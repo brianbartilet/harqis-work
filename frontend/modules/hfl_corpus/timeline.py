@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import os
 import uuid
@@ -195,6 +196,46 @@ async def followup_create(request: Request):
     except (ValueError, TypeError) as exc:
         raise HTTPException(400, str(exc)) from None
     return JSONResponse({"item": item, "duplicate": duplicate}, status_code=200 if duplicate else 201)
+
+
+@router.post('/items/{followup_id}/checklist-action')
+async def checklist_action(request: Request, followup_id: str):
+    actor = owner(request)
+    raw = await body(request)
+    canonical = store()
+    try:
+        request_id = str(uuid.UUID(raw.get('request_id', '')))
+        checklist_id, item_id = raw.get('checklist_id'), raw.get('item_id')
+        if not isinstance(checklist_id, str) or not isinstance(item_id, str):
+            raise ValueError('Choose a checklist item.')
+        fields = raw.get('item')
+        if not isinstance(fields, dict):
+            raise ValueError('Invalid action draft.')
+        # Scope retries to the source item; creation and completion commit together.
+        request_id = str(uuid.uuid5(uuid.UUID(request_id), json.dumps([followup_id, checklist_id, item_id])))
+        with canonical.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT payload FROM followups WHERE id=?', (followup_id,)).fetchone()
+            if not row:
+                raise KeyError(followup_id)
+            parent = json.loads(row['payload'])
+            task = next((task for checklist in parent.get('checklists', []) if checklist['id'] == checklist_id
+                         for task in checklist['items'] if task['id'] == item_id), None)
+            if task is None:
+                raise FollowUpConflict('The checklist item changed or was removed. Reopen the action.')
+            action, duplicate = canonical.create({**fields, 'request_id': request_id, 'agent_enabled': False},
+                                                  actor=actor, source=parent.get('source'), connection=db)
+            if not duplicate:
+                task['done'] = True
+                parent = canonical.update(followup_id, {'version': raw.get('version'), 'checklists': parent['checklists']},
+                                          actor=actor, connection=db)
+        return {'item': action, 'parent': parent, 'duplicate': duplicate}
+    except KeyError:
+        raise HTTPException(404, 'Action not found.') from None
+    except FollowUpConflict as exc:
+        raise HTTPException(409, str(exc)) from None
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(400, str(exc)) from None
 
 
 @router.patch("/items/{followup_id}")

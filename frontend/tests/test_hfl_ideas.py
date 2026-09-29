@@ -90,6 +90,7 @@ def test_checklist_item_conversion_preserves_provenance_and_independent_state(id
     client = authenticated_client
     raw = payload()
     raw['checklists'][0]['cover'] = True
+    raw['checklists'][0]['items'][0]['done'] = False
     idea = ideas.save_idea(raw, 'owner')
     uri = BASE + '/objects/' + idea['id']
     draft = client.get(uri + '/conversion?checklist_id=list&item_id=task').json()
