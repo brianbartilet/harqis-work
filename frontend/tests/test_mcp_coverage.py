@@ -195,6 +195,8 @@ def test_every_new_service_uses_reviewed_http_contract(row, recording_api, tmp_p
         assert Path(values['destination']).read_bytes() == b'\x00\xffattachment\r\n'
     if method == 'create_map':
         assert json.loads(body)['name'] == 'test' and 'title' not in json.loads(body)
+    if method == 'create_checklist_action':
+        assert json.loads(body) == {key: values[key] for key in ('version', 'checklist_id', 'item_id', 'request_id', 'item')}
     if method == 'update_graph_view':
         assert json.loads(body)['revision'] == 7
     if method == 'delete_graph_view':

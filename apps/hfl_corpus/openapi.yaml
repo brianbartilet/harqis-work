@@ -21,6 +21,33 @@ tags:
 - name: hfl-management
   description: Actions, Memory Signal categories, and date pins
 paths:
+  /api/hfl/timeline/items/{followup_id}/checklist-action:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Checklist Action
+      operationId: checklist_action_api_hfl_timeline_items__followup_id__checklist_action_post
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: followup_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Followup Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/hfl/{resource}/{source_id}/attachments:
     get:
       tags:

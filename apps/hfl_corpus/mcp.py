@@ -1001,6 +1001,24 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         return output
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_checklist_action(followup_id: str, version: int, checklist_id: str, item_id: str, request_id: str, item: dict) -> dict:
+        """Create an action and tick its source checklist item atomically. Destructive: writes remote state.
+
+        Args:
+            followup_id: Parent action ID.
+            version: Latest parent version; stale writes return 409 without creating an action.
+            checklist_id: Stable source checklist ID.
+            item_id: Stable source item ID.
+            request_id: UUID for retry-safe creation; reuse with the same payload after an uncertain response.
+            item: New action fields including title and expected_outcome. Agent execution is always disabled.
+        """
+        logger.info("Tool called: create_hfl_corpus_checklist_action")
+        result = ApiServiceHflCorpusTimeline(CONFIG).create_checklist_action(followup_id=followup_id, version=version, checklist_id=checklist_id, item_id=item_id, request_id=request_id, item=item)
+        output = _dict_result(result)
+        logger.info("create_hfl_corpus_checklist_action done")
+        return output
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
     def update_hfl_corpus_timeline_item(followup_id: str, version: int, changes: dict) -> dict:
         """Update an agenda item using its latest version. Can alter scheduling; completion writes a receipt. Destructive: writes remote state.
 

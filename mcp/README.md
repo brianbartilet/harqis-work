@@ -368,6 +368,7 @@ session/protocol surfaces. Writes are marked below; file downloads write locally
 | `list_hfl_corpus_timeline_items` | List up to 500 scoped agenda items with board positions and due-state grouping. |
 | `update_hfl_corpus_timeline_order` | Reorder a status column with item version checks. Destructive: writes remote state. |
 | `create_hfl_corpus_timeline_item` | Create/adopt an agenda item. May configure agent execution if explicitly requested. Destructive: writes remote state. |
+| `create_hfl_corpus_checklist_action` | Create an action and tick the source checklist item atomically, with version checks and retry-safe creation. Agent execution stays disabled. Destructive: writes remote state. |
 | `update_hfl_corpus_timeline_item` | Update an agenda item using its latest version. Can alter scheduling; completion writes a receipt. Destructive: writes remote state. |
 | `get_hfl_corpus_timeline_item` | Read the current agenda item and version. |
 | `get_hfl_corpus_timeline_history` | Read immutable agenda revisions and rendered completion notes. |

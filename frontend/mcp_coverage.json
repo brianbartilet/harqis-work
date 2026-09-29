@@ -338,6 +338,16 @@
       "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.get_timeline_item"
     },
     {
+      "method": "POST",
+      "path": "/api/hfl/timeline/items/{followup_id}/checklist-action",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_checklist_action"
+      ],
+      "reason": "Create an action and complete its source checklist item atomically through the canonical bearer API.",
+      "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.create_checklist_action"
+    },
+    {
       "method": "GET",
       "path": "/api/hfl/timeline/items/{followup_id}/history",
       "status": "covered",
@@ -1431,6 +1441,15 @@
         "get_hfl_corpus_timeline_item"
       ],
       "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/items/{followup_id}/checklist-action",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_checklist_action"
+      ],
+      "reason": "Create an action and complete its source checklist item atomically through the canonical bearer API."
     },
     {
       "method": "GET",

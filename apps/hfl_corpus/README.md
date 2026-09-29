@@ -107,7 +107,7 @@ upsert. Inspect `indexed` and `doc_id`; the request can succeed with
 
 ## MCP Tools
 
-The existing `hfl_corpus` catalog entry now exposes **110 tools**, covering every
+The existing `hfl_corpus` catalog entry covers every
 canonical `/api/hfl` method/path in the frontend. CLI, standalone MCP and the
 Kanban bridge consume the same adapter; existing tool names remain compatible.
 No new credential is required. Configure the canonical host in
@@ -202,6 +202,7 @@ routes; deploy that API revision before using newly exposed graph-view tools.
 | `list_hfl_corpus_timeline_items` | List up to 500 scoped agenda items with board positions and due-state grouping. |
 | `update_hfl_corpus_timeline_order` | Reorder a status column with item version checks. Destructive: writes remote state. |
 | `create_hfl_corpus_timeline_item` | Create/adopt an agenda item. May configure agent execution if explicitly requested. Destructive: writes remote state. |
+| `create_hfl_corpus_checklist_action` | Create an action and tick the source checklist item atomically, with version checks and retry-safe creation. Agent execution stays disabled. Destructive: writes remote state. |
 | `update_hfl_corpus_timeline_item` | Update an agenda item using its latest version. Can alter scheduling; completion writes a receipt. Destructive: writes remote state. |
 | `get_hfl_corpus_timeline_item` | Read the current agenda item and version. |
 | `get_hfl_corpus_timeline_history` | Read immutable agenda revisions and rendered completion notes. |
