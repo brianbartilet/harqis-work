@@ -6,7 +6,7 @@
     const button=element('button');button.type='button';button.className='intent-copy-id';
     const label='Copy '+kind+' ID';button.title=label+': '+id;button.setAttribute('aria-label',label);
     button.innerHTML='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l2-2"/></svg>';
-    const icon=button.innerHTML;let timer;
+    const path=button.querySelector('path'),icon=path.getAttribute('d');let timer;
     button.onclick=async event=>{
       event.preventDefault();event.stopPropagation();
       try {
@@ -17,8 +17,8 @@
           try { input.select();if(!document.execCommand('copy'))throw Error('Clipboard unavailable'); }
           finally { input.remove();button.focus(); }
         }
-        button.textContent='✓';button.title='Copied '+kind+' ID';button.setAttribute('aria-label','Copied '+kind+' ID');
-        clearTimeout(timer);timer=setTimeout(()=>{button.innerHTML=icon;button.title=label+': '+id;button.setAttribute('aria-label',label);},1800);
+        path.setAttribute('d','M5 12l4 4L19 6');button.title='Copied '+kind+' ID';button.setAttribute('aria-label','Copied '+kind+' ID');
+        clearTimeout(timer);timer=setTimeout(()=>{path.setAttribute('d',icon);button.title=label+': '+id;button.setAttribute('aria-label',label);},1800);
       } catch (_) { window.prompt('Copy '+kind+' ID:',String(id)); }
     };
     return button;
