@@ -88,6 +88,10 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 .entity-shell #entity-type-manager #type-feedback{font-size:12px;line-height:1.6;margin:12px 0 0}
 .entity-shell #entity-type-manager #type-feedback:empty{display:none}
 .entity-shell #entity-type-manager input[type=color]{height:44px;width:80px}
+.entity-shell .entity-card>summary{display:grid;grid-template-columns:minmax(0,1fr) auto 18px;gap:10px 14px;align-items:center}
+.entity-shell .entity-card .entity-title-row{min-width:0}
+.entity-shell .entity-card .entity-detail-row{justify-content:flex-start;gap:8px;max-width:100%}
+.entity-shell .entity-card .entity-count{white-space:nowrap;margin-right:0}
 </style>{% endblock %}
 
 {% block content %}

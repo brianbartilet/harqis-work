@@ -15,7 +15,7 @@
   const kindColors = {people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', objects:'#e9c96c'};
   const sourceValue = entry => String(entry.source || '').trim();
   function pill(text) { const p = el('span', text); p.className = 'pill'; return p; }
-  function typePill(kind) { const node = pill(kinds[kind] || kind || 'Unavailable'); node.classList.add('entity-kind'); node.style.setProperty('--entity-color', kindColors[kind] || '#95a7c3'); return node; }
+  function typePill(kind) { const node = pill((kinds[kind] || kind || 'Unavailable').toLowerCase()); node.classList.add('entity-kind'); node.style.setProperty('--entity-color', kindColors[kind] || '#95a7c3'); return node; }
   function refreshFilters() {
     $('filter-kind').replaceChildren();
     for (const [value, title] of [['', 'All types'], ...Object.entries(kinds)]) {
@@ -129,15 +129,15 @@
       checkbox.setAttribute('aria-label', 'Select ' + e.label);
       checkbox.addEventListener('click', event => event.stopPropagation());
       checkbox.onchange = () => { checkbox.checked ? selectedEntities.add(e.id) : selectedEntities.delete(e.id); render(); };
-      summary.append(checkbox);
       const kindPill = pill((kinds[e.kind] || e.kind).toLowerCase());
       kindPill.classList.add('entity-kind'); kindPill.style.setProperty('--entity-color', kindColors[e.kind] || '#95a7c3');
-      title.append(el('span', e.label), kindPill);
+      title.append(el('span', e.label));
       const meta = el('span'); meta.className = 'entity-detail-row';
       const count = el('span', `${e.entries.length} ${e.entries.length === 1 ? 'entry' : 'entries'}`); count.className = 'entity-count';
       meta.append(count, pill(e.resolution.replaceAll('-', ' ')));
       for (const category of e.categories.length ? e.categories : ['Uncategorized']) meta.append(pill(category));
-      summary.append(title, meta); card.append(summary);
+      title.append(meta);
+      summary.append(title, kindPill, checkbox); card.append(summary);
       if(e.merge?.active) meta.append(pill('Merged'));
       card.addEventListener('toggle', () => {
         if (!card.open || card.dataset.populated) return;
