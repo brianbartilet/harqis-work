@@ -723,7 +723,14 @@ def continue_attempt(run_id: str, payload: dict, user: str):
     current = checked(source_snapshot, original['kind'], original['source_id'])
     def instructions(source):
         return {k: v for k, v in source.items() if k not in {'version', 'status', 'updated_at'}}
-    if instructions(current['source']) != instructions(original['source']) or current['category_guidance'] != original['category_guidance']:
+    expected = instructions(original['source'])
+    actual = instructions(current['source'])
+    # Applying an incomplete result can update priority without changing the task.
+    # Accept that exact assessment, but still reject owner edits to instructions
+    # or priority that differ from both the snapshot and the agent result.
+    if actual != expected and original['kind'] == 'actionable' and parent['result'].get('matrix'):
+        expected.update(validate_matrix(parent['result']))
+    if actual != expected or current['category_guidance'] != original['category_guidance']:
         raise HTTPException(409, 'The task instructions changed. Start a new run for the edited task.')
     history = list(original.get('continuation', {}).get('history', []))
     history.append({'run_id': run_id, 'result': {k: v for k, v in parent['result'].items() if k != 'output_html'}, 'reply': reply})

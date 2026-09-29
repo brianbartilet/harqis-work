@@ -700,6 +700,29 @@ def test_continue_preserves_context_files_and_operation_scope(bridge, authentica
     assert third['snapshot']['continuation']['artifacts'][0]['run_id'] == first['id']
 
 
+@pytest.mark.parametrize('edit', [None, {'prompt': 'A different task'}, {'matrix': 'Q4'}])
+def test_continue_after_agent_priority_update(bridge, authenticated_client, edit):
+    module, store, actions = bridge
+    item = create_action(actions)
+    first = start(authenticated_client, item)
+    result = {'summary': 'Analysis ready; which repository?', 'blocked_reason': 'input',
+              'question': 'Which repository?', 'complete': False,
+              'matrix': 'Q2', 'matrix_confidence': 'high', 'matrix_reason': 'Long-term project.'}
+    assert event(authenticated_client, first, 'awaiting_input', result).status_code == 200
+    current = actions.get(item['id'])
+    assert current['matrix'] == 'Q2'
+    if edit:
+        actions.update(item['id'], {'version': current['version'], **edit}, actor='owner')
+    payload = {'request_key': str(uuid4()), 'reply': 'Use the existing project repository.'}
+    path = f"/hfl-corpus/agent-bridge/runs/{first['id']}/continue"
+    response = authenticated_client.post(path, headers=owner_headers(), json=payload)
+    assert response.status_code == (409 if edit else 200), response.text
+    if not edit:
+        assert response.json()['snapshot']['source']['matrix'] == 'Q2'
+        assert response.json()['snapshot']['continuation']['reply'] == payload['reply']
+        assert authenticated_client.post(path, headers=owner_headers(), json=payload).json()['id'] == response.json()['id']
+
+
 def test_continue_rejects_changed_source_and_invalid_reply(bridge, authenticated_client):
     module, store, actions = bridge
     item = create_action(actions)
