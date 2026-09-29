@@ -55,6 +55,9 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 .entity-shell .entity-kind{color:var(--entity-color,#95a7c3);background:color-mix(in srgb,var(--entity-color,#95a7c3) 12%,transparent);border-color:color-mix(in srgb,var(--entity-color,#95a7c3) 25%,transparent);white-space:nowrap}
 .entity-kind::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
 .entity-shell #matching-status{font-size:12px;line-height:1.7;margin:20px 0}
+.entity-shell #matching-panel>p{font-size:12px;line-height:1.7}
+.entity-operation-progress{display:block;width:100%;height:8px;margin:12px 0;accent-color:#38bdf8}
+.entity-operation-progress[hidden]{display:none}
 .entity-shell .matching-jobs{max-height:220px;overflow:auto}
 .entity-shell .matching-job{padding:10px 0;border-bottom:1px solid #334155}
 .entity-shell .matching-job:last-child{border:0}
@@ -148,8 +151,9 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
   <p class="my-3 text-slate-400">Newly enriched entities are checked for same-type identity matches. Strong, corroborated matches merge automatically; uncertain matches appear here. Edited names and profiles are preserved. Unmerged or dismissed matches are excluded from automatic remerging.</p>
   <div class="processing-actions"><button id="matching-scan" type="button">Scan existing entities once / resume</button><button id="matching-refresh" type="button">Refresh matching progress</button></div>
   <div id="matching-status" role="status" aria-live="polite">Loading matching status…</div>
-  <div class="selection-buttons"><button id="suggestions-select" type="button">Select visible</button><button id="suggestions-clear" type="button">Clear selection</button><button id="suggestions-submit" type="button" disabled>Review selected merges</button></div>
+  <div class="selection-buttons"><button id="suggestions-select" type="button">Select visible</button><button id="suggestions-clear" type="button">Clear selection</button><button id="suggestions-submit" type="button" disabled>Review selected merges</button><button id="suggestions-dismiss" type="button" disabled>Keep separate</button></div>
   <p id="suggestions-selection" role="status"></p><p id="suggestions-feedback" role="status"></p>
+  <progress id="suggestions-progress" class="entity-operation-progress" aria-label="Keep separate progress" hidden></progress>
   <p id="suggestions-count"></p><div id="matching-suggestions"></div>
   <button id="suggestions-more" type="button" hidden>Show more suggestions</button>
 </details>
@@ -173,6 +177,7 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
   <form id="batch-merge-form"><header><h2 id="batch-merge-title">Confirm selected merges</h2><button id="batch-close" type="button" aria-label="Close batch merge dialog">×</button></header>
   <p>Review every resulting group, including selections hidden by filters. Overlapping pairs are combined. Nothing is merged until you confirm.</p>
   <div id="batch-groups"></div><p id="batch-feedback" role="status"></p>
+  <progress id="batch-progress" class="entity-operation-progress" aria-label="Merge progress" hidden></progress>
   <footer><button id="batch-confirm" type="submit">Confirm merges</button></footer></form>
 </dialog>
 </main>

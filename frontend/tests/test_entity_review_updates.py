@@ -114,7 +114,8 @@ def test_full_suggestions_endpoint_covers_more_than_first_hundred(review_data, a
     assert len(authenticated_client.get('/api/hfl/entities/matching?all=true').json()['suggestions'])==113
 
 
-def test_review_browser_preserves_poll_state_filters_and_batches(review_data, authenticated_client, tmp_path):
+@pytest.mark.parametrize('operation', ['merge', 'dismiss', 'dismiss-retry'])
+def test_review_browser_preserves_poll_state_filters_and_batches(review_data, authenticated_client, tmp_path, operation):
     import re
     playwright=pytest.importorskip('playwright.sync_api')
     with playwright.sync_playwright() as engine:
@@ -130,9 +131,20 @@ def test_review_browser_preserves_poll_state_filters_and_batches(review_data, au
             page.clock.install()
             errors=[]
             matching_requests=[]
+            dismiss_requests=[]
             page.on('pageerror',lambda e:errors.append(str(e)))
             def route_request(route):
                 req=route.request
+                if '/matching/suggestions/' in req.url and req.url.endswith('/dismiss'):
+                    assert page.locator('#suggestions-progress').is_visible()
+                    assert page.locator('#suggestions-progress').get_attribute('value') is not None
+                    dismiss_requests.append(req.url)
+                    if operation == 'dismiss-retry' and req.url.endswith('/bc/dismiss') and dismiss_requests.count(req.url) == 1:
+                        route.fulfill(status=503, content_type='application/json', body='{"detail":"Temporary failure"}')
+                        return
+                if req.url.endswith('/merges/batch'):
+                    assert page.locator('#batch-progress').is_visible()
+                    assert page.locator('#batch-progress').get_attribute('value') is None
                 if '/matching?' in req.url: matching_requests.append(req.url)
                 response=authenticated_client.request(req.method,req.url.replace('https://entities.test',''),content=req.post_data_buffer,headers={'content-type':req.headers.get('content-type','application/json')})
                 route.fulfill(status=response.status_code,body=response.content,headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding','content-length'}})
@@ -140,6 +152,7 @@ def test_review_browser_preserves_poll_state_filters_and_batches(review_data, au
             page.goto('https://entities.test/hfl-corpus/entities')
             page.wait_for_selector('.matching-suggestion',state='attached')
             page.locator('#matching-panel > summary').click()
+            assert page.locator('#suggestions-dismiss').is_disabled()
             page.locator('#matching-status details > summary').click()
             first=page.locator('.matching-suggestion').first
             first.locator('summary').click()
@@ -159,8 +172,29 @@ def test_review_browser_preserves_poll_state_filters_and_batches(review_data, au
             page.locator('#filter-kind').get_by_role('button',name=re.compile('^People')).click()
             assert '1 hidden' in page.locator('#suggestions-selection').inner_text()
             page.click('#suggestions-select')
+            if operation.startswith('dismiss'):
+                page.set_viewport_size({'width':390,'height':844})
+                page.click('#suggestions-dismiss')
+                playwright.expect(page.locator('#suggestions-feedback')).to_contain_text('suggestions kept separate.')
+                if operation == 'dismiss-retry':
+                    playwright.expect(page.locator('#suggestions-feedback')).to_contain_text('1 failed and remain selected')
+                    playwright.expect(page.locator('#suggestions-selection')).to_have_text('1 selected')
+                    assert {s['id'] for s in entity_matching.status()['suggestions']} == {'bc'}
+                    page.click('#suggestions-dismiss')
+                    playwright.expect(page.locator('#suggestions-feedback')).to_have_text('1 suggestions kept separate.')
+                else:
+                    playwright.expect(page.locator('#suggestions-feedback')).to_have_text('3 suggestions kept separate.')
+                playwright.expect(page.locator('#suggestions-dismiss')).to_be_disabled()
+                playwright.expect(page.locator('#suggestions-progress')).to_be_hidden()
+                assert entity_matching.status()['suggestions_total'] == 0
+                assert len(entities.entity_index()) == 5
+                assert any(url.endswith('/pq/dismiss') for url in dismiss_requests)
+                assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+                assert not errors
+                return
             page.click('#suggestions-submit')
             page.wait_for_selector('#batch-confirm:not([disabled])')
+            playwright.expect(page.locator('#batch-progress')).to_be_hidden()
             assert page.locator('.batch-group').count()==2
             assert len(entities.entity_index())==5
             page.screenshot(path=str(tmp_path / 'batch-desktop.png'))

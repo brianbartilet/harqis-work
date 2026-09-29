@@ -21,7 +21,7 @@ window.HflChecklists = class {
   updateConversion() {
     for (const button of this.root.querySelectorAll('[data-convert-item]')) {
       button.disabled = this.options.canConvert ? !this.options.canConvert() : false;
-      button.title = button.disabled ? 'Save the idea before creating an action from an item.' : 'Create action';
+      button.title = button.disabled ? 'Save the idea before creating an action from an item.' : 'Create action from item';
     }
   }
   render() {
@@ -135,7 +135,7 @@ window.HflChecklists = class {
         preview.onkeydown = event => { if (event.target===preview && ['Enter',' '].includes(event.key)) {event.preventDefault();edit();} };
         text.onblur=show; text.after(preview); preview.hidden=true; show();
         if (this.options.convert) {
-          const convert = this.iconButton('convert', () => { if (!this.options.canConvert || this.options.canConvert()) this.options.convert(list.id, item.id); }, 'Create action');
+          const convert = this.iconButton('convert', () => { if (!this.options.canConvert || this.options.canConvert()) this.options.convert(list.id, item.id); }, 'Create action from item');
           convert.dataset.convertItem = item.id; actions.prepend(convert);
         }
         // Item IDs are unique across the object's lists; moves preserve provenance.
@@ -177,7 +177,7 @@ window.HflChecklistCover = function(root, item, save, open, createAction) {
           try { await createAction(list, task); }
           catch (error) { const message = document.createElement('p'); message.setAttribute('role', 'alert'); message.textContent = error.message; section.append(message); }
           finally { create.disabled = false; }
-        }, 'Create action from checklist item');
+        }, 'Create action from item');
         create.className = 'checklist-card-create'; row.append(create);
       }
       section.append(row);

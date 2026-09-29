@@ -8,6 +8,7 @@
   const selectedKinds = new Set(), selectedCategories = new Set(), selectedSources = new Set();
   let suggestions = [], suggestionEntities = [], visibleSuggestions = [], suggestionLimit = 100, batchGroups = [], batchBusy = false;
   const selectedSuggestions = new Set();
+  let dismissBusy = false;
   let suggestionEntityById = new Map(), entityById = new Map();
   const suggestionNodes = new Map();
   const kinds = {people: 'People', companies: 'Organizations', tools: 'Tools', topics: 'Topics', objects: 'Referenced objects'};
@@ -292,7 +293,8 @@
     const visible = new Set(visibleSuggestions.map(s => s.id));
     const selectedHidden = [...selectedSuggestions].filter(id => !visible.has(id)).length;
     $('suggestions-selection').textContent = `${selectedSuggestions.size} selected${selectedHidden ? ` · ${selectedHidden} hidden by filters or pagination` : ''}`;
-    $('suggestions-submit').disabled = !selectedSuggestions.size || batchBusy;
+    $('suggestions-submit').disabled = !selectedSuggestions.size || batchBusy || dismissBusy;
+    $('suggestions-dismiss').disabled = !selectedSuggestions.size || batchBusy || dismissBusy;
     $('suggestions-count').textContent = `Showing ${visibleSuggestions.length} of ${filtered.length} matching suggestions · ${suggestions.length} awaiting review overall`;
     $('suggestions-more').hidden = filtered.length <= suggestionLimit;
     const container = $('matching-suggestions');
@@ -350,6 +352,38 @@
   }
   $('suggestions-select').onclick = () => { visibleSuggestions.forEach(s => selectedSuggestions.add(s.id)); renderSuggestions(); };
   $('suggestions-clear').onclick = () => { selectedSuggestions.clear(); renderSuggestions(); };
+  function operationProgress(id, value, total, label) {
+    const progress = $(id);
+    progress.hidden = false; progress.max = Math.max(1, total);
+    if (value === null) progress.removeAttribute('value');
+    else progress.value = value;
+    progress.setAttribute('aria-label', label);
+  }
+  $('suggestions-dismiss').onclick = async () => {
+    if (dismissBusy || batchBusy || !selectedSuggestions.size) return;
+    const chosen = [...selectedSuggestions], completed = new Set(), failures = [];
+    const panel = $('matching-panel'), feedback = $('suggestions-feedback');
+    dismissBusy = true; panel.inert = true; renderSuggestions();
+    operationProgress('suggestions-progress', 0, chosen.length, `Keeping separate: 0 of ${chosen.length} processed`);
+    try {
+      if (matchingInFlight) await matchingInFlight;
+      for (const [index, id] of chosen.entries()) {
+        feedback.textContent = `Keeping separate ${index + 1} of ${chosen.length}…`;
+        try {
+          await api('/matching/suggestions/' + encodeURIComponent(id) + '/dismiss', {});
+          completed.add(id); selectedSuggestions.delete(id);
+        } catch (error) { failures.push(error.message); }
+        operationProgress('suggestions-progress', index + 1, chosen.length, `Keeping separate: ${index + 1} of ${chosen.length} processed`);
+      }
+      suggestions = suggestions.filter(s => !completed.has(s.id));
+      await matchingStatus();
+      feedback.textContent = `${completed.size} suggestions kept separate.${failures.length ? ` ${failures.length} failed and remain selected for retry. ${failures[0]}` : ''}`;
+    } catch (error) {
+      feedback.textContent = `${completed.size} suggestions kept separate. Could not refresh matching suggestions: ${error.message}`;
+    } finally {
+      dismissBusy = false; panel.inert = false; $('suggestions-progress').hidden = true; renderSuggestions();
+    }
+  };
   $('suggestions-more').onclick = () => { suggestionLimit += 100; renderSuggestions(); };
   function batchWaiting(busy) {
     batchBusy = busy;
@@ -374,6 +408,7 @@
       if (groups.length > 100) throw Error('Review at most 100 independent merge groups per batch.');
       batchGroups = []; $('batch-groups').replaceChildren(); $('batch-feedback').textContent = 'Preparing current profiles…';
       $('batch-merge-dialog').showModal(); batchWaiting(true);
+      operationProgress('batch-progress', 0, groups.length, 'Preparing merge previews');
       for (const group of groups) {
         const first = suggestionEntities.find(e => group.ids.has(e.id)) || items.find(e => group.ids.has(e.id));
         const node = el('section'); node.className = 'batch-group';
@@ -396,17 +431,20 @@
           node.append(profileDetails);
           batchGroups.push({...group, body, preview, fields, node, result, requestId:crypto.randomUUID()});
         } catch (err) { result.textContent = err.message; }
+        operationProgress('batch-progress', $('batch-groups').children.length, groups.length, `Preparing merge previews: ${$('batch-groups').children.length} of ${groups.length}`);
       }
       $('batch-feedback').textContent = `${batchGroups.length} groups ready. Any unavailable groups above remain selected for later review.`;
     } catch (err) { $('suggestions-feedback').textContent = err.message; }
-    finally { batchWaiting(false); renderSuggestions(); }
+    finally { $('batch-progress').hidden = true; batchWaiting(false); renderSuggestions(); }
   };
   $('batch-merge-form').onsubmit = async event => {
     event.preventDefault(); if (batchBusy) return;
     batchWaiting(true); $('batch-feedback').textContent = 'Merging reviewed groups…';
+    const pending = batchGroups.filter(g => !g.complete);
+    operationProgress('batch-progress', 0, pending.length, 'Checking reviewed groups');
     try {
       const ready = [];
-      for (const group of batchGroups.filter(g => !g.complete)) {
+      for (const [index, group] of pending.entries()) {
         try {
           if (!group.payload) {
             const body = {...group.body, name:group.fields.name.value.trim()};
@@ -418,8 +456,11 @@
           }
           ready.push(group); group.result.textContent = 'Submitting…';
         } catch (err) { group.result.textContent = err.message; }
+        operationProgress('batch-progress', index + 1, pending.length, `Checking reviewed groups: ${index + 1} of ${pending.length}`);
       }
       if (ready.length) {
+        // The batch endpoint returns all outcomes together, so do not invent a percentage.
+        operationProgress('batch-progress', null, ready.length, `Merging ${ready.length} reviewed groups`);
         const response = await api('/merges/batch', {groups:ready.map(g => g.payload)});
         for (const outcome of response.results) {
           const group = ready.find(g => g.requestId === outcome.request_id);
@@ -432,7 +473,7 @@
       if (completed === batchGroups.length && completed) { $('batch-merge-dialog').close(); $('suggestions-feedback').textContent = `${completed} groups merged successfully.`; }
       await load(); await matchingStatus();
     } catch (err) { $('batch-feedback').textContent = err.message + ' Retry to recover the result safely.'; }
-    finally { batchWaiting(false); renderSuggestions(); }
+    finally { $('batch-progress').hidden = true; batchWaiting(false); renderSuggestions(); }
   };
   for (const [id, path] of [['entity-type-form','/types'], ['entity-create-form','/create']]) {
     $(id).onsubmit = async event => {

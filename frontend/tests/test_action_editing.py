@@ -145,13 +145,13 @@ def test_create_action_from_checklist(editor_page, entry, width, tmp_path):
     card = page.locator('.followups-lanes [data-followup-id="' + parent['id'] + '"]')
     expect(card).to_be_visible()
     row = card.locator('.checklist-card-row').first
-    expect(row.get_by_role('button', name='Create action from checklist item')).to_be_visible()
+    expect(row.get_by_role('button', name='Create action from item')).to_be_visible()
     assert row.evaluate('(e) => e.scrollWidth <= e.clientWidth')
     page.screenshot(path=str(tmp_path / f'checklist-card-{width}.png'))
 
     def start():
         if entry == 'card':
-            card.get_by_role('button', name='Create action from checklist item').first.click()
+            card.get_by_role('button', name='Create action from item').first.click()
         else:
             if entry == 'editor':
                 card.get_by_role('button', name='Edit', exact=True).click()
@@ -162,7 +162,7 @@ def test_create_action_from_checklist(editor_page, entry, width, tmp_path):
             expect(source.get_by_role('button', name='Add checklist item to board')).to_be_visible()
             assert source.evaluate('(e) => e.scrollWidth <= e.clientWidth')
             page.screenshot(path=str(tmp_path / f'checklist-editor-{entry}-{width}.png'))
-            source.get_by_role('button', name='Create action', exact=True).click()
+            source.get_by_role('button', name='Create action from item', exact=True).click()
 
     start()
     draft = page.get_by_role('dialog', name='Create action from checklist item', exact=True)
