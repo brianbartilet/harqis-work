@@ -1,0 +1,1 @@
+"""File index service interfaces."""

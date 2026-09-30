@@ -61,6 +61,7 @@ from modules.hfl_shares.router import guest_router as hfl_share_guest_router
 from modules.hfl_shares.router import owner_router as hfl_share_owner_router
 from modules.git_forks.router import router as git_forks_router
 from modules.home.router import router as home_router
+from modules.files.router import router as files_router, guest_router as file_guest_router
 from modules.manifesto.router import router as manifesto_router
 from modules.profile.router import router as profile_router
 from modules.app_settings.router import router as app_settings_router
@@ -263,6 +264,8 @@ app.add_middleware(
     compresslevel=5,
 )
 app.include_router(home_router)
+app.include_router(files_router)
+app.include_router(file_guest_router)
 app.include_router(manifesto_router)
 app.include_router(workflows_router)
 app.include_router(applications_router)
@@ -312,7 +315,7 @@ async def add_security_headers(request: Request, call_next):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     else:
         response.headers["Cache-Control"] = "no-store"
-    if request.url.path.startswith("/share/"):
+    if request.url.path.startswith(("/share/", "/file-share/")):
         response.headers["Cache-Control"] = "no-store"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"

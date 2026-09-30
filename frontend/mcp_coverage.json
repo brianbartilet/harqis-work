@@ -2714,6 +2714,163 @@
       "status": "deferred",
       "tools": [],
       "reason": "Owner session-authenticated configuration defaults for the action editor; a dedicated machine-facing service/auth contract is deferred, as with action configuration."
+    },
+    {
+      "method": "GET",
+      "path": "/file-share/{token}",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation, guest capability, activity tracking, or bounded authenticated file download; no additional machine endpoint in this release."
+    },
+    {
+      "method": "GET",
+      "path": "/files",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation, guest capability, activity tracking, or bounded authenticated file download; no additional machine endpoint in this release."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/catalog",
+      "status": "service",
+      "tools": [
+        "search_file_index_files"
+      ],
+      "reason": "Local catalog facade exposes the underlying data through the shared CLI/MCP adapter; browser response may add owner UI context."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/files/{key}",
+      "status": "service",
+      "tools": [
+        "get_file_index_file"
+      ],
+      "reason": "Local catalog facade exposes the underlying data through the shared CLI/MCP adapter; browser response may add owner UI context."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/files/{key}/download",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation, guest capability, activity tracking, or bounded authenticated file download; no additional machine endpoint in this release."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/graph",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation, guest capability, activity tracking, or bounded authenticated file download; no additional machine endpoint in this release."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/packages",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/packages/{key}",
+      "status": "service",
+      "tools": [
+        "get_file_index_package"
+      ],
+      "reason": "Local catalog facade exposes the underlying data through the shared CLI/MCP adapter; browser response may add owner UI context."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/revisions/{key}/qr",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation, guest capability, activity tracking, or bounded authenticated file download; no additional machine endpoint in this release."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/sources",
+      "status": "service",
+      "tools": [
+        "list_file_index_sources"
+      ],
+      "reason": "Local catalog facade exposes the underlying data through the shared CLI/MCP adapter; browser response may add owner UI context."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/taxonomy",
+      "status": "service",
+      "tools": [
+        "list_hfl_corpus_categories"
+      ],
+      "reason": "Local catalog facade exposes the underlying data through the shared CLI/MCP adapter; browser response may add owner UI context."
+    },
+    {
+      "method": "PATCH",
+      "path": "/files/api/files/{key}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/files/{key}/locations",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/files/{key}/opened",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation, guest capability, activity tracking, or bounded authenticated file download; no additional machine endpoint in this release."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/packages",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/packages/{key}/revisions",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/references",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/revisions/{key}/publish",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/sources",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/sources/{key}/scan",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "PUT",
+      "path": "/files/api/sources/{key}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
     }
   ]
 }

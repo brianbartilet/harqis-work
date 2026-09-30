@@ -32,6 +32,7 @@ from workflows.testing.tasks_config import WORKFLOW_TESTING
 from workflows.tcg.tasks_config import WORKFLOW_TCG
 from workflows.git_forks.tasks_config import WORKFLOW_GIT_FORKS
 from workflows.second_brain.tasks_config import WORKFLOW_SECOND_BRAIN
+from workflows.files.tasks_config import WORKFLOW_FILES
 
 # Set Celery to use the same timezone settings as the Django project
 SPROUT.conf.enable_utc = USE_TZ
@@ -55,6 +56,7 @@ CONFIG_DICTIONARY = (
     | WORKFLOW_TCG
     | WORKFLOW_GIT_FORKS
     | WORKFLOW_SECOND_BRAIN
+    | WORKFLOW_FILES
 )
 
 # Celery's ScheduleEntry.__init__ only accepts these per-entry keys. Our
@@ -114,6 +116,7 @@ SPROUT.conf.task_queues = (
     Queue(WorkflowQueue.WORKER.value),
     Queue(WorkflowQueue.N8N.value),
     Queue(WorkflowQueue.HFL.value),
+    Queue(WorkflowQueue.FILES.value),
     Queue(WorkflowQueue.CAPTURE.value),
     Broadcast(WorkflowQueue.DEFAULT_BROADCAST.value),
     Broadcast(WorkflowQueue.HUD_BROADCAST.value),
@@ -130,6 +133,7 @@ SPROUT.conf.task_default_queue = WorkflowQueue.DEFAULT.value
 #   workflows.hud.tasks.broadcast_*    → hud_broadcast     (fanout)
 #   workflows.hud.tasks.*              → hud               (direct)
 SPROUT.conf.task_routes = {
+    "workflows.files.tasks.*": {"queue": WorkflowQueue.FILES.value},
     "workflows.workers.tasks.broadcast_*": {"queue": WorkflowQueue.WORKERS_BROADCAST.value},
     "workflows.hfl.tasks.persist.persist_hfl_entry": {"queue": WorkflowQueue.HFL.value},
     "workflows.hfl.tasks.persist.flush_hfl_outbox": {"queue": WorkflowQueue.HFL_BROADCAST.value},
@@ -191,3 +195,4 @@ def _declare_on_worker(sender=None, **_):
 # express_signals imports CONFIG_DICTIONARY lazily, so this import is not
 # circular. See docs/thesis/HFL-AUTO-EXPRESS.md.
 import workflows.hfl.express_signals  # noqa: E402,F401
+import workflows.files.output_signals  # noqa: E402,F401
