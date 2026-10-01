@@ -598,13 +598,12 @@ def parse_date(value: str | None) -> date | None:
 
 def entry_occurrence_date(entry: CorpusEntry) -> date | None:
     """Return the canonical occurrence date encoded in an entry heading."""
-    value = entry.header.strip()
-    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-        try:
-            return datetime.strptime(value, fmt).date()
-        except ValueError:
-            continue
-    return None
+    try:
+        # Ingested headings can include fractional seconds and ISO offsets.
+        # Keep the recorded calendar day, rather than shifting it to UTC.
+        return datetime.fromisoformat(entry.header.strip()).date()
+    except ValueError:
+        return None
 
 
 def activity_years(documents: tuple[CorpusDocument, ...]) -> tuple[int, ...]:
