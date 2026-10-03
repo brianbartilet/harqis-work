@@ -22,6 +22,7 @@ def test__scan_source(tmp_path, monkeypatch):
 
 def test__maintain_files_queues_due_sources_once(tmp_path, monkeypatch):
     monkeypatch.setenv('FILES_STORE_PATH', str(tmp_path / 'catalog.db'))
+    monkeypatch.setenv('FILES_ALLOWED_ROOTS', '[]')
     Store().add('sources', {'kind':'local','enabled':True,'interval_hours':24})
     calls=[]
     monkeypatch.setattr(scan_source, 'apply_async', lambda **kw: calls.append(kw) or SimpleNamespace(id='task-id'))
@@ -47,3 +48,19 @@ def test__output_paths_are_bounded_and_explicit():
     from workflows.files.output_signals import output_paths
     value={'text':'/not/a/declared/path','artifacts':[{'output_path':'/documents/result.pdf'}]}
     assert list(output_paths(value))==['/documents/result.pdf']
+
+
+def test__maintenance_discovers_configured_roots_without_opening_ui(tmp_path, monkeypatch):
+    monkeypatch.setenv('FILES_STORE_PATH', str(tmp_path / 'catalog.db'))
+    monkeypatch.setenv('FILES_ALLOWED_ROOTS', json.dumps([str(tmp_path / 'documents')]))
+    monkeypatch.setenv('FILES_HOST_ID', 'test-host')
+    calls = []
+    monkeypatch.setattr(scan_source, 'apply_async', lambda **kw: calls.append(kw) or SimpleNamespace(id='task-id'))
+    assert maintain_files()['queued'] == ['task-id']
+    assert len(Store().all('sources')) == 1
+    assert maintain_files()['queued'] == []
+    monkeypatch.setenv('FILES_ALLOWED_ROOTS', '[]')
+    source, = Store().all('sources')
+    Store().patch('sources', source['id'], {'last_queued': 0})
+    assert maintain_files()['queued'] == []
+    assert len(calls) == 1

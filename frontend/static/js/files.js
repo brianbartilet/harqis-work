@@ -13,7 +13,9 @@
     currentPackage = null,
     categories = [],
     sources = [],
-    view = "catalog";
+    view = "catalog",
+    automaticScans = false;
+  const pendingScans = new Map();
   const selected = new Set(),
     pageSize = 50;
   function requestId() {
@@ -93,13 +95,14 @@
     $("#selected-count").textContent = `${selected.size} selected`;
     $("#package-selection").textContent =
       `${selected.size} files selected in the catalog.`;
+    $("#selection-package").disabled = !selected.size;
+    $("#package-form button[type=submit], #package-form button:not([type])").disabled = !selected.size;
   }
   function filters() {
     return new URLSearchParams(new FormData($("#filter-files")));
   }
   async function changeView(name) {
-    sources = (await api("sources")).items;
-    sourceOptions();
+    message("");
     view = name;
     document
       .querySelectorAll('[id^="view-"]')
@@ -158,18 +161,73 @@
       );
       body.append(tr);
     }
-    if (!result.items) {
+    if (!result.items.length) {
       const tr = el("tr"),
-        td = el("td", "No files found. Add a source and run its first scan.");
+        td = el("td", "No matching files.");
       td.colSpan = 6;
       tr.append(td);
       body.append(tr);
     }
     $("#file-count").textContent =
-      `${total} files · ${offset + 1}–${Math.min(offset + pageSize, total)}`;
+      total ? `${total} files · ${offset + 1}–${Math.min(offset + pageSize, total)}` : "0 files";
     $("#previous-page").disabled = offset === 0;
     $("#next-page").disabled = offset + pageSize >= total;
     selection();
+    const empty = $("#catalog-empty");
+    empty.hidden = result.items.length > 0;
+    $("#catalog-table").hidden = !result.items.length;
+    $("#catalog-pages").hidden = !result.items.length;
+    empty.replaceChildren();
+    if (!empty.hidden) {
+      const filtered = [...filters().values()].some(Boolean);
+      empty.append(el("h2", filtered ? "No files match these filters" : "Your catalog is ready for its first files"));
+      if (filtered) {
+        empty.append(el("p", "Try another name, category, or availability.", "files-muted"), button("Clear filters", async () => {
+          $("#filter-files").reset(); offset = 0; await catalog();
+        }));
+      } else {
+        empty.append(el("p", sources.length ? "Browse a server folder to choose files, or scan a location to index its contents." : "No locations are connected yet. Connect remote storage, or configure a server folder in Locations.", "files-muted"));
+        const local = localSources();
+        for (const source of local) {
+          const row = el("div", undefined, "files-empty-location");
+          const info = el("div");
+          info.append(el("strong", source.name), el("p", source.root, "files-path"), el("p", sourceStatus(source), "files-muted"));
+          row.append(info, button("Browse " + source.name, () => openPicker(source.id)));
+          if (source.enabled) {
+            const scanButton = button("Scan " + source.name, () => queueScan(source.id));
+            scanButton.disabled = source.state === "scanning" || pendingScans.has(source.id);
+            row.append(scanButton);
+          }
+          empty.append(row);
+        }
+        empty.append(button("Manage locations", () => changeView("sources")));
+      }
+    }
+  }
+  function localSources() {
+    return sources.filter((s) => s.kind === "local" && s.host?.toLowerCase() === $("#files-app").dataset.host.toLowerCase() && s.configured_available !== false);
+  }
+  async function loadSources() {
+    const data = await api("sources");
+    sources = data.items;
+    automaticScans = data.automatic_scans;
+    for (const s of sources) {
+      const since = pendingScans.get(s.id);
+      if (since && (s.last_scan >= since || s.last_attempt >= since || Date.now() / 1000 - since > 120)) pendingScans.delete(s.id);
+    }
+  }
+  function sourceStatus(s) {
+    if (s.configured_available === false) return "Folder removed from server configuration";
+    if (!s.enabled) return s.kind === "local" ? "Automatic scans paused · browsing is still available" : "Scans paused";
+    if (s.state === "scanning") return "Scanning files…";
+    if (pendingScans.has(s.id)) return "Scan queued · waiting for the worker";
+    return ({new: "Ready for the first scan", ready: "Ready", missing: "Folder unavailable — check the server drive", permission_denied: "Access denied — check the connection permissions", unreachable: "Cannot reach this location — check its connection"})[s.state] || s.state;
+  }
+  async function queueScan(id) {
+    await api(`sources/${id}/scan`, {});
+    pendingScans.set(id, Date.now() / 1000);
+    message("Scan queued. Files will appear here as they are discovered.");
+    await refresh();
   }
   function sourceOptions() {
     const select = $("#reference-form [name=source_id]");
@@ -180,6 +238,8 @@
         return o;
       }),
     );
+    $("#reference-form button").disabled = !sources.length;
+    referenceHelp();
   }
   function categoryOptions(select, values = [], all = false) {
     select.replaceChildren();
@@ -199,6 +259,96 @@
       o.selected = values.map(String).includes(String(c.id));
       select.append(o);
     }
+  }
+  let folderPath = "", folderOffset = 0, pickerRequest = 0;
+  const picked = new Set();
+  const folderSafe = (fn) => async (...args) => {
+    try { await fn(...args); }
+    catch (error) { $("#folder-message").textContent = error.message; }
+  };
+  function pickerSelection() {
+    $("#folder-selection").textContent = `${picked.size} ${picked.size === 1 ? "file" : "files"} selected`;
+    $("#add-picked").disabled = !picked.size;
+  }
+  async function openPicker(sourceId) {
+    await loadSources();
+    const local = localSources();
+    if (!local.length) {
+      await changeView("sources");
+      message("No server folders are configured. Add remote storage here, or configure a server folder first.");
+      return;
+    }
+    const select = $("#folder-source");
+    select.replaceChildren(...local.map((s) => {
+      const option = el("option", `${s.name} — ${s.root}`);
+      option.value = s.id; return option;
+    }));
+    select.value = local.some((s) => s.id === sourceId) ? sourceId : local[0].id;
+    picked.clear(); pickerSelection();
+    folderPath = ""; folderOffset = 0;
+    $("#folder-dialog").showModal();
+    await folderSafe(loadFolder)();
+  }
+  async function loadFolder() {
+    const request = ++pickerRequest;
+    $("#folder-message").textContent = "Loading folder…";
+    $("#folder-entries").replaceChildren();
+    $("#folder-previous").disabled = true;
+    $("#folder-next").disabled = true;
+    const id = $("#folder-source").value;
+    const data = await api(`sources/${id}/browse?` + new URLSearchParams({path: folderPath, offset: folderOffset}));
+    if (request !== pickerRequest) return;
+    $("#folder-message").textContent = data.items.length ? "Select files to add them to your catalog and package selection." : "This folder is empty.";
+    const crumbs = $("#folder-breadcrumbs");
+    crumbs.replaceChildren();
+    const navigate = (path) => folderSafe(async () => { folderPath = path; folderOffset = 0; await loadFolder(); });
+    crumbs.append(button(sources.find((s) => s.id === id)?.name || "Root folder", navigate("")));
+    const parts = data.path ? data.path.split("/") : [];
+    parts.forEach((part, index) => crumbs.append(el("span", "/", "files-muted"), button(part, navigate(parts.slice(0, index + 1).join("/")))));
+    for (const item of data.items) {
+      const row = el("div", undefined, "files-folder-row");
+      if (item.kind === "folder") {
+        const open = button(item.name, navigate(item.path));
+        open.setAttribute("aria-label", "Open folder " + item.name);
+        row.append(el("span", "Folder", "files-muted"), open);
+      } else {
+        const label = el("label"), check = el("input");
+        check.type = "checkbox"; check.checked = picked.has(item.path);
+        check.onchange = () => {
+          if (check.checked && picked.size >= 200) {
+            check.checked = false;
+            $("#folder-message").textContent = "Add up to 200 files at a time."; return;
+          }
+          check.checked ? picked.add(item.path) : picked.delete(item.path);
+          pickerSelection();
+        };
+        label.append(check, el("span", item.name));
+        row.append(label, el("span", size(item.size), "files-muted"));
+      }
+      $("#folder-entries").append(row);
+    }
+    $("#folder-previous").disabled = folderOffset === 0;
+    $("#folder-next").disabled = folderOffset + 100 >= data.total;
+    $("#folder-page").textContent = data.total ? `${folderOffset + 1}–${Math.min(folderOffset + 100, data.total)} of ${data.total}` : "0 items";
+  }
+  function sourceHelp() {
+    const kind = $("#source-form [name=kind]").value;
+    const guidance = {
+      drive: ["Google Drive folder link or ID", "Paste a Google Drive folder link. The server’s connected Google account must have access."],
+      sftp: ["Remote folder path", "Enter the full remote folder path and the connection profile configured on the server."],
+      http: ["Direct file URL", "Use a public HTTP(S) file URL without query parameters. Add one file per location."],
+      local: ["Server subfolder path", "Use a full path inside a configured server folder. This is a folder on the server, not on your computer."],
+      ftp: ["FTP location", "FTP supports manual references only. Use SFTP to scan or retrieve files."],
+    }[kind];
+    $("#source-root-label").textContent = guidance[0];
+    $("#source-help").textContent = guidance[1];
+    $("#sftp-profile-field").hidden = kind !== "sftp";
+    $("#source-form [name=profile]").required = kind === "sftp";
+  }
+  function referenceHelp() {
+    const s = sources.find((s) => s.id === $("#reference-form [name=source_id]").value);
+    $("#reference-help").textContent = !s ? "Add a location first, or use Browse folders for configured server files." : s.kind === "local" ? `Enter the full server file path inside ${s.root}. Browse folders checks that files exist before adding them.` : s.kind === "drive" ? "Enter the Drive file ID, not a folder ID." : `Enter the complete file location for ${s.name}. Availability is checked when the file is retrieved.`;
+    $("#reference-locator-label").textContent = s?.kind === "local" ? "Full server file path" : s?.kind === "drive" ? "Drive file ID" : "File location";
   }
   async function detail(id) {
     currentFile = id;
@@ -240,14 +390,15 @@
     if (!$("#file-dialog").open) $("#file-dialog").showModal();
   }
   async function sourceList() {
-    sources = (await api("sources")).items;
+    $("#scan-mode").textContent = automaticScans ? "Automatic scans are enabled. New locations are picked up by the scheduler." : "Automatic scans are off on this server. Browse folders or use Scan now to add files.";
     const box = $("#source-list");
     box.replaceChildren();
     for (const s of sources) {
       const card = el("article", undefined, "files-panel");
       card.append(
         el("h2", s.name),
-        el("p", `${s.kind} · ${s.enabled ? "enabled" : "paused"} · ${s.state}`),
+        el("p", `${({local: "Server folder", drive: "Google Drive", sftp: "SFTP", http: "Web file", ftp: "FTP reference"})[s.kind]}${s.configured_root ? " · From server settings" : ""}`, "files-muted"),
+        el("p", sourceStatus(s)),
         el("p", s.root, "files-path"),
         el(
           "p",
@@ -255,11 +406,13 @@
           "files-muted",
         ),
       );
+      if (localSources().some((item) => item.id === s.id)) card.append(button("Browse files", () => openPicker(s.id)));
+      if (s.kind !== "ftp" && s.configured_available !== false) {
+        const scanButton = button("Scan now", () => queueScan(s.id));
+        scanButton.disabled = !s.enabled || s.state === "scanning" || pendingScans.has(s.id);
+        card.append(scanButton);
+      }
       card.append(
-        button("Scan now", async () => {
-          await api(`sources/${s.id}/scan`, {});
-          message("Scan queued. Refresh to see progress.");
-        }),
         button(s.enabled ? "Pause scans" : "Resume scans", async () => {
           const data = Object.fromEntries(
             [
@@ -275,7 +428,7 @@
           );
           data.enabled = !s.enabled;
           await api("sources/" + s.id, data, "PUT");
-          await sourceList();
+          await refresh();
         }),
       );
       box.append(card);
@@ -284,7 +437,7 @@
       box.append(
         el(
           "p",
-          "Add your first base location to begin discovery.",
+          "No locations yet. Add remote storage below, or ask your administrator to configure the folders available on this server.",
           "files-muted",
         ),
       );
@@ -533,6 +686,8 @@
     transform();
   };
   async function refresh() {
+    await loadSources();
+    sourceOptions();
     if (view === "catalog") await catalog();
     if (view === "sources") await sourceList();
     if (view === "packages") {
@@ -545,6 +700,32 @@
     .querySelectorAll("[data-view]")
     .forEach((b) => (b.onclick = safe(() => changeView(b.dataset.view))));
   $("#refresh-files").onclick = safe(refresh);
+  $("#browse-files").onclick = safe(() => openPicker());
+  $("#package-choose").onclick = safe(() => changeView("catalog"));
+  $("#add-remote").onclick = () => {
+    $("#source-settings").open = true;
+    $("#source-form [name=name]").focus();
+  };
+  $("#source-form [name=kind]").onchange = sourceHelp;
+  $("#reference-form [name=source_id]").onchange = referenceHelp;
+  $("#close-folder").onclick = () => $("#folder-dialog").close();
+  $("#folder-source").onchange = folderSafe(async () => {
+    picked.clear(); pickerSelection(); folderPath = ""; folderOffset = 0; await loadFolder();
+  });
+  $("#folder-previous").onclick = folderSafe(async () => { folderOffset = Math.max(0, folderOffset - 100); await loadFolder(); });
+  $("#folder-next").onclick = folderSafe(async () => { folderOffset += 100; await loadFolder(); });
+  $("#add-picked").onclick = folderSafe(async () => {
+    const sourceId = $("#folder-source").value;
+    $("#add-picked").disabled = true;
+    try {
+      const result = await api(`sources/${sourceId}/select`, {paths: [...picked]});
+      result.items.forEach((file) => selected.add(file.id));
+      $("#folder-dialog").close();
+      $("#filter-files").reset(); offset = 0;
+      await changeView("catalog");
+      message(`${result.items.length} files added and selected. Choose Create package from selection to share them.`);
+    } finally { pickerSelection(); }
+  });
   $("#filter-files").onsubmit = safe(async (e) => {
     e.preventDefault();
     offset = 0;
@@ -567,10 +748,8 @@
   $("#reference-form").onsubmit = safe(async (e) => {
     e.preventDefault();
     await api("references", Object.fromEntries(new FormData(e.target)));
-    message(
-      "Reference registered. Availability will be checked on retrieval or discovery.",
-    );
-    await catalog();
+    await changeView("catalog");
+    message("Reference registered. Availability will be checked on retrieval or discovery.");
   });
   $("#entity-search-form").onsubmit = safe(async (e) => {
     e.preventDefault();
@@ -599,8 +778,8 @@
     data.categories = [...form.categories.selectedOptions].map((o) => o.value);
     data.tags = list(data.tags);
     await api("sources", data);
-    message("Source added. Run Scan now or wait for the recurring scan.");
-    await sourceList();
+    message("Location added. Choose Scan now to index its files.");
+    await refresh();
   });
   $("#metadata-form").onsubmit = safe(async (e) => {
     e.preventDefault();
@@ -647,10 +826,18 @@
     } catch (error) {
       message(error.message, true);
     }
-    sources = (await api("sources")).items;
+    await loadSources();
+    sourceHelp();
     sourceOptions();
     categoryOptions($("#filter-files [name=category]"), [], true);
     categoryOptions($("#source-form [name=categories]"));
     await catalog();
   })();
+  let refreshing = false;
+  setInterval(async () => {
+    if (refreshing || document.hidden || !["catalog", "sources"].includes(view) || (!pendingScans.size && !sources.some((s) => s.state === "scanning"))) return;
+    refreshing = true;
+    try { await refresh(); } catch (error) { message(error.message, true); }
+    finally { refreshing = false; }
+  }, 5000);
 })();

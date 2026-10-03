@@ -1,22 +1,67 @@
 {% extends "base.html" %}
-{% block title %}Files · HARQIS{% endblock %}
+{% block title %}Files Â· HARQIS{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{{ static_asset('css/files.css') }}">
 <div id="files-app" data-host="{{ host_id }}">
-  <header class="files-heading"><div><p class="page-header-eyebrow">Organize / Files</p><h1 class="page-header-title">Your files, connected.</h1><p class="files-muted">One catalog across your storage locations. Assemble a package when it’s time to share.</p></div><button id="refresh-files">Refresh</button></header>
+  <header class="files-heading"><div><p class="page-header-eyebrow">Organize / Files</p><h1 class="page-header-title">Your files, connected.</h1><p class="files-muted">Browse your folders, choose files, and share a package when you are ready.</p></div><button id="refresh-files">Refresh</button></header>
   <p id="files-message" role="status" aria-live="polite"></p>
-  <nav class="files-tabs" aria-label="Files views"><button data-view="catalog" aria-pressed="true">Catalog</button><button data-view="sources">Sources</button><button data-view="packages">Packages</button><button data-view="graph">Graph</button></nav>
+  <nav class="files-tabs" aria-label="Files views"><button data-view="catalog" aria-pressed="true">Catalog</button><button data-view="sources">Locations</button><button data-view="packages">Packages</button><button data-view="graph">Graph</button></nav>
   <section id="view-catalog">
-    <details class="files-panel"><summary>Register a file reference manually</summary><form id="reference-form" class="files-toolbar"><input name="name" placeholder="File name" required aria-label="File name"><select name="source_id" aria-label="Source"></select><input name="locator" placeholder="Full path, Drive file ID, or URL" required aria-label="File location"><button>Register reference</button></form></details>
+    <div class="files-start">
+      <div><h2>Choose files. Create a package. Share a link.</h2><p class="files-muted">Browse configured server folders, or scan a location to make its files searchable here.</p></div>
+      <button id="browse-files" class="files-primary">Browse folders</button>
+    </div>
+    <div id="catalog-empty" class="files-panel files-empty" hidden></div>
     <form id="filter-files" class="files-toolbar"><input name="q" placeholder="Search names or tags" aria-label="Search files"><select name="category" aria-label="Filter category"><option value="">All categories</option></select><select name="status" aria-label="Filter availability"><option value="">All availability</option><option value="available">Available</option><option value="missing">Missing</option><option value="unreachable">Unreachable</option><option value="permission_denied">Permission denied</option></select><button>Filter</button></form>
     <div class="files-toolbar"><span id="file-count" class="files-muted"></span><span id="selected-count"></span><button id="selection-package">Create package from selection</button><button id="clear-selection">Clear selection</button></div>
-    <div class="files-table-wrap"><table class="files-table"><thead><tr><th><span class="files-muted">Select</span></th><th>File</th><th>Categories / tags</th><th>Locations</th><th>Size</th><th>Last seen</th></tr></thead><tbody id="file-rows"></tbody></table></div>
-    <div class="files-toolbar"><button id="previous-page">Previous</button><button id="next-page">Next</button></div>
+    <div id="catalog-table" class="files-table-wrap"><table class="files-table"><thead><tr><th><span class="files-muted">Select</span></th><th>File</th><th>Categories / tags</th><th>Locations</th><th>Size</th><th>Last seen</th></tr></thead><tbody id="file-rows"></tbody></table></div>
+    <div id="catalog-pages" class="files-toolbar"><button id="previous-page">Previous</button><button id="next-page">Next</button></div>
   </section>
   <section id="view-sources" hidden>
-    <div class="files-columns"><form id="source-form" class="files-panel"><h2>Add a source</h2><label>Name<input name="name" required maxlength="160" placeholder="Project documents"></label><label>Storage<select name="kind"><option value="local">Server / local folder</option><option value="drive">Google Drive folder</option><option value="http">HTTP file URL</option><option value="sftp">SSH / SFTP folder</option><option value="ftp">FTP reference only</option></select></label><label>Base folder, Drive folder ID, or URL<input name="root" required></label><label>Local host identity<input name="host" value="{{ host_id }}"></label><label>SFTP connection profile<input name="profile" placeholder="Configured profile name"></label><label>Scan every (hours)<input name="interval_hours" type="number" min="1" max="8760" value="24"></label><label>Default categories<select name="categories" multiple></select></label><label>Default tags<input name="tags" placeholder="Comma separated"></label><button>Add source</button><p class="files-muted">New sources are discovered on the next recurring scan, or choose Scan now. Credentials stay in server configuration.</p></form><div id="source-list"></div></div>
+    <div class="files-heading"><div><h2>Your locations</h2><p class="files-muted">Configured server folders appear here automatically. Browse them now or scan to make every file searchable.</p></div><button id="add-remote">Add remote location</button></div>
+    <p id="scan-mode" class="files-muted"></p>
+    <div id="source-list" class="files-location-grid"></div>
+    <details id="source-settings" class="files-panel">
+      <summary>Add a remote location or a server subfolder</summary>
+      <form id="source-form" class="files-source-form">
+        <label>Name<input name="name" required maxlength="160" placeholder="Project documents"></label>
+        <label>Storage<select name="kind" aria-label="Storage"><option value="drive">Google Drive folder</option><option value="sftp">SSH / SFTP folder</option><option value="http">HTTP file URL</option><option value="local">Server subfolder</option><option value="ftp">FTP reference only</option></select></label>
+        <label><span id="source-root-label">Google Drive folder link or ID</span><input name="root" required aria-describedby="source-help"></label>
+        <p id="source-help" class="files-muted"></p>
+        <input name="host" type="hidden" value="{{ host_id }}">
+        <label id="sftp-profile-field" hidden>SFTP connection profile<input name="profile" placeholder="Configured profile name"></label>
+        <details><summary>Scan settings and default labels</summary>
+          <label>Scan every (hours)<input name="interval_hours" type="number" min="1" max="8760" value="24"></label>
+          <label>Default categories<select name="categories" multiple></select></label>
+          <label>Default tags<input name="tags" placeholder="Comma separated"></label>
+        </details>
+        <button>Add location</button>
+      </form>
+    </details>
+    <details id="manual-reference" class="files-panel">
+      <summary>Advanced: register a file reference</summary>
+      <p class="files-muted">Use this only when you already know a file’s exact location. This saves a pointer; it does not upload a file or verify its contents. For server files, use Browse folders instead.</p>
+      <form id="reference-form" class="files-source-form">
+        <label>Display name<input name="name" placeholder="Quarterly report.pdf" required></label>
+        <label>Location<select name="source_id" aria-describedby="reference-help"></select></label>
+        <label><span id="reference-locator-label">File path, Drive file ID, or URL</span><input name="locator" required aria-describedby="reference-help"></label>
+        <p id="reference-help" class="files-muted"></p>
+        <button>Register reference</button>
+      </form>
+    </details>
   </section>
-  <section id="view-packages" hidden><div class="files-columns"><form id="package-form" class="files-panel"><h2>Create a package</h2><p id="package-selection" class="files-muted"></p><label>Title<input name="title" required maxlength="160"></label><label>Description<textarea name="description" maxlength="3000" rows="4"></textarea></label><label>Expires after publication<select name="expiry_days"><option value="7">7 days</option><option value="15">15 days</option><option value="30">30 days</option><option value="0">No expiration</option></select></label><p>Published copies are readable by anyone with the link.</p><button>Create draft revision</button></form><div id="package-list"></div></div><div id="package-detail"></div></section>
+  <dialog id="folder-dialog" class="files-dialog" aria-labelledby="folder-heading">
+    <button id="close-folder" class="files-close">Close</button>
+    <h2 id="folder-heading">Browse server folders</h2>
+    <p class="files-muted">Choose existing files on the server. Adding them to the catalog keeps the originals in place.</p>
+    <label>Location<select id="folder-source"></select></label>
+    <p id="folder-message" role="status" aria-live="polite"></p>
+    <nav id="folder-breadcrumbs" class="files-toolbar" aria-label="Folder path"></nav>
+    <div id="folder-entries" class="files-folder-entries"></div>
+    <div class="files-toolbar"><button id="folder-previous">Previous</button><span id="folder-page" class="files-muted"></span><button id="folder-next">Next</button></div>
+    <div class="files-picker-footer"><span id="folder-selection">0 files selected</span><button id="add-picked" class="files-primary" disabled>Add selected files</button></div>
+  </dialog>
+  <section id="view-packages" hidden><div class="files-columns"><form id="package-form" class="files-panel"><h2>Create a package</h2><p id="package-selection" class="files-muted"></p><button id="package-choose" type="button">Choose files from catalog</button><label>Title<input name="title" required maxlength="160"></label><label>Description<textarea name="description" maxlength="3000" rows="4"></textarea></label><label>Expires after publication<select name="expiry_days"><option value="7">7 days</option><option value="15">15 days</option><option value="30">30 days</option><option value="0">No expiration</option></select></label><p>Published copies are readable by anyone with the link.</p><button>Create draft revision</button></form><div id="package-list"></div></div><div id="package-detail"></div></section>
   <section id="view-graph" hidden><p class="files-muted">Uses your catalog filters. Select a file node to inspect it; drag the canvas to pan and use the wheel to zoom.</p><p id="graph-count"></p><button id="graph-reset">Reset view</button><div class="files-graph"><svg id="files-graph" viewBox="0 0 1100 700" role="img" aria-label="Files connected to categories and entities"></svg></div><div id="graph-accessible" class="files-toolbar"></div></section>
   <dialog id="file-dialog" class="files-dialog"><button id="close-file" class="files-close">Close</button><div id="file-detail"></div><form id="entity-search-form" class="files-toolbar"><input name="q" placeholder="Find an existing entity" aria-label="Entity search"><button>Find entities</button></form><div id="entity-results"></div><form id="metadata-form"><label>Categories<select name="categories" multiple></select></label><label>Tags<input name="tags"></label><label>Linked entity IDs<input name="entities" placeholder="Comma separated canonical IDs"></label><p class="files-muted"><a href="/hfl-corpus/entities" target="_blank" rel="noopener">Browse existing entities ↗</a></p><button>Save metadata</button></form><form id="location-form"><h3>Add another location</h3><label>Source<select name="source_id"></select></label><label>Path, Drive file ID, or URL<input name="locator" required></label><button>Add location</button></form></dialog>
 </div>

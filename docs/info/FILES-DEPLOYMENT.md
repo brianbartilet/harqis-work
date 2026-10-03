@@ -87,7 +87,13 @@ until configuration is ready, but **do not disable maintenance while expiring
 public packages remain** unless their Drive grants have been revoked separately.
 
 `FILES_ALLOWED_ROOTS` is a JSON array. A configured local source must resolve
-inside one of these roots; symlinks are not followed during discovery. Give the
+inside one of these roots; symlinks are not followed during discovery. Each root
+automatically appears as a local location when Files is opened or maintenance
+runs. Existing matching locations keep their names and paused state; new ones
+default to enabled with a 24-hour scan interval. With `FILES_ENABLED=1`, new
+locations are eligible for scanning on the next maintenance pass. Removing a
+root stops automatic scans of its configured location without deleting history.
+Give the
 service account read access to originals and read/write access to the catalog
 directory and its OS temporary directory. Use narrow roots. Never include the
 catalog directory in backups by reading its live WAL files independently.
@@ -238,10 +244,14 @@ catalog: run them on the catalog host, not against an unrelated laptop database.
 
 ## 6. End-to-end acceptance on the server
 
-1. Sign in and open **Organize → Files → Sources**. Add a small approved local
-   folder. Set its host to `harqis-server` (or your configured `FILES_HOST_ID`).
-2. Choose **Scan now**. Refresh until the source is ready. Add a second source,
-   such as an SFTP folder or Drive folder ID. Verify discovery and one download
+1. Sign in and open **Organize → Files**. Confirm the configured roots appear
+   automatically in **Locations**, without duplicating existing local sources.
+   Choose **Browse folders**, open a small approved folder, and select sample
+   files. **Add selected files** should return to the Catalog with those files
+   checked. Confirm this does not upload or publish the files.
+2. In Locations choose **Scan now** (resume the location first if paused).
+   Confirm progress and completion. Use **Add remote location** to add an SFTP
+   folder or Google Drive folder link/ID. Verify discovery and one download
    from each. Confirm retries/errors appear on unavailable sources.
 3. Change a file, scan again, and verify its existing record updates. Remove a
    test original and rescan to verify `missing`; restore it and rescan to recover.

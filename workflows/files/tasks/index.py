@@ -5,6 +5,7 @@ import time
 from core.apps.sprout.app.celery import SPROUT
 from apps.file_index.service import expire, publish, scan
 from apps.file_index.store import Store
+from apps.file_index.local import configured_sources
 from workflows.queues import qualify_queue
 
 
@@ -26,8 +27,8 @@ def maintain_files():
     with store.lease('maintenance', seconds=180):
         results = expire(store)
         queued = []
-        for source in store.all('sources'):
-            if not source.get('enabled') or source['kind'] == 'ftp':
+        for source in configured_sources(store):
+            if not source.get('enabled') or source['kind'] == 'ftp' or source.get('configured_available') is False:
                 continue
             last = max(source.get('last_scan') or 0, source.get('last_queued') or 0)
             if time.time() - last >= source['interval_hours'] * 3600:

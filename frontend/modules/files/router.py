@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from apps.file_index import adapters
+from apps.file_index.local import configured_sources, browse, select_files
 from apps.file_index.service import retrieve_file, register_reference
 from apps.file_index.store import Store
 from web import page_context, require_user, templates
@@ -106,12 +107,53 @@ def page(request: Request):
 
 @router.get('/api/sources')
 def sources():
-    return {'items': Store().all('sources')}
+    try:
+        items = configured_sources()
+    except (ValueError, OSError):
+        raise HTTPException(503, 'Server folder configuration is unavailable. Check FILES_ALLOWED_ROOTS on the server.')
+    return {'items': items, 'automatic_scans': os.environ.get('FILES_ENABLED', '').lower() in {'1', 'true', 'yes'}}
+
+
+def local_error(exc):
+    if isinstance(exc, PermissionError):
+        return HTTPException(403, str(exc))
+    if isinstance(exc, FileNotFoundError):
+        return HTTPException(404, 'Folder or file is unavailable. Check that the server drive is connected, then refresh.')
+    if isinstance(exc, ValueError):
+        return HTTPException(422, str(exc))
+    return HTTPException(409, 'Cannot read this folder. Check server permissions, then refresh.')
+
+
+@router.get('/api/sources/{key}/browse')
+def browse_source(key: str, path: str = '', offset: int = Query(0, ge=0)):
+    source = find('sources', key)
+    try:
+        return browse(source, path, offset)
+    except (ValueError, OSError) as exc:
+        raise local_error(exc)
+
+
+class PickFiles(Command):
+    paths: list[str] = Field(min_length=1, max_length=200)
+
+
+@router.post('/api/sources/{key}/select')
+def pick_files(key: str, payload: PickFiles):
+    source = find('sources', key)
+    try:
+        return {'items': select_files(source, payload.paths)}
+    except (ValueError, OSError) as exc:
+        raise local_error(exc)
 
 
 @router.post('/api/sources')
 def create_source(payload: SourceWrite):
     data = payload.model_dump()
+    if data['kind'] == 'drive' and data['root'].startswith('https://drive.google.com/'):
+        import re
+        match = re.fullmatch(r'/drive/(?:u/\d+/)?folders/([A-Za-z0-9_-]+)/?', urlsplit(data['root']).path)
+        if match:
+            data['root'] = match.group(1)
     try:
         adapters.validate_source(data)
     except Exception as exc:
@@ -133,6 +175,8 @@ def update_source(key: str, payload: SourceWrite):
 @router.post('/api/sources/{key}/scan')
 def scan_source(key: str):
     source = find('sources', key)
+    if not source.get('enabled', True):
+        raise HTTPException(409, 'This location is paused. Resume scans first, or browse and select individual files.')
     if source['kind'] == 'ftp':
         raise HTTPException(422, 'FTP is reference-only; use SFTP for discovery')
     return enqueue('scan_source', source_id=key)

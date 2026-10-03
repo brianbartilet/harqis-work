@@ -29,6 +29,45 @@ feature branch and requested a server deployment guide.
   is restricted to the selected published revision; owner history remains private.
 - Expiry revokes the public folder grant and retains private copies and metadata.
 
+## Folder-first user experience
+
+The primary path is **Browse folders → select existing files → create a draft
+package → publish**. Owners do not need to register paths or recreate configured
+local roots as sources.
+
+- `FILES_ALLOWED_ROOTS` remains the access boundary and now also supplies the
+  initial local locations. Opening Locations (or the Catalog, which loads its
+  locations) and scheduled maintenance reconcile these roots transactionally.
+  Matching existing sources are reused; names, labels, scan intervals, and
+  paused state are preserved. Removed configured roots are retained for history
+  but excluded from automatic scans and browsing. Restoring a root restores its
+  availability without unpausing it.
+- **Catalog** opens with Browse folders. Its first-use state lists configured
+  local folders with Browse and Scan actions. Filtered zero-result states offer
+  Clear filters instead of setup instructions.
+- The authenticated folder picker shows only metadata within allowed local
+  source roots. It supports folder navigation and pages of 100 entries, bounds
+  a folder listing at 10,000 entries, and accepts up to 200 selected files per
+  request. It excludes symbolic links and the catalog database/WAL/SHM. All
+  selected paths must validate before any metadata is registered. Adding files
+  also selects their catalog records for package creation; it neither uploads
+  nor publishes content.
+- **Locations** replaces the Sources label. It displays configured folders,
+  scan status, pause/resume controls, and a collapsed remote/subfolder form.
+  Remote fields change with storage type; Drive accepts folder links or IDs.
+  FTP remains reference-only. Remote files enter the Catalog through scans;
+  the interactive picker supports local server folders only.
+- Manual references live under **Locations → Advanced**, with explicit labels
+  and guidance that a reference does not upload or verify a file. Catalog file
+  details still support alternate locations.
+- Scanning remains opt-in through `FILES_ENABLED` for scheduled work. Manual
+  browsing and Scan now remain available; a paused location must be resumed
+  before a scan. The page refreshes while following a manually queued scan
+  (up to two minutes) or while a source reports that it is scanning.
+- The empty package form directs the owner back to the Catalog and disables
+  draft creation until files are selected. Publication and guest access retain
+  their existing explicit controls and expiry behavior.
+
 ## Automation Runtime Decision
 
 **Classification:** celery

@@ -69,6 +69,19 @@ scans. Drive locators use stable provider IDs. Local/SFTP locators are paths;
 renames are not automatically guessed or merged. Alternate locations can be
 registered manually. SHA-256 is computed for retrieved content.
 
+Configured `FILES_ALLOWED_ROOTS` automatically become local **Locations** when
+the Files UI or maintenance reconciles them. Matching existing sources keep
+their preferences, including paused scans. New locations default to a 24-hour
+scan interval. Removed configured roots retain their history but stop automatic
+scanning. Scheduled scans still require `FILES_ENABLED=1`.
+
+In the UI, **Browse folders** lets owners choose existing local files without
+typing paths or waiting for a complete scan. Adding a selection records metadata
+and selects the files for a package; it does not upload or publish them. Remote
+storage is added in **Locations**, while manual path references are under
+**Advanced**. The picker enforces the same host/root boundaries as retrieval,
+excludes symbolic links and catalog files, and bounds listings and selections.
+
 ## MCP Tools
 
 CLI and MCP use the same registrar. Run these on the catalog host.
