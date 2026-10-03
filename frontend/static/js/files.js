@@ -238,7 +238,7 @@
       if (s.warning_count) {
         row.append(el("p", `${s.warning_count} paths skipped. Coverage is incomplete; unvisited files retain their previous availability.`, "files-muted"));
         const warnings = el("ul");
-        for (const warning of s.warnings) warnings.append(el("li", `${warning.path} � ${warning.error}${warning.errno == null ? "" : ` (errno ${warning.errno})`}`));
+        for (const warning of s.warnings) warnings.append(el("li", `${warning.path} · ${warning.error}${warning.errno == null ? "" : ` (errno ${warning.errno})`}`));
         row.append(warnings);
         if (s.warning_count > s.warnings.length) row.append(el("p", `Showing the first ${s.warnings.length} skipped paths.`, "files-muted"));
       }
@@ -262,7 +262,7 @@
     if (!s.enabled) return s.kind === "local" ? "Automatic scans paused · browsing is still available" : "Scans paused";
     if (s.state === "scanning") return "Scanning files…";
     if (pendingScans.has(s.id)) return "Scan queued · waiting for the worker";
-    return ({new: "Ready for the first scan", ready: "Ready", partial: "Completed with warnings � some paths were skipped; see Catalog indexing", missing: "Folder unavailable — check the server drive", permission_denied: "Access denied — check the connection permissions", unreachable: "Cannot reach this location — check its connection"})[s.state] || s.state;
+    return ({new: "Ready for the first scan", ready: "Ready", partial: "Completed with warnings — some paths were skipped; see Catalog indexing", missing: "Folder unavailable — check the server drive", permission_denied: "Access denied — check the connection permissions", unreachable: "Cannot reach this location — check its connection"})[s.state] || s.state;
   }
   async function queueScan(id) {
     await api(`sources/${id}/scan`, {});
