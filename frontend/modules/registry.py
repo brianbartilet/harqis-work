@@ -23,11 +23,6 @@ MODULES: tuple[ModuleDefinition, ...] = (
         detail="Browse the platform's automation, integration, knowledge, and operating-principle modules.",
     ),
     ModuleDefinition(
-        key="files", label="Organize", route="/files",
-        description="Find files across storage locations and share versioned packages.",
-        detail="Catalog documents and media, connect categories and entities, and publish expiring file packages.",
-    ),
-    ModuleDefinition(
         key="hfl_corpus",
         label="Distill",
         route="/distill",
@@ -54,6 +49,11 @@ MODULES: tuple[ModuleDefinition, ...] = (
         route="/second-brain",
         description="A context-aware feed of what matters now.",
         detail="Blend automatic signals with temporary manual modes, then trace every advisory item to its source and freshness.",
+    ),
+    ModuleDefinition(
+        key="files", label="Organize", route="/files",
+        description="Find files across storage locations and share versioned packages.",
+        detail="Catalog documents and media, connect categories and entities, and publish expiring file packages.",
     ),
     ModuleDefinition(
         key="workflows",
