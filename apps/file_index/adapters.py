@@ -143,16 +143,42 @@ def discover(source):
         root = local_path(source)
         if not root.is_dir():
             raise FileNotFoundError('Source directory is missing')
+        def warning(path, exc=None):
+            # The scan owns this bounded diagnostic buffer; never persist it as source config.
+            source['_warning_count'] = source.get('_warning_count', 0) + 1
+            warnings = source.setdefault('_warnings', [])
+            if len(warnings) < 50:
+                warnings.append({'path': str(path), 'error': type(exc).__name__ if exc else 'ExcludedSystemFolder',
+                                 'errno': getattr(exc, 'errno', None)})
         def onerror(exc):
-            raise exc
+            if not exc.filename or Path(exc.filename) == root:
+                raise exc
+            warning(exc.filename, exc)
         for parent, dirs, files in os.walk(root, followlinks=False, onerror=onerror):
-            dirs[:] = [d for d in dirs if not Path(parent, d).is_symlink()]
+            allowed_dirs = []
+            for name in dirs:
+                path = Path(parent, name)
+                if name in {'.Spotlight-V100', '.Trashes', '.fseventsd', '.TemporaryItems'}:
+                    warning(path)
+                    continue
+                try:
+                    if not path.is_symlink():
+                        allowed_dirs.append(name)
+                except OSError as exc:
+                    warning(path, exc)
+            dirs[:] = allowed_dirs
             for name in files:
                 path = Path(parent, name)
-                if path.is_symlink():
+                try:
+                    if path.is_symlink():
+                        continue
+                    path = local_path(source, path)
+                    info = path.stat()
+                    if not stat.S_ISREG(info.st_mode):
+                        continue
+                except OSError as exc:
+                    warning(path, exc)
                     continue
-                path = local_path(source, path)
-                info = path.stat()
                 yield str(path), metadata(name, info.st_size, info.st_mtime_ns)
     elif kind == 'sftp':
         with sftp(source) as remote:

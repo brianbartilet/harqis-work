@@ -231,10 +231,17 @@
     if (!data.locations.length) rows.append(el("p", "No locations configured yet."));
     for (const s of data.locations) {
       const row = el("div", undefined, "files-indexing-location");
-      row.append(el("strong", `${s.name} · ${s.state.replaceAll("_", " ")}`));
+      row.append(el("strong", `${s.name} · ${(s.state === "partial" ? "Completed with warnings" : s.state.replaceAll("_", " "))}`));
       row.append(el("p", `Last started: ${s.last_started ? date(s.last_started) : "Not recorded"} · Finished: ${date(s.last_finished)} · Last successful scan: ${date(s.last_success)}`, "files-muted"));
       row.append(el("p", `${s.processed.toLocaleString()} files processed${s.progress_at ? " · Updated " + date(s.progress_at) : ""}${s.error ? " · " + s.error : ""}`, "files-muted"));
       row.append(el("p", `Next run: ${s.next_due !== null ? s.next_due <= data.as_of ? "Due — awaiting scheduler / worker" : date(s.next_due) + " (estimated)" : s.schedule}`, "files-muted"));
+      if (s.warning_count) {
+        row.append(el("p", `${s.warning_count} paths skipped. Coverage is incomplete; unvisited files retain their previous availability.`, "files-muted"));
+        const warnings = el("ul");
+        for (const warning of s.warnings) warnings.append(el("li", `${warning.path} � ${warning.error}${warning.errno == null ? "" : ` (errno ${warning.errno})`}`));
+        row.append(warnings);
+        if (s.warning_count > s.warnings.length) row.append(el("p", `Showing the first ${s.warnings.length} skipped paths.`, "files-muted"));
+      }
       rows.append(row);
     }
   }
@@ -255,7 +262,7 @@
     if (!s.enabled) return s.kind === "local" ? "Automatic scans paused · browsing is still available" : "Scans paused";
     if (s.state === "scanning") return "Scanning files…";
     if (pendingScans.has(s.id)) return "Scan queued · waiting for the worker";
-    return ({new: "Ready for the first scan", ready: "Ready", missing: "Folder unavailable — check the server drive", permission_denied: "Access denied — check the connection permissions", unreachable: "Cannot reach this location — check its connection"})[s.state] || s.state;
+    return ({new: "Ready for the first scan", ready: "Ready", partial: "Completed with warnings � some paths were skipped; see Catalog indexing", missing: "Folder unavailable — check the server drive", permission_denied: "Access denied — check the connection permissions", unreachable: "Cannot reach this location — check its connection"})[s.state] || s.state;
   }
   async function queueScan(id) {
     await api(`sources/${id}/scan`, {});

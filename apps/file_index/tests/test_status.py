@@ -21,6 +21,9 @@ def test_coverage_and_schedule(tmp_path, monkeypatch):
     assert status['locations'][0]['next_due'] == 7400
     legacy = {**source, 'state': 'unreachable', 'count': None}
     assert indexing_status(store, [legacy])['locations'][0]['processed'] == 0
+    store.event(source['id'], 'scan_failed', count=197)
+    assert indexing_status(store, [legacy])['locations'][0]['processed'] == 197
+    assert indexing_status(store, [{**legacy, 'processed': 0}])['locations'][0]['processed'] == 0
     for changes in ({'enabled': False}, {'configured_available': False}, {'kind': 'ftp'}):
         assert indexing_status(store, [{**source, **changes}])['locations'][0]['next_due'] is None
     monkeypatch.setenv('FILES_ENABLED', '0')

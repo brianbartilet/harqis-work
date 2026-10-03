@@ -1,5 +1,6 @@
 """Read-only catalog coverage and estimated scan timing (no filesystem walk)."""
 import os
+import json
 import time
 
 
@@ -18,6 +19,12 @@ def indexing_status(store, sources):
         coverage[key + '_percent'] = round(100 * coverage[key] / coverage['total'], 1) if coverage['total'] else None
     locations = []
     for source in sources:
+        processed = source.get('processed')
+        if processed is None:
+            # Legacy failed scans recorded their partial count only in the audit log.
+            with store.connect() as db:
+                event = db.execute("SELECT at,data FROM events WHERE subject=? AND kind IN ('scan_failed','scan_completed','scan_partial') ORDER BY id DESC LIMIT 1", (source['id'],)).fetchone()
+            processed = json.loads(event['data']).get('count', 0) if event and event['at'] >= (source.get('started_at') or 0) else source.get('count') or 0
         state = source.get('state', 'new')
         if state == 'scanning' and 'source:' + source['id'] not in active:
             state = 'interrupted'
@@ -27,7 +34,8 @@ def indexing_status(store, sources):
             'id': source['id'], 'name': source['name'], 'state': state,
             'last_started': source.get('started_at'),
             'last_finished': source.get('finished_at', source.get('last_attempt') or source.get('last_scan')),
-            'last_success': source.get('last_scan'), 'processed': source.get('processed', source.get('count')) or 0,
+            'last_success': source.get('last_scan'), 'processed': processed,
+            'warnings': source.get('warnings', []), 'warning_count': source.get('warning_count', 0),
             'progress_at': source.get('progress_at'), 'error': source.get('error'),
             'next_due': due if eligible and state != 'scanning' else None,
             'schedule': 'scanning' if state == 'scanning' else 'scheduled' if eligible else 'unavailable' if source.get('configured_available') is False else 'paused' if not source.get('enabled', True) else 'reference only' if source['kind'] == 'ftp' else 'disabled',

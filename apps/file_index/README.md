@@ -87,6 +87,18 @@ used by maintenance. Disabled, paused, unavailable, and reference-only locations
 have no next automatic scan. An expired scan lease is shown as interrupted.
 New records inherit location defaults; indexing does not classify contents.
 
+Local scans exclude `.Spotlight-V100`, `.Trashes`, `.fseventsd`, and
+`.TemporaryItems` directories. Other hidden directories remain eligible. An
+inaccessible child directory or file produces a warning and discovery continues;
+an inaccessible source root still fails the scan. Runs with skipped paths show
+**Completed with warnings**, retain the last fully successful scan timestamp,
+and do not mark unvisited records missing. Discovery failures likewise leave
+individual files' previous availability intact. The status panel lists up to
+50 skipped paths and the total warning count. Historical processed counts fall
+back to the latest matching scan audit event when older source records lack
+progress fields. A subsequent complete scan clears warnings and reconciles
+missing files normally.
+
 In the UI, **Browse folders** lets owners choose existing local files without
 typing paths or waiting for a complete scan. Adding a selection records metadata
 and selects the files for a package; it does not upload or publish them. Remote

@@ -28,8 +28,8 @@ def scan(source_id, store=None):
         return {'status': 'disabled'}
     with store.lease('source:' + source_id):
         run_id, count = identity(), 0
-        source.update(state='scanning', error=None, started_at=time.time())
-        store.patch('sources', source_id, {'state': 'scanning', 'error': None, 'started_at': source['started_at'], 'finished_at': None, 'processed': 0, 'progress_at': source['started_at']})
+        source.update(state='scanning', error=None, started_at=time.time(), _warnings=[], _warning_count=0)
+        store.patch('sources', source_id, {'state': 'scanning', 'error': None, 'started_at': source['started_at'], 'finished_at': None, 'warnings': [], 'warning_count': 0, 'processed': 0, 'progress_at': source['started_at']})
         progress_at = time.monotonic()
         store.event(source_id, 'scan_started', run_id=run_id)
         try:
@@ -46,27 +46,29 @@ def scan(source_id, store=None):
                     progress_at = time.monotonic()
             with store.connect() as db:
                 rows = db.execute('SELECT data FROM locations WHERE source_id=?', (source_id,)).fetchall()
-                for row in rows:
+                for row in rows if not source['_warning_count'] else []:
                     location = json.loads(row[0])
                     if (location.get('scan_id') != run_id and
                             (location.get('last_seen') or location['first_seen']) < source['started_at']):
                         location['status'] = 'missing'
                         db.execute('UPDATE locations SET data=? WHERE id=?', (json.dumps(location), location['id']))
-            source.update(state='ready', last_scan=time.time(), error=None, count=count)
-            store.event(source_id, 'scan_completed', run_id=run_id, count=count)
+            if source['_warning_count']:
+                source.update(state='partial', last_attempt=time.time(), error=None, count=count)
+            else:
+                source.update(state='ready', last_scan=time.time(), error=None, count=count)
+            store.event(source_id, 'scan_partial' if source['_warning_count'] else 'scan_completed',
+                        run_id=run_id, count=count, warning_count=source['_warning_count'], warnings=source['_warnings'])
         except Exception as exc:
             status = error_status(exc)
             source.update(state=status, error=type(exc).__name__, last_attempt=time.time())
-            # A failed discovery is not proof that any specific file disappeared.
-            if status != 'missing':
-                with store.connect() as db:
-                    db.execute("UPDATE locations SET data=json_set(data,'$.status',?) WHERE source_id=?", (status, source_id))
+            # A discovery failure does not establish the availability of individual files.
             store.event(source_id, 'scan_failed', run_id=run_id, error=type(exc).__name__, count=count)
             raise
         finally:
             source.update(processed=count, progress_at=time.time(), finished_at=time.time())
+            source.update(warning_count=source['_warning_count'], warnings=source['_warnings'])
             store.patch('sources', source_id, {key: source.get(key) for key in
-                ('state', 'error', 'started_at', 'last_scan', 'last_attempt', 'count', 'processed', 'progress_at', 'finished_at')})
+                ('state', 'error', 'started_at', 'last_scan', 'last_attempt', 'count', 'processed', 'progress_at', 'finished_at', 'warning_count', 'warnings')})
     return {'source_id': source_id, 'count': count, 'run_id': run_id}
 
 

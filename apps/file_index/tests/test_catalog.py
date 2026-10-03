@@ -52,7 +52,7 @@ def test_incomplete_scan_does_not_mark_missing(catalog, monkeypatch):
     monkeypatch.setattr(adapters, 'discover', fail)
     with pytest.raises(PermissionError):
         service.scan(source['id'], store)
-    assert store.catalog()['items'][0]['locations'][0]['status'] == 'permission_denied'
+    assert store.catalog()['items'][0]['locations'][0]['status'] == 'available'
     assert store.get('sources', source['id'])['state'] == 'permission_denied'
 
 
