@@ -22,6 +22,7 @@ def test_owner_routes_and_csrf(authenticated_client, files_env):
     page = client.get('/files')
     assert page.status_code == 200
     assert 'Your files, connected.' in page.text
+    assert client.get('/files/api/indexing-status').status_code == 200
     payload = {'name': 'Docs', 'root': str(files_env), 'kind': 'local', 'host': 'test-host'}
     assert client.post('/files/api/sources', json=payload).status_code == 403
     assert client.post('/files/api/sources', json=payload, headers={'X-Harqis-Files': '1', 'Origin': 'https://attacker.test'}).status_code == 403
@@ -30,6 +31,7 @@ def test_owner_routes_and_csrf(authenticated_client, files_env):
     assert client.get('/files/api/sources').json()['items'][0]['name'] == 'Docs'
     client.cookies.clear()
     assert client.get('/files/api/catalog').status_code == 401
+    assert client.get('/files/api/indexing-status').status_code == 401
 
 
 def test_catalog_package_guest_boundary(authenticated_client, files_env):

@@ -7,6 +7,13 @@
   <p id="files-message" role="status" aria-live="polite"></p>
   <nav class="files-tabs" aria-label="Files views"><button data-view="catalog" aria-pressed="true">Catalog</button><button data-view="sources">Locations</button><button data-view="packages">Packages</button><button data-view="graph">Graph</button></nav>
   <section id="view-catalog">
+    <section class="files-panel" aria-labelledby="indexing-heading">
+      <h2 id="indexing-heading">Catalog indexing</h2>
+      <p class="files-muted">Every minute, the scheduled job checks which locations are due for a scan and expires shared packages. Scans discover files, refresh metadata, and mark missing files after a complete scan. New files inherit the location’s default categories; file contents are not automatically categorized. Originals stay in place.</p>
+      <div id="indexing-summary" class="files-indexing-summary" aria-live="polite">Loading indexing status…</div>
+      <p class="files-muted">Percentages cover known catalog records, including manual references, not undiscovered files. Indexed means observed at least once; it does not guarantee current availability. Scan totals are unknown until discovery finishes.</p>
+      <details><summary>Last and next runs by location</summary><p class="files-muted">Next runs are estimates based on each location’s interval. The scheduler checks every minute; worker availability may delay execution.</p><div id="indexing-locations"></div></details>
+    </section>
     <div class="files-start">
       <div><h2>Choose files. Create a package. Share a link.</h2><p class="files-muted">Browse configured server folders, or scan a location to make its files searchable here.</p></div>
       <button id="browse-files" class="files-primary">Browse folders</button>

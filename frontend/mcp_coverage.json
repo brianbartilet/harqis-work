@@ -2871,6 +2871,27 @@
       "status": "deferred",
       "tools": [],
       "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/sources/{key}/browse",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner-authenticated, paginated server-folder picker for the Files UI; browsing remains constrained to configured roots and is not exposed through a machine tool."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/sources/{key}/select",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated selection registers bounded file metadata from the folder picker; a dedicated machine command and write contract is deferred alongside manual reference registration."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/indexing-status",
+      "status": "ui",
+      "tools": [],
+      "reason": "Read-only Files UI progress and schedule presentation for known catalog records; per-location scan data remains available through list_file_index_sources."
     }
   ]
 }

@@ -75,6 +75,18 @@ their preferences, including paused scans. New locations default to a 24-hour
 scan interval. Removed configured roots retain their history but stop automatic
 scanning. Scheduled scans still require `FILES_ENABLED=1`.
 
+The Catalog's indexing panel refreshes every five seconds while visible. It
+shows counts and percentages for known records observed at least once and
+records with at least one category, independent of catalog filters. Manual
+references remain unindexed until observed. These percentages do not measure
+undiscovered files or guarantee current availability. Scans stream discovery,
+so live progress reports processed files without an invented total or ETA.
+Per-location details include the latest start/finish, last successful scan,
+errors, and estimated next due time from the same interval/queue timestamps
+used by maintenance. Disabled, paused, unavailable, and reference-only locations
+have no next automatic scan. An expired scan lease is shown as interrupted.
+New records inherit location defaults; indexing does not classify contents.
+
 In the UI, **Browse folders** lets owners choose existing local files without
 typing paths or waiting for a complete scan. Adding a selection records metadata
 and selects the files for a package; it does not upload or publish them. Remote

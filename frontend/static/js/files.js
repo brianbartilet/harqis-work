@@ -116,6 +116,7 @@
     await refresh();
   }
   async function catalog() {
+    await indexingStatus();
     const params = filters();
     params.set("offset", offset);
     const result = await api("catalog?" + params);
@@ -202,6 +203,39 @@
         }
         empty.append(button("Manage locations", () => changeView("sources")));
       }
+    }
+  }
+  async function indexingStatus() {
+    const target = $("#indexing-summary");
+    let data;
+    try { data = await api("indexing-status"); }
+    catch { target.textContent = "Indexing status unavailable. Retry with Refresh."; $("#indexing-locations").replaceChildren(); return; }
+    target.replaceChildren();
+    const c = data.coverage;
+    for (const [key, label] of [["indexed", "Indexed"], ["categorized", "Categorized"]]) {
+      const card = el("div");
+      const percent = c[key + "_percent"];
+      card.append(el("strong", `${label}: ${c[key].toLocaleString()} / ${c.total.toLocaleString()} files${percent === null ? " · No records yet" : ` · ${percent}%`}`));
+      if (percent !== null) {
+        const meter = el("progress"); meter.max = 100; meter.value = percent;
+        meter.setAttribute("aria-label", `${label} catalog records`); card.append(meter);
+      }
+      target.append(card);
+    }
+    const running = data.locations.filter((s) => s.state === "scanning");
+    target.append(el("p", running.length ? `${running.length} location(s) scanning · ${running.reduce((n, s) => n + s.processed, 0).toLocaleString()} files processed this run · total still being discovered` : data.automatic_scans ? "Automatic scanning enabled" : "Automatic scanning disabled on this server", "files-muted"));
+    const latest = Math.max(0, ...data.locations.map((s) => s.last_started || s.last_finished || 0));
+    const due = data.locations.filter((s) => s.next_due !== null).map((s) => s.next_due);
+    target.append(el("p", `Last run: ${latest ? date(latest) : "Not run yet"} · Next run: ${due.length ? Math.min(...due) <= data.as_of ? "Due — awaiting scheduler / worker" : date(Math.min(...due)) + " (estimated)" : running.length ? "Scanning now" : "No automatic scans scheduled"}`, "files-muted"));
+    const rows = $("#indexing-locations"); rows.replaceChildren();
+    if (!data.locations.length) rows.append(el("p", "No locations configured yet."));
+    for (const s of data.locations) {
+      const row = el("div", undefined, "files-indexing-location");
+      row.append(el("strong", `${s.name} · ${s.state.replaceAll("_", " ")}`));
+      row.append(el("p", `Last started: ${s.last_started ? date(s.last_started) : "Not recorded"} · Finished: ${date(s.last_finished)} · Last successful scan: ${date(s.last_success)}`, "files-muted"));
+      row.append(el("p", `${s.processed.toLocaleString()} files processed${s.progress_at ? " · Updated " + date(s.progress_at) : ""}${s.error ? " · " + s.error : ""}`, "files-muted"));
+      row.append(el("p", `Next run: ${s.next_due !== null ? s.next_due <= data.as_of ? "Due — awaiting scheduler / worker" : date(s.next_due) + " (estimated)" : s.schedule}`, "files-muted"));
+      rows.append(row);
     }
   }
   function localSources() {
@@ -835,9 +869,14 @@
   })();
   let refreshing = false;
   setInterval(async () => {
-    if (refreshing || document.hidden || !["catalog", "sources"].includes(view) || (!pendingScans.size && !sources.some((s) => s.state === "scanning"))) return;
+    if (refreshing || document.hidden || !["catalog", "sources"].includes(view)) return;
     refreshing = true;
-    try { await refresh(); } catch (error) { message(error.message, true); }
+    try {
+      const wasScanning = pendingScans.size || sources.some((s) => s.state === "scanning");
+      await loadSources();
+      if (wasScanning || pendingScans.size || sources.some((s) => s.state === "scanning")) await refresh();
+      else if (view === "catalog") await indexingStatus();
+    } catch (error) { message(error.message, true); }
     finally { refreshing = false; }
   }, 5000);
 })();

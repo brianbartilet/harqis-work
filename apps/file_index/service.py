@@ -29,17 +29,21 @@ def scan(source_id, store=None):
     with store.lease('source:' + source_id):
         run_id, count = identity(), 0
         source.update(state='scanning', error=None, started_at=time.time())
-        store.patch('sources', source_id, {'state': 'scanning', 'error': None, 'started_at': source['started_at']})
+        store.patch('sources', source_id, {'state': 'scanning', 'error': None, 'started_at': source['started_at'], 'finished_at': None, 'processed': 0, 'progress_at': source['started_at']})
+        progress_at = time.monotonic()
         store.event(source_id, 'scan_started', run_id=run_id)
         try:
             for locator, info in adapters.discover(source):
                 if source['kind'] == 'local' and str(Path(locator).resolve()) in {
                     str(store.path), str(store.path) + '-wal', str(store.path) + '-shm'}:
                     continue
-                count += 1
-                if count > int(os.environ.get('FILES_SCAN_LIMIT', '100000')):
+                if count >= int(os.environ.get('FILES_SCAN_LIMIT', '100000')):
                     raise ValueError('Scan limit exceeded; configure smaller source roots or raise FILES_SCAN_LIMIT')
                 store.observe(source, locator, info, run_id)
+                count += 1
+                if count % 100 == 0 or time.monotonic() - progress_at >= 1:
+                    store.patch('sources', source_id, {'processed': count, 'progress_at': time.time()})
+                    progress_at = time.monotonic()
             with store.connect() as db:
                 rows = db.execute('SELECT data FROM locations WHERE source_id=?', (source_id,)).fetchall()
                 for row in rows:
@@ -60,8 +64,9 @@ def scan(source_id, store=None):
             store.event(source_id, 'scan_failed', run_id=run_id, error=type(exc).__name__, count=count)
             raise
         finally:
+            source.update(processed=count, progress_at=time.time(), finished_at=time.time())
             store.patch('sources', source_id, {key: source.get(key) for key in
-                ('state', 'error', 'started_at', 'last_scan', 'last_attempt', 'count')})
+                ('state', 'error', 'started_at', 'last_scan', 'last_attempt', 'count', 'processed', 'progress_at', 'finished_at')})
     return {'source_id': source_id, 'count': count, 'run_id': run_id}
 
 

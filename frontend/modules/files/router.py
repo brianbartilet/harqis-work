@@ -114,6 +114,12 @@ def sources():
     return {'items': items, 'automatic_scans': os.environ.get('FILES_ENABLED', '').lower() in {'1', 'true', 'yes'}}
 
 
+@router.get('/api/indexing-status')
+def indexing_progress():
+    from apps.file_index.status import indexing_status
+    return indexing_status(Store(), sources()['items'])
+
+
 def local_error(exc):
     if isinstance(exc, PermissionError):
         return HTTPException(403, str(exc))
