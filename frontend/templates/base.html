@@ -207,7 +207,9 @@
       <nav aria-label="Primary navigation"
            class="hidden md:flex items-center gap-1 rounded-lg bg-slate-900/70 p-1 ring-1 ring-slate-800">
         {% for module in modules | default([]) %}
-        {% if module.key == "hfl_corpus" %}
+        {% if module.key == "files" %}
+        {% include "partials/files_navigation.html" %}
+        {% elif module.key == "hfl_corpus" %}
         {% include "partials/activity_navigation.html" %}
         {% elif module.key == "second_brain" %}
         {% include "partials/express_navigation.html" %}
@@ -254,7 +256,9 @@
     <nav aria-label="Primary navigation"
          class="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 pb-2 md:hidden">
       {% for module in modules | default([]) %}
-      {% if module.key == "hfl_corpus" %}
+      {% if module.key == "files" %}
+      {% include "partials/files_navigation.html" %}
+      {% elif module.key == "hfl_corpus" %}
       {% include "partials/activity_navigation.html" %}
       {% elif module.key == "second_brain" %}
       {% include "partials/express_navigation.html" %}

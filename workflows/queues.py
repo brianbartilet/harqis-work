@@ -43,6 +43,7 @@ class WorkflowQueue(StrEnum):
     WORKER = qualify_queue("worker")
     N8N = qualify_queue("n8n")     # n8n container ops (backup/restore/deploy) — pinned to harqis-server
     HFL = qualify_queue("hfl")     # Homework-for-Life: capture/ingest/summarize/recall — harqis-server
+    FILES = qualify_queue("files")  # File catalog and publications — catalog server only
     CAPTURE = qualify_queue("capture")  # isolated Windows desktop screen-reader supervisor
 
     # ── Broadcast (fanout) queues — every subscribed worker handles each task ──

@@ -6,11 +6,12 @@ HTMX, Alpine.js, Tailwind CSS, and SortableJS. Production serves compiled,
 content-versioned assets from `/static/`; the generated files are committed so
 runtime deployment does not require Node.js.
 
-The frontend currently exposes eight modules:
+The frontend currently exposes nine modules:
 
 | Module | Route | Purpose |
 |---|---|---|
 | Home | `/home` | Introduces the platform modules. |
+| Organize → Files | `/files` | Metadata catalog, storage discovery, file/category/entity graph, versioned Drive packages, and expiring guest pages. |
 | Manifesto | `/manifesto` | Renders `docs/MANIFESTO.md` and the HARQIS guiding principles. |
 | Workflows | `/workflows` | Displays Celery workflow categories, task triggers, schedules, status, and run history. |
 | Apps | `/applications` | Inventories `apps/*`, renders documentation, and runs controlled pytest checks using host configuration. |
@@ -20,6 +21,11 @@ The frontend currently exposes eight modules:
 | Second Brain | `/second-brain` | Shows a ranked context-aware advisory feed, manual mode overrides, and opt-in presentation settings. |
 
 `/dashboard` remains as a compatibility redirect to `/home`.
+
+Files deployment requires the catalog-host `files` queue, persistent SQLite
+storage, configured source roots, and Drive/SFTP credentials as applicable.
+Follow [Files deployment](../docs/info/FILES-DEPLOYMENT.md). Public package pages
+use `/file-share/{token}` on the frontend host, separate from HFL sharing.
 
 The `hfl_corpus` integration exposes all 100 canonical `/api/hfl` operations
 through the shared CLI/MCP adapter. See the [tool guide](../apps/hfl_corpus/README.md)

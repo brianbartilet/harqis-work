@@ -38,6 +38,7 @@ APP_CATALOG: tuple[AppToolSpec, ...] = (
     AppToolSpec("discord", "Discord", "apps.discord.mcp.register_discord_tools"),
     AppToolSpec("echo_mtg", "Echo MTG", "apps.echo_mtg.mcp.register_echo_mtg_tools"),
     AppToolSpec("filesystem", "Filesystem", "apps.filesystem.mcp.register_filesystem_tools"),
+    AppToolSpec("file_index", "File Index", "apps.file_index.mcp.register_file_index_tools"),
     AppToolSpec("gemini", "Gemini", "apps.gemini.mcp.register_gemini_tools"),
     AppToolSpec("git", "Git", "apps.git.mcp.register_git_tools"),
     AppToolSpec("github", "GitHub", "apps.github.mcp.register_github_tools"),
