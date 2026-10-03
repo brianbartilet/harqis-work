@@ -722,7 +722,7 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None,
     api_service__tcg_mp_merchant = ApiServiceTcgMpMerchant(cfg__tcg_mp)
     api_service__scryfall_cards = ApiServiceScryfallCards(cfg__scryfall)
 
-    cards_echo = api_service__echo_mtg_inventory.get_collection(tradable_only=1)
+    cards_echo = api_service__echo_mtg_inventory.get_all_collection(tradable_only=1)
     # get_collection is @deserialized(List[dict], child='items'); on a malformed
     # echo response (no 'items' key) the decorator falls back to the raw Response,
     # which then blows up with a cryptic "'Response' object is not iterable" when
@@ -1347,7 +1347,7 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None,
         date_bounded_statuses=DATE_BOUNDED_COMMITMENT_STATUSES,
     )
 
-    cards_echo = api_inventory.get_collection(tradable_only=1) or []
+    cards_echo = api_inventory.get_all_collection(tradable_only=1) or []
     if not isinstance(cards_echo, list):
         raise RuntimeError(
             "echo mtg get_collection did not return a list (got {0})".format(
@@ -1811,7 +1811,7 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None,
         date_bounded_statuses=DATE_BOUNDED_COMMITMENT_STATUSES,
     )
 
-    cards_echo = api_inventory.get_collection(tradable_only=1) or []
+    cards_echo = api_inventory.get_all_collection(tradable_only=1) or []
     if not isinstance(cards_echo, list):
         raise RuntimeError(
             "echo mtg get_collection did not return a list (got {0})".format(

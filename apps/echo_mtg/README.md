@@ -23,6 +23,23 @@
 | `ApiServiceEchoMTGCardItem` | `web/api/item.py` | `get_card_meta(emid)` |
 | `ApiServiceEchoMTGNotes` | `web/api/notes.py` | `get_note(id)`, `create_note(inventory_id, note)`, `update_note(id, note)`, `delete_note(id)` |
 
+### Complete inventory reads
+
+`get_collection(start, limit, sort, direction, tradable_only)` remains a single-page
+read for MCP and explicit pagination callers. EchoMTG caps each response at 1,000
+items even when a larger limit is requested.
+
+`get_all_collection(tradable_only=0, max_items=100_000)` reads the selected partition
+in inventory-ID ascending order, advances by the number of rows actually returned,
+and stops only on an empty page. It rejects malformed pages, missing/repeated
+inventory IDs, and collections exceeding the safety bound instead of returning
+partial inventory. It does not merge tradable and non-tradable partitions.
+
+Purchase mapping, listing generation/updates, and the sold-inventory radar use
+this complete reader with `tradable_only=1`. Confidence thresholds and schedules
+are unchanged. Offset pagination is not an atomic snapshot: avoid concurrent
+inventory edits during a scan; detected overlaps abort the scan.
+
 ## MCP Tools
 
 Registered by `register_echo_mtg_tools` in `apps/echo_mtg/mcp.py`:

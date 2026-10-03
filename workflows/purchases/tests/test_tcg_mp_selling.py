@@ -591,7 +591,7 @@ def test__generate_tcg_mappings_creates_note_for_note_less_card_by_default(monke
         def __init__(self, _config):
             pass
 
-        def get_collection(self, tradable_only=0):
+        def get_all_collection(self, tradable_only=0):
             return [{
                 "emid": "em-1",
                 "inventory_id": "inv-1",
@@ -686,7 +686,7 @@ def test__generate_tcg_mappings_collects_metadata_failures(monkeypatch):
         def __init__(self, _config):
             pass
 
-        def get_collection(self, tradable_only=0):
+        def get_all_collection(self, tradable_only=0):
             return [{"inventory_id": "inv-1", "emid": "em-1"}]
 
     class _EchoCardItem:
