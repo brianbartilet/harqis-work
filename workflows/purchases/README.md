@@ -250,7 +250,7 @@ reading it.
 
 Main inputs:
 
-- EchoMTG inventory from `ApiServiceEchoMTGInventory.get_collection(tradable_only=1)`.
+- EchoMTG inventory from `ApiServiceEchoMTGInventory.get_all_collection(tradable_only=1)`.
 - EchoMTG card metadata from `ApiServiceEchoMTGCardItem.get_card_meta(emid)`.
 - TCG Marketplace product search from `ApiServiceTcgMpProducts.search_card(name)`.
 - Local Scryfall bulk data from `load_scryfall_bulk_data(...)`.
@@ -330,7 +330,7 @@ Procedure:
 2. Fetch pending order reservations for Pending Drop Off and Pending Payment.
 3. Fetch handed-off order quantities for dropped-or-later statuses over the
    configured date window.
-4. Pull EchoMTG `get_collection(tradable_only=1)`.
+4. Pull EchoMTG `get_all_collection(tradable_only=1)`.
 5. Filter to cards needing a listing. A card qualifies only when it has an
    EchoMTG note, the note parses as valid JSON metadata, `tcg_mp_card_id > 0`,
    and `tcg_mp_listing_id == 0`.
@@ -450,7 +450,7 @@ Procedure:
 
 1. Load EchoMTG and TCG Marketplace configs.
 2. Fetch pending commitments and handed-off order quantities.
-3. Pull EchoMTG `get_collection(tradable_only=1)`.
+3. Pull EchoMTG `get_all_collection(tradable_only=1)`.
 4. Keep only cards with note ids and group them by variant.
 5. Pick one representative per variant, preferring a copy with a note.
 6. Compute a base price from EchoMTG metadata: foil uses `foil_price`, non-foil
