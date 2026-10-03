@@ -150,6 +150,19 @@ def test_browser_catalog_to_package(authenticated_client, files_env, monkeypatch
         page.locator('#folder-dialog').get_by_role('checkbox', name='Research brief.md', exact=True).wait_for()
         page.screenshot(path=str(screenshot / 'picker-mobile.png'), full_page=True)
         assert page.locator('#folder-dialog').evaluate('(e)=>e.scrollWidth <= e.clientWidth')
+        page.locator('#close-folder').click()
+        source = authenticated_client.get('/files/api/sources').json()['items'][0]
+        Store().patch('sources', source['id'], {'state': 'permission_denied', 'error': 'PermissionError', 'processed': 6})
+        page.get_by_role('button', name='Refresh', exact=True).click()
+        page.get_by_text('Last and next runs by location', exact=True).click()
+        page.get_by_text('Last scan stopped', exact=True).wait_for()
+        assert page.locator('#indexing-locations .files-scan-path').inner_text() == str(root)
+        assert 'exact failing path was not recorded' in page.locator('#indexing-locations').inner_text()
+        assert page.get_by_role('button', name='Retry scan: documents', exact=True).is_visible()
+        assert page.locator('body').evaluate('(e)=>e.scrollWidth <= window.innerWidth')
+        page.screenshot(path=str(screenshot / 'scan-context-mobile.png'), full_page=True)
+        page.set_viewport_size({'width': 1440, 'height': 1000})
+        page.screenshot(path=str(screenshot / 'scan-context.png'), full_page=True)
         assert not errors
         browser.close()
 

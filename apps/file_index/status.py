@@ -32,6 +32,9 @@ def indexing_status(store, sources):
         due = max(source.get('last_scan') or 0, source.get('last_queued') or 0) + source.get('interval_hours', 24) * 3600
         locations.append({
             'id': source['id'], 'name': source['name'], 'state': state,
+            'root': source.get('root', ''), 'kind': source['kind'], 'host': source.get('host'),
+            'can_scan': source.get('enabled', True) and source['kind'] != 'ftp' and source.get('configured_available') is not False,
+            'error_detail': source.get('error_detail'),
             'last_started': source.get('started_at'),
             'last_finished': source.get('finished_at', source.get('last_attempt') or source.get('last_scan')),
             'last_success': source.get('last_scan'), 'processed': processed,

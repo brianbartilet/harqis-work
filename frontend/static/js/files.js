@@ -227,20 +227,58 @@
     const latest = Math.max(0, ...data.locations.map((s) => s.last_started || s.last_finished || 0));
     const due = data.locations.filter((s) => s.next_due !== null).map((s) => s.next_due);
     target.append(el("p", `Last run: ${latest ? date(latest) : "Not run yet"} · Next run: ${due.length ? Math.min(...due) <= data.as_of ? "Due — awaiting scheduler / worker" : date(Math.min(...due)) + " (estimated)" : running.length ? "Scanning now" : "No automatic scans scheduled"}`, "files-muted"));
-    const rows = $("#indexing-locations"); rows.replaceChildren();
+    const rows = $("#indexing-locations");
+    const expanded = new Set([...rows.querySelectorAll("details[open]")].map((n) => n.dataset.source));
+    rows.replaceChildren();
     if (!data.locations.length) rows.append(el("p", "No locations configured yet."));
     for (const s of data.locations) {
       const row = el("div", undefined, "files-indexing-location");
-      row.append(el("strong", `${s.name} · ${(s.state === "partial" ? "Completed with warnings" : s.state.replaceAll("_", " "))}`));
-      row.append(el("p", `Last started: ${s.last_started ? date(s.last_started) : "Not recorded"} · Finished: ${date(s.last_finished)} · Last successful scan: ${date(s.last_success)}`, "files-muted"));
-      row.append(el("p", `${s.processed.toLocaleString()} files processed${s.progress_at ? " · Updated " + date(s.progress_at) : ""}${s.error ? " · " + s.error : ""}`, "files-muted"));
-      row.append(el("p", `Next run: ${s.next_due !== null ? s.next_due <= data.as_of ? "Due — awaiting scheduler / worker" : date(s.next_due) + " (estimated)" : s.schedule}`, "files-muted"));
+      const failed = ["permission_denied", "unreachable", "missing", "interrupted"].includes(s.state);
+      const queued = pendingScans.has(s.id);
+      const labels = {ready: "Last scan completed", partial: "Completed with skipped paths", scanning: "Scanning now", new: "Not scanned yet", interrupted: "Last scan interrupted"};
+      const heading = el("div", undefined, "files-scan-heading");
+      heading.append(el("h3", s.name), el("span", queued ? "Scan queued" : labels[s.state] || "Last scan stopped", "files-scan-badge"));
+      row.dataset.result = queued ? "scanning" : failed ? "failed" : s.state;
+      row.append(heading, el("p", `${({local: "Server folder", drive: "Google Drive folder", sftp: "SFTP folder", http: "File URL", ftp: "FTP reference"})[s.kind] || "Location"}${s.kind === "local" && s.host ? " on " + s.host : ""}`, "files-muted"), el("code", s.root || "Path not recorded", "files-scan-path"));
+      const explanations = {
+        ready: "The last scan finished and refreshed file metadata. This is the last recorded result, not a live access check.",
+        partial: "The scan continued past skipped paths. Coverage is incomplete; files it could not check retain their previous availability.",
+        scanning: "Files are being discovered. The total is unknown until the scan finishes.",
+        new: "Run a scan to discover the files in this location.",
+        permission_denied: "Access was denied during the last scan. This does not mean every file in the location is inaccessible.",
+        unreachable: "The last scan stopped because a filesystem or connection operation failed. This does not establish whether the location is reachable now.",
+        missing: "A path could not be found during the last scan. The source folder itself may still exist.",
+        interrupted: "The scan did not record a completed result and its activity lease expired. Retry to check this location again."
+      };
+      row.append(el("p", queued ? "Waiting for the worker. The previous scan details remain below until the new scan starts." : explanations[s.state] || "Review the recorded details and try another scan.", "files-scan-explanation"));
+      if (failed) {
+        const issue = s.error_detail;
+        row.append(el("p", issue?.message ? `Recorded issue: ${issue.message}${issue.errno == null ? "" : ` (errno ${issue.errno})`}` : `Recorded issue: ${s.error || "No completion recorded"}`, "files-scan-issue"));
+        row.append(el("p", issue?.path ? "Path that failed:" : "The exact failing path was not recorded for this run. A new scan will capture path details when available.", "files-muted"));
+        if (issue?.path) row.append(el("code", issue.path, "files-scan-path"));
+        row.append(el("p", s.state === "permission_denied" ? "Retry with the updated scanner. If access still fails, check the skipped path and the worker's access to that folder." : "Retry the scan. If it stops again, check that the drive is mounted or the storage connection is available.", "files-muted"));
+      }
+      const facts = el("dl", undefined, "files-scan-facts");
+      const next = s.next_due !== null ? s.next_due <= data.as_of ? "Due; waiting for scheduler / worker" : date(s.next_due) + " (estimated)" : ({scanning: "Scanning now", paused: "Paused", disabled: "Automatic scans disabled", unavailable: "Removed from configuration", "reference only": "Manual references only"})[s.schedule] || s.schedule;
+      for (const [label, value] of [["Files processed", s.processed.toLocaleString() + (failed ? " before stopping" : "")], ["Started", s.last_started ? date(s.last_started) : "Not recorded"], ["Finished", s.last_finished ? date(s.last_finished) : "Not recorded"], ["Last complete scan", s.last_success ? date(s.last_success) : "None yet"], ["Next automatic scan", next]]) {
+        const fact = el("div"); fact.append(el("dt", label), el("dd", value)); facts.append(fact);
+      }
+      row.append(facts);
       if (s.warning_count) {
         row.append(el("p", `${s.warning_count} paths skipped. Coverage is incomplete; unvisited files retain their previous availability.`, "files-muted"));
+        const details = el("details"); details.dataset.source = s.id; details.open = expanded.has(s.id);
+        details.append(el("summary", `View ${s.warning_count} skipped paths`));
         const warnings = el("ul");
         for (const warning of s.warnings) warnings.append(el("li", `${warning.path} · ${warning.error}${warning.errno == null ? "" : ` (errno ${warning.errno})`}`));
-        row.append(warnings);
-        if (s.warning_count > s.warnings.length) row.append(el("p", `Showing the first ${s.warnings.length} skipped paths.`, "files-muted"));
+        details.append(warnings);
+        if (s.warning_count > s.warnings.length) details.append(el("p", `Showing the first ${s.warnings.length} skipped paths.`, "files-muted"));
+        row.append(details);
+      }
+      if (s.can_scan) {
+        const retry = button(queued ? "Scan queued" : failed || s.state === "partial" ? "Retry scan" : "Scan now", () => queueScan(s.id));
+        retry.disabled = queued || s.state === "scanning";
+        retry.setAttribute("aria-label", `${retry.textContent}: ${s.name}`);
+        row.append(retry);
       }
       rows.append(row);
     }

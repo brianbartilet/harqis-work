@@ -42,7 +42,7 @@ def test_live_progress_failure_and_recovery(tmp_path, monkeypatch):
                 assert current['finished_at'] is None
                 assert indexing_status(store, [current])['locations'][0]['state'] == 'scanning'
             yield str(index), {'name': str(index)}
-        raise OSError('connection lost')
+        raise OSError(5, 'connection lost')
 
     monkeypatch.setattr(service.adapters, 'discover', discover)
     with pytest.raises(OSError):
@@ -51,6 +51,9 @@ def test_live_progress_failure_and_recovery(tmp_path, monkeypatch):
     assert failed['processed'] == 101
     assert failed['finished_at'] >= failed['started_at']
     assert failed['last_scan'] is None
+    assert failed['error_detail']['errno'] == 5
+    assert failed['error_detail']['message']
+    assert failed['error_detail']['path'] is None
     monkeypatch.setattr(service.adapters, 'discover', lambda _: iter([('0', {'name': '0'})]))
     service.scan(source['id'], store)
     ready = store.get('sources', source['id'])
