@@ -54,3 +54,22 @@ class ApiServiceTcgMpProducts(BaseApiServiceAppTcgMp):
             .add_json_payload(payload)
 
         return self.client.execute_request(self.request.build())
+
+    def get_pricing_listings(self, product_id: str, foil=0):
+        """Return the complete product/finish offer list, rejecting partial/error responses.
+
+        Unlike the legacy convenience method, retain the envelope's total so a
+        truncated response cannot silently determine a competitive price.
+        """
+        self.request.post()\
+            .add_uri_parameter('listed_item_filter')\
+            .add_json_payload({'foil': str(int(foil)), 'product_id': product_id})
+        response = self.client.execute_request(self.request.build())
+        payload = response.data
+        if not isinstance(payload, dict) or payload.get('status') != 200:
+            raise ValueError("Marketplace listing lookup failed")
+        rows = payload.get('data', {}).get('data')
+        total = payload.get('meta', {}).get('total')
+        if not isinstance(rows, list) or total is None or int(total) != len(rows):
+            raise ValueError("Marketplace listing response is incomplete")
+        return rows

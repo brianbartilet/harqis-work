@@ -6,7 +6,6 @@ import csv
 import psutil
 import requests
 import random
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 from random import randint
@@ -37,6 +36,7 @@ from apps.echo_mtg.references.dto.notes_info import DtoNotesInformation
 from workflows.purchases.helpers.helper import load_scryfall_bulk_data
 from workflows.purchases.helpers.mp_logging import log_mp_summary
 from workflows.purchases.helpers.constants import image_guid_pattern
+from workflows.purchases.helpers.tcg_pricing import resolve_fx, price_variant, number
 
 
 tcg_mp_log = create_logger("tcg_mp_selling")
@@ -1041,7 +1041,39 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None,
 _log_worker_generate_tcg_listings = create_logger("generate_tcg_listings.worker")
 
 
-def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 + 0.10), commission_rate = 1.05):
+def _pricing_run_context(kwargs):
+    fee = number(kwargs.get("platform_fee_pct", 3.0))
+    if not 0 <= fee < 100:
+        raise ValueError("Platform fee must be between 0 and 100")
+    return {
+        "fx": resolve_fx(cfg_id=kwargs.get("cfg_id__alpha_vantage", "ALPHA_VANTAGE")),
+        "platform_fee_pct": float(fee),
+    }
+
+
+def _worker_fx(task, usd_to_sgd_rate):
+    if usd_to_sgd_rate is not None:
+        return {"rate": str(number(usd_to_sgd_rate, positive=True)), "source": "explicit"}
+    fx = task.get("fx")
+    if not fx:
+        raise ValueError("No usable USD/SGD quote; price writes skipped")
+    number(fx["rate"], positive=True)
+    return fx
+
+
+def _variant_pricing(task, card, card_meta, note, cfg, fx, language, condition, fee):
+    pricing = price_variant(
+        base_price_usd=card_meta.get("foil_price" if _norm_foil(card["foil"]) else "tcg_mid"),
+        change_7_day=card.get("price_change"), fx=fx,
+        product_service=lambda: ApiServiceTcgMpProducts(cfg), product_id=note["tcg_mp_card_id"],
+        foil=_norm_foil(card["foil"]), language=language, condition=condition,
+        platform_fee_pct=task.get("platform_fee_pct", fee),
+    )
+    tcg_mp_log.info("TCG pricing product=%s decision=%s", note["tcg_mp_card_id"], json.dumps(pricing))
+    return pricing
+
+
+def _worker_generate_tcg_listings(task: dict, usd_to_sgd_rate=None, platform_fee_pct=3.0):
     """
     Worker executed in a separate process. Handles ONE variant group: all EchoMTG
     copies that share (emid, foil, language, condition) and were flagged as needing
@@ -1057,10 +1089,12 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
       • Stamps the resolved listing id + price into EVERY copy's note, so a
         half-mapped variant self-heals and the next run is a no-op.
 
-    conversion_multiplier = currency estimated rate + tcg/ck pricing diff
+    usd_to_sgd_rate = SGD per USD (normally supplied by the parent task's FX snapshot).
+    platform_fee_pct = percentage of the sale deducted by TCG MP, recovered by division.
     """
     card_name = ""
     try:
+        fx = _worker_fx(task, usd_to_sgd_rate)
         cards = task["cards"]
         rep = cards[0]
         cfg_id__tcg_mp = task["cfg_id__tcg_mp"]
@@ -1127,11 +1161,9 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
             note_cache = {}
         total_quantity = len(variant_copies)
 
-        # Price from the representative card's meta.
-        base_price = card_meta['foil_price'] if rep['foil'] else card_meta['tcg_mid']
-        if base_price is None:
-            raise Exception("No pricing found for: {0}".format(card_name))
-        post_price = round(base_price * conversion_multiplier * commission_rate, 2)
+        pricing = _variant_pricing(task, rep, card_meta, rep_note, cfg__tcg_mp, fx,
+                                   language, condition, platform_fee_pct)
+        post_price = pricing["final_price_sgd"]
 
         # Adopt an existing listing from ANY copy of this variant (a sibling that was
         # already listed, or a mapping-inheritance leftover), else fall back to the
@@ -1205,9 +1237,8 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
         else:
             # Existing listing for this variant (race / half-mapped / live duplicate)
             # — true up its quantity instead of creating another listing.
-            # post_price already includes commission_rate here (unlike the update
-            # worker), so pass it through directly — do NOT re-apply commission.
-            _retry_edit_listing(
+            # Both workers publish the already fee-adjusted, competitor-capped price.
+            edit_result = _retry_edit_listing(
                 api_publish,
                 max_attempts=5,
                 price=post_price,
@@ -1217,6 +1248,8 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
                 condition=condition,
                 listing_id=listing_id,
             )
+            if not edit_result:
+                raise ValueError("Adopted listing disappeared; price was not published")
             if live_listings:
                 duplicate_listing_ids = _remove_duplicate_variant_listings(
                     api_publish, live_listings, listing_id
@@ -1241,7 +1274,9 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
             if n.get("tcg_mp_listing_id", 0) == listing_id and n.get("tcg_mp_selling_price") == post_price:
                 continue
             n["tcg_mp_listing_id"] = listing_id
-            n["tcg_mp_selling_price"] = post_price
+            if quantity > 0:
+                n["tcg_mp_selling_price"] = post_price
+                n["tcg_mp_pricing"] = pricing
             n["function"] = generate_tcg_listings.__name__
             try:
                 api_notes.update_note(c["note_id"], json.dumps(n))
@@ -1261,6 +1296,7 @@ def _worker_generate_tcg_listings(task: dict, conversion_multiplier = (1 + 0.20 
             "status": "ok",
             "card": card_name,
             "created": created,
+            "pricing": pricing,
             "listing_id": listing_id,
             "quantity": quantity,
             "total_quantity": locals().get("total_quantity", quantity),
@@ -1403,8 +1439,18 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None,
 
     # api_service__tcg_mp_merchant.set_listing_status(0)
 
+    try:
+        pricing_context = _pricing_run_context(kwargs)
+    except ValueError as exc:
+        audit_rows.append(_tcg_audit_row(stage="pricing_fx", reason=str(exc)))
+        _write_tcg_audit_csv(generate_tcg_listings.__name__, audit_rows,
+                             output_csv=output_csv, output_dir=audit_output_dir)
+        return _purchase_workflow_result("generate_tcg_listings", str(exc),
+                                         relevant=True, status="failure", errors=1)
+
     tasks_generate = [
         {
+            **pricing_context,
             "cards": group,
             "cfg_id__tcg_mp": cfg_id__tcg_mp,
             "cfg_id__echo_mtg": cfg_id__echo_mtg,
@@ -1465,30 +1511,6 @@ def generate_tcg_listings(worker_count=4, limit: Optional[int] = None,
 
 
 # region task: update_tcg_listings
-
-@dataclass
-class PricingDecision:
-    price: Optional[float] = None
-    needs_lowest_seller: bool = False
-
-
-def _update_pricing_calc(change_7_day: float, price: float, threshold_pct: float = 8.0,) -> PricingDecision:
-    change = float(change_7_day)
-
-    # Rule 1: down / flat → need lowest seller
-    if change <= 0:
-        return PricingDecision(needs_lowest_seller=True)
-
-    # Rule 2: stable upward
-    if 0 < change <= threshold_pct:
-        return PricingDecision(price=round(price, 2))
-
-    # Rule 3: strong upward
-    extra_pct = change - threshold_pct
-    final_price = price * (1 + extra_pct / 100.0)
-
-    return PricingDecision(price=round(final_price, 2))
-
 
 def _retry_delay(attempt: int, base_delay: float, max_delay: float) -> float:
     delay = min(max_delay, base_delay * (2 ** (attempt - 1)))
@@ -1566,13 +1588,15 @@ def _retry_edit_listing(api_publish, *, max_attempts=10, base_delay=1.0, max_del
     return r
 
 
-def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.3 + 0), commission_rate = (1.05 + 0)):
+def _worker_update_tcg_listings_prices(task: dict, usd_to_sgd_rate=None, platform_fee_pct=3.0):
     """
     Worker executed in a separate process.
-    conversion_multiplier = currency estimated rate + tcg/ck pricing diff
+    usd_to_sgd_rate = SGD per USD (normally supplied by the parent task's FX snapshot).
+    platform_fee_pct = TCG MP commission percentage, recovered by division.
     """
     card_name = ""
     try:
+        fx = _worker_fx(task, usd_to_sgd_rate)
         # --- unpack task ---
         card_echo = task["card_echo"]
         cfg_id__tcg_mp = task["cfg_id__tcg_mp"]
@@ -1584,7 +1608,6 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.3 
         from apps.echo_mtg.references.web.api.notes import ApiServiceEchoMTGNotes
         from apps.echo_mtg.references.web.api.item import ApiServiceEchoMTGCardItem
         from apps.tcg_mp.references.web.api.publish import ApiServiceTcgMpPublish
-        from apps.tcg_mp.references.web.api.product import ApiServiceTcgMpProducts
         from apps.tcg_mp.references.web.api.view import ApiServiceTcgMpUserView
 
         cfg__tcg_mp = CONFIG_MANAGER.get(cfg_id__tcg_mp)
@@ -1613,36 +1636,14 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.3 
                 "set_code": card_meta.get("set_code", "") if "card_meta" in locals() else "",
             }
 
-        if card_echo['foil']:
-            base_price = card_meta['foil_price']
-        else:
-            base_price = card_meta['tcg_mid']
-
-        if base_price is None:
-            raise Exception("No pricing found for: {0}".format(card_name))
-
-        decision = _update_pricing_calc(
-            change_7_day=card_echo["price_change"],
-            price=round(base_price, 2)
-        )
-
-        # NOTE: `needs_lowest_seller` (set for down/flat 7-day change) is NOT yet
-        # implemented as an actual lowest-seller lookup — both branches price off
-        # base_price. Effective behaviour today:
-        #   • down/flat change → base_price * conversion_multiplier
-        #   • upward change     → adjusted price (see _update_pricing_calc) * multiplier
-        # Fetching the marketplace's lowest seller and undercutting is a deliberate
-        # follow-up (ApiServiceTcgMpProducts.search_single_card_listings exists for it).
-        if decision.needs_lowest_seller:
-            post_price = round(base_price * conversion_multiplier, 2)
-        else:
-            post_price = round(decision.price * conversion_multiplier, 2)
-
         # The variant's marketplace attributes — passed to edit_listing so a JP/LP
         # listing is NOT silently flipped back to EN/NM on every price refresh (the
         # edit endpoint defaults those when omitted; the old code omitted them).
         language = _language_value(card_echo, "EN") or "EN"
         condition = _condition_value(card_echo, "NM") or "NM"
+        pricing = _variant_pricing(task, card_echo, card_meta, json_note, cfg__tcg_mp, fx,
+                                   language, condition, platform_fee_pct)
+        post_price = pricing["final_price_sgd"]
         listing_id = json_note["tcg_mp_listing_id"]
 
         # Quantity = live count of EchoMTG copies of the SAME variant, so duplicate
@@ -1658,6 +1659,8 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.3 
         duplicate_listing_ids = []
         note_cache = {}
         audit_failures = []
+        updated = False
+        matching = [card_echo]
         try:
             time.sleep(2)
             existing = api_service__search.search_card(card_echo["emid"], tradable_only=1) or []
@@ -1700,7 +1703,7 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.3 
                     max_attempts=10,
                     base_delay=1.0,
                     max_delay=20.0,
-                    price=round(post_price * commission_rate, 2),
+                    price=post_price,
                     quantity=quantity,
                     foil=card_echo["foil"],
                     language=language,
@@ -1715,15 +1718,15 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.3 
                     listing_id = 0
                     updated = False
                 else:
+                    updated = True
                     if live_listings:
                         duplicate_listing_ids = _remove_duplicate_variant_listings(
                             api_publish, live_listings, listing_id
                         )
-                    updated = True
         except Exception as exc:
             _log_worker_generate_tcg_listings.exception(f"Failed to update listing for {card_name}")
-            updated = False
-            matching = [card_echo]
+            # An edit may have succeeded before duplicate cleanup failed. Preserve
+            # that publication result and stamp the price that is actually live.
             audit_failures.append({
                 "card": card_echo,
                 "card_name": card_name,
@@ -1736,7 +1739,9 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.3 
         # this variant — so all copies stay consistent and a vanished listing is reset
         # across the whole variant, not just the representative.
         json_note["tcg_mp_listing_id"] = listing_id
-        json_note["tcg_mp_selling_price"] = post_price
+        if updated:
+            json_note["tcg_mp_selling_price"] = post_price
+            json_note["tcg_mp_pricing"] = pricing
         time.sleep(2)
         siblings = matching if matching else [card_echo]
         notes_updated = 0
@@ -1752,7 +1757,9 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.3 
                     if not payload:
                         continue
                     payload["tcg_mp_listing_id"] = listing_id
-                    payload["tcg_mp_selling_price"] = post_price
+                    if updated:
+                        payload["tcg_mp_selling_price"] = post_price
+                        payload["tcg_mp_pricing"] = pricing
                     payload["function"] = update_tcg_listings_prices.__name__
                 api_notes.update_note(note_id, json.dumps(payload))
                 notes_updated += 1
@@ -1771,6 +1778,7 @@ def _worker_update_tcg_listings_prices(task: dict, conversion_multiplier = (1.3 
             "status": "ok",
             "card": card_name,
             "updated": updated,
+            "pricing": pricing,
             "listing_id": listing_id,
             "quantity": quantity,
             "total_quantity": locals().get("total_quantity", quantity),
@@ -1871,8 +1879,18 @@ def update_tcg_listings_prices(worker_count=2, limit: Optional[int] = None,
         f"{len(representatives)} variant listing(s) to update from {len(cards_echo)} tradable copies."
     )
 
+    try:
+        pricing_context = _pricing_run_context(kwargs)
+    except ValueError as exc:
+        audit_rows.append(_tcg_audit_row(stage="pricing_fx", reason=str(exc)))
+        _write_tcg_audit_csv(update_tcg_listings_prices.__name__, audit_rows,
+                             output_csv=output_csv, output_dir=audit_output_dir)
+        return _purchase_workflow_result("update_tcg_listings_prices", str(exc),
+                                         relevant=True, status="failure", errors=1)
+
     tasks_update = [
         {
+            **pricing_context,
             "card_echo": card,
             "cfg_id__tcg_mp": cfg_id__tcg_mp,
             "cfg_id__echo_mtg": cfg_id__echo_mtg,
