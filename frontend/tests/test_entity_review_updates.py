@@ -166,7 +166,7 @@ def test_review_browser_preserves_poll_state_filters_and_batches(review_data, au
             page.click('#suggestions-clear')
             page.locator('#filter-kind').get_by_role('button',name=re.compile('^Pets')).click()
             assert page.locator('.matching-suggestion').count()==1
-            assert page.locator('.matching-suggestion .entity-kind').inner_text()=='Pets'
+            assert page.locator('.matching-suggestion .entity-kind').inner_text()=='pets'
             page.click('#suggestions-select')
             page.locator('#filter-kind').get_by_role('button',name=re.compile('^Pets')).click()
             page.locator('#filter-kind').get_by_role('button',name=re.compile('^People')).click()

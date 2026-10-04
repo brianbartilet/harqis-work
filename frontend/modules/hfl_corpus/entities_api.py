@@ -119,6 +119,9 @@ async def index(request: Request, source: str = '', since: str = '', until: str 
 
 class Profile(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    aliases: list[str] = Field(default_factory=list, max_length=100)
+    partial_aliases: list[str] = Field(default_factory=list, max_length=100)
+    preferred_name: bool = False
     categories: list[str] = Field(default_factory=list)
     emails: list[str] = Field(default_factory=list)
     phones: list[str] = Field(default_factory=list)
@@ -188,10 +191,12 @@ def validated_profile(payload: Profile):
     data['name'] = data['name'].strip()
     if not data['name'] or entities.is_link(data['name']):
         raise HTTPException(400, 'Use an entity name, not a link or email address')
-    for field in ('categories', 'emails', 'phones'):
+    for field in ('categories', 'emails', 'phones', 'aliases', 'partial_aliases'):
         data[field] = list(dict.fromkeys(v.strip() for v in data[field] if v.strip()))
         if any(len(v) > 200 for v in data[field]):
             raise HTTPException(400, 'Contact details and categories must be at most 200 characters each')
+    if any(len(v) < 3 for v in data['partial_aliases']):
+        raise HTTPException(400, 'Partial aliases need at least three characters')
     import re
     from urllib.parse import urlsplit
     data['references'] = list(dict.fromkeys(v.strip() for v in data['references'] if v.strip()))

@@ -67,6 +67,7 @@ up from `scripts/agents/<bucket>/`).
 | `agent_bridge_runner.py` | Consume HFL actionable/pin requests with local Hermes, renew leases, and durably report results; supports once, watch, dispatch, check, capabilities discovery (no inference), and isolated smoke modes. See [settings and troubleshooting](../docs/info/HFL-AGENT-BRIDGE.md). |
 | `action_terminal.py` | Native Hermes PTY sessions, shared execution capacity, transcript artifacts, and recoverable Git worktrees. Loaded by `agent_bridge_runner.py --watch`. |
 | `setup_agent_bridge.py` | Preview or reconcile the Hermes minute bridge job from `agent_bridge_schedule.json`. See [setup and operation](../docs/info/HFL-AGENT-BRIDGE.md). |
+| `setup_entity_consolidation.py` | Preview or reconcile daily 09:00 Singapore Hermes entity cleanup. Run `python scripts/agents/hfl/setup_entity_consolidation.py --apply` on the canonical Hermes host; omit `--apply` for a read-only preview. |
 | `migrate_pin_titles.py` | Preview or back up and migrate pinned-date Notes into Title in an explicit profile SQLite database, retaining Notes and existing title edits. |
 | `migrate_media_sources.py` | Dry-run-first `media` → `desktop` / `android-capture` classification or exact `--rename OLD=NEW` migration across Markdown and Elasticsearch, preserving IDs and creating recovery artifacts. |
 | `migrate_references.py` | Dry-run-first removal of insecure HTTP references from HFL Markdown and Elasticsearch, with apply-mode backups and rollback. |

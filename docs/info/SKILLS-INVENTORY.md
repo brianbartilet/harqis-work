@@ -43,6 +43,7 @@ of truth.
 | `/manage-fork-fleet` | Discover, compare, test, deploy, and safely synchronize harqis-work forks through isolated worktrees and PRs. |
 | `/max-plan` | Perform a deep reasoning planning pass and persist the resulting plan. |
 | `/merge-entities` | Preview, perform, audit, and reverse same-type Activity Corpus entity merges through the authenticated API. |
+| `/auto-merge-entities` | Daily Hermes consolidation with aliases, partial hints, typo evidence and grouped HFL/Telegram reporting. |
 | `/migrate-to-core` | Move reusable generic code from `harqis-work` into `harqis-core`. |
 | `/manifesto-audit` | Audit CODE/PARA flows and manifesto alignment with any LLM runtime; produce evidence-backed reports and authorized remediation. |
 | `/prioritize-regression-tests` | Prioritize existing Xray tests for Jira sprint/release changes with Story/Bug > Test > scenario traceability, execution order, and coverage gaps. |
