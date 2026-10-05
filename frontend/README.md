@@ -27,8 +27,8 @@ storage, configured source roots, and Drive/SFTP credentials as applicable.
 Follow [Files deployment](../docs/info/FILES-DEPLOYMENT.md). Public package pages
 use `/file-share/{token}` on the frontend host, separate from HFL sharing.
 
-The `hfl_corpus` integration exposes all 100 canonical `/api/hfl` operations
-through the shared CLI/MCP adapter. See the [tool guide](../apps/hfl_corpus/README.md)
+The reviewed manifest maps 115 canonical `/api/hfl` operations to the
+`hfl_corpus` integration through the shared CLI/MCP adapter. See the [tool guide](../apps/hfl_corpus/README.md)
 and [endpoint coverage report](../docs/info/FRONTEND_MCP_COVERAGE.md).
 The reviewed [coverage manifest](mcp_coverage.json) includes browser aliases and
 deferred administration/session protocols. Run

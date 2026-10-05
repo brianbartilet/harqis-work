@@ -59,7 +59,7 @@ of truth.
 | `/write-notes` | Save OCR-enriched HFL notes, list recent notes with document links, and safely update one note by GUID. |
 | `/zapier-mcp` | Search, enable, and wire Zapier MCP actions into workflows or direct agent use. |
 
-**Current canonical count: 44 skills.** The count is derived from directories
+**Current canonical count: 45 skills.** The count is derived from directories
 containing `.agents/skills/*/SKILL.md`; cache or generated directories do not
 count.
 

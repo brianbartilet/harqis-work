@@ -1,25 +1,25 @@
 # HARQIS frontend MCP coverage
 
-Updated 2026-09-23. This is a source and test-backed contract; deployed tool
+Updated 2026-09-27. This is a source and test-backed contract; deployed tool
 availability still depends on configuration, `MCP_ENABLED_APPS`, API revision,
 and reconnecting the MCP client.
 
 ## Implemented coverage
 
-All **100 canonical `/api/hfl` method/path endpoints** now have dedicated MCP
-wrappers in the existing `hfl_corpus` integration: the original 31 plus 69 new
+All **110 canonical `/api/hfl` method/path endpoints** now have dedicated MCP
+wrappers in the existing `hfl_corpus` integration: the original 31 plus 79 added
 operations. Existing names remain compatible. This covers corpus/calendar,
 entries and references, actions/categories/pins, entity graph and profiles,
 merge/unmerge/audits/matching, saved graph views, timeline, ideas, mind maps,
 goals, graph links, proposals/conversions, and attachments.
 
-Another **56 browser-facing routes** have canonical API equivalents, and **5
+Another **66 browser-facing routes** have canonical API equivalents, and **5
 fork routes** have shared-service equivalents in the Git MCP integration. Git
 operations execute on the MCP host, which may differ from the frontend host.
 
-The complete inventory contains **277 method/path routes**. Remaining surfaces
-are explicitly recorded: **63 deferred routes**, **30 UI/session routes**, and
-**23 guest/worker protocol routes**. Some deferred routes have partial related
+The complete inventory contains **315 method/path routes**. Remaining surfaces
+are explicitly recorded: **74 deferred routes**, **31 UI/session routes**, and
+**29 guest/worker protocol routes**. Some deferred routes have partial related
 tools (for example pin CRUD without all browser scheduling controls). These are
 not counted as exact equivalents. This PR does not claim every frontend feature
 is exposed to MCP.
@@ -44,7 +44,7 @@ and isolated frontend lifecycles. New routes must receive an explicit coverage
 decision; new canonical HFL routes must receive tools.
 
 The inventory counts mounted methods separately, including the 12 timeline and
-34 ideas operations at both browser/API prefixes. `/static` is an asset mount,
+44 ideas operations at both browser/API prefixes. `/static` is an asset mount,
 not a semantic tool, and is excluded. Main frontend disables public Swagger;
 standalone `frontend/hfl_api.py` publishes `/openapi.json` for the canonical API,
 including graph views and one copy of each entity merge route.
@@ -121,6 +121,7 @@ browser context. Source links point to the route definitions.
 
 | Method | Path | Coverage | Tool / rationale |
 | --- | --- | --- | --- |
+| GET | [`/distill`](../../frontend/modules/home/router.py#L13) | ui | Owner-facing HTML landing page for reviewing ideas and actions; underlying data operations use the existing canonical HFL tools. |
 | GET | [`/home`](../../frontend/modules/home/router.py#L13) | ui | Presentation, redirect, authentication/session or host-desktop flow; browser-specific. |
 
 ### frontend/modules/manifesto/router.py
@@ -200,6 +201,8 @@ browser context. Source links point to the route definitions.
 
 | Method | Path | Coverage | Tool / rationale |
 | --- | --- | --- | --- |
+| GET | [`/api/hfl/timeline/ideas/ideas/{identity}/connections`](../../frontend/modules/hfl_corpus/ideas_api.py#L120) | covered | `get_hfl_corpus_idea_connections` |
+| GET | [`/hfl-corpus/timeline/ideas/ideas/{identity}/connections`](../../frontend/modules/hfl_corpus/ideas_api.py#L120) | alias | `get_hfl_corpus_idea_connections` |
 | GET | [`/api/hfl/timeline/ideas/snapshot`](../../frontend/modules/hfl_corpus/ideas_api.py#L94) | covered | `get_hfl_corpus_ideas_snapshot` |
 | GET | [`/api/hfl/timeline/ideas/connection-availability`](../../frontend/modules/hfl_corpus/ideas_api.py#L100) | covered | `get_hfl_corpus_connection_availability` |
 | GET | [`/api/hfl/timeline/ideas/actions/{identity}/connections`](../../frontend/modules/hfl_corpus/ideas_api.py#L108) | covered | `get_hfl_corpus_action_connections` |
@@ -268,6 +271,29 @@ browser context. Source links point to the route definitions.
 | POST | [`/hfl-corpus/timeline/ideas/objects/{identity}/attachments`](../../frontend/modules/hfl_corpus/ideas_api.py#L497) | alias | `upload_hfl_corpus_idea_attachments` |
 | DELETE | [`/hfl-corpus/timeline/ideas/objects/{identity}/attachments/{attachment_id}`](../../frontend/modules/hfl_corpus/ideas_api.py#L506) | alias | `delete_hfl_corpus_idea_attachment` |
 | POST | [`/hfl-corpus/timeline/ideas/maps/{identity}/accept-proposal`](../../frontend/modules/hfl_corpus/ideas_api.py#L546) | alias | `create_hfl_corpus_map_proposal` |
+
+### frontend/modules/hfl_corpus/intent_reuse.py
+
+| Method | Path | Coverage | Tool / rationale |
+| --- | --- | --- | --- |
+| GET | [`/api/hfl/timeline/ideas/reuse/options`](../../frontend/modules/hfl_corpus/intent_reuse.py#L37) | covered | `list_hfl_corpus_reuse_options` |
+| GET | [`/hfl-corpus/timeline/ideas/reuse/options`](../../frontend/modules/hfl_corpus/intent_reuse.py#L37) | alias | `list_hfl_corpus_reuse_options` |
+| GET | [`/api/hfl/timeline/ideas/reuse/board-ideas`](../../frontend/modules/hfl_corpus/intent_reuse.py#L52) | covered | `list_hfl_corpus_board_ideas` |
+| GET | [`/hfl-corpus/timeline/ideas/reuse/board-ideas`](../../frontend/modules/hfl_corpus/intent_reuse.py#L52) | alias | `list_hfl_corpus_board_ideas` |
+| GET | [`/api/hfl/timeline/ideas/reuse/clone/{kind}/{identity}`](../../frontend/modules/hfl_corpus/intent_reuse.py#L62) | covered | `get_hfl_corpus_clone_draft` |
+| GET | [`/hfl-corpus/timeline/ideas/reuse/clone/{kind}/{identity}`](../../frontend/modules/hfl_corpus/intent_reuse.py#L62) | alias | `get_hfl_corpus_clone_draft` |
+| POST | [`/api/hfl/timeline/ideas/reuse/clone/{kind}/{identity}`](../../frontend/modules/hfl_corpus/intent_reuse.py#L80) | covered | `create_hfl_corpus_clone` |
+| POST | [`/hfl-corpus/timeline/ideas/reuse/clone/{kind}/{identity}`](../../frontend/modules/hfl_corpus/intent_reuse.py#L80) | alias | `create_hfl_corpus_clone` |
+| POST | [`/api/hfl/timeline/ideas/reuse/copy-list`](../../frontend/modules/hfl_corpus/intent_reuse.py#L116) | covered | `create_hfl_corpus_list_copy` |
+| POST | [`/hfl-corpus/timeline/ideas/reuse/copy-list`](../../frontend/modules/hfl_corpus/intent_reuse.py#L116) | alias | `create_hfl_corpus_list_copy` |
+| POST | [`/api/hfl/timeline/ideas/maps/{identity}/paste`](../../frontend/modules/hfl_corpus/intent_reuse.py#L141) | covered | `create_hfl_corpus_map_paste` |
+| POST | [`/hfl-corpus/timeline/ideas/maps/{identity}/paste`](../../frontend/modules/hfl_corpus/intent_reuse.py#L141) | alias | `create_hfl_corpus_map_paste` |
+| GET | [`/api/hfl/timeline/ideas/lists/{identity:path}`](../../frontend/modules/hfl_corpus/intent_reuse.py#L231) | covered | `get_hfl_corpus_list` |
+| GET | [`/hfl-corpus/timeline/ideas/lists/{identity:path}`](../../frontend/modules/hfl_corpus/intent_reuse.py#L231) | alias | `get_hfl_corpus_list` |
+| POST | [`/api/hfl/timeline/ideas/lists`](../../frontend/modules/hfl_corpus/intent_reuse.py#L243) | covered | `create_hfl_corpus_list` |
+| POST | [`/hfl-corpus/timeline/ideas/lists`](../../frontend/modules/hfl_corpus/intent_reuse.py#L243) | alias | `create_hfl_corpus_list` |
+| PATCH | [`/api/hfl/timeline/ideas/lists/{identity:path}`](../../frontend/modules/hfl_corpus/intent_reuse.py#L244) | covered | `update_hfl_corpus_list` |
+| PATCH | [`/hfl-corpus/timeline/ideas/lists/{identity:path}`](../../frontend/modules/hfl_corpus/intent_reuse.py#L244) | alias | `update_hfl_corpus_list` |
 
 ### frontend/modules/hfl_corpus/management_api.py
 
@@ -387,6 +413,28 @@ browser context. Source links point to the route definitions.
 | POST | [`/api/hfl-agent/deliver`](../../frontend/modules/hfl_corpus/agent_bridge.py#L732) | protocol | Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation. |
 | POST | [`/api/hfl-agent/runs/{run_id}/claim`](../../frontend/modules/hfl_corpus/agent_bridge.py#L738) | protocol | Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation. |
 | POST | [`/api/hfl-agent/runs/{run_id}/events`](../../frontend/modules/hfl_corpus/agent_bridge.py#L763) | protocol | Guest session/redemption or worker identity/lease protocol; not an owner CRUD operation. |
+
+### frontend/modules/hfl_corpus/action_agents.py
+
+| Method | Path | Coverage | Tool / rationale |
+| --- | --- | --- | --- |
+| GET | [`/api/hfl-agent/terminals`](../../frontend/modules/hfl_corpus/action_agents.py#L149) | protocol | Authenticated worker terminal transport; not an owner MCP operation. |
+| GET | [`/api/hfl-agent/terminals/{identity}/inputs/{attachment_id}`](../../frontend/modules/hfl_corpus/action_agents.py#L168) | protocol | Authenticated worker terminal transport; not an owner MCP operation. |
+| GET | [`/hfl-corpus/agent-bridge/actions/{source_id}/configuration`](../../frontend/modules/hfl_corpus/action_agents.py#L40) | deferred | Owner session-authenticated terminal/configuration operation; machine-facing contract deferred. |
+| GET | [`/hfl-corpus/agent-bridge/actions/{source_id}/sessions`](../../frontend/modules/hfl_corpus/action_agents.py#L70) | deferred | Owner session-authenticated terminal/configuration operation; machine-facing contract deferred. |
+| GET | [`/hfl-corpus/agent-bridge/sessions/{identity}`](../../frontend/modules/hfl_corpus/action_agents.py#L92) | deferred | Owner session-authenticated terminal/configuration operation; machine-facing contract deferred. |
+| GET | [`/hfl-corpus/agent-bridge/sessions/{identity}/transcript`](../../frontend/modules/hfl_corpus/action_agents.py#L135) | deferred | Owner session-authenticated terminal/configuration operation; machine-facing contract deferred. |
+| POST | [`/api/hfl-agent/terminals/{identity}/claim`](../../frontend/modules/hfl_corpus/action_agents.py#L156) | protocol | Authenticated worker terminal transport; not an owner MCP operation. |
+| POST | [`/api/hfl-agent/terminals/{identity}/files/{name}`](../../frontend/modules/hfl_corpus/action_agents.py#L207) | protocol | Authenticated worker terminal transport; not an owner MCP operation. |
+| POST | [`/api/hfl-agent/terminals/{identity}/output`](../../frontend/modules/hfl_corpus/action_agents.py#L191) | protocol | Authenticated worker terminal transport; not an owner MCP operation. |
+| POST | [`/api/hfl-agent/terminals/{identity}/poll`](../../frontend/modules/hfl_corpus/action_agents.py#L174) | protocol | Authenticated worker terminal transport; not an owner MCP operation. |
+| POST | [`/hfl-corpus/agent-bridge/actions/{source_id}/configuration`](../../frontend/modules/hfl_corpus/action_agents.py#L51) | deferred | Owner session-authenticated terminal/configuration operation; machine-facing contract deferred. |
+| POST | [`/hfl-corpus/agent-bridge/actions/{source_id}/sessions`](../../frontend/modules/hfl_corpus/action_agents.py#L80) | deferred | Owner session-authenticated terminal/configuration operation; machine-facing contract deferred. |
+| POST | [`/hfl-corpus/agent-bridge/presets`](../../frontend/modules/hfl_corpus/action_agents.py#L61) | deferred | Owner session-authenticated terminal/configuration operation; machine-facing contract deferred. |
+| POST | [`/hfl-corpus/agent-bridge/sessions/{identity}`](../../frontend/modules/hfl_corpus/action_agents.py#L99) | deferred | Owner session-authenticated terminal/configuration operation; machine-facing contract deferred. |
+| POST | [`/hfl-corpus/agent-bridge/sessions/{identity}/forget`](../../frontend/modules/hfl_corpus/action_agents.py#L143) | deferred | Owner session-authenticated terminal/configuration operation; machine-facing contract deferred. |
+| POST | [`/hfl-corpus/agent-bridge/sessions/{identity}/input`](../../frontend/modules/hfl_corpus/action_agents.py#L115) | deferred | Owner session-authenticated terminal/configuration operation; machine-facing contract deferred. |
+| POST | [`/hfl-corpus/agent-bridge/sessions/{identity}/images`](../../frontend/modules/hfl_corpus/action_agents.py#L121) | deferred | Owner session-authenticated terminal image input; machine-facing contract deferred. |
 
 ### frontend/modules/hfl_shares/router.py
 
