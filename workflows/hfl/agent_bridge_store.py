@@ -193,6 +193,9 @@ class AgentBridgeStore:
         if not isinstance(payload.get('model', ''), str) or len(payload.get('model', '')) > 200:
             raise ValueError('Model attribution must be text of at most 200 characters.')
         summary = payload.get('summary', '')
+        if 'board_ids' in payload:
+            from workflows.hfl.intent_boards import board_ids
+            board_ids(payload['board_ids'])
         if any(key in payload for key in ('matrix', 'matrix_confidence', 'matrix_reason')):
             from workflows.hfl.timeline_store import validate_matrix
             validate_matrix(payload)

@@ -100,7 +100,7 @@ def _workspace_authorize(request, *, write=False):
     if redirect:
         raise HTTPException(401, 'Authentication required')
     if write and not verify_csrf_token(request.headers.get('x-csrf-token', ''), user):
-        raise HTTPException(403, 'Invalid form token. Reload the page.')
+        raise HTTPException(403, 'Invalid form token. Please refresh the page and try again.')
 
 
 @router.get('/workspace-views')
@@ -183,7 +183,7 @@ async def hfl_memory_pins(request: Request, payload: MemoryPinRequest):
     if redirect:
         return JSONResponse({"detail": "Authentication required"}, status_code=401)
     if not verify_csrf_token(payload.csrf, user):
-        return JSONResponse({"detail": "Invalid form token."}, status_code=403)
+        return JSONResponse({"detail": "Invalid form token. Please refresh the page and try again."}, status_code=403)
     if payload.action == "preview_prompt":
         if len(payload.prompt) > 20000:
             return JSONResponse({"detail": "Use 20,000 characters or fewer."}, status_code=422)

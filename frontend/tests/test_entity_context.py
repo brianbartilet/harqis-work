@@ -45,6 +45,8 @@ def test_invalid_context_fails_closed(context):
 
 def test_graph_and_directory_pass_context_and_exclude_unrelated_profiles(monkeypatch, tmp_path):
     from modules.hfl_corpus import entities
+    from modules.hfl_corpus import ideas_api
+    monkeypatch.setattr(ideas_api, 'canonical_snapshot', lambda: {'ideas': [], 'actions': [], 'topics': [], 'links': []})
     from workflows.hfl.entity_store import get_store, VERSION
     monkeypatch.setenv('HARQIS_ENTITIES_DB', str(tmp_path / 'entities.sqlite3'))
     row = dict(id='one', title='Launch', text='React launch', source='notes', date='2026-09-20',

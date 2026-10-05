@@ -55,14 +55,51 @@ if (typeof window !== 'undefined') {
   window.HflBindEditor = (dialog, form, options) => {
     const status = document.createElement('span'); status.className = 'editor-save-status'; status.setAttribute('role', 'status');
     form.querySelector('.agenda-dialog-footer').prepend(status);
+    status.setAttribute('aria-live', 'polite');
+    const progress = document.createElement('progress'); progress.max = 100; progress.hidden = true;
+    progress.setAttribute('aria-label', 'File upload progress'); status.after(progress);
+    const report = (text, percent = null) => {
+      status.textContent = text; progress.hidden = percent === null;
+      if (percent !== null) progress.value = percent;
+    };
     const controller = new HflEditorState({...options,
       acknowledge: sent => { const data=JSON.parse(sent);data.files=[];data.removed=[];return JSON.stringify(data); },
-      status: text => { status.textContent = text; }});
+      status: report});
+    controller.report = report;
+    const creationLabel = !options.exists() ? options.creationLabel : null;
+    controller.submit = async () => {
+      if (controller.submitting) return;
+      controller.submitting = true;
+      const body = form.querySelector('.agenda-form-body');
+      const wasInert = body.inert; body.inert = true;
+      const buttons = [...form.querySelectorAll('header button, footer button')].map(button => [button, button.disabled]);
+      buttons.forEach(([button]) => { button.disabled = true; });
+      form.setAttribute('aria-busy', 'true');
+      try {
+        await controller.flush();
+        if (creationLabel) {
+          controller.submitting = false;
+          dialog.close();
+          if (options.confirmation === false) return;
+          document.querySelector('.editor-save-confirmation')?.remove();
+          const notice = document.createElement('div'); notice.className = 'editor-save-confirmation';
+          const message = document.createElement('span'); message.setAttribute('role', 'status');
+          message.textContent = creationLabel + ' saved.';
+          const dismiss = document.createElement('button'); dismiss.type = 'button'; dismiss.textContent = 'Dismiss';
+          dismiss.onclick = () => notice.remove(); notice.append(message, dismiss);
+          (document.querySelector('dialog[open]') || document.body).append(notice);
+        }
+      } finally {
+        controller.submitting = false; body.inert = wasInert; form.removeAttribute('aria-busy');
+        buttons.forEach(([button, disabled]) => { button.disabled = disabled; });
+      }
+    };
     const events = new AbortController();
     for (const type of ['input', 'change', 'click', 'hfl:checklists-changed']) form.addEventListener(type, () => queueMicrotask(() => controller.changed()), {signal: events.signal});
     const close = dialog.close.bind(dialog);
     let question;
     dialog.close = () => {
+      if (controller.submitting) return;
       if (question?.open) return;
       clearTimeout(controller.timer);
       if (!controller.dirty && !controller.pending) { close(); return; }
@@ -95,7 +132,7 @@ if (typeof window !== 'undefined') {
     dialog.addEventListener('pointerdown', e => { outside = isOutside(e); }, {signal: events.signal});
     dialog.addEventListener('click', e => { if (outside && isOutside(e)) dialog.close(); outside = false; }, {signal: events.signal});
     window.addEventListener('beforeunload', e => { if (controller.dirty || controller.pending) { e.preventDefault(); e.returnValue = ''; } }, {signal: events.signal});
-    dialog.addEventListener('close', () => { controller.stop(); events.abort(); status.remove(); dialog.close = close; window.HflEditorLocation('', null); }, {once: true});
+    dialog.addEventListener('close', () => { controller.stop(); events.abort(); status.remove(); progress.remove(); dialog.close = close; window.HflEditorLocation('', null); }, {once: true});
     const itemId=new URLSearchParams(location.search).get('item');
     if(itemId)requestAnimationFrame(()=>form.querySelector(`[data-item-id="${CSS.escape(itemId)}"] input[type=text]`)?.focus());
     return controller;

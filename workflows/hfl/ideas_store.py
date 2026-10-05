@@ -73,7 +73,9 @@ class IdeasStore(BoardStoreMixin):
             item['item_actions'] = [r for r in links if r['idea_id'] == item['id']]
             for checklist in item.get('checklists', []):
                 checklist.setdefault('cover', False)
-        return list(result.values())
+        from workflows.hfl.intent_boards import project
+        with self.followups.connect() as db:
+            return project(db, result.values(), 'idea:')
 
     def idea(self, identity):
         item = next((i for i in self.ideas() if i['id'] == identity), None)
@@ -82,9 +84,12 @@ class IdeasStore(BoardStoreMixin):
         return item
 
     def save_idea(self, raw, actor, identity=None, connection=None):
-        allowed = {'title', 'description', 'body', 'checklists', 'status', 'source', 'expected_outcome', 'matrix', 'matrix_confidence', 'matrix_reason', 'version', 'request_id', 'source_date', 'workspace_ids'}
+        allowed = {'title', 'description', 'body', 'checklists', 'status', 'source', 'expected_outcome', 'matrix', 'matrix_confidence', 'matrix_reason', 'version', 'request_id', 'source_date', 'workspace_ids', 'board_ids'}
         if set(raw) - allowed:
             raise ValueError('Unsupported idea fields.')
+        if 'board_ids' in raw:
+            from workflows.hfl.intent_boards import board_ids
+            raw = {**raw, 'board_ids': board_ids(raw['board_ids'])}
         previous = self.idea(identity) if identity else {}
         item = {**previous, **raw}
         if not isinstance(item.get('title'), str) or not item['title'].strip() or len(item['title']) > 200:
@@ -119,6 +124,9 @@ class IdeasStore(BoardStoreMixin):
                 return existing
             if previous and (raw.get('version') != previous['version'] or (found and found['version'] != raw['version'])):
                 raise FollowUpConflict('The idea changed. Reopen it before saving.')
+            from workflows.hfl.intent_boards import sync, memberships
+            item['board_ids'] = (sync(db, 'idea:' + identity, raw['board_ids']) if 'board_ids' in raw
+                                 else memberships(db, 'idea:' + identity))
             encoded = json.dumps(item)
             db.execute('INSERT INTO idea_edits VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,payload=excluded.payload', (identity, item['version'], encoded))
             db.execute('INSERT INTO idea_history VALUES (?,?,?,?)', (identity, item['version'], str(actor), encoded))
@@ -171,7 +179,7 @@ class IdeasStore(BoardStoreMixin):
             db.executemany('INSERT INTO board_order VALUES (?,?)', [(identity, index) for index, identity in enumerate(identities)])
 
     def save_map(self, raw, identity=None, connection=None):
-        if set(raw) - {'name', 'members', 'positions', 'node_sizes', 'edge_widths', 'version', 'request_id', 'prompt', 'purpose', 'root', 'goal_id', 'drafts', 'edges', 'board_date', 'color', 'hidden_members'}:
+        if set(raw) - {'name', 'members', 'positions', 'node_sizes', 'edge_widths', 'version', 'request_id', 'prompt', 'purpose', 'root', 'goal_id', 'drafts', 'edges', 'board_date', 'color', 'hidden_members', 'active'}:
             raise ValueError('Unsupported mind-map fields.')
         previous = self.map(identity) if identity else {}
         item = {**previous, **raw}
@@ -190,6 +198,8 @@ class IdeasStore(BoardStoreMixin):
         from workflows.hfl.intent_reuse import list_graph
         list_nodes, _ = list_graph(self.snapshot()) if any(i.startswith('list:') for i in members) else ([], [])
         added_members = set(members) - set(previous.get('members', []))
+        if not item.get('active', True) and any(i.startswith(('idea:', 'action:')) for i in added_members):
+            raise ValueError('Activate this board before attaching ideas or actions.')
         restored = added_members | {n['id'] for n in list_nodes if n.get('list_id') in added_members}
         if isinstance(item.get('hidden_members'), list):
             item['hidden_members'] = [i for i in item['hidden_members'] if i not in restored]

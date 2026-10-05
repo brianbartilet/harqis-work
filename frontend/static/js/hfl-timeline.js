@@ -43,6 +43,7 @@
   function openEditor(item = null, desiredStatus = '') {
     suggestionId = null; editing = item; source = item?.source || null; requestId = crypto.randomUUID();
     form.reset();
+    window.HflActionAgentSettings(form, item?.id);
     form.querySelectorAll('.action-triage').forEach(section => { section.open = false; });
     attachments.reset(item?.id);
     window.HflIntentFields(form,item||{});
@@ -55,12 +56,17 @@
     document.getElementById('followup-editor-title').textContent = item ? (desiredStatus === 'done' ? 'Complete action' : 'Edit action') : 'New action';
     showEvidence(); stateFields(); error('followup-save-error'); editor.showModal();
     editorState = window.HflBindEditor(editor, form, {
+      creationLabel: 'Action',
       snapshot: () => JSON.stringify({fields:window.HflIntentValues(form),checklists:window.hflActionChecklists.value,files:attachments.pending.map(f=>[f.name,f.size,f.lastModified]),removed:[...attachments.removed]}),
       exists: () => !!editing, valid: () => form.checkValidity(),
       lock: value => { busy=value; attachments.root.inert=value; form.querySelector('[type=submit]').disabled=value; },
       save: saveEditor,
     });
     window.hflActionChecklists.options.addToBoard = async (list, task) => { try { await editorState.flush(); await window.HflIdeas.addToBoard('actionable',editing,list,task); } catch(e) { error('followup-save-error',e.message); } };
+    window.hflActionChecklists.options.convert = async (listId, itemId) => {
+      try { await editorState.flush(); const parent = editing; editor.close(); await window.HflIdeas.createChecklistAction(parent, listId, itemId); }
+      catch(e) { error('followup-save-error',e.message); }
+    };
     window.hflActionChecklists.render();
     form.querySelector('[type=submit]').textContent = 'Create';
     form.querySelector('[type=submit]').hidden = !!item;
@@ -117,6 +123,7 @@
     }
     for(const sourceName of item.sources || [])meta.append(node('span',sourceName,'action-source'));
     el.append(meta,node('h3',item.title));
+    el.querySelector('h3').append(window.HflCopyIdButton('action',item.id));
     window.HflChecklistCover?.(el, item, async checklists => {
       window.dispatchEvent(new CustomEvent('hfl:action-saving',{detail:{saving:true}}));
       try { await api('/'+item.id, {method:'PATCH',body:JSON.stringify({version:item.version,checklists})}); await load(); }
@@ -124,7 +131,7 @@
         window.dispatchEvent(new CustomEvent('hfl:action-saving',{detail:{saving:false}}));
         window.dispatchEvent(new Event('hfl:actions-updated'));
       }
-    }, () => openEditor(item));
+    }, () => openEditor(item), (list, task) => window.HflIdeas.createChecklistAction(item, list.id, task.id));
     const outcome=node('details');outcome.append(node('summary','Expected outcome'),node('p',item.expected_outcome,'agenda-card-outcome'));el.append(outcome);
     if(item.prompt){const details=node('details');details.append(node('summary','Initial prompt'),node('pre',item.prompt,'action-prompt'));el.append(details);}
     if(item.notes || item.completion_note){const details=node('details');details.append(node('summary','Notes & outcome'));if(item.notes)details.append(node('p',item.notes));if(item.completion_note)details.append(node('p','Outcome: '+item.completion_note));el.append(details);}
@@ -135,8 +142,9 @@
     actions.append(management,views);
     management.append(button('Edit',()=>openEditor(item)));
     if(!['done','dismissed'].includes(item.status)){
-      management.append(button('Dismiss',e=>patch(item,{status:'dismissed'},e.currentTarget)),button('Done',e=>patch(item,{status:'done'},e.currentTarget)));
-    } if(item.status !== 'open') management.append(button('Set in review',e=>patch(item,{status:'open'},e.currentTarget)));
+      management.append(button('Dismiss',e=>patch(item,{status:'dismissed'},e.currentTarget)));
+      if(item.status !== 'incomplete') management.append(button('Done',e=>patch(item,{status:'done'},e.currentTarget)));
+    } if(!['open','in_progress','waiting'].includes(item.status)) management.append(button('In Review',e=>patch(item,{status:'open'},e.currentTarget)));
     management.append(button('History',()=>showHistory(item)));
     const resultsButton = button('Agents',()=>window.hflAgentBridge.open('actionable',item.id,item.title));
     resultsButton.className = 'action-results-button';
@@ -209,7 +217,7 @@
     const available = items ? items.length > 0 : days.some(marker => marker.planned.length || marker.actions.length);
     indicator.hidden = !available;
     indicator.dataset.timelineStatus = status;
-    const label = 'Actions available · ' + ({open:'In review / Ready',in_progress:'In progress',incomplete:'Incomplete',done:'Done',dismissed:'Dismissed or historical'}[status]);
+    const label = 'Actions available · ' + ({open:'In Review / Ready',in_progress:'In Progress',incomplete:'Incomplete',done:'Done',dismissed:'Dismissed or historical'}[status]);
     indicator.setAttribute('aria-label', label);
     indicator.title = label;
   }
@@ -221,7 +229,7 @@
       if(markers?.dot_status)day.dataset.timelineStatus=markers.dot_status;else delete day.dataset.timelineStatus;
       day.toggleAttribute('data-timeline-action', Boolean(markers?.actions.length));
       if(!day.dataset.timelineLabel)day.dataset.timelineLabel=day.getAttribute('aria-label')||day.dataset.activityDay;
-      const suffix=markers ? `; ${markers.planned.length} scheduled${markers.dot_status ? ' · '+({open:'In review / Ready',in_progress:'In progress',incomplete:'Incomplete',done:'All done'}[markers.dot_status]) : ''}, ${markers.actions.length} linked actions` : '';
+      const suffix=markers ? `; ${markers.planned.length} scheduled${markers.dot_status ? ' · '+({open:'In Review / Ready',in_progress:'In Progress',incomplete:'Incomplete',done:'All done'}[markers.dot_status]) : ''}, ${markers.actions.length} linked actions` : '';
       day.setAttribute('aria-label',day.dataset.timelineLabel+suffix);day.title=day.dataset.timelineLabel+suffix;
     });
   }
@@ -261,6 +269,7 @@
       const el=node('article',null,'agenda-card agenda-idea-card');
       el.append(node('p',(item.category==='missed_commitments' ? 'Possibly missed' : (item.category||'manual idea').replaceAll('_',' '))+(item.confidence?' · '+item.confidence+' confidence':'')+((item.analysis_status||'uncertain')==='uncertain' ? ' · Uncertain' : ''),'agenda-eyebrow'),node('h3',item.title),node('p',item.body||item.description||item.recommendation||item.expected_outcome));
       if(item.matrix)el.append(node('p',item.matrix+' · '+(item.matrix_confidence||'unassessed')+' matrix confidence'+(item.matrix_reason?' — '+item.matrix_reason:''),'agenda-description'));
+      el.querySelector('h3').append(window.HflCopyIdButton('idea',item.id));
       const details=node('details');details.append(node('summary','Evidence & completion check'),node('p',item.observation||''),node('p',item.resolution_check));
       if(item.automatic_review?.reason)details.append(node('p','Automatic action review: '+item.automatic_review.reason));
       (item.evidence||[]).forEach(ref=>{const a=node('a',ref.date+' · '+ref.title);a.href=evidenceUrl(ref);a.target='_blank';a.rel='noopener';const p=node('p');p.append(a);details.append(p);});el.append(details);
@@ -298,6 +307,7 @@
   async function saveEditor() {
     error('followup-save-error');
     const payload=window.HflIntentValues(form);
+    window.HflBoardChanges(form,payload,!!editing);
     payload.description = '';
     payload.checklists=window.hflActionChecklists?.value||[];
     if(editing)payload.version=editing.version;else{payload.request_id=requestId;payload.source=source;if(suggestionId)payload.suggestion_id=suggestionId;}
@@ -308,8 +318,9 @@
       if (changed) payload.prompt = '';
       const saved = await api(editing?'/'+editing.id:'',{method:editing?'PATCH':'POST',body:JSON.stringify(payload)});
       editing = saved.item;
+      window.HflBoardSaved(form);
       if (changed) {
-        await attachments.save(editing.id);
+        await attachments.save(editing.id, editorState.report);
         editing = (await api('/'+editing.id,{method:'PATCH',body:JSON.stringify({version:editing.version,prompt})})).item;
       }
       window.HflEditorLocation('actionable',editing.id);
@@ -318,7 +329,7 @@
       form.querySelector('[type=submit]').hidden=true;
       await load(); window.dispatchEvent(new Event('hfl:actions-updated'));
   }
-  form.addEventListener('submit',async e=>{e.preventDefault();try{await editorState.flush();}catch(err){error('followup-save-error',err.message);}});
+  form.addEventListener('submit',async e=>{e.preventDefault();try{await editorState.submit();}catch(err){error('followup-save-error',err.message);}});
   window.hflActions = {card, openEditor, load};
   timelineApi('/markers').then(data=>{markerDays=data.days;paintMarkers();}).catch(()=>{});
   window.addEventListener('hfl:timeline-close',()=>{clearTimeout(pollTimer);++sequence;});

@@ -844,7 +844,8 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     window.activityModals?.setAll(pendingState.all);syncDates();sourceOptions([]);
   }
   showMode();
-  setAnimation(readOnly?'off':!reducedMotion&&['off','breathing','ripple','drift'].includes(pendingState?.animationMode)?pendingState.animationMode:savedAnimation(),false);
+  const previewAnimation=!reducedMotion&&new URLSearchParams(location.search).get('animation')==='drift'?'drift':'off';
+  setAnimation(readOnly?previewAnimation:!reducedMotion&&['off','breathing','ripple','drift'].includes(pendingState?.animationMode)?pendingState.animationMode:savedAnimation(),false);
   requestAnimationFrame(animate);
   if(window.HflIdeas){
     window.HflIdeas.maps.getPositions=()=>Object.fromEntries(nodes.map(n=>{

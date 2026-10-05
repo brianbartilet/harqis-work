@@ -45,6 +45,9 @@ def commit_merge(preview, request_id, fingerprint, actor):
         if revision(db) != preview['revision']:
             raise ValueError('Entities changed; review a fresh merge preview')
         if preview.get('automatic'):
+            owner = db.execute("SELECT value FROM state WHERE key='entity-consolidation-owner'").fetchone()
+            if owner and json.loads(owner[0]) == 'hermes' and not preview['automatic'].get('run_id'):
+                raise ValueError('Hermes owns automatic merging; legacy work is deferred')
             from workflows.hfl.entity_matching import blocked
             if blocked(db, [m['id'] for m in preview['members']]):
                 raise ValueError('A previous unmerge or dismissal blocks automatic matching')
@@ -61,7 +64,7 @@ def commit_merge(preview, request_id, fingerprint, actor):
             'profile': preview['profile'], 'evidence': preview['evidence'],
             'unique_entries': preview['unique_entries'],
             'automatic': preview.get('automatic'),
-        })
+        }, deliver=not bool(preview.get('automatic')))
         result = dict(entity_id=identity, event_id=event_id, state='complete', action='merged')
         db.execute('INSERT INTO entity_operations VALUES (?,?,?)', (request_id, fingerprint, json.dumps(result)))
         return result

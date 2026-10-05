@@ -192,11 +192,11 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
         modal = page.locator('dialog[open]').last
         expect(modal.get_by_label('Idea', exact=True)).to_have_value('Source idea (1)')
         assert modal.locator('[data-object-attachments] + [data-intent-fields]').count() == 1
-        modal.locator('[data-intent-fields] summary').click()
+        modal.get_by_label('Workspaces', exact=True).click()
         modal.locator('[data-intent-fields]').get_by_label('Work', exact=True).check()
         modal.locator('[data-intent-fields]').get_by_label('Home', exact=True).check()
-        modal.locator('[data-intent-fields] summary').click()
-        expect(modal.locator('[data-intent-fields] summary')).to_have_text('Work + Home')
+        modal.get_by_label('Workspaces', exact=True).click()
+        expect(modal.get_by_label('Workspaces', exact=True)).to_have_text('Work + Home')
 
         expect(modal.locator('.checklist-markdown')).to_contain_text('Choose a shelf')
         for revised in ('**Updated shelf**', '*Updated again*'):
@@ -210,8 +210,10 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
 
         page.screenshot(path=str(tmp_path / ('clone-' + str(width) + '.png')), full_page=True)
         modal.get_by_role('button', name='Create', exact=True).click()
-        expect(modal.locator('.editor-save-status')).to_have_text('Saved')
-        expect(modal.get_by_role('button', name='Save now', exact=True)).to_have_count(0)
+        expect(modal).to_have_count(0)
+        copy = next(i for i in ideas.ideas() if i['title']=='Source idea (1)')
+        page.evaluate('(id) => window.HflIdeas.editIdea(id)', copy['id'])
+        expect(modal).to_be_visible()
         assert len(ideas.ideas()) == 2
         assert next(i for i in ideas.ideas() if i['title']=='Source idea (1)')['workspace_ids'] == ['home','work']
         modal.get_by_role('button', name='Copy list', exact=True).click()
@@ -238,9 +240,9 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
         page.locator('[data-followup-id="'+action['id']+'"]').get_by_role('button', name='Edit', exact=True).click()
         action_form = page.locator('#followup-form')
         assert action_form.locator('[data-object-attachments] + [data-intent-fields]').count() == 1
-        action_form.locator('[data-intent-fields] summary').click()
+        action_form.get_by_label('Workspaces', exact=True).click()
         action_form.locator('[data-intent-fields]').get_by_label('Home', exact=True).check()
-        action_form.locator('[data-intent-fields] summary').click()
+        action_form.get_by_label('Workspaces', exact=True).click()
         action_form.get_by_text('Action plan', exact=True).click()
         action_form.get_by_label('Repeat', exact=True).select_option('monthly')
         action_form.get_by_label('First planned date').fill('2099-01-31')

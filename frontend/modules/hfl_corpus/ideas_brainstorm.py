@@ -19,16 +19,15 @@ def snapshot(identity):
                for i in mindmap['members'] if i in available]
     members.extend({'id': d['id'], 'label': d['title'], 'kind': 'drafts', 'body': d.get('body', '')} for d in mindmap.get('drafts', []))
     members.sort(key=lambda m: m['id'] != mindmap.get('root'))
-    omitted = max(0, len(members) - 100)
-    members = members[:100]
-    for member in members:
-        member['body'] = (member.get('body') or '')[:6000]
+    omitted = 0
     allowed = {m['id'] for m in members}
     source = {'purpose': mindmap.get('purpose', mindmap['name']), 'root': mindmap.get('root', ''), 'id': identity, 'title': mindmap['name'], 'version': mindmap['version'], 'prompt': mindmap['prompt'], 'members': members, 'omitted_members': omitted,
               'connections': [e for e in mindmap.get('edges', []) if e['source'] in allowed and e['target'] in allowed], 'attachments': []}
+    from modules.hfl_corpus.intent_board_context import context
+    source['available_boards'] = context()
     path = Path(__file__).resolve().parents[3] / 'workflows/hfl/prompts/ideas_brainstorm.md'
     runtime = path.read_text(encoding='utf-8')
     return {'source_key': 'mindmap:' + identity, 'kind': 'mindmap', 'source_id': identity, 'source': source,
             'category_guidance': '', 'policy': 'ideas-brainstorm-v1', 'execution_settings': {**read_settings(), 'agent_mode': 'restricted'},
             'runtime_prompt': runtime, 'prompt_path': 'workflows/hfl/prompts/ideas_brainstorm.md',
-            'prompt_hash': digest(runtime), 'instruction_hash': digest({'source': {k: v for k, v in source.items() if k != 'version'}, 'runtime': runtime})}
+            'prompt_hash': digest(runtime), 'instruction_hash': digest({'source': {k: v for k, v in source.items() if k not in {'version', 'available_boards'}}, 'runtime': runtime})}

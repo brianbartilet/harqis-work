@@ -429,6 +429,62 @@ Or, from any Claude Code session opened in the repo (OS-agnostic):
 
 The skill walks through every step, validates prerequisites before making changes, and surfaces a per-component log path on any failure. See `.agents/skills/deploy-harqis/SKILL.md` for the full reference.
 
+**macOS production ownership and worker readiness:**
+
+- Register an always-on host once with `python scripts/deploy.py --role host --register`.
+  Subsequent non-console deploys and targeted restarts reuse and refresh existing
+  launchd plists owned by this checkout/instance, even if the jobs were unloaded.
+  Unregistered services keep the existing detached behavior; deployment does not
+  silently register new services or the client-owned stdio MCP endpoint.
+- Stop, down, and restart unload owned launchd jobs **before** PID/orphan cleanup,
+  preventing `KeepAlive` from racing the replacement process. Plists are retained
+  for the next login; use `--unregister` to remove persistence. Registrations for
+  another checkout are rejected rather than overwritten.
+- `--console` remains an explicit debugging option: it suspends launchd and uses
+  Terminal-owned workers, **without restart supervision**. `--register --console`
+  writes persistence but does not activate it. Run a later non-console deploy to
+  restore supervisor ownership. A plist containing `KeepAlive` alone does not
+  prove its job is loaded.
+- Deploy/start/restart success for a worker requires its exact local Celery node
+  to answer `ping` and consume **all** configured queues. Remote workers cannot
+  satisfy this gate. Direct queues match by name; fanout queues match by their
+  configured exchange, not Kombu's generated `bcast.*` queue name. Queue prefixes
+  and the capture worker's explicit hostname are honored.
+- Checks use `scripts/launch.py worker-check --queues <configured-list>` in an
+  isolated, launcher-bootstrapped interpreter: up to 60 seconds of retries, with
+  a 75-second outer process deadline including imports/broker stalls. Failure
+  aborts deployment with a log pointer; already-started services are not rolled
+  back automatically. Readiness is point-in-time, not proof of future uptime.
+- The remote verified restart no longer requests console mode and uses the same
+  exact-worker check. Its single fast-forward disables Git hooks for that command
+  only, so an asynchronous post-merge restart cannot race the explicit lifecycle.
+  Linux uses the equivalent owned-systemd-unit lifecycle described below.
+
+**Cross-platform deployment contract:**
+
+- Worker readiness is shared across macOS, Linux, and native Windows: the exact
+  node must answer and advertise every configured subscription. Windows probes
+  use console `python.exe`, while background workers retain the existing
+  windowless process flags. Paths are passed as argv, not shell strings.
+- Linux non-console deployments reuse existing same-checkout `systemd --user`
+  units. Stop/restart suspends the unit before process cleanup; registration
+  reloads the manager and restarts the unit to apply new configuration. Manager
+  failures abort deployment rather than reporting success. New hosts still need
+  explicit `--register`; an available user manager and administrator-configured
+  user lingering are prerequisites for boot/logout-independent user services.
+- Native Windows keeps its existing non-admin HKCU Run-key registration.
+  This is **login startup, not Windows Service supervision**: it does not promise
+  startup before login or automatic crash recovery. This compatibility change
+  does not install a privileged service manager or migrate existing registry
+  entries. An unattended Windows server needs a separately configured supervisor
+  or a supervised Linux environment; do not treat a passing readiness check as
+  evidence of recovery after a later crash.
+- Client-owned stdio MCP is excluded from registration on every platform.
+- The independent `Deployment platforms` workflow runs deployment/launcher
+  contract tests on native Ubuntu, Windows, and macOS runners. Supervisor calls
+  remain mocked; these checks are not a live install/reboot/recovery certification.
+  This workflow is independent of frontend coverage checks.
+
 ### 4.4 Daemon scripts
 
 Each daemon is launched via the cross-platform `python scripts/launch.py <service>` entry point, which handles env loading automatically and execs the right Python process.

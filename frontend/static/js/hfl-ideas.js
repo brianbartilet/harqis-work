@@ -126,9 +126,9 @@ window.HflObjectDescription = (item = {}) => {
     const params = new URL(preview.action_url, location.origin).searchParams;
     return request('/hfl-corpus/timeline/source?' + new URLSearchParams({path: params.get('source_path'), entry_id: params.get('source_entry')}));
   }
-  async function openEditor(kind, item = {}, parent = null, conversion = null, clone = null) {
+  async function openEditor(kind, item = {}, parent = null, conversion = null, clone = null, checklistSource = null) {
     const label = kind === 'actionable' ? 'action' : kind;
-    const d = dialog(conversion ? 'Create action from idea' : item.id ? 'Edit ' + label : 'New ' + label);
+    const d = dialog(checklistSource ? 'Create action from checklist item' : conversion ? 'Create action from idea' : item.id ? 'Edit ' + label : 'New ' + label);
     if(kind==='idea')d.footer.replaceChildren();
     if(clone)d.node.classList.add('idea-copy-dialog');
     let state;
@@ -155,6 +155,7 @@ window.HflObjectDescription = (item = {}) => {
         template.querySelector('[name=matrix]').onchange = event => { if (!event.target.value) for (const name of ['matrix_confidence','matrix_reason']) template.querySelector(`[name=${name}]`).value = ''; };
         template.querySelector('.agenda-evidence')?.remove(); template.querySelector('.agenda-error')?.remove();
         d.body.append(...template.children); checklistRoot = d.body.querySelector('[data-action-checklists]');
+        window.HflActionAgentSettings?.(d.form, item.id);
         checklistToolbar = d.body.querySelector('[data-checklist-toolbar]');
       } else {
         const details = section('Details');
@@ -168,6 +169,7 @@ window.HflObjectDescription = (item = {}) => {
         checklistHeader.append(checklistSection.querySelector('h3'), checklistToolbar);
         checklistRoot = el('div'); checklistSection.append(checklistHeader, checklistRoot);
       }
+      if(!current && editingBoard && maps.current?.active!==false)item={...item,board_ids:[...new Set([...(item.board_ids||[]),editingBoard])]};
       window.HflIntentFields(d.form, item, kind);
       const formState = () => JSON.stringify({fields: window.HflIntentValues(d.form), checklists: checklists?.value});
       const canConvert = () => !!current && !state?.dirty && !state?.pending;
@@ -176,7 +178,9 @@ window.HflObjectDescription = (item = {}) => {
         canConvert,
         addToBoard: async (list,task) => { try { await state.flush(); await addToBoard(kind,current,list,task); } catch(e) { d.error.textContent=e.message; } },
         convert: (listId, itemId) => { if (canConvert()) { d.node.close(); convert(current.id, listId, itemId); } },
-      } : {addButtonRoot: checklistToolbar, addToBoard: async (list,task) => { try { await state.flush(); await addToBoard(kind,current,list,task); } catch(e) { d.error.textContent=e.message; } }}); checklists.set(item.checklists);
+      } : {addButtonRoot: checklistToolbar,
+        convert: async (listId, itemId) => { try { await state.flush(); const source = current; d.node.close(); await createChecklistAction(source, listId, itemId); } catch(e) { d.error.textContent=e.message; } },
+        addToBoard: async (list,task) => { try { await state.flush(); await addToBoard(kind,current,list,task); } catch(e) { d.error.textContent=e.message; } }}); checklists.set(item.checklists);
       d.form.querySelectorAll('textarea[name=body]').forEach(markdownEditor);
       const attachmentsSection = d.body.querySelector('[data-object-attachments]');
       const copiedFiles = [];
@@ -195,7 +199,10 @@ window.HflObjectDescription = (item = {}) => {
       const persistEditor = async () => {
           d.error.textContent = '';
           files.validate();
+          await maps.flush();
           const values = window.HflIntentValues(d.form); values.checklists = checklists.value;
+          if(!current && !attachToCurrent && editingBoard)values.board_ids=values.board_ids.filter(id=>id!==editingBoard);
+          window.HflBoardChanges(d.form, values, !!current);
           values.description = '';
           const prompt = values.prompt, filesChanged = files.changed;
           if (kind === 'actionable' && filesChanged) values.prompt = '';
@@ -205,13 +212,17 @@ window.HflObjectDescription = (item = {}) => {
           } else if (kind === 'idea') {
             if (!current) { values.request_id = requestId; values.source = source; if (parent?.kind === 'daily') values.source_date = parent.id.slice(6); }
             current = (await api('/objects' + (current ? '/' + current.id : ''), current ? 'PATCH' : 'POST', values)).item;
+          } else if (checklistSource && !current) {
+            current = (await request('/hfl-corpus/timeline/items/' + checklistSource.id + '/checklist-action', {method:'POST', body:JSON.stringify({...checklistSource, request_id:requestId, item:values})})).item;
           } else if (conversion && !current) {
             current = (await api('/objects/' + conversion.id + '/convert', 'POST', {request_id: requestId, idea_version: conversion.idea_version, checklist_id: conversion.checklist_id || '', item_id: conversion.item_id || '', item: values, attachments: copiedFiles.filter(f => f.check.checked).map(f => f.id)})).item;
           } else {
             if (!current) { values.request_id = requestId; values.source = source; values.agent_enabled = false; }
             current = (await request('/hfl-corpus/timeline/items' + (current ? '/' + current.id : ''), {method: current ? 'PATCH' : 'POST', body: JSON.stringify(values)})).item;
           }
-          await files.save(current.id);
+          window.HflBoardSaved(d.form);
+          await maps.reload();
+          await files.save(current.id, state.report);
           if ((clone || conversion) && !copiedLoaded) {copiedLoaded=true;copiedFiles.forEach(f=>f.check.closest('label').remove());attachmentsSection.querySelector('.idea-copy-files-note')?.remove();files.reset(current.id);}
           if (kind === 'actionable' && filesChanged && prompt) {
             current = (await request('/hfl-corpus/timeline/items/' + current.id, {method: 'PATCH', body: JSON.stringify({version: current.version, prompt})})).item;
@@ -239,13 +250,14 @@ window.HflObjectDescription = (item = {}) => {
           window.HflEditorLocation(kind,current.id); changed(null, false, !!conversion);
       };
       state=window.HflBindEditor(d.node,d.form,{
+        creationLabel: kind === 'idea' ? 'Idea' : 'Action',
         snapshot:()=>JSON.stringify({form:formState(),files:files.pending.map(f=>[f.name,f.size,f.lastModified]),removed:[...files.removed]}),
         exists:()=>!!current, valid:()=>d.form.checkValidity(), save:persistEditor,
         lock:value=>{files.root.inert=value;save.disabled=value;},
         settled:()=>checklists.updateConversion(),
       });
       if(current)window.HflEditorLocation(kind,current.id);
-      d.form.onsubmit=async event=>{event.preventDefault();try{await state.flush();checklists.updateConversion();}catch(e){d.error.textContent=e.message;}};
+      d.form.onsubmit=async event=>{event.preventDefault();try{await state.submit();checklists.updateConversion();}catch(e){d.error.textContent=e.message;}};
       const otherBoard=button(editingBoard?'Add to another board':'Add to board',async()=>{otherBoard.disabled=true;try{attachToCurrent=false;await state.flush();await addToBoard(kind,current,null,null,editingBoard);}catch(e){d.error.textContent=e.message;}finally{attachToCurrent=true;otherBoard.disabled=false;}});
       d.footer.append(otherBoard);
     } catch (error) { d.error.textContent = error.message; }
@@ -276,6 +288,13 @@ window.HflObjectDescription = (item = {}) => {
     const d = dialog('Preparing action draft');
     try { const data = await api('/objects/' + id + '/conversion?' + new URLSearchParams({checklist_id: checklistId, item_id: itemId})); d.node.close(); await openEditor('actionable', data.item, null, {...data, id}); }
     catch (error) { d.error.textContent = error.message; }
+  }
+  async function createChecklistAction(parent, checklistId, itemId) {
+    const task = parent.checklists?.find(list => list.id === checklistId)?.items.find(item => item.id === itemId);
+    if (!task) throw Error('The checklist item changed or was removed. Reload the action.');
+    await openEditor('actionable', {title:task.text.slice(0,200), expected_outcome:task.text, agent_enabled:false},
+      {id:'action:'+parent.id,kind:'actions'}, null, null,
+      {id:parent.id, version:parent.version, checklist_id:checklistId, item_id:itemId});
   }
   async function addToBoard(kind, item, list = null, task = null, excludeBoard = null) {
     const d = dialog('Add to board'); d.node.classList.add('board-picker');
@@ -870,6 +889,7 @@ window.HflObjectDescription = (item = {}) => {
     async edit(current = null, seed = null) {
       const d = dialog(current ? 'Settings' : 'Add Board');
       const name = field(d.body, 'name', 'Board name', current?.name || seed?.label, 'text', true, 100);
+      const active=field(d.body,'active','Active', '', 'checkbox');active.checked=current?.active!==false;
       const getColor=colorField(d.body,'Board color',current?.color||this.palette[this.loaded.length%this.palette.length]);
       const purpose = field(d.body, 'purpose', 'What are you exploring or trying to achieve?', current?.purpose || seed?.label, 'textarea', true, 3000);
       const starting = current || seed ? null : field(d.body, 'seed', 'Starting thought (optional)', '', 'text', false, 200);
@@ -887,7 +907,7 @@ window.HflObjectDescription = (item = {}) => {
         const members = [...new Set([...(current?.members || []), ...(seed ? [seed.id] : []), ...(goal.value ? ['goal:' + goal.value] : [])])];
         const root = current?.root || seed?.id || (goal.value ? 'goal:' + goal.value : draftId);
         const drafts = current?.drafts || (root === draftId ? [{id: draftId, title: starting?.value.trim() || name.value, body: purpose.value}] : []);
-        const {item} = await api('/maps' + (current ? '/' + current.id : ''), current ? 'PATCH' : 'POST', {name: name.value, color:getColor(), purpose: purpose.value, board_date:boardDate.value, root, goal_id: goal.value, members, drafts, prompt: prompt.value || 'Develop this board toward its purpose. Propose alternatives, assumptions to test, and concrete next steps.', ...(current ? {version: current.version} : {request_id: key, positions: {}})});
+        const {item} = await api('/maps' + (current ? '/' + current.id : ''), current ? 'PATCH' : 'POST', {name: name.value, active:active.checked, color:getColor(), purpose: purpose.value, board_date:boardDate.value, root, goal_id: goal.value, members, drafts, prompt: prompt.value || 'Develop this board toward its purpose. Propose alternatives, assumptions to test, and concrete next steps.', ...(current ? {version: current.version} : {request_id: key, positions: {}})});
         this.queues.delete(item.id);this.loaded=[...this.loaded.filter(m=>m.id!==item.id),item];if(seed)this.cacheNode(seed);const selectedGoal=this.goals.find(g=>g.id===goal.value);if(selectedGoal)this.cacheNode({...selectedGoal,id:'goal:'+selectedGoal.id,object_id:selectedGoal.id,label:selectedGoal.title,kind:'goals'});this.selectBoard(item); d.node.close(); if (agent?.value === 'agent') this.brainstorm();
       } catch (error) { d.error.textContent = error.message; } finally { save.disabled = false; } };
     },
@@ -963,7 +983,7 @@ window.HflObjectDescription = (item = {}) => {
     if(editingParams.get('edit_kind')==='idea') editIdea(editingParams.get('edit'));
     else if(!document.getElementById('followup-agenda')) openAction(editingParams.get('edit'));
   }
-  window.HflIdeas = {cloneObject, editList, chooseIdeaForBoard, addToBoard, openAction, openEditor, editIdea, convert, inspect, maps, api};
+  window.HflIdeas = {cloneObject, editList, chooseIdeaForBoard, addToBoard, createChecklistAction, openAction, openEditor, editIdea, convert, inspect, maps, api};
   document.addEventListener('click', async event => {
     document.querySelectorAll('.idea-add-menu').forEach(menu => {
       if (!menu.contains(event.target)) { menu.querySelector('.idea-add-options').hidden = true; menu.querySelector('.idea-add-toggle').setAttribute('aria-expanded', 'false'); }

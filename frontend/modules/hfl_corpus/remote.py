@@ -214,6 +214,10 @@ class RemoteCorpusClient:
         except httpx.HTTPError as exc:
             raise RemoteCorpusError(f"Canonical HFL corpus unavailable: {exc}") from exc
 
+    def categories(self) -> dict:
+        """Return canonical categories for modules that reuse HFL organization."""
+        return self._get('/categories').json()
+
     def _post(self, path: str, **kwargs) -> httpx.Response:
         try:
             timeout = kwargs.pop("timeout", self.timeout)

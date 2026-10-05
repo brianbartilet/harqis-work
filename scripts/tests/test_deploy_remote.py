@@ -54,21 +54,22 @@ def test_remote_restart_script_contains_required_verified_workflow():
     assert "git branch --show-current" in script
     assert "git rev-parse HEAD" in script
     assert "git status --short --branch" in script
-    assert "git pull --ff-only" in script
+    assert 'git -c core.hooksPath=/dev/null pull --ff-only' in script
     assert "/Applications/Docker.app/Contents/Resources/bin" in script
     assert "scripts/deploy.py --role host --down" in script
-    assert "scripts/deploy.py --role host --console" in script
+    assert "scripts/deploy.py --role host\n" in script
+    assert "--console" not in script
     assert 'os.environ.get("FRONTEND_PORT", "8081")' in script
     assert "for service in rabbitmq redis elasticsearch" in script
     assert "from scripts.launch import setup_env" in script
-    assert "from core.apps.sprout import SPROUT" in script
-    assert "inspect.ping()" in script
-    assert "inspect.active_queues()" in script
+    assert 'verify_worker_ready("worker", machine, args)' in script
+    assert "if not pings" not in script
     assert "REMOTE HOST RESTART VERIFIED" in script
 
 
 def test_remote_verified_restart_streams_script_over_ssh(monkeypatch):
     deploy = load_deploy_module()
+    monkeypatch.setattr(deploy.shutil, "which", lambda name: f"/mock/bin/{name}")
     observed = {}
     monkeypatch.setattr(
         deploy,
@@ -98,7 +99,7 @@ def test_remote_verified_restart_streams_script_over_ssh(monkeypatch):
     ]
     payload = observed["kwargs"]["input"]
     assert isinstance(payload, bytes)
-    assert b"git pull --ff-only" in payload
+    assert b"git -c core.hooksPath=/dev/null pull --ff-only" in payload
     assert b"\r\n" not in payload
     assert "text" not in observed["kwargs"]
     assert observed["kwargs"]["check"] is False
@@ -106,6 +107,7 @@ def test_remote_verified_restart_streams_script_over_ssh(monkeypatch):
 
 def test_remote_restart_failure_is_reported(monkeypatch):
     deploy = load_deploy_module()
+    monkeypatch.setattr(deploy.shutil, "which", lambda name: f"/mock/bin/{name}")
     monkeypatch.setattr(
         deploy,
         "load_remote_target",

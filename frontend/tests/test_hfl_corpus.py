@@ -1335,6 +1335,30 @@ def test_activity_counts_all_entries_in_a_canonical_daily_document():
     ) == {"2026-08-20": 72}
 
 
+@pytest.mark.parametrize("header", [
+    "2026-09-30", "2026-09-30 23:20", "2026-09-30 23:20:10",
+    "2026-09-30 23:20:10.334647", "2026-09-30T23:20:10.334647",
+    "2026-09-30T00:20:10.334647+08:00",
+])
+def test_activity_and_date_filters_count_iso_headings_in_nested_documents(header):
+    entry = CorpusEntry(anchor="imported", header=header, moment="Memory",
+                        what_happened="Memory", tags=("work",), source="notes")
+    document = _document("2026/Sep/2026-09-30.md", entries=(entry,))
+    day = date(2026, 9, 30)
+    assert activity_counts((document,), year=2026) == {day.isoformat(): 1}
+    assert activity_counts((document,), year=2026, query="#work", source="notes") == {day.isoformat(): 1}
+    assert corpus_module.activity_counts_between((document,), start=day, end=day) == {day.isoformat(): 1}
+    assert activity_day_entries((document,), activity_day=day) == ((document.relative_path, entry),)
+    assert document.matching_entries((), occurrence_from=day, occurrence_to=day) == (entry,)
+    assert activity_years((document,)) == (2026,)
+
+
+def test_activity_ignores_undated_or_invalid_headings():
+    for header in ("Imported memory", "2026-09-31 12:00:00.123456", ""):
+        entry = CorpusEntry(anchor="invalid", header=header, moment="Memory", what_happened="Memory", tags=())
+        assert corpus_module.entry_occurrence_date(entry) is None
+
+
 def test_activity_day_entries_include_noncanonical_historical_documents():
     historical = CorpusEntry(
         anchor="historical-entry",

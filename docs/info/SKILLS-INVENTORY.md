@@ -22,7 +22,7 @@ of truth.
 | `/clarify-feature` | Convert an enhancement request into an approved implementation spec before files change. |
 | `/choose-automation-runtime` | Classify automation as Celery, agent-orchestrated, or hybrid and record its ownership and controls. |
 | `/commit` | Review, stage, and create a Conventional Commit, with optional push and guarded host-sync chaining. |
-| `/create-action` | Save a standalone or entry-linked Activity Corpus action with optional dates, instructions, and supporting files, without scheduling execution. |
+| `/create-action` | Record standalone or entry-linked Activity Corpus actions with instructions, dates, and supporting files without scheduling execution. |
 | `/create-data-only-from-hud` | Add a host-safe data-only fallback twin for an existing Windows HUD task. |
 | `/create-new-fork-repository` | Produce a clean client/business fork baseline while preserving the platform skeleton. |
 | `/create-new-hud` | Scaffold a Rainmeter HUD task, configuration, imports, documentation, and optional queue wiring. |
@@ -42,9 +42,11 @@ of truth.
 | `/manage-second-brain` | Inspect, configure, validate, reconcile, and diagnose advisory Second Brain categories, operations, clients, and runtime health. |
 | `/manage-fork-fleet` | Discover, compare, test, deploy, and safely synchronize harqis-work forks through isolated worktrees and PRs. |
 | `/max-plan` | Perform a deep reasoning planning pass and persist the resulting plan. |
-| `/merge-entities` | Preview and perform same-type Activity Corpus entity merges, inspect audits, and reverse merges through the authenticated API. |
+| `/merge-entities` | Preview, perform, audit, and reverse same-type Activity Corpus entity merges through the authenticated API. |
+| `/auto-merge-entities` | Daily Hermes consolidation with aliases, partial hints, typo evidence and grouped HFL/Telegram reporting. |
 | `/migrate-to-core` | Move reusable generic code from `harqis-work` into `harqis-core`. |
 | `/manifesto-audit` | Audit CODE/PARA flows and manifesto alignment with any LLM runtime; produce evidence-backed reports and authorized remediation. |
+| `/prioritize-regression-tests` | Prioritize existing Xray tests for Jira sprint/release changes with Story/Bug > Test > scenario traceability, execution order, and coverage gaps. |
 | `/radar-sold-inventory` | Cross-reference sold TCG orders with inventory and radar data. |
 | `/replay-expired-celery-tasks` | Reconstruct, review, and safely replay missed Celery Beat executions that expired before a worker consumed them. |
 | `/run-tests` | Run app-specific, targeted, or full pytest suites using repository conventions. |
@@ -57,7 +59,7 @@ of truth.
 | `/write-notes` | Save OCR-enriched HFL notes, list recent notes with document links, and safely update one note by GUID. |
 | `/zapier-mcp` | Search, enable, and wire Zapier MCP actions into workflows or direct agent use. |
 
-**Current canonical count: 43 skills.** The count is derived from directories
+**Current canonical count: 45 skills.** The count is derived from directories
 containing `.agents/skills/*/SKILL.md`; cache or generated directories do not
 count.
 
@@ -77,6 +79,7 @@ count.
 | Capture a prompt audit event | `/capture-hfl-session` |
 | Govern harqis-work forks | `/manage-fork-fleet` |
 | Ship a feature across forks | `/ship-feature-to-forks` |
+| Prioritize regression from existing Jira/Xray tests | `/prioritize-regression-tests` |
 | Validate changes | `/run-tests` |
 | Refresh documentation | `/update-docs` |
 | Commit completed work | `/commit` |

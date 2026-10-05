@@ -512,6 +512,7 @@ def test_public_share_body_limit_rejects_malformed_scope_headers(invalid_headers
 def test_module_registry_has_fixed_primary_navigation():
     assert [module.key for module in MODULES] == [
         "home",
+        "files",
         "hfl_corpus",
         "sharing",
         "manifesto",

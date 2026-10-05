@@ -181,6 +181,32 @@ def test_unfulfilled_prompt_becomes_incomplete(bridge, authenticated_client, kin
     assert actions.get(item['id'])['status'] == 'incomplete'
 
 
+def test_agent_board_context_and_additive_associations(bridge, authenticated_client, monkeypatch):
+    from workflows.hfl.ideas_store import IdeasStore
+    from modules.hfl_corpus import entities
+    module, store, actions = bridge
+    monkeypatch.setattr(entities, 'current_entries', lambda *args: [])
+    monkeypatch.setattr(entities, 'projection', lambda *args: [])
+    ideas = IdeasStore(actions)
+    boards = [ideas.save_map(dict(request_id=str(uuid4()), name=name, members=[], positions={}))
+              for name in ['Selected', 'Relevant', 'Now inactive']]
+    item = create_action(actions)
+    item = actions.update(item['id'], dict(version=1, board_ids=[boards[0]['id']]), actor='owner')
+    linked = ideas.save_idea(dict(request_id=str(uuid4()), title='Supporting idea', body='Full supporting detail', board_ids=[boards[1]['id']]), 'owner')
+    run = start(authenticated_client, item, auto=True)
+    source = run['snapshot']['source']
+    assert source['board_ids'] == [boards[0]['id']]
+    relevant = next(b for b in source['available_boards'] if b['id'] == boards[1]['id'])
+    assert relevant['members'][0]['id'] == 'idea:' + linked['id']
+    assert relevant['members'][0]['body'] == 'Full supporting detail'
+    ideas.save_map(dict(version=1, active=False), boards[2]['id'])
+    event(authenticated_client, run, 'plan', {'summary': 'Review board context'})
+    response = event(authenticated_client, run, 'succeeded', {**RESULT, 'board_ids': [boards[1]['id'], boards[2]['id'], 'removed']})
+    assert response.status_code == 200, response.text
+    assert actions.get(item['id'])['board_ids'] == sorted([boards[0]['id'], boards[1]['id']])
+    assert ideas.map(boards[1]['id'])['edges'] == []
+
+
 def test_pin_hour_backfill_and_older_gap_notice_are_deduplicated(bridge, monkeypatch):
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo
@@ -698,6 +724,29 @@ def test_continue_preserves_context_files_and_operation_scope(bridge, authentica
     assert third['snapshot']['operation_scope'] == first['request_key']
     assert len(third['snapshot']['continuation']['history']) == 2
     assert third['snapshot']['continuation']['artifacts'][0]['run_id'] == first['id']
+
+
+@pytest.mark.parametrize('edit', [None, {'prompt': 'A different task'}, {'matrix': 'Q4'}])
+def test_continue_after_agent_priority_update(bridge, authenticated_client, edit):
+    module, store, actions = bridge
+    item = create_action(actions)
+    first = start(authenticated_client, item)
+    result = {'summary': 'Analysis ready; which repository?', 'blocked_reason': 'input',
+              'question': 'Which repository?', 'complete': False,
+              'matrix': 'Q2', 'matrix_confidence': 'high', 'matrix_reason': 'Long-term project.'}
+    assert event(authenticated_client, first, 'awaiting_input', result).status_code == 200
+    current = actions.get(item['id'])
+    assert current['matrix'] == 'Q2'
+    if edit:
+        actions.update(item['id'], {'version': current['version'], **edit}, actor='owner')
+    payload = {'request_key': str(uuid4()), 'reply': 'Use the existing project repository.'}
+    path = f"/hfl-corpus/agent-bridge/runs/{first['id']}/continue"
+    response = authenticated_client.post(path, headers=owner_headers(), json=payload)
+    assert response.status_code == (409 if edit else 200), response.text
+    if not edit:
+        assert response.json()['snapshot']['source']['matrix'] == 'Q2'
+        assert response.json()['snapshot']['continuation']['reply'] == payload['reply']
+        assert authenticated_client.post(path, headers=owner_headers(), json=payload).json()['id'] == response.json()['id']
 
 
 def test_continue_rejects_changed_source_and_invalid_reply(bridge, authenticated_client):

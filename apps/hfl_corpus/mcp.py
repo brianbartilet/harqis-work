@@ -84,17 +84,18 @@ def register_hfl_corpus_tools(mcp: FastMCP):
 
     @mcp.tool()
     def create_hfl_corpus_action(
-        request_id: str, title: str, expected_outcome: str,
+        request_id: str, title: str, expected_outcome: str = "",
         review_date: str = "", due_date: str = "", prompt: str = "",
         notes: str = "", source: Optional[dict] = None,
         matrix: str = "", matrix_confidence: str = "", matrix_reason: str = "",
+        board_ids: list[str] | None = None,
     ) -> dict:
         """Create an action (writes remote state), with scheduled agent execution disabled.
 
         Args:
             request_id: Caller-generated UUID; reuse with identical fields on retry.
             title: Action title, at most 200 characters.
-            expected_outcome: Required outcome, at most 3,000 characters.
+            expected_outcome: Optional outcome, at most 3,000 characters.
             review_date: YYYY-MM-DD or empty for no review date.
             due_date: YYYY-MM-DD or empty for no deadline.
             prompt: Optional Markdown instructions, at most 20,000 characters.
@@ -103,11 +104,13 @@ def register_hfl_corpus_tools(mcp: FastMCP):
             matrix: Q1 urgent/important, Q2 important/not urgent, Q3 urgent/not important, Q4 neither; empty if unclassified.
             matrix_confidence: high, medium, low, or empty if unassessed.
             matrix_reason: Evidence-based classification rationale, at most 3,000 characters.
+            board_ids: Optional active Activity Graph board IDs; attached as orphan orbs.
         """
         return _management("create_action", request_id=request_id, title=title,
                            expected_outcome=expected_outcome, review_date=review_date,
                            due_date=due_date, prompt=prompt, notes=notes, source=source,
-                           matrix=matrix, matrix_confidence=matrix_confidence, matrix_reason=matrix_reason)
+                           matrix=matrix, matrix_confidence=matrix_confidence, matrix_reason=matrix_reason,
+                           board_ids=board_ids)
 
     @mcp.tool()
     def list_hfl_corpus_actions(closed: bool = False, offset: int = 0) -> dict:
@@ -682,11 +685,11 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         return output
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
-    def create_hfl_corpus_entity_backfill() -> dict:
+    def create_hfl_corpus_entity_backfill(include_new_types: bool = False) -> dict:
         """Request entity enrichment/backfill on the canonical host. Destructive: writes remote state.
         """
         logger.info("Tool called: create_hfl_corpus_entity_backfill")
-        result = ApiServiceHflCorpusEntities(CONFIG).create_entity_backfill()
+        result = ApiServiceHflCorpusEntities(CONFIG).create_entity_backfill(include_new_types=include_new_types)
         output = _dict_result(result)
         logger.info("create_hfl_corpus_entity_backfill done")
         return output
@@ -811,11 +814,11 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         return output
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
-    def get_hfl_corpus_entity_matching() -> dict:
+    def get_hfl_corpus_entity_matching(all: bool = False) -> dict:
         """Read matching scan status and candidate suggestions.
         """
         logger.info("Tool called: get_hfl_corpus_entity_matching")
-        result = ApiServiceHflCorpusEntities(CONFIG).get_entity_matching()
+        result = ApiServiceHflCorpusEntities(CONFIG).get_entity_matching(all=all)
         output = _dict_result(result)
         logger.info("get_hfl_corpus_entity_matching done")
         return output
@@ -992,12 +995,30 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         """Create/adopt an agenda item. May configure agent execution if explicitly requested. Destructive: writes remote state.
 
         Args:
-            item: Action fields: request_id UUID, title, expected_outcome, source, suggestion_id, review_date, due_date, prompt, notes, checklists, matrix, agent_enabled. Server validates; omission preserves normal defaults.
+            item: Action fields: request_id UUID, title, expected_outcome, source, suggestion_id, review_date, due_date, prompt, notes, checklists, matrix, agent_enabled, board_ids (optional active board IDs). Server validates; omission preserves normal defaults.
         """
         logger.info("Tool called: create_hfl_corpus_timeline_item")
         result = ApiServiceHflCorpusTimeline(CONFIG).create_timeline_item(item=item)
         output = _dict_result(result)
         logger.info("create_hfl_corpus_timeline_item done")
+        return output
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_checklist_action(followup_id: str, version: int, checklist_id: str, item_id: str, request_id: str, item: dict) -> dict:
+        """Create an action and tick its source checklist item atomically. Destructive: writes remote state.
+
+        Args:
+            followup_id: Parent action ID.
+            version: Latest parent version; stale writes return 409 without creating an action.
+            checklist_id: Stable source checklist ID.
+            item_id: Stable source item ID.
+            request_id: UUID for retry-safe creation; reuse with the same payload after an uncertain response.
+            item: New action fields including title and expected_outcome. Agent execution is always disabled.
+        """
+        logger.info("Tool called: create_hfl_corpus_checklist_action")
+        result = ApiServiceHflCorpusTimeline(CONFIG).create_checklist_action(followup_id=followup_id, version=version, checklist_id=checklist_id, item_id=item_id, request_id=request_id, item=item)
+        output = _dict_result(result)
+        logger.info("create_hfl_corpus_checklist_action done")
         return output
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
@@ -1007,7 +1028,7 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         Args:
             followup_id: Followup id.
             version: Latest object version; stale writes return 409. Read before retrying.
-            changes: Action fields to change; status, dates, title, expected_outcome, prompt, notes, checklists, matrix, agent_enabled. Do not supply internal _agent_actor attribution.
+            changes: Action fields to change; status, dates, title, expected_outcome, prompt, notes, checklists, matrix, agent_enabled, board_ids (optional active board IDs). Do not supply internal _agent_actor attribution.
         """
         logger.info("Tool called: update_hfl_corpus_timeline_item")
         result = ApiServiceHflCorpusTimeline(CONFIG).update_timeline_item(followup_id=followup_id, version=version, changes=changes)
@@ -1286,6 +1307,15 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         return output
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def get_hfl_corpus_board_context() -> dict:
+        """Read active Activity Graph boards and all permitted member objects and connections.
+
+        Use this context to select relevant board_ids when creating or processing
+        ideas and actions. Existing board selections should be retained.
+        """
+        return _dict_result(ApiServiceHflCorpusIdeas(CONFIG).get_board_context())
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
     def get_hfl_corpus_idea(identity: str) -> dict:
         """Read an idea, version and rendered content.
 
@@ -1305,7 +1335,7 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         Args:
             request_id: Caller-generated UUID; reuse with identical content when retrying.
             title: Title.
-            fields: Optional description, body, checklists, status, source, expected_outcome, matrix, matrix_confidence, matrix_reason, source_date.
+            fields: Optional description, body, checklists, status, source, expected_outcome, matrix, matrix_confidence, matrix_reason, source_date, workspace_ids, board_ids (optional list of active board IDs).
         """
         logger.info("Tool called: create_hfl_corpus_idea")
         result = ApiServiceHflCorpusIdeas(CONFIG).create_idea(request_id=request_id, title=title, fields=fields)
@@ -1320,7 +1350,7 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         Args:
             identity: Resource ID returned by the corresponding list/get operation.
             version: Latest object version; stale writes return 409. Read before retrying.
-            changes: Changed title, description, body, checklists, status, source, expected_outcome, matrix, matrix_confidence, matrix_reason, source_date.
+            changes: Changed title, description, body, checklists, status, source, expected_outcome, matrix, matrix_confidence, matrix_reason, source_date, workspace_ids, board_ids (optional list of active board IDs).
         """
         logger.info("Tool called: update_hfl_corpus_idea")
         result = ApiServiceHflCorpusIdeas(CONFIG).update_idea(identity=identity, version=version, changes=changes)
@@ -1378,7 +1408,7 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         Args:
             request_id: Caller-generated UUID; reuse with identical content when retrying.
             name: Map name, 1–100 characters.
-            fields: Optional members, positions, node_sizes, edge_widths, prompt, purpose, root, goal_id, drafts, edges, board_date and color.
+            fields: Optional members, positions, node_sizes, edge_widths, prompt, purpose, root, goal_id, drafts, edges, board_date, active (boolean, default true) and color.
         """
         logger.info("Tool called: create_hfl_corpus_map")
         result = ApiServiceHflCorpusIdeas(CONFIG).create_map(request_id=request_id, name=name, fields=fields)
@@ -1393,7 +1423,7 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         Args:
             identity: Resource ID returned by the corresponding list/get operation.
             version: Latest object version; stale writes return 409. Read before retrying.
-            changes: Map fields to change: name, members, positions, node_sizes, edge_widths, prompt, purpose, root, goal_id, drafts, edges, board_date, color.
+            changes: Map fields to change: name, members, positions, node_sizes, edge_widths, prompt, purpose, root, goal_id, drafts, edges, board_date, active, color.
         """
         logger.info("Tool called: update_hfl_corpus_map")
         result = ApiServiceHflCorpusIdeas(CONFIG).update_map(identity=identity, version=version, changes=changes)
@@ -1720,3 +1750,30 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         logger.info("Tool called: update_hfl_corpus_list")
         result = ApiServiceHflCorpusIdeas(CONFIG).update_list(identity=identity, version=version, checklist=checklist)
         return _dict_result(result)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_entity_type(name: str, color: str, description: str) -> dict:
+        """Create a type with a name, hex color and extraction description. History is not reprocessed."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).create_entity_type(name=name, color=color, description=description))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_entity(name: str, kind: str, categories: list[str] | None = None,
+                                 emails: list[str] | None = None, phones: list[str] | None = None,
+                                 references: list[str] | None = None, notes: str = '') -> dict:
+        """Create a manual entity of a configured type with optional profile details."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).create_entity(name=name, kind=kind,
+            categories=categories, emails=emails, phones=phones, references=references, notes=notes))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_type(identity: str, kind: str) -> dict:
+        """Change an entity to a configured type, preserving its profile."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).update_entity_type(identity=identity, kind=kind))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_entity_merge_batch(groups: list[dict]) -> dict:
+        """Commit up to 100 disjoint groups after user review. Each group needs entity_ids,
+        name, request_id (UUID) and preview_token from analyze_hfl_corpus_entity_selection;
+        evidence and profile edits are optional. Reuse identical payloads and request IDs
+        on retry. Returns a result or error per group; partial success is possible.
+        """
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).create_entity_merge_batch(groups=groups))

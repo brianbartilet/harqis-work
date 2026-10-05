@@ -4,8 +4,9 @@
   const embedded = window.parent !== window;
   const params = new URLSearchParams(location.search);
   const inherited = params.get('context') || '';
-  let all = false;
   const scopeButton = document.querySelector('[data-activity-all]');
+  const defaultAll = scopeButton?.getAttribute('aria-checked') === 'true';
+  let all = defaultAll;
   const scopeText = document.querySelector('[data-activity-context]');
   function updateScope() {
     scopeButton?.setAttribute('aria-checked', String(all));
@@ -57,7 +58,7 @@
   }
   window.activityModals = {open, context:()=>all ? '' : inherited, isAll:()=>all,
     setAll:value=>{all=value===true;updateScope();},
-    reset:()=>{all=false;updateScope();}};
+    reset:()=>{all=defaultAll;updateScope();}};
   document.querySelector('[data-activity-close]')?.addEventListener('click',close);
   document.getElementById('activity-standalone')?.addEventListener('cancel',event=>{event.preventDefault();close();});
   scopeButton?.addEventListener('click',()=>{all=!all;updateScope();window.dispatchEvent(new Event('hfl:activity-scope'));});

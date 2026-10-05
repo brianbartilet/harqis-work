@@ -15,6 +15,9 @@ def extend(base, snapshot, *, since='', until='', query='', sources=None, contex
     boards = [{**b, 'title': b['name'], 'body': b.get('purpose', ''), 'status': 'board',
                'source_date': b.get('board_date', '')} for b in snapshot.get('maps', [])]
     snapshot = {**snapshot, 'boards': boards}
+    goal_links.extend(dict(source='board:' + board['id'], target=member, relation='contains')
+                      for board in boards for member in board.get('members', [])
+                      if member.startswith(('idea:', 'action:')))
     for memory in snapshot.get('memories', []):
         entry_id = memory.get('graph_entry_id', '')
         if entry_id not in corpus_ids:

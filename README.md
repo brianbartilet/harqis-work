@@ -37,6 +37,7 @@ At its core the platform has three layers:
 | `desktop` | Windows desktop automation | Local | No | — |
 | `discord` | Discord bot — messaging, guilds, webhooks | REST API | Yes | [API Docs](https://discord.com/developers/docs/reference) · [Portal](https://discord.com/developers/applications) |
 | `echo_mtg` | MTG collection management | REST API | Yes | [API Docs](https://www.echomtg.com/api/) · [Site](https://www.echomtg.com/) |
+| `file_index` | Metadata file catalog, multi-source discovery, revisioned Drive packages and expiry | Local + provider adapters | Yes | [Deployment](docs/info/FILES-DEPLOYMENT.md) |
 | `filesystem` | Local file and directory operations (pathlib) | Local | No | — |
 | `gemini` | Google Gemini — text generation, token counting, embeddings | REST API | Yes | [API Docs](https://ai.google.dev/api/rest) · [Console](https://aistudio.google.com/) |
 | `git` | Local git repository operations (CLI wrapper) | Local | No | — |
@@ -289,6 +290,7 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 | `purchases` | Active | 8 | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
 | `desktop` | Active | 8 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
 | `hfl` | Active | 37 | Homework-for-Life capture/ingest → canonical Activity Corpus + Elasticsearch, including granular note changes, durable outbox replay, and an evidence-grounded activity watchdog |
+| `files` | Opt-in | 3 | Source discovery, versioned Drive package publication, and expiry; enabled with `FILES_ENABLED=1` |
 | `git_forks` | Active | 1 | Weekly hybrid discovery and drift analysis for harqis-work forks, with one HFL entry per fork instance plus a fleet summary |
 | `notes` | Active | 2 | Repository-backed note sync: editing-machine push → canonical host fast-forward pull; HFL performs the downstream ingest |
 | `knowledge` | Guarded active | 11 | Multi-source RAG ingest, cited answers, cross-link reports, and on-demand topic mapping/scanning |
@@ -311,6 +313,7 @@ Declared in `workflows/queues.py` (`WorkflowQueue` enum) and registered with Rab
 | Queue | Used by |
 |-------|---------|
 | `default` | Catch-all / unrouted tasks; fallback when a task has no `options.queue` |
+| `files` | Catalog scans, package publishing and expiry on the catalog server only |
 | `hud` | All `workflows.hud.tasks.*` (auto-routed via `task_routes`) — calendar, TCG orders, YNAB, AI logs |
 | `peon` | Work-context HUD tasks (Jira boards, calendar focus, etc.) |
 | `tcg` | TCG marketplace pipeline — Scryfall bulk, card matching, listings, pricing |
@@ -345,7 +348,7 @@ CONFIG_DICTIONARY = (
     | WORKFLOW_KNOWLEDGE | WORKFLOW_DUMPS | WORKFLOW_HFL | WORKFLOW_NOTES
     | WORKFLOW_WORKERS
     | WORKFLOW_TESTING | WORKFLOW_TCG
-    | WORKFLOW_GIT_FORKS | WORKFLOW_SECOND_BRAIN
+    | WORKFLOW_GIT_FORKS | WORKFLOW_SECOND_BRAIN | WORKFLOW_FILES
 )
 SPROUT.conf.beat_schedule = _celery_safe_schedule(CONFIG_DICTIONARY)
 ```
@@ -461,6 +464,7 @@ harqis-work/
 │   ├── desktop/                    # Windows desktop automation
 │   ├── discord/                    # Discord bot
 │   ├── echo_mtg/                   # MTG collection management
+│   ├── file_index/                 # Metadata catalog and share packages
 │   ├── filesystem/                 # Local file and directory operations
 │   ├── gemini/                     # Google Gemini AI (generation, embeddings)
 │   ├── git/                        # Local git CLI wrapper
@@ -500,6 +504,7 @@ harqis-work/
 │   ├── desktop/                    # Git pulls, window mgmt, file sync
 │   ├── dumps/                      # Daily dump collection (Android/Termux → harqis-server)
 │   ├── finance/                    # Manual PDF-to-YNAB transaction import
+│   ├── files/                      # Discovery, Drive publication and expiry
 │   ├── git_forks/                  # Fork fleet discovery and drift analysis
 │   ├── hfl/                        # Homework-for-Life capture/ingest/express pipeline
 │   ├── hud/                        # Desktop HUD, fallback, and compatibility tasks
@@ -605,7 +610,7 @@ The three driving principles:
                              ▼
    ┌──────────────────────────────────────────────────────────┐
    │                   MCP Server  (mcp/)                     │
-   │   Tools from 43 catalog modules — OANDA, YNAB, Gmail,    │
+   │   Tools from 44 catalog modules — OANDA, YNAB, Gmail,    │
    │    Telegram, Discord, Trello, Jira, Scryfall, TCG …      │
    └──────┬──────────────────────────────────┬────────────────┘
           │ reads / writes                   │ triggers
@@ -632,7 +637,7 @@ The three driving principles:
 | Component | Where | What it does |
 |---|---|---|
 | **Hermes agent** | `~/.hermes/` (local per-machine) | Agent runtime: persistent memory, distilled lessons, plans, and cron jobs (agent / `no_agent` modes) — see [`docs/info/HERMES.md`](docs/info/HERMES.md) |
-| **MCP server** | `mcp/server.py` | Registers tools from 41 app integrations plus knowledge & memory recall via `tools/catalog.py`; the live surface depends on `MCP_ENABLED_APPS` and successful module registration |
+| **MCP server** | `mcp/server.py` | Registers tools from 42 app integrations plus knowledge & memory recall via `tools/catalog.py`; the live surface depends on `MCP_ENABLED_APPS` and successful module registration |
 | **Celery Beat** | `workflows/config.py` | Runs all scheduled automation — HUD updates, MTG resale pipeline, desktop sync |
 | **RabbitMQ + Redis** | Docker stack | Celery broker and result backend |
 | **Frontend** | `frontend/main.py` | Web dashboard — manually trigger any task, inspect run history |
@@ -866,6 +871,16 @@ SPOTIFY_REFRESH_TOKEN=           # OAuth2 refresh token (minted once — see app
 ORGO_API_KEY=
 GOOGLE_APPS_API_KEY=              # shared Google/YouTube readiness signal
 GOOGLE_SHEET_HARQIS_ID=            # HARQIS Google Sheet id
+FILES_ENABLED=                    # opt-in Files scheduling; see docs/info/FILES-DEPLOYMENT.md
+FILES_STORE_PATH=                 # absolute persistent catalog path on the server
+FILES_HOST_ID=                    # stable catalog-host identity
+FILES_ALLOWED_ROOTS=              # JSON array of approved local source roots
+FILES_QUEUE=                      # files by default; only the catalog server consumes it
+FILES_PUBLIC_URL=                 # public HTTPS frontend origin
+FILES_GOOGLE_CONFIG_ID=           # GOOGLE_DRIVE by default
+FILES_SFTP_PROFILES_PATH=          # private SSH connection profile JSON
+FILES_MAX_BYTES=                  # per-file retrieval bound, default 2 GiB
+FILES_SCAN_LIMIT=                 # discovered files per scan, default 100000
 OWN_TRACKS_HOST=                  # default: localhost
 OWN_TRACKS_PORT=                  # default: 8083
 OWN_TRACKS_USERNAME=

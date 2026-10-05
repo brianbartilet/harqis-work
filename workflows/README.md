@@ -1,4 +1,9 @@
-# Workflows 
+# Workflows
+
+[`files`](files/README.md) powers Organize → Files with metadata discovery,
+versioned Drive package publication, and expiry. It runs on the catalog server's
+`files` queue and enables Beat maintenance only when `FILES_ENABLED=1`.
+See the [server deployment guide](../docs/info/FILES-DEPLOYMENT.md).
 
 # Description
 - Please see the [documentation](https://github.com/brianbartilet/harqis-core/tree/main/docs/WORKFLOWS.md) in HARQIS-core for workflow principles and guidelines.
@@ -192,3 +197,7 @@ When a worker disconnects, its anonymous fanout-bound queue is auto-deleted. A b
 ### Demo
 
 `workflows/hud/tasks/broadcast_reload.py` ships a working `broadcast_reload_config` task that just logs the receiving worker's hostname + timestamp and returns a JSON payload. Use it as a copy-paste template for new broadcasts.
+
+Entity consolidation is a Hermes-owned daily hybrid: the `auto-merge-entities` skill
+uses the entity API and the callable HFL `deliver_entity_consolidation` task for
+grouped HFL/Telegram reporting. It adds no Beat schedule. See [HFL workflows](hfl/README.md).

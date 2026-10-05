@@ -69,6 +69,65 @@ def test_worker_restores_verified_inputs_separately_from_outputs(tmp_path, monke
             runner.restore_input_attachments(SimpleNamespace(client=client), run)
 
 
+@pytest.mark.parametrize('count', [13, 50, 51])
+def test_worker_attachment_count_matches_upload_limit(tmp_path, monkeypatch, count):
+    import hashlib
+    import httpx
+    from types import SimpleNamespace
+    monkeypatch.setattr(runner, 'spool_root', lambda: tmp_path)
+    content = b'Brief'
+    items = [{'id': f'{i:032x}', 'filename': f'{i:032x}.md',
+              'size': len(content), 'digest': hashlib.sha256(content).hexdigest()} for i in range(count)]
+    run = {'id': 'run', 'lease_token': 'lease', 'snapshot': {'source': {'attachments': items}}}
+    with httpx.Client(base_url='https://test/', transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, content=content))) as client:
+        if count > 50:
+            with pytest.raises(runner.InputAttachmentError, match='51.*limit is 50'):
+                runner.restore_input_attachments(SimpleNamespace(client=client), run)
+        else:
+            runner.restore_input_attachments(SimpleNamespace(client=client), run)
+            assert len(list((tmp_path / 'workspaces/run/inputs').iterdir())) == count
+
+
+@pytest.mark.parametrize('file_limit,total_limit,valid', [(5, 10, True), (4, 10, False), (5, 9, False)])
+def test_worker_stream_limits_and_partial_cleanup(tmp_path, monkeypatch, file_limit, total_limit, valid):
+    import hashlib
+    import httpx
+    from types import SimpleNamespace
+    from workflows.hfl import attachment_limits
+    monkeypatch.setattr(runner, 'spool_root', lambda: tmp_path)
+    monkeypatch.setattr(attachment_limits, 'MAX_FILE_BYTES', file_limit)
+    monkeypatch.setattr(attachment_limits, 'MAX_TOTAL_BYTES', total_limit)
+    content = b'Brief'
+    items = [{'id': f'{i:032x}', 'filename': f'{i:032x}.md',
+              'size': len(content), 'digest': hashlib.sha256(content).hexdigest()} for i in range(2)]
+    run = {'id': 'run', 'lease_token': 'lease', 'snapshot': {'source': {'attachments': items}}}
+    with httpx.Client(base_url='https://test/', transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, content=content))) as client:
+        if valid:
+            runner.restore_input_attachments(SimpleNamespace(client=client), run)
+        else:
+            with pytest.raises(runner.InputAttachmentError, match='per file'):
+                runner.restore_input_attachments(SimpleNamespace(client=client), run)
+        files = list((tmp_path / 'workspaces/run/inputs').iterdir())
+        assert all(p.name in {i['filename'] for i in items} and p.read_bytes() == content for p in files)
+        assert len(files) == (2 if valid else (0 if file_limit < 5 else 1))
+
+
+def test_consume_reports_attachment_limit_to_owner(tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, 'spool_root', lambda: tmp_path)
+    run = {'id': 'run', 'lease_token': 'lease', 'snapshot': {'source': {'attachments': [{}] * 51}}}
+    events = []
+    class Client:
+        def call(self, path, payload=None):
+            return {'runs': [run]} if path == 'queue' else run
+        def event(self, run, key, kind, payload):
+            events.append((kind, payload))
+    runner.consume(Client())
+    assert events[-1][0] == 'failed'
+    assert events[-1][1]['summary'] == 'This task has 51 input attachments; the limit is 50.'
+
+
 def test_worker_rejects_remote_plaintext_and_missing_token(monkeypatch):
     monkeypatch.setenv('HFL_AGENT_BRIDGE_URL', 'http://remote.example')
     monkeypatch.setenv('HFL_AGENT_BRIDGE_TOKEN', 'test-token')

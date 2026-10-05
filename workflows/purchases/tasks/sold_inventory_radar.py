@@ -746,7 +746,7 @@ def radar_sold_inventory(dry_run: bool = False, last_x_days: int = 60,
     }
 
     # ── 3. inventory + notes → candidates ────────────────────────────────────
-    inventory = inventory_service.get_collection(tradable_only=1) or []
+    inventory = inventory_service.get_all_collection(tradable_only=1) or []
     if not isinstance(inventory, list):
         _log.warning("radar: echo inventory did not return a list; aborting")
         return {

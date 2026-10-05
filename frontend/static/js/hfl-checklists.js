@@ -21,7 +21,7 @@ window.HflChecklists = class {
   updateConversion() {
     for (const button of this.root.querySelectorAll('[data-convert-item]')) {
       button.disabled = this.options.canConvert ? !this.options.canConvert() : false;
-      button.title = button.disabled ? 'Save the idea before creating an action from an item.' : 'Create action';
+      button.title = button.disabled ? 'Save the idea before creating an action from an item.' : 'Create action from item';
     }
   }
   render() {
@@ -135,7 +135,7 @@ window.HflChecklists = class {
         preview.onkeydown = event => { if (event.target===preview && ['Enter',' '].includes(event.key)) {event.preventDefault();edit();} };
         text.onblur=show; text.after(preview); preview.hidden=true; show();
         if (this.options.convert) {
-          const convert = this.iconButton('convert', () => { if (!this.options.canConvert || this.options.canConvert()) this.options.convert(list.id, item.id); }, 'Create action');
+          const convert = this.iconButton('convert', () => { if (!this.options.canConvert || this.options.canConvert()) this.options.convert(list.id, item.id); }, 'Create action from item');
           convert.dataset.convertItem = item.id; actions.prepend(convert);
         }
         // Item IDs are unique across the object's lists; moves preserve provenance.
@@ -160,7 +160,7 @@ window.HflChecklists = class {
     form.addEventListener('reset', () => window.hflActionChecklists.set([]));
   }
 })();
-window.HflChecklistCover = function(root, item, save, open) {
+window.HflChecklistCover = function(root, item, save, open, createAction) {
   for (const list of (item.checklists || []).filter(list => list.cover)) {
     const section = document.createElement('section'); section.className = 'checklist-card-cover';
     const heading = document.createElement('p'); heading.textContent = `${list.title} · ${list.items.filter(i => i.done).length}/${list.items.length}`; section.append(heading);
@@ -169,7 +169,18 @@ window.HflChecklistCover = function(root, item, save, open) {
       const label = document.createElement('label'), check = document.createElement('input'); check.type = 'checkbox'; check.checked = task.done;
       check.onchange = async () => { section.inert = true; const lists = structuredClone(item.checklists); lists.find(l => l.id === list.id).items.find(i => i.id === task.id).done = check.checked;
         try { await save(lists); } catch (error) { check.checked = task.done; const message = document.createElement('p'); message.setAttribute('role', 'alert'); message.textContent = error.message; section.append(message); } finally { section.inert = false; }
-      }; const text=document.createElement('span'); window.HflChecklistMarkdown?.(text,task.text); if(!window.HflChecklistMarkdown)text.textContent=task.text; label.append(check,text); section.append(label);
+      }; const text=document.createElement('span'); window.HflChecklistMarkdown?.(text,task.text); if(!window.HflChecklistMarkdown)text.textContent=task.text; label.append(check,text);
+      const row = document.createElement('div'); row.className = 'checklist-card-row'; row.append(label);
+      if (createAction) {
+        const create = HflChecklists.prototype.iconButton.call(HflChecklists.prototype, 'convert', async event => {
+          event.stopPropagation(); create.disabled = true;
+          try { await createAction(list, task); }
+          catch (error) { const message = document.createElement('p'); message.setAttribute('role', 'alert'); message.textContent = error.message; section.append(message); }
+          finally { create.disabled = false; }
+        }, 'Create action from item');
+        create.className = 'checklist-card-create'; row.append(create);
+      }
+      section.append(row);
     }
     root.append(section);
   }

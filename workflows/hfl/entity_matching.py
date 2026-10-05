@@ -44,6 +44,8 @@ def blocked(db, ids):
 
 
 def request_scan(seeds=None):
+    if agent_owned():
+        return {'state': 'agent-owned', 'owner': 'hermes', 'run_id': get_store().state('consolidation-active')}
     if not enabled():
         return {'state': 'disabled'}
     seeds = sorted(set(seeds or []))
@@ -56,8 +58,12 @@ def request_scan(seeds=None):
     return {'id': identity, 'state': 'requested'}
 
 
+def agent_owned():
+    return get_store().state('entity-consolidation-owner') == 'hermes'
+
+
 def dispatch_pending():
-    if not enabled():
+    if agent_owned() or not enabled():
         return
     from core.apps.sprout.app.celery import SPROUT
     with get_store().connection() as db:
@@ -130,6 +136,9 @@ def prepare(job_id, entities):
         for left, right in sorted(pairs):
             if blocked(db, [left, right]):
                 continue
+            if db.execute("SELECT 1 FROM entity_match_pairs WHERE left_id=? AND right_id=? "
+                          "AND state IN ('pending','suggested') LIMIT 1", (left, right)).fetchone():
+                continue  # Concurrent enrichment/history jobs share outstanding work.
             pair_id = digest([job_id, left, right])
             db.execute('INSERT OR IGNORE INTO entity_match_pairs(id,job_id,left_id,right_id) VALUES (?,?,?,?)',
                        (pair_id, job_id, left, right))
@@ -143,7 +152,7 @@ def evidence_entity(entity):
     return {'id': entity['id'], 'name': entity['label'], 'kind': entity['kind'], 'external_id':entity.get('external_id'),
             'profile': bounded_profile,
             'activity': [{'id': e['id'], 'text': (e.get('evidence') or '')[:2000]}
-                         for e in entity['entries'] if e.get('source') != 'entities-audit'][:8]}
+                         for e in entity['entries'] if e.get('source') not in {'entities-audit', 'entity-consolidation'}][:8]}
 
 
 def evaluate(pairs):
@@ -220,6 +229,8 @@ def curated_profile(entity):
 
 
 def process_batch(job_id):
+    if agent_owned():
+        return {'job_id': job_id, 'pending': 0, 'owner': 'hermes'}
     from modules.hfl_corpus import entities
     from modules.hfl_corpus.entity_merge_api import MergePreview, build_preview
     from workflows.hfl import entity_merges
@@ -229,7 +240,7 @@ def process_batch(job_id):
         if not job or job['state'] in {'complete','failed'}:
             return {'job_id':job_id,'pending':0}
     current = entities.entity_index()
-    current = [e for e in current if any(x.get('source') != 'entities-audit' for x in e['entries'])]
+    current = [e for e in current if any(x.get('source') not in {'entities-audit', 'entity-consolidation'} for x in e['entries'])]
     prepare(job_id, current)
     available = {e['id']: e for e in current}
     with store.connection() as db:
@@ -244,7 +255,8 @@ def process_batch(job_id):
         left, right = store.resolve(row['left_id']), store.resolve(row['right_id'])
         with store.connection() as db:
             excluded = blocked(db, [left, right])
-        if left == right or left not in available or right not in available or excluded:
+        if (left == right or left not in available or right not in available or excluded
+                or available[left]['kind'] != available[right]['kind']):
             with store.connection() as db:
                 db.execute("UPDATE entity_match_pairs SET state='skipped' WHERE id=?", (row['id'],))
             continue
@@ -281,7 +293,8 @@ def process_batch(job_id):
             curated = [e for e in (a,b) if curated_profile(e)]
             result['protected_profile'] = bool(curated)
             if supported(decision, pair) and len(curated) <= 1:
-                target = curated[0] if curated else a
+                from workflows.hfl.entity_candidates import preferred
+                target = preferred([a, b])
                 request_id = str(uuid.uuid5(uuid.NAMESPACE_URL, pair['id']))
                 previous = entity_merges.operation(request_id, pair['id'])
                 if previous:
@@ -316,7 +329,7 @@ def process_batch(job_id):
     return {'job_id':job_id,'pending':remaining}
 
 
-def status():
+def status(limit=100):
     with get_store().connection() as db:
         aliases = {r[0]:r[1] for r in db.execute('SELECT alias,canonical FROM decisions WHERE active=1')}
         def resolve(identity):
@@ -331,9 +344,22 @@ def status():
         jobs = [dict(r) for r in db.execute("SELECT id,mode,state,error,created FROM entity_match_jobs ORDER BY mode='history' DESC, created DESC LIMIT 20")]
         for job in jobs:
             job['counts'] = {r[0]:r[1] for r in db.execute('SELECT state,count(*) FROM entity_match_pairs WHERE job_id=? GROUP BY state',(job['id'],))}
-        suggestions = [{**dict(r),'data':json.loads(r['data'])} for r in db.execute("SELECT * FROM entity_match_pairs WHERE state='suggested' ORDER BY rowid DESC LIMIT 100")]
-        total = db.execute("SELECT count(*) FROM entity_match_pairs WHERE state='suggested'").fetchone()[0]
-    return {'enabled':enabled(),'jobs':jobs,'suggestions':suggestions,'suggestions_total':total}
+        suggestions, seen = [], set()
+        for row in db.execute("SELECT * FROM entity_match_pairs WHERE state='suggested' ORDER BY rowid DESC"):
+            item = {**dict(row), 'data': json.loads(row['data'])}
+            ids = [resolve(i) for i in item['data'].get('entity_ids', [row['left_id'], row['right_id']])]
+            pair = tuple(sorted(set(ids)))
+            if len(pair) < 2 or pair in seen:
+                continue
+            seen.add(pair)
+            item['data']['entity_ids'] = ids
+            suggestions.append(item)
+        total = len(suggestions)
+        if limit is not None:
+            suggestions = suggestions[:limit]
+    return {'enabled':enabled(), 'owner': 'hermes' if agent_owned() else 'celery',
+            'consolidation_run': get_store().state('consolidation-active'),
+            'jobs':jobs,'suggestions':suggestions,'suggestions_total':total}
 
 
 def dismiss(identity):
@@ -342,5 +368,19 @@ def dismiss(identity):
         row = db.execute("SELECT * FROM entity_match_pairs WHERE id=? AND state='suggested'",(identity,)).fetchone()
         if not row:
             raise ValueError('Suggestion is unavailable')
-        block_members(db, [row['left_id'],row['right_id']], 'dismissed')
-        db.execute("UPDATE entity_match_pairs SET state='dismissed' WHERE id=?",(identity,))
+        aliases = {r[0]: r[1] for r in db.execute('SELECT alias,canonical FROM decisions WHERE active=1')}
+        def resolve(value):
+            seen = set()
+            while value in aliases and value not in seen:
+                seen.add(value)
+                value = aliases[value]
+            return value
+        def members(pair):
+            data = json.loads(pair['data'])
+            return {resolve(i) for i in data.get('entity_ids', [pair['left_id'], pair['right_id']])}
+        selected = members(row)
+        block_members(db, sorted(selected), 'dismissed')
+        # Older overlapping jobs may contain more than one suggestion for this pair.
+        duplicates = [r['id'] for r in db.execute("SELECT * FROM entity_match_pairs WHERE state='suggested'")
+                      if members(r) == selected]
+        db.executemany("UPDATE entity_match_pairs SET state='dismissed' WHERE id=?", [(i,) for i in duplicates])

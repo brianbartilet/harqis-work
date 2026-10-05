@@ -200,13 +200,10 @@ Found while building the radar; walked through and resolved/triaged:
    creation (with a warning) when no Scryfall GUID resolved, so no `scryfall_guid=None`
    note is ever persisted.
 6. **Deprecated `logger.warn()`** — ✅ **fixed** → `.warning()`.
-7. **`needs_lowest_seller` is never honoured** — *documented, behaviour unchanged.*
-   `_update_pricing_calc` flags it for down/flat 7-day change but the worker prices off
-   `base_price` either way (the lowest-seller lookup is not implemented). The code now
-   says so explicitly. Effective pricing: down/flat → `base_price × multiplier`; upward
-   → adjusted price × multiplier. Fetching + undercutting the marketplace's lowest
-   seller (`ApiServiceTcgMpProducts.search_single_card_listings`) is a deliberate
-   follow-up, not enabled here.
+7. **Competitor pricing was not implemented** — fixed. Both listing workers now
+   cap movement pricing at the average of the five cheapest comparable competing
+   offers. See [TCG pricing algorithm](#tcg-pricing-algorithm) for fee recovery,
+   automatic FX, and fallback rules.
 8. **`force_generate` disables listings without re-enabling** — ✅ **fixed.**
    `generate_tcg_mappings` now calls `set_listing_status(1)` at the end of a
    `force_generate` run, so a standalone force run no longer leaves the store off.
@@ -218,6 +215,7 @@ Found while building the radar; walked through and resolved/triaged:
 | `scryfall` | Bulk card data download and card metadata lookup |
 | `tcg_mp` | Listing creation, price edits, order retrieval |
 | `echo_mtg` | Owned inventory data (cards to list) |
+| `alpha_vantage` | USD → SGD exchange rate for listing prices |
 
 ## Helper Modules
 
@@ -226,6 +224,7 @@ Found while building the radar; walked through and resolved/triaged:
 | `helpers/helper.py` | `load_scryfall_bulk_data()` — loads downloaded bulk JSON into memory |
 | `helpers/constants.py` | `image_guid_pattern` — regex for TCG image GUID extraction |
 | `helpers/mp_logging.py` | `log_mp_summary()` — summarizes multiprocessing worker results |
+| `helpers/tcg_pricing.py` | Shared price calculation, competitor selection, and FX cache |
 
 ## Scheduled Job Details
 
@@ -250,7 +249,7 @@ reading it.
 
 Main inputs:
 
-- EchoMTG inventory from `ApiServiceEchoMTGInventory.get_collection(tradable_only=1)`.
+- EchoMTG inventory from `ApiServiceEchoMTGInventory.get_all_collection(tradable_only=1)`.
 - EchoMTG card metadata from `ApiServiceEchoMTGCardItem.get_card_meta(emid)`.
 - TCG Marketplace product search from `ApiServiceTcgMpProducts.search_card(name)`.
 - Local Scryfall bulk data from `load_scryfall_bulk_data(...)`.
@@ -330,7 +329,7 @@ Procedure:
 2. Fetch pending order reservations for Pending Drop Off and Pending Payment.
 3. Fetch handed-off order quantities for dropped-or-later statuses over the
    configured date window.
-4. Pull EchoMTG `get_collection(tradable_only=1)`.
+4. Pull EchoMTG `get_all_collection(tradable_only=1)`.
 5. Filter to cards needing a listing. A card qualifies only when it has an
    EchoMTG note, the note parses as valid JSON metadata, `tcg_mp_card_id > 0`,
    and `tcg_mp_listing_id == 0`.
@@ -450,13 +449,13 @@ Procedure:
 
 1. Load EchoMTG and TCG Marketplace configs.
 2. Fetch pending commitments and handed-off order quantities.
-3. Pull EchoMTG `get_collection(tradable_only=1)`.
+3. Pull EchoMTG `get_all_collection(tradable_only=1)`.
 4. Keep only cards with note ids and group them by variant.
 5. Pick one representative per variant, preferring a copy with a note.
 6. Compute a base price from EchoMTG metadata: foil uses `foil_price`, non-foil
    uses `tcg_mid`.
-7. Run `_update_pricing_calc`, then apply currency/market conversion and
-   commission.
+7. Apply the shared TCG pricing algorithm: automatic USD → SGD conversion, 3%
+   fee recovery, seven-day momentum, and the cheapest-five competitor cap.
 8. Resolve language and condition from EchoMTG.
 9. Filter live copies to note-backed listable variants for the same TCG product.
 10. Compute safe quantity by subtracting pending commitments and accounting for
@@ -471,6 +470,99 @@ Procedure:
 
 Listings stay aligned with EchoMTG metadata, current pricing, active order
 commitments, and the note-backed listable quantity.
+
+## TCG pricing algorithm
+
+`_worker_generate_tcg_listings` and `_worker_update_tcg_listings_prices` use
+`helpers/tcg_pricing.py`, so identical inputs produce identical prices when creating,
+adopting, or updating a listing. Mapping generation only prepares identifiers;
+the Scryfall `tcg_price` in its note is not the selling-price input.
+
+### Formula and units
+
+The base price is EchoMTG `foil_price` for foil cards and `tcg_mid` otherwise,
+in USD. `price_change` is interpreted as a seven-day percentage (15 means +15%).
+The exchange rate is **SGD per USD**, not its inverse. The platform fee defaults
+to **3% of the sale amount**; dividing by `0.97` recovers it exactly before rounding.
+
+```text
+premium = max(0, seven_day_change - 8) / 100
+movement_price_sgd = base_price_usd * usd_to_sgd_rate * (1 + premium) / 0.97
+competitor_average_sgd = mean(five cheapest eligible competitor asking prices)
+final_price_sgd = min(movement_price_sgd, competitor_average_sgd)
+```
+
+With no eligible competitors, use the movement price. Negative, flat, and positive
+movement up to and including 8% add no premium. Above 8%, only the excess percentage
+points are added, once. The competitor average caps **all** movement categories,
+including spikes. Never apply another fee markup after this cap. A competitor cap
+can reduce proceeds below the EchoMTG base; there is no acquisition-cost or margin floor.
+
+Use decimal arithmetic and round only the final price to two decimal places,
+half up. Reject nonpositive, nonfinite, missing, or invalid base prices/FX rates;
+invalid movement also skips the variant. A price rounding to zero is not published.
+
+Examples for USD 10, an illustrative rate of 1.28, and a 3% fee:
+
+| Seven-day change | Movement price (rounded for display) | Competitor average | Published price |
+|---|---:|---:|---:|
+| −20%, 0%, or +8% | SGD 13.20 | SGD 12.00 | SGD 12.00 |
+| +15% | SGD 14.12 | SGD 13.50 | SGD 13.50 |
+| +15% | SGD 14.12 | SGD 20.00 | SGD 14.12 |
+| +15% | SGD 14.12 | None | SGD 14.12 |
+
+### Eligible competitors
+
+Fetch offers through `ApiServiceTcgMpProducts.get_pricing_listings(product_id, foil)`.
+The product ID scopes the exact printing; compare the same foil status, language,
+and condition. Exclude own offers (ownership flag and authenticated user ID),
+suspended sellers, signed/altered cards, unavailable stock, invalid prices,
+and duplicate listing IDs. Unknown ownership or missing variant attributes are
+not eligible. The lookup must have a successful response and a total count matching
+the returned rows; an incomplete response is a lookup failure.
+
+Sort by price, take at most five, and average each distinct listing equally,
+regardless of its stock quantity. With one to four offers, average all of them.
+Prices are treated as SGD item asking prices, excluding shipping. This is a cap
+at an average, not a promise to undercut every seller or evidence of completed sales.
+
+### FX cache and failures
+
+Reuse the existing Alpha Vantage integration and its configured credentials.
+Each parent task resolves FX once before dispatching pricing workers, sharing a
+single snapshot across that run. Cache it in the gitignored
+`logs/tcg-pricing/usd-sgd.json` for 24 hours, using atomic replacement.
+
+If refresh fails, a cached quote may be used only while its source timestamp and
+fetch timestamp are at most seven days old. Without a usable quote, record a
+`pricing_fx` audit failure and skip pricing-worker dispatch (including their
+combined price/quantity mutations). The preceding sold-inventory radar still runs
+normally. There is no hardcoded exchange-rate fallback. A cache-write failure does
+not discard an otherwise valid fresh quote.
+
+A failed competitor lookup, malformed/partial response, or no eligible offers
+uses movement pricing, with the reason recorded. Invalid card pricing skips that
+variant. Existing sold-inventory reconciliation, reservation safeguards, and
+duplicate-listing handling remain in place.
+
+Both workers accept `usd_to_sgd_rate=None, platform_fee_pct=3.0`.
+Normally the rate and fee arrive in the parent task's dispatched payload;
+an explicit worker `usd_to_sgd_rate` is available for controlled direct calls.
+Parent tasks accept `platform_fee_pct` and `cfg_id__alpha_vantage` via kwargs
+(under `update_kwargs` when using the reconciliation wrapper). The fee is a
+percentage, not a multiplier. The old `conversion_multiplier` and `commission_rate`
+worker arguments are replaced.
+
+Worker logs/results include base price, movement, FX source/date, selected offers,
+competitor average, selected price, and fallback reasons. After successful publication,
+EchoMTG notes store the actual published amount in `tcg_mp_selling_price` and the
+decision in `tcg_mp_pricing`. Failed updates do not replace the saved price with an
+unpublished proposal. Older notes acquire the consistent meaning on their next
+successful publication.
+
+Offline regression coverage lives in `tests/test_tcg_pricing.py`, including FX
+freshness and outages, invalid inputs, competitor filtering, caps, worker parity,
+failed publication, and skipped writes without FX. Tests mock marketplace writes.
 
 ## Manual Approval Flow
 

@@ -131,6 +131,11 @@ def test_supervision_pause_and_resume_are_platform_scoped(tmp_path, monkeypatch,
     monkeypatch.setattr(deploy, "IS_MAC", platform == "mac")
     monkeypatch.setattr(deploy, "IS_LIN", platform == "linux")
     monkeypatch.setattr(deploy, "_plist_path", lambda service: plist)
+    monkeypatch.setattr(deploy, "_systemd_unit_path", lambda service: tmp_path / f"{service}.service")
+    deploy._systemd_unit_path("worker").write_text(
+        f"[Service]\nWorkingDirectory={deploy.REPO_ROOT}\n"
+        f"ExecStart=python {deploy._systemd_quote(str(deploy.LAUNCH_PY), command=True)} worker\n"
+    )
 
     def fake_run(command, **kwargs):
         calls.append(command)

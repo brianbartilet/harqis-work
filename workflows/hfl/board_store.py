@@ -17,10 +17,13 @@ def text(value, label, limit, required=False):
 def normalize_board(item):
     """Read old maps additively, preserving their IDs and revisions."""
     return {'purpose': item['name'], 'root': '', 'goal_id': '', 'drafts': [], 'edges': [],
-            'created_at': '', 'updated_at': '', 'board_date': '', 'color': PIN_COLORS[0], 'node_sizes': {}, 'edge_widths': {}, **item}
+            'created_at': '', 'updated_at': '', 'board_date': '', 'active': True, 'color': PIN_COLORS[0], 'node_sizes': {}, 'edge_widths': {}, **item}
 
 
 def validate_board(item, extra_ids=()):
+    item.setdefault('active', True)
+    if type(item['active']) is not bool:
+        raise ValueError('Board active must be a boolean.')
     item.setdefault('color', PIN_COLORS[0])
     if item['color'] not in PIN_COLORS:
         raise ValueError('Choose a color from the Memory Signal palette.')
@@ -220,6 +223,8 @@ class BoardStoreMixin(ConnectionStoreMixin):
                 return {'board': board, 'idea_id': receipt['idea_id']}
             if not draft and shared_node in board['members']:
                 return {'board': board, 'idea_id': shared_id}
+            if not board['active']:
+                raise ValueError('Activate this board before promoting an idea.')
             if board['version'] != version:
                 raise FollowUpConflict('The board changed. Reload before promoting.')
             if not draft:

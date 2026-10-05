@@ -1,5 +1,6 @@
 """Owner session/bearer commands shared by the directory and external agents."""
 import json
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
@@ -24,6 +25,9 @@ class MergePreview(BaseModel):
 
 class MergeFields(BaseModel):
     model_config = ConfigDict(extra='forbid')
+    aliases: list[str] = Field(default_factory=list, max_length=100)
+    partial_aliases: list[str] = Field(default_factory=list, max_length=100)
+    preferred_name: bool = False
     categories: list[str] = Field(default_factory=list)
     emails: list[str] = Field(default_factory=list)
     phones: list[str] = Field(default_factory=list)
@@ -73,8 +77,11 @@ def build_preview(payload, current=None):
     if len(kinds) != 1:
         raise ValueError('All selected entities must have the same type')
     profile = {'name': name}
-    for key in ('categories', 'emails', 'phones', 'references'):
+    for key in ('categories', 'emails', 'phones', 'references', 'aliases', 'partial_aliases'):
         profile[key] = unique(v for e in selected for v in (e.get('profile') or {}).get(key, []))
+    profile['aliases'] = unique([*profile['aliases'], *(e['label'] for e in selected if e['label'] != name)])
+    profile['alias_sources'] = {v: next(((e.get('profile') or {}).get('alias_sources', {}).get(v, 'user') for e in selected if v in (e.get('profile') or {}).get('aliases', []) or v in (e.get('profile') or {}).get('partial_aliases', [])), 'merged-name') for v in [*profile['aliases'], *profile['partial_aliases']]}
+    profile['preferred_name'] = any((e.get('profile') or {}).get('preferred_name') and e['label'] == name for e in selected)
     profile['notes'] = '\n\n'.join(f"### {e['label']}\n{e['profile']['notes']}" for e in selected
                                   if (e.get('profile') or {}).get('notes'))
     with store.connection() as db:
@@ -82,6 +89,7 @@ def build_preview(payload, current=None):
             raise ValueError('Entities changed during preview; try again')
     members = [dict(id=e['id'], label=e['label'], profile=e.get('profile')) for e in selected]
     return dict(name=name, kind=selected[0]['kind'], members=members, profile=profile,
+                selection_hash=digest(selected),
                 evidence=payload.evidence.strip(), revision=version,
                 unique_entries=len({x['id'] for e in selected for x in e['entries']}))
 
@@ -93,11 +101,16 @@ async def call(function, *args):
         raise HTTPException(409, str(exc)) from exc
 
 
+def preview_digest(result):
+    # Unrelated enrichment and merges must not invalidate a reviewed selection.
+    return digest({k: v for k, v in result.items() if k != 'revision'})
+
+
 @router.post('/merge-preview')
 async def preview(request: Request, payload: MergePreview):
     owner(request)
     result = await call(build_preview, payload)
-    result['preview_token'] = signer().dumps(digest(result))
+    result['preview_token'] = signer().dumps(preview_digest(result))
     return result
 
 
@@ -114,13 +127,15 @@ async def submit(request: Request, payload: MergeSubmit, background_tasks: Backg
     except BadSignature as exc:
         raise HTTPException(409, 'Preview expired or invalid; review a fresh preview') from exc
     result = await call(build_preview, payload)
-    if digest(result) != expected:
+    if preview_digest(result) != expected:
         raise HTTPException(409, 'Selection, fields or entity data changed; review a fresh preview')
     if payload.profile is not None:
         from modules.hfl_corpus.entities_api import Profile, validated_profile
+        sources = result['profile'].get('alias_sources', {})
         result['profile'] = validated_profile(Profile(**{
             **result['profile'], **payload.profile.model_dump(exclude_unset=True),
         }))
+        result['profile']['alias_sources'] = {v: sources.get(v, 'user') for k in ('aliases', 'partial_aliases') for v in result['profile'][k]}
     result = await call(merges.commit_merge, result, str(payload.request_id), fingerprint, actor)
     background_tasks.add_task(merges.flush_audits)
     return result
@@ -156,10 +171,40 @@ async def history(request: Request, identity: str):
 
 
 @router.get('/matching')
-async def matching_status(request: Request):
+async def matching_status(request: Request, all: bool = False):
     owner(request)
     from workflows.hfl.entity_matching import status
-    return await run_in_threadpool(status)
+    result = await run_in_threadpool(status, None if all else 100)
+    if all:
+        current = await run_in_threadpool(entities.entity_index)
+        ids = {i for s in result['suggestions'] for i in s['data'].get('entity_ids', [])}
+        result['entities'] = [e for e in current if e['id'] in ids]
+    return result
+
+
+class BatchSubmit(BaseModel):
+    groups: list[MergeSubmit] = Field(min_length=1, max_length=100)
+
+
+@router.post('/merges/batch')
+async def submit_batch(request: Request, payload: BatchSubmit, background_tasks: BackgroundTasks):
+    owner(request)
+    seen = set()
+    for group in payload.groups:
+        if seen.intersection(group.entity_ids):
+            raise HTTPException(400, 'Combine overlapping selections into one group before submitting.')
+        seen.update(group.entity_ids)
+    results = []
+    for group in payload.groups:
+        try:
+            result = await submit(request, group, background_tasks)
+            results.append({'request_id': str(group.request_id), 'result': result})
+        except HTTPException as exc:
+            results.append({'request_id': str(group.request_id), 'error': exc.detail})
+        except Exception:
+            # A retry with the same request ID recovers a commit whose response was lost.
+            results.append({'request_id': str(group.request_id), 'error': 'Merge could not complete. Retry this group.'})
+    return {'results': results}
 
 
 @router.post('/matching/scan')
@@ -175,3 +220,68 @@ async def dismiss_match(request: Request, identity: str):
     from workflows.hfl.entity_matching import dismiss
     await call(dismiss, identity)
     return {'dismissed':identity}
+
+
+class ConsolidationFact(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    left_quote: str = Field(max_length=2000)
+    right_quote: str = Field(max_length=2000)
+    explanation: str = Field(min_length=1, max_length=2000)
+
+
+class ConsolidationDecision(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    decision: Literal['merge', 'review', 'separate']
+    reason: str = Field(min_length=1, max_length=10000)
+    contradictions: list[str] = Field(default_factory=list, max_length=20)
+    facts: list[ConsolidationFact] = Field(default_factory=list, max_length=8)
+    aliases: list[str] = Field(default_factory=list, max_length=30)
+    partial_aliases: list[str] = Field(default_factory=list, max_length=30)
+
+
+class ConsolidationBatch(BaseModel):
+    decisions: dict[str, ConsolidationDecision] = Field(min_length=1, max_length=20)
+
+
+@router.post('/consolidation/begin')
+async def consolidation_begin(request: Request):
+    owner(request)
+    from workflows.hfl.entity_consolidation import begin
+    return await call(begin)
+
+
+@router.get('/consolidation/{run_id}')
+async def consolidation_status(request: Request, run_id: str):
+    owner(request)
+    from workflows.hfl.entity_consolidation import load, view
+    return view(await call(load, run_id))
+
+
+@router.post('/consolidation/{run_id}/decisions/{pair_id}')
+async def consolidation_decide(request: Request, run_id: str, pair_id: str, payload: ConsolidationDecision):
+    owner(request)
+    from workflows.hfl.entity_consolidation import decide
+    return await call(decide, run_id, pair_id, payload.model_dump())
+
+
+@router.post('/consolidation/{run_id}/decisions')
+async def consolidation_batch(request: Request, run_id: str, payload: ConsolidationBatch):
+    owner(request)
+    from workflows.hfl.entity_consolidation import decide
+    results = []
+    for pair_id, decision in payload.decisions.items():
+        try:
+            pair = await call(decide, run_id, pair_id, decision.model_dump())
+            results.append({'id': pair_id, 'state': pair['state'], 'operation': pair.get('operation'), 'note': pair.get('note')})
+        except HTTPException as exc:
+            results.append({'id': pair_id, 'error': exc.detail})
+    return {'results': results}
+
+
+@router.post('/consolidation/{run_id}/finish')
+async def consolidation_finish(request: Request, run_id: str):
+    owner(request)
+    from workflows.hfl.entity_consolidation import finish, dispatch_reports, load, view
+    result = await call(finish, run_id)
+    await call(dispatch_reports, run_id)
+    return view(await call(load, run_id))

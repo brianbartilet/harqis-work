@@ -258,6 +258,25 @@ Amounts are in the smallest currency unit (cents for USD). Pagination is cursor-
 
 ---
 
+### File Index (`apps/file_index/mcp.py`)
+
+Local catalog tools; run on the catalog host with its `FILES_STORE_PATH`.
+
+| Tool | Description |
+|---|---|
+| `search_file_index_files` | Paginated name/tag/category metadata search |
+| `get_file_index_file` | File metadata and storage locations |
+| `list_file_index_sources` | Configured source roots and last scan status |
+| `get_file_index_package` | Owner-visible revisions and audit |
+| `create_file_index_output` | **Write** generated-output metadata under an enabled local source; does not share content |
+
+*Find indexed files tagged research.*
+*Inspect the locations of this file.*
+*Register this generated report in the file catalog.*
+
+Publication remains an explicit owner UI command. See
+[File Index](../apps/file_index/README.md) and its deployment guide.
+
 ### Gemini (`apps/gemini/mcp.py`)
 
 Wraps `apps/gemini/references/web/api/` services. Requires valid `GEMINI` section in `apps_config.yaml`.
@@ -378,6 +397,7 @@ session/protocol surfaces. Writes are marked below; file downloads write locally
 | `list_hfl_corpus_timeline_items` | List up to 500 scoped agenda items with board positions and due-state grouping. |
 | `update_hfl_corpus_timeline_order` | Reorder a status column with item version checks. Destructive: writes remote state. |
 | `create_hfl_corpus_timeline_item` | Create/adopt an agenda item. May configure agent execution if explicitly requested. Destructive: writes remote state. |
+| `create_hfl_corpus_checklist_action` | Create an action and tick the source checklist item atomically, with version checks and retry-safe creation. Agent execution stays disabled. Destructive: writes remote state. |
 | `update_hfl_corpus_timeline_item` | Update an agenda item using its latest version. Can alter scheduling; completion writes a receipt. Destructive: writes remote state. |
 | `get_hfl_corpus_timeline_item` | Read the current agenda item and version. |
 | `get_hfl_corpus_timeline_history` | Read immutable agenda revisions and rendered completion notes. |

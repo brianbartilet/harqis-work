@@ -1,0 +1,7 @@
+{
+  "name": "hfl-entity-consolidation-daily",
+  "schedule": "0 9 * * *",
+  "timezone": "Asia/Singapore",
+  "skill": ".agents/skills/auto-merge-entities/SKILL.md",
+  "prompt": "Read and execute .agents/skills/auto-merge-entities/SKILL.md from the configured workdir. This scheduled job is authorized to consolidate all registered entity types, retain aliases and publish one grouped HFL/Telegram report through the canonical finish API. Resume unfinished work; do not stop after the first page of pairs. Use contextual evidence, defer uncertainty, and verify delivery. Do not send an additional cron notification."
+}

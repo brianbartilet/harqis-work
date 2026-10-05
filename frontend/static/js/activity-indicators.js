@@ -3,7 +3,7 @@
   let panel = document.querySelector('[data-activity-panel]');
   if (!panel) return;
   let actions = {};
-  const labels = {open:'In review / Ready',in_progress:'In progress',incomplete:'Incomplete',done:'Done'};
+  const labels = {open:'In Review / Ready',in_progress:'In Progress',incomplete:'Incomplete',done:'Done'};
   function paint() {
     panel.querySelectorAll('[data-activity-day]').forEach(cell => {
       const day = cell.dataset.activityDay, marker = actions[day];

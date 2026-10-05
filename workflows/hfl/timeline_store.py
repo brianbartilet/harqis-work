@@ -21,7 +21,7 @@ def store_path():
 
 
 STATES = {"open", "active", "in_progress", "incomplete", "done", "dismissed"}
-FIELDS = {"title", "expected_outcome", "notes", "prompt", "review_date", "due_date", "status", "completion_note", "agent_enabled", "matrix", "matrix_confidence", "matrix_reason", "description", "body", "checklists", "hide_ticked", "workspace_ids", "recurrence"}
+FIELDS = {"title", "expected_outcome", "notes", "prompt", "review_date", "due_date", "status", "completion_note", "agent_enabled", "matrix", "matrix_confidence", "matrix_reason", "description", "body", "checklists", "hide_ticked", "workspace_ids", "board_ids", "recurrence"}
 
 
 def validate_matrix(payload):
@@ -130,8 +130,8 @@ class FollowUpStore:
             if not isinstance(value, str) or len(value if key == "prompt" else value.strip()) > limit:
                 raise ValueError(f"{key.replace('_', ' ')} must be text of at most {limit} characters")
             result[key] = value if key == "prompt" else value.strip()
-        if not result["title"] or not result["expected_outcome"]:
-            raise ValueError("A title and expected outcome are required.")
+        if not result["title"]:
+            raise ValueError("A title is required.")
         if result.get("status", "open") not in STATES:
             raise ValueError("Unknown follow-up status.")
         result.setdefault("status", "open")
@@ -154,6 +154,8 @@ class FollowUpStore:
             raise ValueError("Unsupported follow-up fields.")
         request_id = str(uuid.UUID(str(raw.get("request_id", ""))))
         item = self.validate({key: value for key, value in raw.items() if key in FIELDS})
+        from workflows.hfl.intent_boards import board_ids, sync
+        item['board_ids'] = board_ids(raw.get('board_ids', []))
         if item["status"] != "open":
             raise ValueError("New follow-ups start In Review.")
         now = isoformat()
@@ -178,11 +180,13 @@ class FollowUpStore:
                 from workflows.hfl.object_content import content_fields
                 original.update(content_fields(original))
                 original.setdefault('workspace_ids', [])
+                original.setdefault('board_ids', [])
                 original.setdefault('recurrence', None)
                 original.setdefault('hide_ticked', False)
                 if any(original.get(k, True if k == "agent_enabled" else [] if k == 'checklists' else "") != item.get(k, True if k == "agent_enabled" else [] if k == 'checklists' else "") for k in FIELDS) or original.get("source") != source:
                     raise FollowUpConflict("This creation request was already used. Reload before creating another follow-up.")
                 return existing, True
+            item['board_ids'] = sync(db, 'action:' + item['id'], item['board_ids'])
             encoded = json.dumps(item)
             db.execute("INSERT INTO followups VALUES (?, ?, ?, ?, ?, ?)",
                        (item["id"], request_id, 1, item["status"], now, encoded))
@@ -195,9 +199,10 @@ class FollowUpStore:
     def get(self, followup_id):
         with self.connect() as db:
             row = db.execute("SELECT payload FROM followups WHERE id=?", (followup_id,)).fetchone()
-        if not row:
-            raise KeyError(followup_id)
-        return json.loads(row["payload"])
+            if not row:
+                raise KeyError(followup_id)
+            from workflows.hfl.intent_boards import project
+            return project(db, [json.loads(row['payload'])], 'action:')[0]
 
     def update(self, followup_id, raw, *, actor, connection=None):
         if set(raw) - FIELDS - {"version"}:
@@ -213,6 +218,9 @@ class FollowUpStore:
             if type(raw.get("version")) is not int or raw["version"] != old["version"]:
                 raise FollowUpConflict("This follow-up changed in another window. Reload it before saving.")
             item = self.validate({**old, **{k: v for k, v in raw.items() if k in FIELDS}})
+            from workflows.hfl.intent_boards import sync, memberships
+            item['board_ids'] = (sync(db, 'action:' + followup_id, raw['board_ids']) if 'board_ids' in raw
+                                 else memberships(db, 'action:' + followup_id))
             item.update(version=old["version"] + 1, updated_at=isoformat())
             item["completed_at"] = (old["completed_at"] or item["updated_at"]) if item["status"] == "done" else ""
             encoded = json.dumps(item)
@@ -232,6 +240,9 @@ class FollowUpStore:
                         next_date = next_occurrence(item['recurrence'], planned)
                         if next_date:
                             successor = {k: v for k, v in item.items() if k in FIELDS}
+                            from workflows.hfl.intent_boards import boards
+                            active = {b['id'] for b in boards(db) if b.get('active', True)}
+                            successor['board_ids'] = [i for i in item['board_ids'] if i in active]
                             successor.update(request_id=request_id, status='open', completion_note='', review_date='', due_date=next_date,
                                              checklists=copy_lists(item['checklists'], reset=True), agent_enabled=False)
                             self.create(successor, actor=actor, source=item.get('source'), connection=db)
@@ -240,7 +251,8 @@ class FollowUpStore:
     def list(self, *, closed=False):
         with self.connect() as db:
             rows = db.execute("SELECT payload FROM followups WHERE (status IN ('done','dismissed')) = ? ORDER BY updated_at DESC", (int(closed),)).fetchall()
-        return [json.loads(row["payload"]) for row in rows]
+            from workflows.hfl.intent_boards import project
+            return project(db, [json.loads(row['payload']) for row in rows], 'action:')
 
     def history(self, followup_id):
         self.get(followup_id)
@@ -321,6 +333,8 @@ class FollowUpStore:
                 previous = db.execute('SELECT payload,updated_at FROM timeline_suggestions WHERE id=?', (sid,)).fetchone()
                 created_at = json.loads(previous['payload']).get('created_at', previous['updated_at']) if previous else isoformat()
                 item = {**item, "id": sid, "created_at": created_at, "analysis_status": item.get("status", "uncertain")}
+                from workflows.hfl.intent_boards import associate
+                item['board_ids'] = associate(db, 'idea:' + sid, item.get('board_ids', []))
                 db.execute("INSERT INTO timeline_suggestions(id,status,payload,updated_at) VALUES (?,'suggested',?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,updated_at=excluded.updated_at", (sid,json.dumps(item),isoformat()))
                 db.execute("INSERT OR IGNORE INTO timeline_suggestion_periods VALUES (?,?,?)", (sid,start,end))
             db.execute("UPDATE timeline_runs SET state=?,payload=?,updated_at=? WHERE period_key=? AND run_id=?", (state,json.dumps(result),isoformat(),f"{start}:{end}",run_id))
@@ -415,6 +429,8 @@ class FollowUpStore:
                 item.update(id='followup-'+uuid.uuid4().hex,version=1,created_at=now,updated_at=now,completed_at='',
                             source=candidate['source'],timezone='Asia/Singapore',suggestion_id=sid,
                             creation_mode='automatic',automatic_basis=str(decision['reason'])[:3000])
+                from workflows.hfl.intent_boards import associate, memberships
+                item['board_ids'] = associate(db, 'action:' + item['id'], memberships(db, 'idea:' + sid))
                 encoded=json.dumps(item)
                 request_id=str(uuid.uuid5(uuid.NAMESPACE_URL,'hfl-auto:'+sid))
                 db.execute('INSERT INTO followups VALUES (?,?,?,?,?,?)',(item['id'],request_id,1,'open',now,encoded))

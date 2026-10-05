@@ -53,6 +53,12 @@ Legacy one-to-one merges have `legacy_decisions`; their reversal endpoint is doc
 
 ## Automatic matching and historical scan
 
+For daily autonomous cleanup, use the repository's `auto-merge-entities` skill.
+Once Hermes owns matching, the older scan/evaluator no longer executes automatic
+merges. Its pending suggestions remain available to the first Hermes pass.
+Automated runs deliver grouped HFL/Telegram summaries; individual HFL audit posts
+are reserved for manual operations. All operations retain internal audit and undo.
+
 When explicitly asked to scan existing entities, call `POST /api/hfl/entities/matching/scan`.
 This starts/resumes the one-time job; do not manufacture fresh jobs to bypass completion
 or retry limits. Check `GET /api/hfl/entities/matching` for pending work, errors and review

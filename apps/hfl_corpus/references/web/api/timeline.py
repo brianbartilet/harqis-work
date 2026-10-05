@@ -71,9 +71,23 @@ class ApiServiceHflCorpusTimeline(ApiServiceHflCorpusExtended):
         """Create/adopt an agenda item. May configure agent execution if explicitly requested. Destructive: writes remote state.
 
         Args:
-            item: Action fields: request_id UUID, title, expected_outcome, source, suggestion_id, review_date, due_date, prompt, notes, checklists, matrix, agent_enabled. Server validates; omission preserves normal defaults.
+            item: Action fields: request_id UUID, title, expected_outcome, source, suggestion_id, review_date, due_date, prompt, notes, checklists, matrix, agent_enabled, board_ids (optional active board IDs). Server validates; omission preserves normal defaults.
         """
         return self._json('POST', 'timeline/items', payload=item)
+
+
+    def create_checklist_action(self, followup_id: str, version: int, checklist_id: str, item_id: str, request_id: str, item: dict) -> dict:
+        """Create an action and tick its source checklist item atomically. Destructive: writes remote state.
+
+        Args:
+            followup_id: Parent action ID.
+            version: Latest parent version; stale writes return 409 without creating an action.
+            checklist_id: Stable source checklist ID.
+            item_id: Stable source item ID.
+            request_id: UUID for retry-safe creation; reuse with the same payload after an uncertain response.
+            item: New action fields including title and expected_outcome. Agent execution is always disabled.
+        """
+        return self._json('POST', f'timeline/items/{self._segment(followup_id)}/checklist-action', payload=dict(version=version, checklist_id=checklist_id, item_id=item_id, request_id=request_id, item=item))
 
     def update_timeline_item(self, followup_id: str, version: int, changes: dict) -> dict:
         """Update an agenda item using its latest version. Can alter scheduling; completion writes a receipt. Destructive: writes remote state.
@@ -81,7 +95,7 @@ class ApiServiceHflCorpusTimeline(ApiServiceHflCorpusExtended):
         Args:
             followup_id: Followup id.
             version: Latest object version; stale writes return 409. Read before retrying.
-            changes: Action fields to change; status, dates, title, expected_outcome, prompt, notes, checklists, matrix, agent_enabled. Do not supply internal _agent_actor attribution.
+            changes: Action fields to change; status, dates, title, expected_outcome, prompt, notes, checklists, matrix, agent_enabled, board_ids (optional active board IDs). Do not supply internal _agent_actor attribution.
         """
         if '_agent_actor' in changes:
             raise ValueError('Internal worker attribution is not accepted by owner tools.')

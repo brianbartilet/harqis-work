@@ -65,8 +65,10 @@ def clone_draft(request: Request, kind: str, identity: str):
     timeline.owner(request)
     source = get_object(kind, identity)
     from modules.hfl_corpus.attachments import source_store
-    fields = FIELDS if kind == 'actionable' else {'title', 'body', 'description', 'checklists', 'workspace_ids', 'expected_outcome', 'matrix', 'matrix_confidence', 'matrix_reason'}
+    fields = FIELDS if kind == 'actionable' else {'title', 'body', 'description', 'checklists', 'workspace_ids', 'board_ids', 'expected_outcome', 'matrix', 'matrix_confidence', 'matrix_reason'}
     item = {k: copy.deepcopy(v) for k, v in source.items() if k in fields}
+    # Copies choose their own destination; conversion separately inherits boards.
+    item['board_ids'] = []
     titles = {i['title'] for i in api.permitted_snapshot()['actions' if kind == 'actionable' else 'ideas']}
     suffix = 1
     while source['title'][:185] + f' ({suffix})' in titles:
@@ -83,7 +85,7 @@ async def clone(request: Request, kind: str, identity: str):
     actor = timeline.owner(request)
     raw = await timeline.body(request)
     source = get_object(kind, identity)
-    allowed = FIELDS if kind == 'actionable' else {'title', 'body', 'description', 'checklists', 'workspace_ids', 'expected_outcome', 'matrix', 'matrix_confidence', 'matrix_reason', 'status'}
+    allowed = FIELDS if kind == 'actionable' else {'title', 'body', 'description', 'checklists', 'workspace_ids', 'board_ids', 'expected_outcome', 'matrix', 'matrix_confidence', 'matrix_reason', 'status'}
     if not isinstance(raw.get('item'), dict) or set(raw['item']) - allowed:
         raise HTTPException(422, 'Invalid clone fields.')
     canonical = api.store()
@@ -204,8 +206,10 @@ async def paste_board(request: Request, identity: str):
                     current = canonical.followups.get(original['id']) if kind == 'actionable' else canonical.idea(original['id'])
                     if current['version'] != original['version']:
                         raise FollowUpConflict('A copied object changed. Copy again.')
-                    allowed = FIELDS if kind == 'actionable' else {'title', 'body', 'description', 'checklists', 'workspace_ids', 'expected_outcome', 'matrix', 'matrix_confidence', 'matrix_reason'}
+                    allowed = FIELDS if kind == 'actionable' else {'title', 'body', 'description', 'checklists', 'workspace_ids', 'board_ids', 'expected_outcome', 'matrix', 'matrix_confidence', 'matrix_reason'}
                     values = {k: copy.deepcopy(v) for k, v in original.items() if k in allowed}
+                    # The paste transaction attaches to its target after all copies exist.
+                    values.pop('board_ids', None)
                     values.update(title=name(original['title']), request_id=str(uuid.uuid4()), checklists=copy_lists(original.get('checklists', []), reset=True))
                     if kind == 'actionable':
                         values.update(status='open', review_date='', due_date='', recurrence=None, completion_note='', agent_enabled=False)

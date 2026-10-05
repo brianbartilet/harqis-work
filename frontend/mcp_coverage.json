@@ -338,6 +338,16 @@
       "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.get_timeline_item"
     },
     {
+      "method": "POST",
+      "path": "/api/hfl/timeline/items/{followup_id}/checklist-action",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_checklist_action"
+      ],
+      "reason": "Create an action and complete its source checklist item atomically through the canonical bearer API.",
+      "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.create_checklist_action"
+    },
+    {
       "method": "GET",
       "path": "/api/hfl/timeline/items/{followup_id}/history",
       "status": "covered",
@@ -1431,6 +1441,15 @@
         "get_hfl_corpus_timeline_item"
       ],
       "reason": "Browser-facing operation is available through the canonical bearer API; presentation/session behavior is not reproduced."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/items/{followup_id}/checklist-action",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_checklist_action"
+      ],
+      "reason": "Create an action and complete its source checklist item atomically through the canonical bearer API."
     },
     {
       "method": "GET",
@@ -2648,6 +2667,231 @@
         "update_hfl_corpus_list"
       ],
       "reason": "Browser alias of the canonical intent-reuse endpoint."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/types",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entity_type"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity_type"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/create",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entity"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/type/{identity}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_type"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_type"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/merges/batch",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entity_merge_batch"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity_merge_batch"
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/agent-bridge/configuration/defaults",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner session-authenticated configuration defaults for the action editor; a dedicated machine-facing service/auth contract is deferred, as with action configuration."
+    },
+    {
+      "method": "GET",
+      "path": "/file-share/{token}",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation, guest capability, activity tracking, or bounded authenticated file download; no additional machine endpoint in this release."
+    },
+    {
+      "method": "GET",
+      "path": "/files",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation, guest capability, activity tracking, or bounded authenticated file download; no additional machine endpoint in this release."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/catalog",
+      "status": "service",
+      "tools": [
+        "search_file_index_files"
+      ],
+      "reason": "Local catalog facade exposes the underlying data through the shared CLI/MCP adapter; browser response may add owner UI context."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/files/{key}",
+      "status": "service",
+      "tools": [
+        "get_file_index_file"
+      ],
+      "reason": "Local catalog facade exposes the underlying data through the shared CLI/MCP adapter; browser response may add owner UI context."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/files/{key}/download",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation, guest capability, activity tracking, or bounded authenticated file download; no additional machine endpoint in this release."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/graph",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation, guest capability, activity tracking, or bounded authenticated file download; no additional machine endpoint in this release."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/packages",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/packages/{key}",
+      "status": "service",
+      "tools": [
+        "get_file_index_package"
+      ],
+      "reason": "Local catalog facade exposes the underlying data through the shared CLI/MCP adapter; browser response may add owner UI context."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/revisions/{key}/qr",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation, guest capability, activity tracking, or bounded authenticated file download; no additional machine endpoint in this release."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/sources",
+      "status": "service",
+      "tools": [
+        "list_file_index_sources"
+      ],
+      "reason": "Local catalog facade exposes the underlying data through the shared CLI/MCP adapter; browser response may add owner UI context."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/taxonomy",
+      "status": "service",
+      "tools": [
+        "list_hfl_corpus_categories"
+      ],
+      "reason": "Local catalog facade exposes the underlying data through the shared CLI/MCP adapter; browser response may add owner UI context."
+    },
+    {
+      "method": "PATCH",
+      "path": "/files/api/files/{key}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/files/{key}/locations",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/files/{key}/opened",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation, guest capability, activity tracking, or bounded authenticated file download; no additional machine endpoint in this release."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/packages",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/packages/{key}/revisions",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/references",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/revisions/{key}/publish",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/sources",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/sources/{key}/scan",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "PUT",
+      "path": "/files/api/sources/{key}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated source/package administration and publication remain in the Files UI; dedicated machine command and approval contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/sources/{key}/browse",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner-authenticated, paginated server-folder picker for the Files UI; browsing remains constrained to configured roots and is not exposed through a machine tool."
+    },
+    {
+      "method": "POST",
+      "path": "/files/api/sources/{key}/select",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated selection registers bounded file metadata from the folder picker; a dedicated machine command and write contract is deferred alongside manual reference registration."
+    },
+    {
+      "method": "GET",
+      "path": "/files/api/indexing-status",
+      "status": "ui",
+      "tools": [],
+      "reason": "Read-only Files UI progress and schedule presentation for known catalog records; per-location scan data remains available through list_file_index_sources."
     }
   ]
 }

@@ -221,7 +221,8 @@
               <p class="text-xs font-medium text-slate-400">{{ document.entry_count | default(0) }} entries</p>
               <div class="mt-2 flex flex-wrap items-center gap-1.5" data-result-tags aria-label="Document tags">
               {% if document.tag_counts %}
-                {% for tag, count in document.ordered_tag_counts(selected_tags) %}
+                {% set top_tags = document.tag_counts | sort(attribute='0') | sort(attribute='1', reverse=true) %}
+                {% for tag, count in top_tags[:10] %}
                 {% set active = document.tag_matches(tag, selected_tags) %}
                 {% set tag_entry_anchor = document.first_matching_entry_anchor(tag) %}
                 <a href="{{ url_for('hfl_document', relative_path=document.relative_path) }}?tag={{ tag | urlencode }}{% if tag_entry_anchor %}#{{ tag_entry_anchor }}{% endif %}"

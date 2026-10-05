@@ -51,6 +51,11 @@ MODULES: tuple[ModuleDefinition, ...] = (
         detail="Blend automatic signals with temporary manual modes, then trace every advisory item to its source and freshness.",
     ),
     ModuleDefinition(
+        key="files", label="Organize", route="/files",
+        description="Find files across storage locations and share versioned packages.",
+        detail="Catalog documents and media, connect categories and entities, and publish expiring file packages.",
+    ),
+    ModuleDefinition(
         key="workflows",
         label="Workflows",
         route="/workflows",

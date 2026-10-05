@@ -6,11 +6,12 @@ HTMX, Alpine.js, Tailwind CSS, and SortableJS. Production serves compiled,
 content-versioned assets from `/static/`; the generated files are committed so
 runtime deployment does not require Node.js.
 
-The frontend currently exposes eight modules:
+The frontend currently exposes nine modules:
 
 | Module | Route | Purpose |
 |---|---|---|
 | Home | `/home` | Introduces the platform modules. |
+| Organize → Files | `/files` | Metadata catalog, storage discovery, file/category/entity graph, versioned Drive packages, and expiring guest pages. |
 | Manifesto | `/manifesto` | Renders `docs/MANIFESTO.md` and the HARQIS guiding principles. |
 | Workflows | `/workflows` | Displays Celery workflow categories, task triggers, schedules, status, and run history. |
 | Apps | `/applications` | Inventories `apps/*`, renders documentation, and runs controlled pytest checks using host configuration. |
@@ -21,8 +22,13 @@ The frontend currently exposes eight modules:
 
 `/dashboard` remains as a compatibility redirect to `/home`.
 
-The `hfl_corpus` integration exposes all 110 canonical `/api/hfl` operations
-through the shared CLI/MCP adapter. See the [tool guide](../apps/hfl_corpus/README.md)
+Files deployment requires the catalog-host `files` queue, persistent SQLite
+storage, configured source roots, and Drive/SFTP credentials as applicable.
+Follow [Files deployment](../docs/info/FILES-DEPLOYMENT.md). Public package pages
+use `/file-share/{token}` on the frontend host, separate from HFL sharing.
+
+The reviewed manifest maps 115 canonical `/api/hfl` operations to the
+`hfl_corpus` integration through the shared CLI/MCP adapter. See the [tool guide](../apps/hfl_corpus/README.md)
 and [endpoint coverage report](../docs/info/FRONTEND_MCP_COVERAGE.md).
 The reviewed [coverage manifest](mcp_coverage.json) includes browser aliases and
 deferred administration/session protocols. Run
@@ -479,6 +485,21 @@ closed, and includes All activity; its adjacent caption names the selected views
 independent draft with supporting files and reset checklists. Dates, recurrence,
 and previous relationships are omitted; a `copied-from` connection records its source.
 
+The optional **Boards** checkbox dropdown follows **Workspaces** in both editors.
+It lists active boards by most recent update. Selections mirror board membership:
+adding one attaches an orphan orb without connections to other objects; removing
+one detaches the object without deleting it. Creating an object inside a board
+automatically associates that board and preserves the creation flow's connections.
+Idea-to-action conversion inherits active board selections. Board Settings has an
+**Active** toggle (existing boards default to active); inactive associations remain
+stored but are excluded from choices for new attachments.
+
+Ideas and actions expose `board_ids` through the canonical and management APIs.
+`GET /api/hfl/timeline/ideas/board-context` and `get_hfl_corpus_board_context` provide
+active boards with permitted member objects and connections. Idea generation and
+action processing use that context and can add relevant board associations while
+retaining owner selections. Context never includes protected corpus objects.
+
 Checklist text renders sanitized Markdown and switches to source text when clicked.
 Each list has a copy button with recent, searchable action/idea destinations; list
 copies preserve completion. Adding a whole list to a mindmap attaches a live List
@@ -692,8 +713,9 @@ and remote servers do not automatically synchronize their view databases.
 Explicit query parameters take precedence. **Reset** clears additional search
 filters and restores the currently selected view or combination, retaining Dynamic
 mode when enabled. With no selected views it shows All activity.
-Removing the selected view clears that selection. Unsaved changes require
-**Save** and are discarded on navigation without a prompt. Secrets access is
+Removing the selected view clears that selection. **Save** updates the named
+view; applying a search shares its filters without changing that definition.
+Unsubmitted typing is discarded on navigation. Secrets access is
 never stored in a view. Graph profiles remain independent.
 
 #### Combined views and Dynamic mode
@@ -720,10 +742,15 @@ selection; gaps show all entries (subject to normal secret-access restrictions).
 selection. Choosing views manually turns it off. Explicit filter links retain
 their own scope; ordinary landing-page visits restore persisted preferences.
 
-The open page checks the schedule every 15 seconds and when focus returns.
+Activity Corpus and Actions Kanban share selections, Dynamic mode, saved-view
+edits, and applied search/source/tag/date filters in the owner profile database.
+Both landing pages restore this state. Open tabs receive change notifications
+and check for updates every 15 seconds and when focus returns, in either mode.
+Generated navigation URLs carry a revision so stale refresh/back navigation can
+restore the latest shared state. Explicit filter links retain their own scope.
 No Celery task or external scheduler runs this feature. Updates wait while a
-dialog or the Views menu is open, or filters are modified. Clear additional
-filters to resume. A transition shows loading feedback, keeps the old results
+dialog or the Views menu is open, or filters contain unsubmitted edits. Apply
+those edits to share them. A transition shows loading feedback, keeps the old results
 on failure with Retry, preserves scroll position for automatic changes, and
 fades the updated heatmap unless reduced motion is requested.
 

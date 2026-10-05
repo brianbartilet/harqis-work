@@ -399,11 +399,10 @@ def test_board_edits_work_while_save_is_slow_and_retry(ideas, authenticated_clie
                 page.get_by_role('menuitem',name='Create linked '+kind,exact=True).click()
                 dialog.locator('[name=title]').fill('Linked '+kind)
                 if kind == 'Action':
-                    dialog.locator('.action-details > summary').click()
+                    dialog.locator('.action-details > summary').filter(has_text='Action plan').click()
                     dialog.get_by_label('Expected outcome').fill('Validate this thought')
                 dialog.get_by_role('button',name='Add to current board',exact=True).click()
-                expect(dialog.locator('.editor-save-status')).to_have_text('Saved')
-                dialog.get_by_role('button',name='Close editor',exact=True).click()
+                expect(page.locator('.editor-save-confirmation')).to_contain_text(kind + ' saved.')
                 page.wait_for_timeout(250)
                 if dialog.count():
                     assert not dialog.locator('.idea-error').inner_text(), dialog.inner_text()
@@ -844,7 +843,7 @@ def test_board_clone_destinations_and_idea_menu_browser(ideas, authenticated_cli
             picker.get_by_role('button',name='Close editor',exact=True).click()
             menu.get_by_role('menuitem',name='Clone idea',exact=True).click()
             editor.get_by_role('button',name='Add to current board',exact=True).click()
-            expect(editor.locator('.editor-save-status')).to_have_text('Saved')
+            expect(editor).to_have_count(0)
             copy=next(i for i in ideas.ideas() if i['title']=='Original idea (2)')
             assert 'idea:'+copy['id'] in ideas.map(board['id'])['members']
             assert not errors

@@ -75,7 +75,7 @@ class ActionSource(Command):
 class CreateAction(Command):
     request_id: UUID = Field(description="Caller-generated UUID. Reuse unchanged on retry.")
     title: str = Field(min_length=1, max_length=200)
-    expected_outcome: str = Field(min_length=1, max_length=3000)
+    expected_outcome: str = Field(default="", max_length=3000)
     review_date: str = ""
     due_date: str = ""
     prompt: str = Field(default="", max_length=20000)
@@ -84,6 +84,7 @@ class CreateAction(Command):
     body: str = Field(default='', max_length=50000)
     checklists: list[dict] = Field(default_factory=list, max_length=20)
     hide_ticked: bool = Field(default=False, strict=True)
+    board_ids: list[str] = Field(default_factory=list, max_length=10000)
     source: ActionSource | None = None
     matrix: Literal['', 'Q1', 'Q2', 'Q3', 'Q4'] = ''
     matrix_confidence: Literal['', 'high', 'medium', 'low'] = ''
@@ -93,7 +94,7 @@ class CreateAction(Command):
 class UpdateAction(Command):
     version: int = Field(ge=1, strict=True, description="Version returned by the latest read; stale versions return 409.")
     title: str | None = Field(default=None, min_length=1, max_length=200)
-    expected_outcome: str | None = Field(default=None, min_length=1, max_length=3000)
+    expected_outcome: str | None = Field(default=None, max_length=3000)
     review_date: str | None = None
     due_date: str | None = None
     prompt: str | None = Field(default=None, max_length=20000)
@@ -102,6 +103,7 @@ class UpdateAction(Command):
     body: str | None = Field(default=None, max_length=50000)
     checklists: list[dict] | None = Field(default=None, max_length=20)
     hide_ticked: bool | None = Field(default=None, strict=True)
+    board_ids: list[str] | None = Field(default=None, max_length=10000)
     status: Literal["open", "active", "in_progress", "incomplete", "done", "dismissed"] | None = None
     completion_note: str | None = Field(default=None, max_length=3000)
     matrix: Literal['', 'Q1', 'Q2', 'Q3', 'Q4'] | None = None

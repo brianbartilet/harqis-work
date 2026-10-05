@@ -82,8 +82,15 @@ async def page(request: Request):
         from modules.hfl_corpus import workspace_views
         from modules.hfl_corpus.view_scope import parse_scope
         saved = await run_in_threadpool(workspace_views.listing)
+        if not request.query_params and (saved['preferences']['revision'] or saved['last_used']):
+            target = workspace_views.selection_url(saved, dynamic=saved['preferences']['dynamic'])
+            return RedirectResponse(target.replace('/hfl-corpus?', '/hfl-corpus/actions?', 1), status_code=303)
         try:
-            state = workspace_views.WorkspaceState.model_validate({key: value for key, value in request.query_params.items() if key in workspace_views.WorkspaceState.model_fields})
+            values = {key: value for key, value in request.query_params.items() if key in workspace_views.WorkspaceState.model_fields}
+            for key in ('rolling', 'page_size'):
+                if key in values:
+                    values[key] = int(values[key])
+            state = workspace_views.WorkspaceState.model_validate(values)
             scope = parse_scope(request.query_params.get('scope'))
         except ValueError:
             raise HTTPException(422, 'Invalid workspace filters.') from None
@@ -109,14 +116,19 @@ async def index(request: Request, source: str = '', since: str = '', until: str 
     authorize(request)
     rows = await run_in_threadpool(entities.entity_index, source, since, until, context, graph_query, sources)
     rows.sort(key=lambda e: (e['label'].casefold(), e['id']))
-    counts = {k: sum(e['kind'] == k for e in rows) for k in entities.KINDS}
+    from workflows.hfl.entity_types import listing
+    types = listing()
+    counts = {t['id']: sum(e['kind'] == t['id'] for e in rows) for t in types}
     rows = [e for e in rows if (not kind or e['kind'] == kind) and
             all(word in str([e['label'], e.get('categories'), e.get('profile')]).casefold() for word in q.casefold().split())]
-    return {'entities': rows[offset:offset + limit] if limit else rows[offset:], 'total': len(rows), 'counts': counts}
+    return {'entities': rows[offset:offset + limit] if limit else rows[offset:], 'total': len(rows), 'counts': counts, 'types': types}
 
 
 class Profile(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    aliases: list[str] = Field(default_factory=list, max_length=100)
+    partial_aliases: list[str] = Field(default_factory=list, max_length=100)
+    preferred_name: bool = False
     categories: list[str] = Field(default_factory=list)
     emails: list[str] = Field(default_factory=list)
     phones: list[str] = Field(default_factory=list)
@@ -124,15 +136,74 @@ class Profile(BaseModel):
     notes: str = ''
 
 
+class TypedProfile(Profile):
+    kind: str
+
+
+class TypeWrite(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    color: str = Field(pattern=r'^#[0-9a-fA-F]{6}$')
+    description: str = Field(min_length=1, max_length=1000)
+
+
+@router.post('/api/hfl/entities/types')
+async def create_type(request: Request, payload: TypeWrite):
+    authorize(request)
+    from workflows.hfl.entity_types import create
+    try:
+        return await run_in_threadpool(create, payload.name, payload.color, payload.description)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+def validate_kind(kind):
+    from workflows.hfl.entity_types import listing
+    if kind not in {t['id'] for t in listing()}:
+        raise HTTPException(400, 'Choose an existing entity type.')
+
+
+@router.post('/api/hfl/entities/create')
+async def create_entity(request: Request, payload: TypedProfile):
+    from uuid import uuid4
+    actor = authorize(request)
+    validate_kind(payload.kind)
+    identity = 'manual-' + uuid4().hex
+    data = validated_profile(Profile(**payload.model_dump()))
+    await run_in_threadpool(get_store().save_profile, identity, payload.kind, data, actor)
+    return {'id': identity}
+
+
+class KindWrite(BaseModel):
+    kind: str
+
+
+@router.post('/api/hfl/entities/type/{identity}')
+async def change_type(request: Request, identity: str, payload: KindWrite):
+    actor = authorize(request)
+    validate_kind(payload.kind)
+    available = {e['id']: e for e in await run_in_threadpool(entities.entity_index)}
+    if identity not in available:
+        raise HTTPException(404, 'Entity unavailable; refresh the directory.')
+    entity = available[identity]
+    data = validated_profile(Profile(**(entity.get('profile') or {'name': entity['label']})))
+    try:
+        await run_in_threadpool(get_store().save_profile, identity, payload.kind, data, actor)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return {'kind': payload.kind}
+
+
 def validated_profile(payload: Profile):
     data = payload.model_dump()
     data['name'] = data['name'].strip()
     if not data['name'] or entities.is_link(data['name']):
         raise HTTPException(400, 'Use an entity name, not a link or email address')
-    for field in ('categories', 'emails', 'phones'):
+    for field in ('categories', 'emails', 'phones', 'aliases', 'partial_aliases'):
         data[field] = list(dict.fromkeys(v.strip() for v in data[field] if v.strip()))
         if any(len(v) > 200 for v in data[field]):
             raise HTTPException(400, 'Contact details and categories must be at most 200 characters each')
+    if any(len(v) < 3 for v in data['partial_aliases']):
+        raise HTTPException(400, 'Partial aliases need at least three characters')
     import re
     from urllib.parse import urlsplit
     data['references'] = list(dict.fromkeys(v.strip() for v in data['references'] if v.strip()))
@@ -264,9 +335,12 @@ async def status(request: Request):
 
 
 @router.post('/api/hfl/entities/backfill')
-async def backfill(request: Request):
+async def backfill(request: Request, include_new_types: bool = False):
     authorize(request)
     from workflows.hfl.entity_events import request_enrichment
+    if include_new_types:
+        from workflows.hfl.entity_types import revision
+        get_store().state('entity-types-backfill', revision())
     return await run_in_threadpool(request_enrichment)
 
 

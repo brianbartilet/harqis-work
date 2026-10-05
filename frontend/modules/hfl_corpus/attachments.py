@@ -9,9 +9,7 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-MAX_FILES = 50
-MAX_FILE_BYTES = 500 * 1024 * 1024
-MAX_TOTAL_BYTES = MAX_FILES * MAX_FILE_BYTES
+from workflows.hfl.attachment_limits import MAX_FILES, MAX_FILE_BYTES, MAX_TOTAL_BYTES
 
 
 class AttachmentStore:

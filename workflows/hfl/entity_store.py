@@ -39,12 +39,15 @@ class EntityStore:
                 CREATE TABLE IF NOT EXISTS entity_match_pairs(id TEXT PRIMARY KEY, job_id TEXT NOT NULL,
                     left_id TEXT NOT NULL, right_id TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending',
                     data TEXT NOT NULL DEFAULT '{}');
+                CREATE INDEX IF NOT EXISTS entity_match_pair_identity ON entity_match_pairs(left_id,right_id,state);
                 CREATE TABLE IF NOT EXISTS entity_match_blocks(left_id TEXT NOT NULL, right_id TEXT NOT NULL,
                     reason TEXT NOT NULL, PRIMARY KEY(left_id,right_id));
                 CREATE TABLE IF NOT EXISTS entity_audit(id TEXT PRIMARY KEY, entity_id TEXT NOT NULL,
                     action TEXT NOT NULL, actor TEXT NOT NULL, created TEXT NOT NULL, data TEXT NOT NULL,
                     delivery TEXT NOT NULL DEFAULT 'pending', error TEXT NOT NULL DEFAULT '');
             ''')
+            if 'types_revision' not in {r[1] for r in db.execute('PRAGMA table_info(enrichment)')}:
+                db.execute("ALTER TABLE enrichment ADD COLUMN types_revision TEXT NOT NULL DEFAULT ''")
             if 'merge_id' not in {r[1] for r in db.execute('PRAGMA table_info(decisions)')}:
                 db.execute('ALTER TABLE decisions ADD COLUMN merge_id TEXT')
             if 'queued_at' not in {r[1] for r in db.execute('PRAGMA table_info(pending)')}:
@@ -68,14 +71,15 @@ class EntityStore:
             return {r['id']: {**dict(r), 'mentions': json.loads(r['mentions'])}
                     for r in db.execute('SELECT * FROM enrichment')}
 
-    def save(self, identity, content_hash, mentions, version=VERSION, match=False):
+    def save(self, identity, content_hash, mentions, version=VERSION, match=False, types_revision=''):
         with self.connection() as db:
-            db.execute('INSERT OR REPLACE INTO enrichment VALUES (?,?,?,?)',
-                       (identity, content_hash, version, json.dumps(mentions)))
+            db.execute('INSERT OR REPLACE INTO enrichment(id,hash,version,mentions,types_revision) VALUES (?,?,?,?,?)',
+                       (identity, content_hash, version, json.dumps(mentions), types_revision))
             if match and mentions:
                 from workflows.hfl.entity_matching import enabled
-                if enabled():
-                    job_id = 'enrichment-' + digest([identity, content_hash, version])
+                owner = db.execute("SELECT value FROM state WHERE key='entity-consolidation-owner'").fetchone()
+                if enabled() and not (owner and json.loads(owner[0]) == 'hermes'):
+                    job_id = 'enrichment-' + digest([identity, content_hash, version, types_revision])
                     db.execute('INSERT OR IGNORE INTO entity_match_jobs(id,mode,seeds) VALUES (?,?,?)',
                                (job_id, 'enrichment', json.dumps(sorted({m['id'] for m in mentions}))))
 
@@ -143,6 +147,10 @@ class EntityStore:
             group = db.execute('SELECT * FROM entity_merges WHERE id=?', (identity,)).fetchone()
             if group and not group['active']:
                 raise ValueError('Entity was unmerged; refresh before editing its profile')
+            previous = db.execute('SELECT data FROM profiles WHERE id=?', (identity,)).fetchone()
+            old_sources = json.loads(previous[0]).get('alias_sources', {}) if previous else {}
+            data = dict(data)
+            data['alias_sources'] = {v: old_sources.get(v, 'user') for k in ('aliases', 'partial_aliases') for v in data.get(k, [])}
             if group:
                 from workflows.hfl.entity_merges import record_event
                 old = db.execute('SELECT data FROM profiles WHERE id=?', (identity,)).fetchone()
@@ -150,8 +158,10 @@ class EntityStore:
                     'name': data['name'], 'members': json.loads(group['members']),
                     'before': json.loads(old[0]) if old else None, 'profile': data,
                 }, deliver=False)
+            if group:
+                db.execute('UPDATE entity_merges SET kind=?,name=? WHERE id=?', (kind, data['name'], identity))
             db.execute("INSERT INTO profiles(id,kind,data) VALUES (?,?,?) ON CONFLICT(id) "
-                       "DO UPDATE SET data=excluded.data, updated=CURRENT_TIMESTAMP",
+                       "DO UPDATE SET data=excluded.data, kind=excluded.kind, updated=CURRENT_TIMESTAMP",
                        (identity, kind, json.dumps(data)))
 
     def state(self, key, value=None):

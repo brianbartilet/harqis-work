@@ -31,6 +31,74 @@ class ApiServiceGoogleDrive(BaseGoogleDiscoveryService):
 
     # ── List / Search ─────────────────────────────────────────────────────
 
+    def iter_files(self, query: str):
+        """Yield all matching metadata, including every page."""
+        token = None
+        while True:
+            page = self._files.list(q=query, pageSize=1000, pageToken=token,
+                fields='nextPageToken,incompleteSearch,files(id,name,mimeType,size,modifiedTime,version,appProperties,webViewLink)',
+                supportsAllDrives=True, includeItemsFromAllDrives=True).execute()
+            if page.get('incompleteSearch'):
+                raise RuntimeError('Drive search incomplete; scan will not mark files missing')
+            yield from page.get('files', [])
+            token = page.get('nextPageToken')
+            if not token:
+                break
+
+    def download_to_path(self, file_id, destination, *, maximum, export_mime=None):
+        """Stream a bounded binary download or Workspace export to disk."""
+        request = (self._files.export_media(fileId=file_id, mimeType=export_mime) if export_mime
+                   else self._files.get_media(fileId=file_id, supportsAllDrives=True))
+        with open(destination, 'wb') as stream:
+            downloader = MediaIoBaseDownload(stream, request, chunksize=1024 * 1024)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+                if stream.tell() > maximum:
+                    raise ValueError('File exceeds configured transfer limit')
+
+    def package_object(self, object_id, name, *, parent_id=None, path=None, mime_type=None):
+        """Create using a preallocated ID; retries recover the same object."""
+        from googleapiclient.errors import HttpError
+        try:
+            return self._files.get(fileId=object_id, fields='id,name,webViewLink,size,md5Checksum').execute()
+        except HttpError as exc:
+            if exc.resp.status != 404:
+                raise
+        body = {'id': object_id, 'name': name,
+                'mimeType': mime_type if path else 'application/vnd.google-apps.folder'}
+        if parent_id:
+            body['parents'] = [parent_id]
+        media = MediaFileUpload(str(path), mimetype=mime_type, resumable=True) if path else None
+        return self._files.create(body=body, media_body=media, fields='id,name,webViewLink,size,md5Checksum').execute()
+
+    def allocate_id(self):
+        return self._files.generateIds(count=1, space='drive', type='files').execute()['ids'][0]
+
+    def public_reader(self, file_id):
+        """Idempotently enable anyone-with-link read access."""
+        permissions = self.service.permissions()
+        for item in permissions.list(fileId=file_id, fields='permissions(id,type,role)').execute().get('permissions', []):
+            if item['type'] == 'anyone':
+                if item['role'] != 'reader':
+                    permissions.update(fileId=file_id, permissionId=item['id'], body={'role': 'reader'}).execute()
+                return item['id']
+        return permissions.create(fileId=file_id, body={'type': 'anyone', 'role': 'reader', 'allowFileDiscovery': False},
+                                  fields='id').execute()['id']
+
+    def revoke_public_reader(self, file_id):
+        """Remove public permissions, including a grant whose response was lost."""
+        from googleapiclient.errors import HttpError
+        permissions = self.service.permissions()
+        try:
+            items = permissions.list(fileId=file_id, fields='permissions(id,type)').execute().get('permissions', [])
+            for item in items:
+                if item['type'] == 'anyone':
+                    permissions.delete(fileId=file_id, permissionId=item['id']).execute()
+        except HttpError as exc:
+            if exc.resp.status != 404:
+                raise
+
     def list_files(self, query: str = None, page_size: int = 50,
                    order_by: str = 'modifiedTime desc',
                    fields: str = 'files(id,name,mimeType,size,modifiedTime,parents)') -> List[Dict[str, Any]]:
@@ -94,7 +162,7 @@ class ApiServiceGoogleDrive(BaseGoogleDiscoveryService):
         Returns:
             File metadata dict.
         """
-        return self._files.get(fileId=file_id, fields=fields).execute()
+        return self._files.get(fileId=file_id, fields=fields, supportsAllDrives=True).execute()
 
     # ── Download ──────────────────────────────────────────────────────────
 

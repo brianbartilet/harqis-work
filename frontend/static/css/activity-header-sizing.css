@@ -2,6 +2,7 @@
 :is(.corpus-header-shell .corpus-header-link,
     .corpus-header-shell .corpus-secrets-control,
     #followups-board .followups-toolbar .board-create-menu > summary,
+    #followups-board .followups-toolbar .ideas-drawer-toggle,
     #followups-board .followups-toolbar .board-workspace-filter > summary,
     #followups-board [data-board-refresh],
     #followups-board [data-board-close],
@@ -17,4 +18,10 @@
   display:inline-flex;
   align-items:center;
   justify-content:center;
+}
+
+#followups-board .followups-toolbar .ideas-drawer-toggle {
+  width:auto;
+  min-width:0;
+  flex:0 0 auto;
 }
