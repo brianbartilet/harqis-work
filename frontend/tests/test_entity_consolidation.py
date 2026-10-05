@@ -217,10 +217,74 @@ def test_delivery_is_idempotent_and_does_not_remerge(corpus, monkeypatch):
     monkeypatch.setattr(persistence, 'submit_hfl_entry', submit)
     monkeypatch.setattr(activity_radar, 'corpus_document_url', lambda *a, **k: 'https://example.test/report')
     monkeypatch.setattr(activity_radar, '_notify', lambda text: sent.append(text) or [123])
-    delivery.deliver(run['id'])
-    delivery.deliver(run['id'])
+    result = delivery.deliver(run['id'])
+    assert result['telegram_state'] == 'sent'
+    assert result['telegram_ids'] == [123]
+    assert 'people: 1 merged groups' in sent[0]
+    assert delivery.deliver(run['id']) == result
     assert len(sent) == len(saved) == 1
     assert len(entities.entity_index()) == 1
+
+
+@pytest.mark.parametrize('outcome', ['empty', 'deferred'])
+def test_no_merges_persist_hfl_without_telegram(corpus, monkeypatch, outcome):
+    from workflows.hfl.tasks import entity_consolidation as delivery, activity_radar
+    from workflows.hfl import persistence
+    if outcome == 'empty':
+        monkeypatch.setattr(entities, 'current_entries', lambda: [])
+    run = consolidation.begin()
+    if outcome == 'deferred':
+        value = decision()
+        # A proposed merge is not an actual merge when evidence is rejected.
+        value['facts'][0]['left_quote'] = 'Invented evidence cannot establish the identity of these people.'
+        result = consolidation.decide(run['id'], run['pairs'][0]['id'], value)
+        assert result['state'] == 'deferred'
+    consolidation.finish(run['id'])
+    stored = consolidation.load(run['id'])
+    stored['delivery']['error'] = 'PreviousPersistenceFailure'
+    consolidation.save(stored)
+    saved, sent = [], []
+    def submit(entry, **kwargs):
+        saved.append((entry, kwargs))
+        return {'delivery': 'persisted', 'path': '2026-10-04.md'}
+    monkeypatch.setattr(persistence, 'submit_hfl_entry', submit)
+    monkeypatch.setattr(activity_radar, 'corpus_document_url', lambda *a, **k: 'https://example.test/report')
+    monkeypatch.setattr(activity_radar, '_notify', lambda text: sent.append(text) or [123])
+    result = delivery.deliver(run['id'])
+    assert sent == []
+    assert result['telegram_state'] == 'suppressed'
+    assert result['hfl']['delivery'] == 'persisted'
+    assert 'error' not in result
+    assert consolidation.load(run['id'])['delivery'] == result
+    assert delivery.deliver(run['id']) == result
+    assert len(saved) == 1
+    assert saved[0][1]['dedup_key'] == 'entity-consolidation:' + run['id']
+    assert sent == []
+
+
+def test_suppressed_delivery_is_terminal_for_finish_status_and_recovery(corpus, monkeypatch, authenticated_client):
+    from workflows.hfl.tasks.entity_consolidation import deliver_entity_consolidation
+    run, pair = first()
+    value = decision()
+    value['decision'] = 'review'
+    consolidation.decide(run['id'], pair['id'], value)
+    consolidation.finish(run['id'])
+    stored = consolidation.load(run['id'])
+    stored['delivery'] = {'hfl': {'delivery': 'persisted'}, 'telegram_state': 'suppressed', 'queued_at': 0}
+    consolidation.save(stored)
+    monkeypatch.setattr(deliver_entity_consolidation, 'apply_async',
+                        lambda **kwargs: pytest.fail('Suppressed reports must not be queued again'))
+    assert consolidation.dispatch_reports() == []
+    url = '/api/hfl/entities/consolidation/' + run['id']
+    for _ in range(2):
+        response = authenticated_client.post(url + '/finish')
+        assert response.status_code == 200
+        assert response.json()['delivery'] == stored['delivery']
+        status = authenticated_client.get(url)
+        assert status.status_code == 200
+        assert status.json()['state'] == 'complete'
+        assert status.json()['delivery']['telegram_state'] == 'suppressed'
+    assert consolidation.dispatch_reports() == []
 
 
 def test_delivery_uncertainty_does_not_duplicate_telegram(corpus, monkeypatch):

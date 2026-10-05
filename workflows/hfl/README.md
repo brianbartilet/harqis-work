@@ -808,10 +808,12 @@ package, credential, or environment variable.
 ### `deliver_entity_consolidation` (daily Hermes entity consolidation)
 
 **Runtime:** hybrid. Hermes owns adaptive identity decisions and the sole daily
-09:00 Asia/Singapore schedule. The canonical entity API validates same-type,
+03:00 Asia/Singapore schedule. The canonical entity API validates same-type,
 evidence-grounded decisions, exclusions and current snapshots. The callable
 `workflows.hfl.tasks.entity_consolidation.deliver_entity_consolidation` Celery task
-persists the grouped HFL report and sends its Telegram summary. No Beat entry.
+persists the grouped HFL report and sends its Telegram summary only for actual
+merged outcomes. Zero-merge runs persist HFL with terminal Telegram state
+`suppressed`; finish retries and outbox recovery do not requeue them. No Beat entry.
 
 **Data flow:** entity profiles/activity → Hermes `auto-merge-entities` skill →
 authenticated consolidation API → reversible merges → HFL persistence → Telegram.
@@ -826,7 +828,7 @@ and delivery worker must share `HARQIS_ENTITIES_DB` on the canonical host.
 and `TELEGRAM` default chat configuration. Reconcile the checked-in schedule with
 `scripts/agents/hfl/setup_entity_consolidation.py --apply` on the Hermes owner.
 
-**Outputs:** one report per run grouped by type, Telegram link, internal merge
+**Outputs:** one report per run grouped by type, Telegram link only for runs with merges, internal merge
 audits and undo references. Automatic merges suppress individual HFL audit posts;
 manual merge posts remain enabled. Reports are excluded from enrichment evidence.
 **Failure behavior:** operation receipts prevent repeated merges. Unfinished runs
