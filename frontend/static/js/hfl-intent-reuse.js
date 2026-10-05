@@ -47,7 +47,10 @@
     let root=form.querySelector('[data-intent-fields]');
     if(!root){root=element('section');root.dataset.intentFields='';}
     form.querySelector('[data-object-attachments]').after(root);root.replaceChildren(element('p','Workspaces'));
-    window.HflWorkspacePicker(root,{selected:item?.workspace_ids||[],empty:'No workspace',name:'workspace_ids'});
+    const params=new URLSearchParams(location.search);
+    const activeWorkspaces=(params.get('views')||params.get('workspace')||params.get('workspace_ids')||'').split(',').filter(Boolean);
+    const selectedWorkspaces=item?.workspace_ids??(item?.id?[]:activeWorkspaces);
+    window.HflWorkspacePicker(root,{selected:selectedWorkspaces,empty:'No workspace',name:'workspace_ids'});
     const boardRoot=element('section');boardRoot.dataset.intentBoards='';boardRoot.append(element('p','Boards'));root.append(boardRoot);
     window.HflWorkspacePicker(boardRoot,{selected:item?.board_ids||[],empty:'No board',name:'board_ids',boards:true});
     boardRoot.dataset.baseline=JSON.stringify([...(item?.board_ids||[])].sort());

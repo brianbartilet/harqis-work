@@ -480,6 +480,9 @@ ideas, excluding dismissed ideas. Click outside or press Escape to close it. Car
 show their origin and description, with Edit, Promote, and Dismiss controls. The board's
 Create menu offers Entry, Action, and Idea. Actions and ideas can belong to several
 saved workspaces through a checkbox dropdown below supporting files. Explicit
+workspace selections are prefilled from the current view when creating an action
+or idea, and can be changed or cleared before saving. Existing objects and drafts
+with their own workspace selections retain those assignments. Explicit
 workspace assignments include the object even when its source, tags, or
 dates do not match that workspace's saved filters. Additional search filters and
 protected-entry restrictions still apply. Removing an assignment restores the

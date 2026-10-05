@@ -121,6 +121,38 @@ def create_action(client):
     return response.json()['item']
 
 
+@pytest.mark.parametrize('editor', ['timeline', 'idea', 'actionable'])
+@pytest.mark.parametrize('count', [0, 1, 2])
+def test_new_objects_inherit_selected_workspaces(editor_page, workspace_corpus, editor, count):
+    from urllib.parse import urlencode
+    from playwright.sync_api import expect
+    from modules.hfl_corpus import workspace_views
+    page, client = editor_page
+    views = [workspace_views.save(workspace_views.WorkspaceWrite(name=name, state={})) for name in ('Work', 'Home')]
+    selected = sorted(view['id'] for view in views[:count])
+    query = {'reset': '1'} if not selected else {'workspace' if count == 1 else 'views': ','.join(selected)}
+    page.goto('https://editing.test/hfl-corpus/actions?' + urlencode(query))
+    page.wait_for_function('window.hflActions && window.HflIdeas')
+    if editor == 'timeline':
+        page.evaluate('window.hflActions.openEditor()')
+        form = page.locator('#followup-form')
+    else:
+        page.evaluate('(kind) => window.HflIdeas.openEditor(kind)', editor)
+        form = page.locator('.idea-dialog:visible form')
+    expect(form.locator('[data-intent-fields] > input[name=workspace_ids]')).to_have_count(count)
+    assert sorted(form.evaluate('(form) => new FormData(form).getAll("workspace_ids")')) == selected
+    form.locator('[name=title]').fill('Inherited workspace ' + editor)
+    if editor != 'idea':
+        form.locator('[name=expected_outcome]').evaluate('(input) => { input.value="Done"; input.dispatchEvent(new Event("input", {bubbles:true})); }')
+    save_path = BASE + '/objects' if editor == 'idea' else '/hfl-corpus/timeline/items'
+    with page.expect_response(lambda response: response.request.method == 'POST' and urlparse(response.url).path == save_path) as saved:
+        form.locator('[type=submit]').click()
+    assert saved.value.status == (200 if editor == 'idea' else 201)
+    endpoint = BASE + '/reuse/board-ideas' if editor == 'idea' else '/hfl-corpus/timeline/items'
+    item = next(item for item in client.get(endpoint).json()['items'] if item['title'] == 'Inherited workspace ' + editor)
+    assert item['workspace_ids'] == selected
+
+
 def test_checklist_action_is_atomic_and_retryable(ideas, authenticated_client):
     client = authenticated_client
     parent = create_action(client)
