@@ -60,7 +60,7 @@
         if(oldCards.has(item.id)&&JSON.stringify(oldItems.get(item.id))===JSON.stringify(item)){
           section.append(oldCards.get(item.id));continue;
         }
-        const card=actions.card(item);card.tabIndex=0;
+        const card=actions.card(item);card.tabIndex=0;card.dataset.matrix=item.matrix||'unclassified';
         const clone=node('button','⧉','action-clone-handle');clone.type='button';clone.title='Clone action';clone.setAttribute('aria-label','Clone '+item.title);clone.onclick=()=>window.HflIdeas.cloneObject('actionable',item.id);card.prepend(clone);
         const grip=node('button','⠿','action-drag-handle');grip.type='button';grip.setAttribute('aria-label','Move '+item.title);grip.title='Drag to move card; Alt+Up/Down to reorder';card.prepend(grip);
         card.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
@@ -101,7 +101,14 @@
         const card=node('article',null,'agenda-card idea-board-card');card.dataset.ideaId=item.id;
         const grip=node('button','⠿','action-drag-handle');grip.type='button';grip.setAttribute('aria-label','Drag idea '+item.title);
         const clone=node('button','⧉','action-clone-handle');clone.type='button';clone.setAttribute('aria-label','Clone '+item.title);clone.onclick=()=>window.HflIdeas.cloneObject('idea',item.id);
-        const meta=node('div',null,'agenda-card-meta');meta.append(node('span',item.status==='adopted'?'Has actions':'Idea'),node('span',item.origin==='manual'?'Manual':'Agent generated','action-source'));
+        const meta=node('div',null,'agenda-card-meta');
+        const timestamp=item.generated_at||item.created_at, date=new Date(timestamp);
+        const datePill=node('span',null,'idea-date');
+        if(timestamp&&!Number.isNaN(date.getTime())){
+          const time=node('time',new Intl.DateTimeFormat('en-SG',{day:'numeric',month:'short',year:'numeric',timeZone:'Asia/Singapore'}).format(date));
+          time.dateTime=timestamp;datePill.title=(item.generated_at?'Generated':'Created')+' '+date.toLocaleString('en-SG',{timeZone:'Asia/Singapore'})+' SGT';datePill.append(time);
+        }else{datePill.textContent='Date unavailable';}
+        meta.append(datePill,node('span',item.status==='adopted'?'Has actions':'Idea'),node('span',item.origin==='manual'?'Manual':'Agent generated','action-source'));
         if(item.origin!=='manual'){
           meta.append(node('span',item.confidence?label(item.confidence)+' confidence':'Confidence unassessed','idea-confidence'));
           if(item.analysis_status==='uncertain')meta.append(node('span','Uncertain','idea-analysis-status'));
@@ -115,6 +122,13 @@
         management.append(edit,promote,board,dismiss);card.append(grip,clone,meta,title);
         const description=window.HflObjectDescription(item)||item.recommendation||item.expected_outcome||'';
         if(description.trim()){const body=node('div',description,'agenda-description idea-card-description markdown-body');card.append(body);window.HflChecklistMarkdown(body,description);}
+        if(item.source?.path&&item.source?.entry_id){
+          const evidence=node('div',null,'action-evidence-link'),available=item.evidence_available!==false;
+          const link=node(available?'a':'span',available?'Open HFL entry ↗':'HFL entry unavailable');
+          if(available){link.href='/hfl-corpus/timeline/evidence?'+new URLSearchParams({path:item.source.path,entry_id:item.source.entry_id});link.target='_blank';link.rel='noopener';link.title=item.source.title||'Source HFL entry';}
+          else{link.setAttribute('aria-disabled','true');link.title='The linked HFL entry is no longer available';}
+          evidence.append(link);card.append(evidence);
+        }
         const controls=node('div',null,'agenda-card-actions action-controls'),views=node('div',null,'action-view-controls');
         management.className='action-management-controls';
         const connections=node('button','Connections','action-connections-button');connections.type='button';connections.onclick=()=>window.HflActionConnections.open({...item,kind:'idea'},connections);

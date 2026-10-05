@@ -109,6 +109,37 @@ def test_kanban_full_workspace_controls(editor_page, workspace_corpus, width, tm
     expect(page.get_by_role('heading', name='Share recipe draft')).to_be_visible()
 
 
+@pytest.mark.parametrize('source_state', ['available', 'missing', 'manual'])
+def test_idea_card_date_and_source(editor_page, source_state):
+    from playwright.sync_api import expect
+    from urllib.parse import parse_qs
+    page, _ = editor_page
+    item = {'id': str(uuid4()), 'title': 'Traceable idea', 'status': 'suggested',
+            'origin': 'manual' if source_state == 'manual' else 'agent',
+            'created_at': '2026-10-05T18:30:00Z'}
+    if source_state != 'manual':
+        item.update(generated_at='2026-10-04T18:30:00Z',
+                    source={'path': '2026/10/example & notes.md', 'entry_id': 'entry-123', 'title': 'Source note'},
+                    evidence_available=source_state == 'available')
+    page.route('**/ideas/reuse/board-ideas?*', lambda route: route.fulfill(json={'items': [item]}))
+    page.goto('https://editing.test/hfl-corpus/actions')
+    page.get_by_role('button', name='Show ideas', exact=True).click()
+    card = page.locator('[data-idea-id="' + item['id'] + '"]')
+    first_pill = card.locator('.agenda-card-meta > :first-child')
+    expect(first_pill).to_have_text('6 Oct 2026' if source_state == 'manual' else '5 Oct 2026')
+    expect(first_pill.locator('time')).to_have_attribute('datetime', item.get('generated_at', item['created_at']))
+    if source_state == 'available':
+        link = card.get_by_role('link', name='Open HFL entry ↗')
+        expect(link).to_be_visible()
+        url = urlparse(link.get_attribute('href'))
+        assert url.path == '/hfl-corpus/timeline/evidence'
+        assert parse_qs(url.query) == {'path': [item['source']['path']], 'entry_id': ['entry-123']}
+    else:
+        expect(card.get_by_role('link', name='Open HFL entry ↗')).to_have_count(0)
+        if source_state == 'missing':
+            expect(card.locator('[aria-disabled="true"]')).to_have_text('HFL entry unavailable')
+
+
 def create_action(client):
     response = client.post('/hfl-corpus/timeline/items', json={
         'request_id': str(uuid4()), 'title': 'Editing test', 'expected_outcome': 'Verified UI',
