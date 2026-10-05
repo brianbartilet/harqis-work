@@ -348,7 +348,7 @@ CONFIG_DICTIONARY = (
     | WORKFLOW_KNOWLEDGE | WORKFLOW_DUMPS | WORKFLOW_HFL | WORKFLOW_NOTES
     | WORKFLOW_WORKERS
     | WORKFLOW_TESTING | WORKFLOW_TCG
-    | WORKFLOW_GIT_FORKS | WORKFLOW_SECOND_BRAIN
+    | WORKFLOW_GIT_FORKS | WORKFLOW_SECOND_BRAIN | WORKFLOW_FILES
 )
 SPROUT.conf.beat_schedule = _celery_safe_schedule(CONFIG_DICTIONARY)
 ```
@@ -610,7 +610,7 @@ The three driving principles:
                              ▼
    ┌──────────────────────────────────────────────────────────┐
    │                   MCP Server  (mcp/)                     │
-   │   Tools from 43 catalog modules — OANDA, YNAB, Gmail,    │
+   │   Tools from 44 catalog modules — OANDA, YNAB, Gmail,    │
    │    Telegram, Discord, Trello, Jira, Scryfall, TCG …      │
    └──────┬──────────────────────────────────┬────────────────┘
           │ reads / writes                   │ triggers
@@ -637,7 +637,7 @@ The three driving principles:
 | Component | Where | What it does |
 |---|---|---|
 | **Hermes agent** | `~/.hermes/` (local per-machine) | Agent runtime: persistent memory, distilled lessons, plans, and cron jobs (agent / `no_agent` modes) — see [`docs/info/HERMES.md`](docs/info/HERMES.md) |
-| **MCP server** | `mcp/server.py` | Registers tools from 41 app integrations plus knowledge & memory recall via `tools/catalog.py`; the live surface depends on `MCP_ENABLED_APPS` and successful module registration |
+| **MCP server** | `mcp/server.py` | Registers tools from 42 app integrations plus knowledge & memory recall via `tools/catalog.py`; the live surface depends on `MCP_ENABLED_APPS` and successful module registration |
 | **Celery Beat** | `workflows/config.py` | Runs all scheduled automation — HUD updates, MTG resale pipeline, desktop sync |
 | **RabbitMQ + Redis** | Docker stack | Celery broker and result backend |
 | **Frontend** | `frontend/main.py` | Web dashboard — manually trigger any task, inspect run history |
