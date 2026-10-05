@@ -1848,6 +1848,13 @@ paths:
           type: integer
           default: 0
           title: Offset
+      - name: kinds
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Kinds
       responses:
         '200':
           description: Successful Response
@@ -3347,6 +3354,140 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/board-context:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Board Context
+      operationId: board_context_api_hfl_timeline_ideas_board_context_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+  /api/hfl/entities/consolidation/begin:
+    post:
+      summary: Consolidation Begin
+      operationId: consolidation_begin_api_hfl_entities_consolidation_begin_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/hfl/entities/consolidation/{run_id}:
+    get:
+      summary: Consolidation Status
+      operationId: consolidation_status_api_hfl_entities_consolidation__run_id__get
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/consolidation/{run_id}/decisions/{pair_id}:
+    post:
+      summary: Consolidation Decide
+      operationId: consolidation_decide_api_hfl_entities_consolidation__run_id__decisions__pair_id__post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: pair_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Pair Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsolidationDecision'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/consolidation/{run_id}/decisions:
+    post:
+      summary: Consolidation Batch
+      operationId: consolidation_batch_api_hfl_entities_consolidation__run_id__decisions_post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsolidationBatch'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/consolidation/{run_id}/finish:
+    post:
+      summary: Consolidation Finish
+      operationId: consolidation_finish_api_hfl_entities_consolidation__run_id__finish_post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
     ActionSource:
@@ -3487,6 +3628,12 @@ components:
           maxLength: 3000
           title: Matrix Reason
           default: ''
+        board_ids:
+          items:
+            type: string
+          type: array
+          maxItems: 10000
+          title: Board Ids
       additionalProperties: false
       type: object
       required:
@@ -3690,6 +3837,22 @@ components:
           type: string
           title: Notes
           default: ''
+        aliases:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Aliases
+        partial_aliases:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Partial Aliases
+        preferred_name:
+          type: boolean
+          title: Preferred Name
+          default: false
       additionalProperties: false
       type: object
       title: MergeFields
@@ -3804,6 +3967,22 @@ components:
           type: string
           title: Notes
           default: ''
+        aliases:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Aliases
+        partial_aliases:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Partial Aliases
+        preferred_name:
+          type: boolean
+          title: Preferred Name
+          default: false
       type: object
       required:
       - name
@@ -3824,6 +4003,12 @@ components:
           maxLength: 20000
           title: Instructions
           default: ''
+        workspace_ids:
+          items:
+            type: string
+          type: array
+          maxItems: 30
+          title: Workspace Ids
       additionalProperties: false
       type: object
       required:
@@ -3960,6 +4145,14 @@ components:
             maxLength: 3000
           - type: 'null'
           title: Matrix Reason
+        board_ids:
+          anyOf:
+          - items:
+              type: string
+            type: array
+            maxItems: 10000
+          - type: 'null'
+          title: Board Ids
       additionalProperties: false
       type: object
       required:
@@ -3985,6 +4178,14 @@ components:
             maxLength: 20000
           - type: 'null'
           title: Instructions
+        workspace_ids:
+          anyOf:
+          - items:
+              type: string
+            type: array
+            maxItems: 30
+          - type: 'null'
+          title: Workspace Ids
       additionalProperties: false
       type: object
       title: UpdateCategory
@@ -4225,6 +4426,22 @@ components:
         kind:
           type: string
           title: Kind
+        aliases:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Aliases
+        partial_aliases:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Partial Aliases
+        preferred_name:
+          type: boolean
+          title: Preferred Name
+          default: false
       type: object
       required:
       - name
@@ -4252,6 +4469,85 @@ components:
       required:
       - groups
       title: BatchSubmit
+    ConsolidationBatch:
+      properties:
+        decisions:
+          additionalProperties:
+            $ref: '#/components/schemas/ConsolidationDecision'
+          type: object
+          maxProperties: 20
+          minProperties: 1
+          title: Decisions
+      type: object
+      required:
+      - decisions
+      title: ConsolidationBatch
+    ConsolidationDecision:
+      properties:
+        decision:
+          type: string
+          enum:
+          - merge
+          - review
+          - separate
+          title: Decision
+        reason:
+          type: string
+          maxLength: 10000
+          minLength: 1
+          title: Reason
+        contradictions:
+          items:
+            type: string
+          type: array
+          maxItems: 20
+          title: Contradictions
+        facts:
+          items:
+            $ref: '#/components/schemas/ConsolidationFact'
+          type: array
+          maxItems: 8
+          title: Facts
+        aliases:
+          items:
+            type: string
+          type: array
+          maxItems: 30
+          title: Aliases
+        partial_aliases:
+          items:
+            type: string
+          type: array
+          maxItems: 30
+          title: Partial Aliases
+      additionalProperties: false
+      type: object
+      required:
+      - decision
+      - reason
+      title: ConsolidationDecision
+    ConsolidationFact:
+      properties:
+        left_quote:
+          type: string
+          maxLength: 2000
+          title: Left Quote
+        right_quote:
+          type: string
+          maxLength: 2000
+          title: Right Quote
+        explanation:
+          type: string
+          maxLength: 2000
+          minLength: 1
+          title: Explanation
+      additionalProperties: false
+      type: object
+      required:
+      - left_quote
+      - right_quote
+      - explanation
+      title: ConsolidationFact
   securitySchemes:
     HTTPBearer:
       type: http

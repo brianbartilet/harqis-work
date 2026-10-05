@@ -225,6 +225,22 @@ def canonical_api(monkeypatch, tmp_path):
     client.close()
 
 
+def test_consolidation_decision_payloads(recording_api):
+    origin, records = recording_api
+    api = service('apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities', origin)
+    decision = {
+        'decision': 'merge', 'reason': 'Matching identity confirmed by source evidence',
+        'facts': [{'left_quote': 'Acme', 'right_quote': 'Acme', 'explanation': 'Same employer'}],
+        'contradictions': [], 'aliases': ['Example'], 'partial_aliases': [],
+    }
+    api.update_entity_consolidation_decision('run-1', 'pair-1', decision)
+    assert records[-1][0:2] == ('POST', '/api/hfl/entities/consolidation/run-1/decisions/pair-1')
+    assert json.loads(records[-1][3]) == decision
+    api.update_entity_consolidation_decisions('run-1', {'pair-1': decision})
+    assert records[-1][0:2] == ('POST', '/api/hfl/entities/consolidation/run-1/decisions')
+    assert json.loads(records[-1][3]) == {'decisions': {'pair-1': decision}}
+
+
 def test_map_and_goal_lifecycle_over_real_http(canonical_api):
     api = service('apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas', canonical_api)
     idea = api.create_idea(str(uuid4()), 'Explore a test idea')['item']

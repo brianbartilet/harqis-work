@@ -319,7 +319,7 @@ Wraps xAI Grok via the OpenAI-compatible SDK (`https://api.x.ai/v1`). Requires v
 
 ### HFL Activity Corpus (`apps/hfl_corpus/mcp.py`)
 
-110 typed tools cover the canonical frontend `/api/hfl` routes using
+121 typed tools cover the canonical frontend `/api/hfl` routes using
 `HFL_CORPUS_API_URL` and `HFL_CORPUS_API_TOKEN`. The same catalog powers the CLI
 and agent bridge. Existing tool names are retained. See the
 [app guide](../apps/hfl_corpus/README.md) for version checks, merge preview tokens,
@@ -330,6 +330,12 @@ session/protocol surfaces. Writes are marked below; file downloads write locally
 | Tool | Description |
 | --- | --- |
 | `upload_hfl_corpus_attachments` | Attach multiple supporting files to an action or pin (remote write). |
+| `create_hfl_corpus_entity_consolidation` | Begin or resume an entity consolidation run. Destructive: writes remote state. |
+| `get_hfl_corpus_entity_consolidation` | Read a consolidation run and its candidate decisions. |
+| `update_hfl_corpus_entity_consolidation_decision` | Record a decision and apply an eligible merge. Destructive: writes remote state. |
+| `update_hfl_corpus_entity_consolidation_decisions` | Submit up to 20 pair decisions; results report each success or error. Destructive: writes remote state. |
+| `update_hfl_corpus_entity_consolidation_finish` | Finish a decided run and dispatch its reports. Destructive: writes remote state. |
+| `get_hfl_corpus_board_context` | Read active boards and permitted member objects and connections. |
 | `get_hfl_corpus_idea_connections` | Read an idea's graph connections. |
 | `list_hfl_corpus_reuse_options` | Search actions and ideas available for independent copying. |
 | `list_hfl_corpus_board_ideas` | List ideas available to boards, optionally including dismissed ideas. |

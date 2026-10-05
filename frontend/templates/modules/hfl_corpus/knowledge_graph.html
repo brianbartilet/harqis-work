@@ -8,6 +8,14 @@
   <header class="activity-modal-heading"><h1>Activity Graph</h1><button type="button" data-activity-close>Back to corpus</button></header>
   {% else %}<h1 class="sr-only">Activity Graph</h1>{% endif %}
   {% if request.query_params.get('readonly') == '1' %}<div class="kg-preview-heading"><span>Timeline · Overview</span><span>View only · Pan and zoom to explore</span></div>{% endif %}
+  {% if request.query_params.get('readonly') != '1' %}
+  <div class="kg-fullscreen-bar" id="kg-fullscreen-bar" hidden>
+    <strong>Activity Graph</strong>
+    <button id="kg-toggle-boards" type="button" aria-expanded="false" aria-controls="kg-boards">Boards</button>
+    <button id="kg-exit-fullscreen" type="button">Exit fullscreen <span aria-hidden="true">↙</span></button>
+  </div>
+  <div id="kg-fullscreen-filters" class="kg-fullscreen-filters" aria-label="Current graph filters" tabindex="0" hidden></div>
+  {% endif %}
   <div class="kg-toolbar kg-main-toolbar">
     <label>Find a node<input id="kg-search" type="search" placeholder="Search entries or entities" autocomplete="off"></label>
     <div class="kg-detail-control"><select id="kg-density" aria-label="Graph detail"><option value="100">Overview</option><option value="500">Expanded</option><option value="1000">Dense</option><option value="0">All matching nodes</option></select><details class="kg-detail-help"><summary aria-label="About graph detail">i</summary><p>Overview: up to 100 nodes.<br>Expanded: up to 500 nodes.<br>Dense: up to 1,000 nodes.<br>All: every matching node and connection.<br>A node is an entry, entity, source or date. Filters may return fewer nodes.</p></details></div>
@@ -69,10 +77,10 @@
   <div class="kg-stage" id="kg-stage" aria-busy="true">
   <div id="kg-loading" role="status"><span class="kg-spinner" aria-hidden="true"></span><strong>Loading Activity Graph</strong><span>Reading activity and preparing connections…</span></div>
   <div class="kg-workspace" id="kg-workspace" inert>
-    <aside class="kg-boards" aria-label="Saved boards"><div id="idea-map-tools"></div></aside>
+    <aside id="kg-boards" class="kg-boards" aria-label="Saved boards"><div id="idea-map-tools"></div></aside>
     <section class="kg-map" aria-label="Interactive knowledge graph">
       <div id="kg-canvas" aria-label="Interactive force graph. Select nodes with the list below or beside the graph."></div>
-      <div class="kg-zoom"><button id="kg-in" aria-label="Zoom in">+</button><button id="kg-out" aria-label="Zoom out">−</button><button id="kg-fit">Fit</button></div>
+      <div class="kg-zoom"><button id="kg-in" aria-label="Zoom in">+</button><button id="kg-out" aria-label="Zoom out">−</button><button id="kg-fit">Fit</button>{% if request.query_params.get('readonly') != '1' %}<button id="kg-fullscreen" type="button" aria-expanded="false" aria-label="Fullscreen graph">⛶ Fullscreen</button>{% endif %}</div>
       <div class="kg-map-caption"><span id="kg-map-title" class="kg-eyebrow">EXPLORE ACTIVITY CONSTELLATION</span><span id="kg-map-count"></span></div><span class="kg-help">Drag to pan · Pinch or scroll to zoom · Mouse-drag nodes to arrange</span>
     </section>
     <aside class="kg-inspector">

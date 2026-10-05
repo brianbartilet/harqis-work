@@ -2892,6 +2892,75 @@
       "status": "ui",
       "tools": [],
       "reason": "Read-only Files UI progress and schedule presentation for known catalog records; per-location scan data remains available through list_file_index_sources."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/consolidation/begin",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entity_consolidation"
+      ],
+      "reason": "Begin or resume an entity consolidation run. Destructive: writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity_consolidation"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/entities/consolidation/{run_id}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_entity_consolidation"
+      ],
+      "reason": "Read a consolidation run and its candidate decisions.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.get_entity_consolidation"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/consolidation/{run_id}/decisions/{pair_id}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_consolidation_decision"
+      ],
+      "reason": "Record a decision and apply an eligible merge. Destructive: writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_consolidation_decision"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/consolidation/{run_id}/decisions",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_consolidation_decisions"
+      ],
+      "reason": "Submit up to 20 pair decisions; results report each success or error. Destructive: writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_consolidation_decisions"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/consolidation/{run_id}/finish",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_consolidation_finish"
+      ],
+      "reason": "Finish a decided run and dispatch its reports. Destructive: writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_consolidation_finish"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/board-context",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_board_context"
+      ],
+      "reason": "Read active boards and permitted member objects through the canonical board-context API.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.get_board_context"
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/board-context",
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_board_context"
+      ],
+      "reason": "Read active boards and permitted member objects through the canonical board-context API."
     }
   ]
 }

@@ -1777,3 +1777,70 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         on retry. Returns a result or error per group; partial success is possible.
         """
         return _dict_result(ApiServiceHflCorpusEntities(CONFIG).create_entity_merge_batch(groups=groups))
+
+    # --- Entity consolidation ---
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_entity_consolidation() -> dict:
+        """Begin or resume an entity consolidation run. Destructive: writes remote state.
+        """
+        logger.info("Tool called: create_hfl_corpus_entity_consolidation")
+        result = ApiServiceHflCorpusEntities(CONFIG).create_entity_consolidation()
+        output = _dict_result(result)
+        logger.info("create_hfl_corpus_entity_consolidation done")
+        return output
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def get_hfl_corpus_entity_consolidation(run_id: str) -> dict:
+        """Read a consolidation run and its candidate decisions.
+
+        Args:
+            run_id: Run ID returned by create_hfl_corpus_entity_consolidation.
+        """
+        logger.info("Tool called: get_hfl_corpus_entity_consolidation")
+        result = ApiServiceHflCorpusEntities(CONFIG).get_entity_consolidation(run_id=run_id)
+        output = _dict_result(result)
+        logger.info("get_hfl_corpus_entity_consolidation done")
+        return output
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_consolidation_decision(run_id: str, pair_id: str, decision: dict) -> dict:
+        """Record a decision and apply an eligible merge. Destructive: writes remote state.
+
+        Args:
+            run_id: Consolidation run ID.
+            pair_id: Candidate pair ID from the run.
+            decision: decision (merge/review/separate), reason, and optional contradictions, facts, aliases and partial_aliases. Facts contain left_quote, right_quote and explanation.
+        """
+        logger.info("Tool called: update_hfl_corpus_entity_consolidation_decision")
+        result = ApiServiceHflCorpusEntities(CONFIG).update_entity_consolidation_decision(run_id=run_id, pair_id=pair_id, decision=decision)
+        output = _dict_result(result)
+        logger.info("update_hfl_corpus_entity_consolidation_decision done")
+        return output
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_consolidation_decisions(run_id: str, decisions: dict) -> dict:
+        """Submit up to 20 pair decisions; results report each success or error. Destructive: writes remote state.
+
+        Args:
+            run_id: Consolidation run ID.
+            decisions: Pair IDs mapped to decision objects, as in update_hfl_corpus_entity_consolidation_decision.
+        """
+        logger.info("Tool called: update_hfl_corpus_entity_consolidation_decisions")
+        result = ApiServiceHflCorpusEntities(CONFIG).update_entity_consolidation_decisions(run_id=run_id, decisions=decisions)
+        output = _dict_result(result)
+        logger.info("update_hfl_corpus_entity_consolidation_decisions done")
+        return output
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_consolidation_finish(run_id: str) -> dict:
+        """Finish a decided run and dispatch its reports. Destructive: writes remote state.
+
+        Args:
+            run_id: Consolidation run ID; unfinished decisions prevent completion.
+        """
+        logger.info("Tool called: update_hfl_corpus_entity_consolidation_finish")
+        result = ApiServiceHflCorpusEntities(CONFIG).update_entity_consolidation_finish(run_id=run_id)
+        output = _dict_result(result)
+        logger.info("update_hfl_corpus_entity_consolidation_finish done")
+        return output

@@ -1,5 +1,6 @@
 """Preset transitions and motion against isolated graph data, desktop and mobile."""
 from pathlib import Path
+import re
 import time
 import pytest
 
@@ -388,3 +389,68 @@ def test_readonly_timeline_overview(authenticated_client, monkeypatch, tmp_path,
         assert not mutations and not errors
         page.screenshot(path=str(tmp_path / f'graph-readonly-{width}.png'))
         browser.close()
+
+@pytest.mark.parametrize('width,height', [(1440, 1000), (390, 844)])
+def test_graph_fullscreen_preserves_state_and_selection(authenticated_client, monkeypatch, tmp_path, width, height):
+    playwright = pytest.importorskip('playwright.sync_api')
+    from modules.hfl_corpus import entities
+    monkeypatch.setattr(entities, 'graph', lambda *args: dict(
+        nodes=[dict(id='person:alex', kind='people', label='Alex')], edges=[], total_nodes=1, sources=[]))
+    with playwright.sync_playwright() as engine:
+        options = {'headless': True}
+        if not Path(engine.chromium.executable_path).exists(): options['channel'] = 'msedge'
+        browser = engine.chromium.launch(**options)
+        try:
+            page = browser.new_page(viewport={'width': width, 'height': height})
+            errors = []
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            def route_request(route):
+                r = route.request
+                response = authenticated_client.request(r.method, r.url.replace('http://graph.test', ''), content=r.post_data,
+                    headers={'content-type': r.headers.get('content-type', 'application/json')})
+                route.fulfill(status=response.status_code, body=response.content,
+                    headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding','content-length'}})
+            page.route('http://graph.test/**', route_request)
+            page.goto('http://graph.test/hfl-corpus/graph')
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.click('#kg-open-views')
+            page.click('[data-preset="people"]')
+            page.locator('#kg-search').fill('Alex')
+            page.wait_for_timeout(500)
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.locator('#kg-list button').filter(has_text='Alex').click()
+            page.wait_for_timeout(1200)  # Let the preset's camera transition finish.
+            camera_script = '''() => {
+                const host=document.querySelector('#kg-canvas'), z=host.querySelector('canvas').__zoom;
+                return {x:(host.clientWidth/2-z.x)/z.k,y:(host.clientHeight/2-z.y)/z.k,zoom:z.k};
+            }'''
+            camera = page.evaluate(camera_script)
+            page.click('#kg-fullscreen')
+            playwright.expect(page.locator('.kg-shell')).to_have_class(re.compile('kg-fullscreen'))
+            page.wait_for_timeout(250)
+            assert page.evaluate(camera_script) == pytest.approx(camera, abs=0.1)
+            assert page.locator('.kg-shell').bounding_box() == dict(x=0, y=0, width=width, height=height)
+            playwright.expect(page.locator('.kg-inspector')).to_be_visible()
+            playwright.expect(page.locator('.kg-boards')).not_to_be_visible()
+            page.get_by_role('button', name='Clear selection', exact=True).click()
+            playwright.expect(page.locator('.kg-inspector')).not_to_be_visible()
+            page.click('#kg-toggle-boards')
+            playwright.expect(page.locator('.kg-boards')).to_be_visible()
+            page.click('#kg-toggle-boards')
+            playwright.expect(page.locator('.kg-main-toolbar')).not_to_be_visible()
+            playwright.expect(page.locator('#kg-fullscreen-filters')).not_to_be_visible()
+            playwright.expect(page.locator('#kg-exit-fullscreen')).to_be_visible()
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.screenshot(path=str(tmp_path / f'fullscreen-{width}.png'))
+            page.click('#kg-exit-fullscreen')
+            playwright.expect(page.locator('#kg-fullscreen')).to_be_focused()
+            playwright.expect(page.locator('.kg-main-toolbar')).to_be_visible()
+            playwright.expect(page.locator('#kg-search')).to_have_value('Alex')
+            page.click('#kg-fullscreen')
+            page.keyboard.press('Escape')
+            playwright.expect(page.locator('#kg-exit-fullscreen')).not_to_be_visible()
+            page.goto('http://graph.test/hfl-corpus/graph?embed=1&readonly=1')
+            assert page.locator('#kg-fullscreen').count() == 0
+            assert not errors
+        finally:
+            browser.close()

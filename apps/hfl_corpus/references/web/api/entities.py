@@ -224,3 +224,43 @@ class ApiServiceHflCorpusEntities(ApiServiceHflCorpusExtended):
         group payloads and request IDs on retry; results report each success or failure.
         """
         return self._json('POST', 'entities/merges/batch', payload={'groups': groups})
+
+    def create_entity_consolidation(self) -> dict:
+        """Begin or resume an entity consolidation run. Destructive: writes remote state.
+        """
+        return self._json('POST', 'entities/consolidation/begin')
+
+    def get_entity_consolidation(self, run_id: str) -> dict:
+        """Read a consolidation run and its candidate decisions.
+
+        Args:
+            run_id: Run ID returned by create_hfl_corpus_entity_consolidation.
+        """
+        return self._json('GET', f'entities/consolidation/{self._segment(run_id)}')
+
+    def update_entity_consolidation_decision(self, run_id: str, pair_id: str, decision: dict) -> dict:
+        """Record a decision and apply an eligible merge. Destructive: writes remote state.
+
+        Args:
+            run_id: Consolidation run ID.
+            pair_id: Candidate pair ID from the run.
+            decision: decision (merge/review/separate), reason, and optional contradictions, facts, aliases and partial_aliases. Facts contain left_quote, right_quote and explanation.
+        """
+        return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/decisions/{self._segment(pair_id)}', payload=decision)
+
+    def update_entity_consolidation_decisions(self, run_id: str, decisions: dict) -> dict:
+        """Submit up to 20 pair decisions; results report each success or error. Destructive: writes remote state.
+
+        Args:
+            run_id: Consolidation run ID.
+            decisions: Pair IDs mapped to decision objects, as in update_hfl_corpus_entity_consolidation_decision.
+        """
+        return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/decisions', payload={'decisions': decisions})
+
+    def update_entity_consolidation_finish(self, run_id: str) -> dict:
+        """Finish a decided run and dispatch its reports. Destructive: writes remote state.
+
+        Args:
+            run_id: Consolidation run ID; unfinished decisions prevent completion.
+        """
+        return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/finish')
