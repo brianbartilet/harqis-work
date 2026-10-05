@@ -75,6 +75,9 @@ def source_snapshot(kind, source_id):
             raise BridgeConflict('Closed actionables cannot be executed.')
         source = {key: item.get(key, '') for key in ('id', 'title', 'prompt', 'expected_outcome', 'notes', 'version', 'status', 'source', 'matrix', 'matrix_confidence', 'matrix_reason', 'review_date', 'due_date')}
         source.update({key: item[key] for key in ('description', 'body', 'checklists') if item.get(key)})
+        from modules.hfl_corpus.intent_board_context import context
+        source['board_ids'] = item.get('board_ids', [])
+        source['available_boards'] = context()
         guidance = ''
     elif kind == 'pin':
         pins = get_memory_pin_store().snapshot()
@@ -104,11 +107,13 @@ def source_snapshot(kind, source_id):
     except HTTPException as exc:
         raise ValueError('Supporting files could not be loaded: ' + str(exc.detail)) from None
     runtime = PROMPT_PATH.read_text(encoding='utf-8')
+    # Board evidence is frozen for this run. Status/version changes to member
+    # objects (including this action starting) are not owner instruction edits.
     return {'source_key': f'{kind}:{source_id}', 'kind': kind, 'source_id': source_id,
             'source': source, 'category_guidance': guidance, 'policy': POLICY,
             'execution_settings': action_execution_settings(kind, source_id),
             'runtime_prompt': runtime, 'prompt_path': 'workflows/hfl/prompts/agent_bridge.md', 'prompt_hash': digest(runtime),
-            'instruction_hash': digest({'source': {k: v for k, v in source.items() if k not in {'version', 'status', 'updated_at'}}, 'guidance': guidance, 'runtime': runtime})}
+            'instruction_hash': digest({'source': {k: v for k, v in source.items() if k not in {'version', 'status', 'updated_at', 'available_boards'}}, 'guidance': guidance, 'runtime': runtime})}
 
 
 def action_execution_settings(kind, source_id):
@@ -305,6 +310,13 @@ def apply_action(run, status):
     payload = {'version': version, 'status': status, '_agent_actor': actor}
     if status in {'done', 'incomplete'} and run.get('result', {}).get('matrix'):
         payload.update(validate_matrix(run['result']))
+    if status in {'done', 'incomplete'} and 'board_ids' in run.get('result', {}):
+        from workflows.hfl.intent_boards import board_ids
+        from modules.hfl_corpus.ideas_api import canonical_snapshot
+        active = {b['id'] for b in canonical_snapshot()['maps'] if b.get('active', True)}
+        current = action_call('GET', '/' + source_id)['item']
+        payload['board_ids'] = sorted(set(current.get('board_ids', [])) |
+                                      (set(board_ids(run['result']['board_ids'])) & active))
     if status == 'done':
         payload['completion_note'] = (run['result']['summary'] + '\n\nAgent run: ' + run['id'])[:3000]
     item = action_call('PATCH', '/' + source_id, payload)['item']

@@ -142,6 +142,13 @@ def boards(request: Request):
     return {'maps': canonical.maps(), 'goals': canonical.goals(), 'palette': list(PIN_COLORS)}
 
 
+@router.get('/board-context')
+def board_context(request: Request):
+    timeline.owner(request)
+    from modules.hfl_corpus.intent_board_context import context
+    return {'boards': context()}
+
+
 @router.put('/boards/order')
 async def reorder_boards(request: Request):
     timeline.owner(request)
@@ -410,6 +417,8 @@ def conversion(request: Request, identity: str, checklist_id: str = '', item_id:
     from modules.hfl_corpus.attachments import source_store
     files, source = source_store('idea', identity)
     fields = {k: copy.deepcopy(item[k]) for k in FIELDS if k in item and k not in {'status', 'prompt', 'agent_enabled', 'completion_note', 'due_date', 'review_date'}}
+    active = {b['id'] for b in store().maps() if b.get('active', True)}
+    fields['board_ids'] = [i for i in item.get('board_ids', []) if i in active]
     fields.setdefault('expected_outcome', (item.get('recommendation') or item.get('body') or item.get('description') or item['title'])[:3000])
     for checklist in fields.get('checklists', []):
         for task in checklist['items']:
@@ -471,7 +480,9 @@ async def convert(request: Request, identity: str):
             raise HTTPException(409, 'Restore this idea before creating an action.')
         if checklist_id or item_id:
             checklist_task(current, checklist_id, item_id)['done'] = True
-        action, _ = call(canonical.followups.create, {**fields, 'request_id': request_id, 'agent_enabled': False},
+        from workflows.hfl.intent_boards import boards as stored_boards
+        inherited_boards = [b['id'] for b in stored_boards(db) if b.get('active', True) and 'idea:' + identity in b.get('members', [])]
+        action, _ = call(canonical.followups.create, {'board_ids': inherited_boards, **fields, 'request_id': request_id, 'agent_enabled': False},
                          actor=actor, source=original.get('source'), connection=db)
         db.execute('INSERT INTO idea_conversions VALUES (?,?)', (request_id, fingerprint))
         call(files.clone, source, 'actionable:' + action['id'], attachment_ids, db)

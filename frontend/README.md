@@ -485,6 +485,21 @@ closed, and includes All activity; its adjacent caption names the selected views
 independent draft with supporting files and reset checklists. Dates, recurrence,
 and previous relationships are omitted; a `copied-from` connection records its source.
 
+The optional **Boards** checkbox dropdown follows **Workspaces** in both editors.
+It lists active boards by most recent update. Selections mirror board membership:
+adding one attaches an orphan orb without connections to other objects; removing
+one detaches the object without deleting it. Creating an object inside a board
+automatically associates that board and preserves the creation flow's connections.
+Idea-to-action conversion inherits active board selections. Board Settings has an
+**Active** toggle (existing boards default to active); inactive associations remain
+stored but are excluded from choices for new attachments.
+
+Ideas and actions expose `board_ids` through the canonical and management APIs.
+`GET /api/hfl/timeline/ideas/board-context` and `get_hfl_corpus_board_context` provide
+active boards with permitted member objects and connections. Idea generation and
+action processing use that context and can add relevant board associations while
+retaining owner selections. Context never includes protected corpus objects.
+
 Checklist text renders sanitized Markdown and switches to source text when clicked.
 Each list has a copy button with recent, searchable action/idea destinations; list
 copies preserve completion. Adding a whole list to a mindmap attaches a live List

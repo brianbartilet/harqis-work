@@ -307,6 +307,7 @@
   async function saveEditor() {
     error('followup-save-error');
     const payload=window.HflIntentValues(form);
+    window.HflBoardChanges(form,payload,!!editing);
     payload.description = '';
     payload.checklists=window.hflActionChecklists?.value||[];
     if(editing)payload.version=editing.version;else{payload.request_id=requestId;payload.source=source;if(suggestionId)payload.suggestion_id=suggestionId;}
@@ -317,6 +318,7 @@
       if (changed) payload.prompt = '';
       const saved = await api(editing?'/'+editing.id:'',{method:editing?'PATCH':'POST',body:JSON.stringify(payload)});
       editing = saved.item;
+      window.HflBoardSaved(form);
       if (changed) {
         await attachments.save(editing.id, editorState.report);
         editing = (await api('/'+editing.id,{method:'PATCH',body:JSON.stringify({version:editing.version,prompt})})).item;

@@ -247,6 +247,7 @@
 .board-controls .board-create-menu>.idea-add-toggle{width:100%;min-height:44px;background:#2563eb;border-color:#3b82f6;color:#fff;font-weight:600}
 .board-controls .board-create-menu>.idea-add-toggle:hover{background:#3b82f6}
 .board-connection-list{display:grid;gap:12px}
+.board-connections-dialog .board-hint + .board-connection-list{margin-top:16px}
 .board-connection-card{padding:16px;border:1px solid #334155;border-radius:10px;background:#101c2e}
 .board-connection-heading{display:flex;align-items:center;gap:9px;overflow-wrap:anywhere}
 .board-connection-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}

@@ -399,7 +399,7 @@ def test_board_edits_work_while_save_is_slow_and_retry(ideas, authenticated_clie
                 page.get_by_role('menuitem',name='Create linked '+kind,exact=True).click()
                 dialog.locator('[name=title]').fill('Linked '+kind)
                 if kind == 'Action':
-                    dialog.locator('.action-details > summary').click()
+                    dialog.locator('.action-details > summary').filter(has_text='Action plan').click()
                     dialog.get_by_label('Expected outcome').fill('Validate this thought')
                 dialog.get_by_role('button',name='Add to current board',exact=True).click()
                 expect(page.locator('.editor-save-confirmation')).to_contain_text(kind + ' saved.')

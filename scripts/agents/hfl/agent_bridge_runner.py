@@ -152,6 +152,9 @@ def parse_result(output, *, board_planning=False):
     if any(key in result for key in ('matrix', 'matrix_confidence', 'matrix_reason')):
         from workflows.hfl.timeline_store import validate_matrix
         validate_matrix(result)
+    if 'board_ids' in result:
+        from workflows.hfl.intent_boards import board_ids
+        board_ids(result['board_ids'])
     return result
 
 

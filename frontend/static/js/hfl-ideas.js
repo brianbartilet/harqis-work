@@ -169,6 +169,7 @@ window.HflObjectDescription = (item = {}) => {
         checklistHeader.append(checklistSection.querySelector('h3'), checklistToolbar);
         checklistRoot = el('div'); checklistSection.append(checklistHeader, checklistRoot);
       }
+      if(!current && editingBoard && maps.current?.active!==false)item={...item,board_ids:[...new Set([...(item.board_ids||[]),editingBoard])]};
       window.HflIntentFields(d.form, item, kind);
       const formState = () => JSON.stringify({fields: window.HflIntentValues(d.form), checklists: checklists?.value});
       const canConvert = () => !!current && !state?.dirty && !state?.pending;
@@ -198,7 +199,10 @@ window.HflObjectDescription = (item = {}) => {
       const persistEditor = async () => {
           d.error.textContent = '';
           files.validate();
+          await maps.flush();
           const values = window.HflIntentValues(d.form); values.checklists = checklists.value;
+          if(!current && !attachToCurrent && editingBoard)values.board_ids=values.board_ids.filter(id=>id!==editingBoard);
+          window.HflBoardChanges(d.form, values, !!current);
           values.description = '';
           const prompt = values.prompt, filesChanged = files.changed;
           if (kind === 'actionable' && filesChanged) values.prompt = '';
@@ -216,6 +220,8 @@ window.HflObjectDescription = (item = {}) => {
             if (!current) { values.request_id = requestId; values.source = source; values.agent_enabled = false; }
             current = (await request('/hfl-corpus/timeline/items' + (current ? '/' + current.id : ''), {method: current ? 'PATCH' : 'POST', body: JSON.stringify(values)})).item;
           }
+          window.HflBoardSaved(d.form);
+          await maps.reload();
           await files.save(current.id, state.report);
           if ((clone || conversion) && !copiedLoaded) {copiedLoaded=true;copiedFiles.forEach(f=>f.check.closest('label').remove());attachmentsSection.querySelector('.idea-copy-files-note')?.remove();files.reset(current.id);}
           if (kind === 'actionable' && filesChanged && prompt) {
@@ -883,6 +889,7 @@ window.HflObjectDescription = (item = {}) => {
     async edit(current = null, seed = null) {
       const d = dialog(current ? 'Settings' : 'Add Board');
       const name = field(d.body, 'name', 'Board name', current?.name || seed?.label, 'text', true, 100);
+      const active=field(d.body,'active','Active', '', 'checkbox');active.checked=current?.active!==false;
       const getColor=colorField(d.body,'Board color',current?.color||this.palette[this.loaded.length%this.palette.length]);
       const purpose = field(d.body, 'purpose', 'What are you exploring or trying to achieve?', current?.purpose || seed?.label, 'textarea', true, 3000);
       const starting = current || seed ? null : field(d.body, 'seed', 'Starting thought (optional)', '', 'text', false, 200);
@@ -900,7 +907,7 @@ window.HflObjectDescription = (item = {}) => {
         const members = [...new Set([...(current?.members || []), ...(seed ? [seed.id] : []), ...(goal.value ? ['goal:' + goal.value] : [])])];
         const root = current?.root || seed?.id || (goal.value ? 'goal:' + goal.value : draftId);
         const drafts = current?.drafts || (root === draftId ? [{id: draftId, title: starting?.value.trim() || name.value, body: purpose.value}] : []);
-        const {item} = await api('/maps' + (current ? '/' + current.id : ''), current ? 'PATCH' : 'POST', {name: name.value, color:getColor(), purpose: purpose.value, board_date:boardDate.value, root, goal_id: goal.value, members, drafts, prompt: prompt.value || 'Develop this board toward its purpose. Propose alternatives, assumptions to test, and concrete next steps.', ...(current ? {version: current.version} : {request_id: key, positions: {}})});
+        const {item} = await api('/maps' + (current ? '/' + current.id : ''), current ? 'PATCH' : 'POST', {name: name.value, active:active.checked, color:getColor(), purpose: purpose.value, board_date:boardDate.value, root, goal_id: goal.value, members, drafts, prompt: prompt.value || 'Develop this board toward its purpose. Propose alternatives, assumptions to test, and concrete next steps.', ...(current ? {version: current.version} : {request_id: key, positions: {}})});
         this.queues.delete(item.id);this.loaded=[...this.loaded.filter(m=>m.id!==item.id),item];if(seed)this.cacheNode(seed);const selectedGoal=this.goals.find(g=>g.id===goal.value);if(selectedGoal)this.cacheNode({...selectedGoal,id:'goal:'+selectedGoal.id,object_id:selectedGoal.id,label:selectedGoal.title,kind:'goals'});this.selectBoard(item); d.node.close(); if (agent?.value === 'agent') this.brainstorm();
       } catch (error) { d.error.textContent = error.message; } finally { save.disabled = false; } };
     },

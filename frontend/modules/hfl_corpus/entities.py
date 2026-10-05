@@ -155,7 +155,7 @@ def graph(source='', since='', until='', limit=100, query='', shared=False, cont
     from modules.hfl_corpus.ideas_api import canonical_snapshot
     from modules.hfl_corpus.ideas_graph import extend
     snapshot = canonical_snapshot()
-    if not any(snapshot[k] for k in ('ideas', 'actions', 'topics', 'links')):
+    if not any(snapshot.get(k) for k in ('ideas', 'actions', 'topics', 'links', 'goals', 'maps', 'lists')):
         return _corpus_graph(source, since, until, limit, query, shared, context)
     base = _corpus_graph(source, since, until, 0, '', False, context)
     return extend(base, snapshot, since=since, until=until, query=query, sources=source, context=context, shared=shared, limit=limit)

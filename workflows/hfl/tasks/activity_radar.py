@@ -219,7 +219,7 @@ def synthesize_findings(
 
 def validate_findings(
     data: dict[str, Any], valid_ids: set[str],
-    *, lookup: dict[str, dict[str, Any]] | None = None, include_matrix: bool = False,
+    *, lookup: dict[str, dict[str, Any]] | None = None, include_matrix: bool = False, include_boards: bool = False,
 ) -> list[dict[str, Any]]:
     findings = []
     for raw in data.get("findings", []):
@@ -281,6 +281,9 @@ def validate_findings(
                 finding.update(validate_matrix(raw))
             except ValueError:
                 finding.update(validate_matrix({}))
+        if include_boards:
+            from workflows.hfl.intent_boards import board_ids
+            finding['board_ids'] = board_ids(raw.get('board_ids', []))
         canonical = json.dumps({k: finding[k] for k in ("category", "title", "evidence")}, sort_keys=True)
         finding["fingerprint"] = hashlib.sha256(canonical.encode()).hexdigest()[:16]
         finding["evidence_signature"] = hashlib.sha256("|".join(evidence).encode()).hexdigest()[:12]

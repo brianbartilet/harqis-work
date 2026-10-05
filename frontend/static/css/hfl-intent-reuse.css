@@ -79,7 +79,8 @@
 .idea-board-card h3 { clear:both; padding-top:.5rem; line-height:1.5; }
 .idea-board-card .agenda-card-actions { margin-top:.75rem; }
 [data-intent-fields] { margin:1rem 0; }
-[data-intent-fields] > p { font-size:.68rem; font-weight:650; color:#94a3b8; margin-bottom:.5rem; }
+[data-intent-fields] > p, [data-intent-boards] > p { font-size:.68rem; font-weight:650; color:#94a3b8; margin-bottom:.5rem; }
+[data-intent-boards] { margin-top:1rem; }
 .intent-workspace-picker > summary { width:100%; box-sizing:border-box; white-space:nowrap; overflow:hidden; }
 .intent-workspace-picker > summary > span { overflow:hidden; text-overflow:ellipsis; }
 .idea-dialog .intent-workspace-picker .workspace-view-options label,.agenda-form-body .intent-workspace-picker .workspace-view-options label { display:flex; align-items:center; gap:.6rem; margin:0; padding:.4rem; font-size:.8rem; }

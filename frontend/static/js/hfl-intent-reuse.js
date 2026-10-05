@@ -23,24 +23,24 @@
     };
     return button;
   };
-  window.HflWorkspacePicker = (host, {selected=[], empty='All activity', name='', onapply=()=>{}, onload=()=>{}, onerror=()=>{}}={}) => {
+  window.HflWorkspacePicker = (host, {selected=[], empty='All activity', name='', onapply=()=>{}, onload=()=>{}, onerror=()=>{}, boards=false}={}) => {
     host._disposeWorkspacePicker?.();
     const picker=element('details');picker.className='workspace-view-picker intent-workspace-picker';
     const summary=element('summary'),caption=element('span'),options=element('div'),choices=element('div');
-    summary.setAttribute('aria-label',name?'Workspaces':'Focus on');summary.append(caption);options.className='workspace-view-options';
+    summary.setAttribute('aria-label',boards?'Boards':name?'Workspaces':'Focus on');summary.append(caption);options.className='workspace-view-options';
     const clear=element('button',empty);clear.type='button';options.append(clear,choices,element('p','Selections apply when you close this list.'));picker.append(summary,options);host.append(picker);
     let ids=new Set(selected),applied=[...ids].sort().join(','),views=[];
-    const update=()=>{caption.textContent=views.filter(v=>ids.has(v.id)).map(v=>v.name).join(' + ')||([...ids].length?'Selected workspaces':empty);clear.setAttribute('aria-pressed',String(!ids.size));};
+    const update=()=>{caption.textContent=views.filter(v=>ids.has(v.id)).map(v=>v.name).join(' + ')||([...ids].length?(boards?'Selected boards':'Selected workspaces'):empty);clear.setAttribute('aria-pressed',String(!ids.size));};
     const render=()=>{choices.replaceChildren();for(const view of views){const label=element('label'),input=element('input'),dot=element('span');input.type='checkbox';input.value=view.id;input.checked=ids.has(view.id);dot.className='view-color-dot';dot.style.backgroundColor=view.color||'#94a3b8';label.append(input,dot,document.createTextNode(view.name));choices.append(label);input.onchange=()=>{input.checked?ids.add(view.id):ids.delete(view.id);update();};}update();};
-    const commit=()=>{const key=[...ids].sort().join(',');if(key===applied)return;applied=key;if(name){host.querySelectorAll('input[type=hidden]').forEach(n=>n.remove());for(const id of ids){const input=element('input');input.type='hidden';input.name=name;input.value=id;host.append(input);}host.dispatchEvent(new Event('change',{bubbles:true}));}onapply([...ids],views);};
+    const commit=()=>{const key=[...ids].sort().join(',');if(key===applied)return;applied=key;if(name){host.querySelectorAll(':scope > input[type=hidden]').forEach(n=>n.remove());for(const id of ids){const input=element('input');input.type='hidden';input.name=name;input.value=id;host.append(input);}host.dispatchEvent(new Event('change',{bubbles:true}));}onapply([...ids],views);};
     for(const id of ids){if(name){const input=element('input');input.type='hidden';input.name=name;input.value=id;host.append(input);}}
-    clear.onclick=()=>{ids.clear();render();picker.open=false;applied=null;commit();};
+    clear.onclick=()=>{ids=new Set([...ids].filter(id=>!views.some(v=>v.id===id)));render();picker.open=false;applied=null;commit();};
     picker.addEventListener('toggle',()=>{if(!picker.open)commit();});
     picker.addEventListener('keydown',event=>{if(event.key==='Escape'){event.stopPropagation();picker.open=false;commit();summary.focus();}});
     const controller=new AbortController();host._disposeWorkspacePicker=()=>controller.abort();document.addEventListener('click',event=>{if(!picker.isConnected){controller.abort();return;}if(!picker.contains(event.target)){picker.open=false;commit();}},{signal:controller.signal});
     // Close/apply on submit too, so a pending checkbox selection is never lost.
     host.closest('form')?.addEventListener('submit',commit,{capture:true,signal:controller.signal});
-    update();fetch('/hfl-corpus/workspace-views').then(async response=>{if(!response.ok)throw Error();return response.json();}).then(data=>{if(!picker.isConnected)return;views=data.views;for(const id of ids)if(!views.some(v=>v.id===id))views.push({id,name:'Unavailable workspace'});render();onload(views);}).catch(()=>{options.append(element('p','Workspaces unavailable. Reopen to retry.'));onerror();});
+    clear.disabled=true;update();fetch(boards?'/hfl-corpus/timeline/ideas/boards':'/hfl-corpus/workspace-views').then(async response=>{if(!response.ok)throw Error();return response.json();}).then(data=>{if(!picker.isConnected)return;views=boards?data.maps.filter(b=>b.active!==false).sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||'')||a.name.localeCompare(b.name)):data.views;if(!boards)for(const id of ids)if(!views.some(v=>v.id===id))views.push({id,name:'Unavailable workspace'});clear.disabled=false;render();onload(views);}).catch(()=>{options.append(element('p',boards?'Boards unavailable. Reopen to retry.':'Workspaces unavailable. Reopen to retry.'));onerror();});
     return {close:()=>{picker.open=false;commit();}};
   };
   window.HflIntentFields = (form, item={}, kind='actionable') => {
@@ -48,6 +48,9 @@
     if(!root){root=element('section');root.dataset.intentFields='';}
     form.querySelector('[data-object-attachments]').after(root);root.replaceChildren(element('p','Workspaces'));
     window.HflWorkspacePicker(root,{selected:item?.workspace_ids||[],empty:'No workspace',name:'workspace_ids'});
+    const boardRoot=element('section');boardRoot.dataset.intentBoards='';boardRoot.append(element('p','Boards'));root.append(boardRoot);
+    window.HflWorkspacePicker(boardRoot,{selected:item?.board_ids||[],empty:'No board',name:'board_ids',boards:true});
+    boardRoot.dataset.baseline=JSON.stringify([...(item?.board_ids||[])].sort());
     let recurrence=form.querySelector('[data-recurrence-fields]');recurrence?.remove();
     if(kind!=='actionable')return;
     recurrence=element('section');recurrence.dataset.recurrenceFields='';
@@ -60,15 +63,22 @@
     const end=add('repeat_end','Repeat until (optional)','date',item?.recurrence?.end||'');
     const update=()=>{for(const input of [interval,start,end]){input.disabled=!frequency.value;input.closest('label').hidden=!frequency.value;}interval.required=start.required=!!frequency.value;};frequency.onchange=update;update();
     recurrence.append(element('small','Completing an occurrence creates the next future action with unchecked checklist items.'));
-    form.querySelector('.action-triage-body').append(recurrence);
+    form.elements.expected_outcome.closest('.action-triage-body').append(recurrence);
   };
   window.HflIntentValues = form => {
     const data=new FormData(form), result=Object.fromEntries(data);
     if (form.elements.hide_ticked) result.hide_ticked = form.elements.hide_ticked.checked;
     result.workspace_ids=data.getAll('workspace_ids').sort();
+    result.board_ids=data.getAll('board_ids').sort();
     if(form.querySelector('[data-recurrence-fields]'))result.recurrence=result.repeat_frequency?{frequency:result.repeat_frequency,interval:Number(result.repeat_interval),start:result.repeat_start,end:result.repeat_end||''}:null;
     for(const key of Object.keys(result))if(key.startsWith('repeat_'))delete result[key];
     return result;
+  };
+  window.HflBoardChanges = (form, values, existing) => {
+    if(existing && JSON.stringify(values.board_ids)===form.querySelector('[data-intent-boards]')?.dataset.baseline)delete values.board_ids;
+  };
+  window.HflBoardSaved = form => {
+    form.querySelector('[data-intent-boards]').dataset.baseline=JSON.stringify(new FormData(form).getAll('board_ids').sort());
   };
   const markdownCache=new Map();
   window.HflChecklistMarkdown = (root,text) => {
