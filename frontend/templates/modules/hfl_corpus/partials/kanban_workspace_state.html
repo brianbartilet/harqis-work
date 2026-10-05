@@ -7,6 +7,5 @@
     {% for source in workspace_state.source.split(',') if source %}<label><input type="checkbox" data-source-option value="{{ source }}" checked>{{ source }}</label>{% endfor %}
   </div></details>
   <button data-corpus-search><span class="workspace-spinner" hidden></span><span data-search-label>Search</span></button>
-  <span data-active-view-caption><span data-active-view-name></span></span><span data-dynamic-badge></span><span data-active-view-modified></span>
 </form>
 <script type="application/json" data-memory-csrf>{{ memory_csrf | tojson }}</script>

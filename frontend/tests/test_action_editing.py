@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 from test_hfl_ideas import ideas, BASE, payload
+from test_corpus_workspaces import workspace_corpus
 
 
 @pytest.fixture
@@ -49,13 +50,14 @@ def test_workspace_status_resolves_without_selection(editor_page, query, expecte
 
 
 @pytest.mark.parametrize('width', [1440, 390])
-def test_kanban_full_workspace_controls(editor_page, width, tmp_path):
+def test_kanban_full_workspace_controls(editor_page, workspace_corpus, width, tmp_path):
     from playwright.sync_api import expect
     page, client = editor_page
     page.set_viewport_size({'width':width, 'height':1000})
     page.goto('https://editing.test/hfl-corpus/actions')
     menu = page.locator('[data-workspace-menu]')
-    menu.locator(':scope > summary').click()
+    if not menu.evaluate('(element) => element.open'):
+        menu.locator(':scope > summary').click()
     for label in ('Save', 'New', 'Edit Views', 'Remove', 'Generate share recipe', 'Sharing preview', 'Visualize'):
         expect(menu.get_by_role('button', name=label, exact=True)).to_be_visible()
     panel = menu.locator('.workspace-menu-panel').bounding_box()
@@ -67,21 +69,29 @@ def test_kanban_full_workspace_controls(editor_page, width, tmp_path):
     dialog.get_by_label('Name', exact=True).fill('Kanban focus')
     dialog.locator('[data-workspace-confirm]').click()
     page.wait_for_url('**/hfl-corpus/actions?**')
-    expect(page.locator('[data-board-context]')).to_contain_text('Kanban focus')
-    menu.locator(':scope > summary').click()
+    expect(page.locator('[data-active-view-name]')).to_have_text('Kanban focus')
+    expect(page.locator('[data-active-view-name]')).to_be_visible()
+    expect(page.locator('[data-dynamic-badge]')).to_have_text('Dynamic OFF')
+    expect(page.locator('[data-active-view-modified]')).to_have_text('Saved')
+    page.screenshot(path=str(tmp_path / 'kanban-workspace-indicator.png'))
+    if not menu.evaluate('(element) => element.open'):
+        menu.locator(':scope > summary').click()
     menu.get_by_role('button', name='Edit Views', exact=True).click()
     dialog.locator('[data-add-block]').click()
     dialog.locator('[data-workspace-confirm]').click()
     expect(dialog).not_to_be_visible()
     expect(page.locator('[data-view-loading]')).not_to_be_visible()
-    menu.locator(':scope > summary').click()
+    if not menu.evaluate('(element) => element.open'):
+        menu.locator(':scope > summary').click()
     menu.get_by_role('button', name='Visualize', exact=True).click()
     expect(page.locator('#view-visualizer')).to_be_visible()
     page.locator('[data-visualize-close]').click()
     expect(menu.locator('[data-dynamic-toggle]')).to_be_enabled()
     menu.locator('[data-dynamic-toggle]').check()
     page.wait_for_url('**/hfl-corpus/actions?**dynamic=1**')
-    menu.locator(':scope > summary').click()
+    expect(page.locator('[data-dynamic-badge]')).to_have_text('Dynamic ON')
+    if not menu.evaluate('(element) => element.open'):
+        menu.locator(':scope > summary').click()
     expect(menu.locator('[data-dynamic-toggle]')).to_be_checked()
     page.route('**/sharing/from-corpus?mode=preview', lambda route: route.fulfill(content_type='text/html', body='<p>Preview ready</p>'))
     menu.get_by_role('button', name='Sharing preview', exact=True).click()
@@ -89,10 +99,11 @@ def test_kanban_full_workspace_controls(editor_page, width, tmp_path):
     page.locator('[data-corpus-share-close]').click()
     menu.locator('[data-view-picker] > summary').click()
     menu.locator('[data-view-all]').click()
-    expect(page.locator('[data-board-context]')).to_have_text('All activity')
+    expect(page.locator('[data-active-view-name]')).to_have_text('All activity')
     assert '/hfl-corpus/actions' in page.url
     page.route('**/sharing/from-corpus', lambda route: route.fulfill(content_type='text/html', body='<h1>Share recipe draft</h1>'))
-    menu.locator(':scope > summary').click()
+    if not menu.evaluate('(element) => element.open'):
+        menu.locator(':scope > summary').click()
     menu.get_by_role('button', name='Generate share recipe', exact=True).click()
     page.wait_for_url('**/sharing/from-corpus')
     expect(page.get_by_role('heading', name='Share recipe draft')).to_be_visible()

@@ -10,7 +10,12 @@
     <button type="button" data-board-refresh>Refresh</button>
     <p data-board-status role="status" aria-live="polite"></p>
     <p data-board-context hidden></p>
-    {% if actions_page %}{% include "modules/hfl_corpus/partials/workspace_views.html" %}{% endif %}
+    {% if actions_page %}
+    <div class="kanban-workspace-controls">
+    {% include "modules/hfl_corpus/partials/workspace_indicator.html" %}
+    {% include "modules/hfl_corpus/partials/workspace_views.html" %}
+    </div>
+    {% endif %}
     <p data-board-error class="agenda-error" role="alert" hidden></p>
   </div>
   <div class="followups-lanes" data-board-lanes></div>
