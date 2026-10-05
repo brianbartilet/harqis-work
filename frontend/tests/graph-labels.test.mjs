@@ -46,3 +46,45 @@ test('crowded board titles stay clear of each other and orb controls',()=>{
     const a=labels[i];assert.ok(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y);
   }
 });
+
+test('passive layout holds visibility for eight seconds and follows its orb',async()=>{
+  const {createLabelLayout}=await import('../src/graph-labels.mjs');
+  const layout=createLabelLayout(), first=node('first');
+  layout([first],viewport,measure,0,'view');
+  const initial=layout([first],viewport,measure,400,'view')[0];
+  const moved={...first,x:240};
+  const second={...node('second'),x:500};
+  const held=layout([moved,second],viewport,measure,7999,'view');
+  assert.equal(held.length,1);
+  assert.equal(held[0].x,initial.x+40);
+  assert.equal(held[0].alpha,1);
+  const tick=layout([moved,second],viewport,measure,8000,'view');
+  assert.equal(tick.find(b=>b.node.id==='first').alpha,1);
+  const fading=layout([moved,second],viewport,measure,8300,'view');
+  assert.equal(fading.find(b=>b.node.id==='second').alpha,0.5);
+  assert.equal(layout([moved,second],viewport,measure,8400,'view').length,2);
+});
+
+test('invalid placement fades out and in together; interaction bypasses timer',async()=>{
+  const {createLabelLayout}=await import('../src/graph-labels.mjs');
+  const layout=createLabelLayout(), first=node('first');
+  const old=layout([first],viewport,measure,0,'view',true)[0];
+  const blocked={...viewport,obstacles:[{x:old.x,y:old.y,w:old.w,h:old.h}]};
+  layout([first],blocked,measure,8000,'view');
+  assert.equal(layout([first],blocked,measure,8100,'view')[0].alpha,0.5);
+  assert.equal(layout([first],blocked,measure,8200,'view').length,0);
+  const next=layout([first],blocked,measure,8300,'view')[0];
+  assert.equal(next.alpha,0.5);assert.notEqual(next.x,old.x);
+  const selected={...first,emphasis:true};
+  assert.equal(layout([selected],viewport,measure,8500,'selected',true)[0].font,14);
+  assert.equal(layout([],viewport,measure,8501,'selected').length,0);
+});
+
+test('interaction during a fade does not flash an unchanged label to full opacity',async()=>{
+  const {createLabelLayout}=await import('../src/graph-labels.mjs');
+  const layout=createLabelLayout(), candidate=node('steady');
+  layout([candidate],viewport,measure,0,'first');
+  assert.equal(layout([candidate],viewport,measure,300,'pan')[0].alpha,0.5);
+  assert.equal(layout([candidate],viewport,measure,350,'pan')[0].alpha,0.75);
+  assert.equal(layout([candidate],viewport,measure,400,'pan')[0].alpha,1);
+});

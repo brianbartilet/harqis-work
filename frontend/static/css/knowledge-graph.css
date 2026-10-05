@@ -249,3 +249,5 @@
   .kg-fullscreen.kg-has-selection .kg-inspector{top:auto;left:0;right:0;width:100%;height:38%;border-top:1px solid #52758b}
   .kg-fullscreen.kg-has-selection .kg-zoom{right:14px;bottom:calc(38% + 12px)}
 }
+
+.kg-shell .kg-zoom #kg-fullscreen{font-family:inherit;font-size:12px;font-weight:500}

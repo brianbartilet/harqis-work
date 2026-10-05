@@ -130,7 +130,7 @@ def test_presets_motion_and_large_graph(authenticated_client, monkeypatch, tmp_p
             assert pill['x']>=0 and pill['x']+pill['width']<=page.viewport_size['width']
             page.locator('#kg-list button').first.click()
             page.wait_for_function("document.querySelector('#kg-canvas').dataset.motion==='paused'")
-            page.wait_for_timeout(100)
+            page.wait_for_timeout(450)  # Selection labels finish their fade while orb motion stays paused.
             image=canvas.evaluate('(el)=>el.toDataURL()')
             page.wait_for_timeout(300)
             assert canvas.evaluate('(el)=>el.toDataURL()')==image
@@ -452,5 +452,51 @@ def test_graph_fullscreen_preserves_state_and_selection(authenticated_client, mo
             page.goto('http://graph.test/hfl-corpus/graph?embed=1&readonly=1')
             assert page.locator('#kg-fullscreen').count() == 0
             assert not errors
+        finally:
+            browser.close()
+
+def test_background_graph_arrivals_fade_without_resetting_view(authenticated_client, monkeypatch):
+    playwright = pytest.importorskip('playwright.sync_api')
+    from modules.hfl_corpus import entities
+    sample = [dict(id='person:old', kind='people', label='Existing person')]
+    monkeypatch.setattr(entities, 'graph', lambda *args: dict(nodes=list(sample), edges=[], total_nodes=len(sample), sources=[]))
+    with playwright.sync_playwright() as engine:
+        options = {'headless': True}
+        if not Path(engine.chromium.executable_path).exists(): options['channel'] = 'msedge'
+        browser = engine.chromium.launch(**options)
+        try:
+            page = browser.new_page(viewport={'width':1440,'height':1000})
+            def respond(route):
+                r=route.request
+                response=authenticated_client.request(r.method,r.url.replace('http://graph.test',''),content=r.post_data,
+                    headers={'content-type':r.headers.get('content-type','application/json')})
+                route.fulfill(status=response.status_code,body=response.content,
+                    headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding','content-length'}})
+            page.route('http://graph.test/**',respond)
+            page.add_init_script('''(() => {
+                window.arrivalAlphas=[];
+                const paint=CanvasRenderingContext2D.prototype.fillText;
+                CanvasRenderingContext2D.prototype.fillText=function(text,...args){
+                    if(text==='N'&&this.canvas.closest('#kg-canvas'))window.arrivalAlphas.push(this.globalAlpha);
+                    return paint.call(this,text,...args);
+                };
+            })();''')
+            page.goto('http://graph.test/hfl-corpus/graph')
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.wait_for_timeout(1500)
+            geometry='''() => ({positions:window.HflIdeas.maps.getPositions(),zoom:{...document.querySelector('#kg-canvas canvas').__zoom}})'''
+            before=page.evaluate(geometry)
+            sample.append(dict(id='person:new',kind='people',label='New person'))
+            playwright.expect(page.locator('#kg-map-count')).to_contain_text('2 nodes',timeout=12000)
+            page.wait_for_timeout(500)
+            after=page.evaluate(geometry)
+            assert after['positions']['person:old']==before['positions']['person:old']
+            assert after['zoom']==before['zoom']
+            assert page.locator('#kg-loading').is_hidden()
+            alphas=page.evaluate('window.arrivalAlphas')
+            assert any(0<a<1 for a in alphas), alphas
+            assert alphas[-1]==1
+            page.wait_for_timeout(3500)
+            assert page.evaluate(geometry)==after
         finally:
             browser.close()
