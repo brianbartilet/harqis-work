@@ -29,6 +29,21 @@ async def filter_actions(request, items, canonical, *, recent_dismissed=False):
     result = []
     assigned_filter = set(filter(None, request.query_params.get('workspace_ids', '').split(',')))
     selected_views = set(filter(None, request.query_params.get('views', request.query_params.get('workspace', '')).split(',')))
+    assigned_state = scope.all if scope.any else state
+    if not scope.any and len(selected_views) == 1:
+        # Single-workspace URLs flatten the saved filters into the query. Those
+        # filters select inherited items, but must not veto explicit membership.
+        from modules.hfl_corpus.workspace_views import listing
+        view = next((view for view in listing()['views'] if view['id'] in selected_views), None)
+        if view:
+            defaults = WorkspaceState().model_dump()
+            assigned_state = WorkspaceState.model_validate({
+                key: defaults[key] if value == view['state'].get(key, defaults[key]) else value
+                for key, value in state.model_dump().items()
+            })
+            # The date field still defines any additional date constraints.
+            assigned_state.date_field = state.date_field
+    assigned_narrowing = predicate(resolved(assigned_state))
     for original in items:
         item = dict(original)
         assignments = set(item.get('workspace_ids', []))
@@ -81,10 +96,11 @@ async def filter_actions(request, items, canonical, *, recent_dismissed=False):
                 if values.get('date_field') == 'entry' and (values.get('date_from') or values.get('date_to')):
                     return False
                 return predicate(values)(document, entry)
-            if not manual_matches(states[0]) or (scope.any and not explicitly_selected and not any(manual_matches(value) for value in scope.any)):
+            if not manual_matches(assigned_state if explicitly_selected else states[0]) or (scope.any and not explicitly_selected and not any(manual_matches(value) for value in scope.any)):
                 continue
             result.append(item)
             continue
-        if narrowing(document, entry) and (explicitly_selected or not clauses or any(match(document, entry) for match in clauses)):
+        matches_narrowing = assigned_narrowing if explicitly_selected else narrowing
+        if matches_narrowing(document, entry) and (explicitly_selected or not clauses or any(match(document, entry) for match in clauses)):
             result.append(item)
     return result

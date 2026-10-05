@@ -479,7 +479,11 @@ The bottom-left bulb opens an overlay drawer containing manual and generated
 ideas, excluding dismissed ideas. Click outside or press Escape to close it. Cards
 show their origin and description, with Edit, Promote, and Dismiss controls. The board's
 Create menu offers Entry, Action, and Idea. Actions and ideas can belong to several
-saved workspaces through a checkbox dropdown below supporting files. The board's
+saved workspaces through a checkbox dropdown below supporting files. Explicit
+workspace assignments include the object even when its source, tags, or
+dates do not match that workspace's saved filters. Additional search filters and
+protected-entry restrictions still apply. Removing an assignment restores the
+usual source-based inclusion for that workspace. The board's
 rightmost Workspaces picker aggregates selected views, applies selections when
 closed, and includes All activity; its adjacent caption names the selected views. Clone buttons open an
 independent draft with supporting files and reset checklists. Dates, recurrence,

@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 from test_hfl_ideas import ideas, BASE, payload
+from test_corpus_workspaces import workspace_corpus
 
 
 def test_copy_destinations_paginate_and_search_descriptions(ideas, authenticated_client):
@@ -133,6 +134,47 @@ def test_workspace_assignment_filters_actions_and_ideas(ideas, authenticated_cli
         ideas.followups.create(payload(title=workspace, expected_outcome='Done', workspace_ids=[workspace]), actor='owner')
     rows = authenticated_client.get('/hfl-corpus/timeline/items?workspace_ids=home').json()['items']
     assert [i['title'] for i in rows] == ['home']
+
+
+@pytest.mark.parametrize('kind', ['idea', 'actionable'])
+@pytest.mark.parametrize('combined', [False, True])
+@pytest.mark.parametrize('linked', [False, True])
+def test_explicit_workspace_overrides_inherited_filters(ideas, authenticated_client, workspace_corpus, monkeypatch, kind, combined, linked):
+    import json
+    from urllib.parse import urlsplit, parse_qsl
+    from modules.hfl_corpus import workspace_views
+    from modules.hfl_corpus import entities, timeline
+
+    entry = workspace_corpus.entries[0]
+    source = {'path': workspace_corpus.relative_path, 'entry_id': timeline.entry_evidence_id(entry.text)} if linked else None
+    monkeypatch.setattr(entities, 'current_entries', lambda *a: [
+        {'id': source['entry_id'], 'path': source['path'], 'text': entry.text}] if source else [])
+
+    view = workspace_views.save(workspace_views.WorkspaceWrite(
+        name='External source', state=workspace_views.WorkspaceState(
+            source='browsing', q='#personal', date_field='entry', date_from='2000-01-01', date_to='2000-01-02')))
+    raw = payload(title='Shared context', workspace_ids=[view['id']])
+    if kind == 'idea':
+        item = ideas.save_idea({**raw, **({'source': source} if source else {})}, 'owner')
+        endpoint = BASE + '/reuse/board-ideas'
+        edit = BASE + '/objects/' + item['id']
+    else:
+        item, _ = ideas.followups.create({**raw, 'expected_outcome': 'Done'}, actor='owner', source=source)
+        endpoint = '/hfl-corpus/timeline/items'
+        edit = endpoint + '/' + item['id']
+    snapshot = workspace_views.listing()
+    params = dict(parse_qsl(urlsplit(workspace_views.selection_url(snapshot, [view['id']])).query))
+    if combined:
+        params = {'views': view['id'], 'scope': json.dumps({'any': [view['state']], 'all': {}})}
+    def ids(filters):
+        response = authenticated_client.get(endpoint, params=filters)
+        assert response.status_code == 200, response.text
+        return {row['id'] for row in response.json()['items']}
+    assert item['id'] in ids(params)
+    assert item['id'] not in ids({**params, 'q': 'unmatched additional search'})
+    response = authenticated_client.patch(edit, json={'version': item['version'], 'workspace_ids': []})
+    assert response.status_code == 200, response.text
+    assert item['id'] not in ids(params)
 
 
 @pytest.mark.parametrize('width', [1280, 390])
