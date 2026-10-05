@@ -1,5 +1,5 @@
 import {readGraphState} from './graph-state.mjs';
-import {placeLabels} from './graph-labels.mjs';
+import {createLabelLayout} from './graph-labels.mjs';
 import {boardCurvature} from './graph-curves.mjs';
 import {exampleGraph} from './knowledge-graph-example.js';
 import React, {useEffect, useRef, useState} from 'react';
@@ -40,6 +40,12 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   const selectedSources=new Set();
   let loading=false, graphData={nodes:[],links:[]}, graphApi=null, active=null, focusId=null;
   let nodeActions=[];
+  let labelRevision=0;
+  let labelRefreshAt=0,labelFadeUntil=0,arrivalFadeUntil=0;
+  let setGraphRedraw=null,graphRedraw=true;
+  const nodeArrivals=new Map(),edgeArrivals=new Map();
+  const arrivalKey=edge=>[endpointId(edge.source),endpointId(edge.target),edge.relation||'',!!edge.local].join('|');
+  const arrivalAlpha=(time)=>reducedMotion||time===undefined?1:Math.min(1,Math.max(0,(performance.now()-time)/400));
   const host=$('canvas'), root=createRoot(host);
   const touchViewport=window.matchMedia('(pointer: coarse)').matches;
   const uiFont=getComputedStyle(host).fontFamily;
@@ -141,6 +147,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   }
 
   function followDrag(node,delta={x:0,y:0}){
+    labelRevision++;
     const starting=draggedNode!==node;
     if(starting&&transition){
       transition=null;
@@ -209,6 +216,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     $('preset-notice').hidden=!notice;$('preset-notice').textContent=notice;
   }
   function choosePreset(next){
+    labelRevision++;
     draggedNode=null;dragNodes.clear();
     layoutSeed=Math.random();
     randomizePresetNodes(nodes,layoutSeed);
@@ -232,6 +240,8 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     !!document.querySelector('dialog[open]:not(#activity-standalone)')||!$('views-panel').hidden||!$('animation-panel').hidden;}
   function animate(now){
     requestAnimationFrame(animate);
+    const redraw=!document.hidden&&(now>=labelRefreshAt||now<labelFadeUntil+50||now<arrivalFadeUntil+50);
+    if(setGraphRedraw&&redraw!==graphRedraw){graphRedraw=redraw;setGraphRedraw(redraw);}
     const delta=Math.min(100,now-(lastClock||now));lastClock=now;
     const paused=motionPaused(),state=paused?'Paused':animationMode==='off'?'Motion is off':PRESETS[preset]+' · '+animationMode;
     if($('animation-status').textContent!==state)$('animation-status').textContent=state;
@@ -258,6 +268,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   }
   function Graph({data,activeId,selectedId}) {
     const ref=useRef();
+    const [keepDrawing,setKeepDrawing]=useState(true);
+    setGraphRedraw=setKeepDrawing;
+    const labelLayout=useRef(null);
+    if(!labelLayout.current)labelLayout.current=createLabelLayout();
     const sizeTools=useRef(),actionTools=useRef(),connectorTools=useRef(),connectionTools=useRef(),hoverTimer=useRef(),gesture=useRef();
     const [hoverId,setHoverId]=useState(null),[controlsFocused,setControlsFocused]=useState(false);
     const sizeAnchor=useRef(null);
@@ -335,7 +349,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(!Number.isFinite(a.x)||!Number.isFinite(b.x))return;
       const angle=Math.atan2(b.y-a.y,b.x-a.x),length=Math.hypot(b.x-a.x,b.y-a.y);
       if(length<(a.radius+b.radius+20)/zoom)return;
-      ctx.save();ctx.fillStyle=color(board?a.kind:b.kind);ctx.globalAlpha=.85;
+      ctx.save();ctx.fillStyle=color(board?a.kind:b.kind);ctx.globalAlpha=.85*arrivalAlpha(edgeArrivals.get(arrivalKey(link)));
       for(const reverse of !board?[true]:mode==='both'?[false,true]:[false]){
         const distance=(reverse?a.radius:b.radius)+9,t=reverse?distance/(zoom*length):1-distance/(zoom*length);
         const cp=link.__controlPoints;
@@ -387,7 +401,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       const visible=!activeId||node.id===activeId||near.has(node.id);
       const radius=node.radius/globalScale;
       const ink=color(node.kind),emphasis=node.id===activeId||node.id===selectedId||window.HflIdeas?.maps.selection.has(node.id);
-      ctx.save();ctx.globalAlpha=visible?(node.status==='dismissed'?.35:1):.075;
+      ctx.save();ctx.globalAlpha=(visible?(node.status==='dismissed'?.35:1):.075)*arrivalAlpha(nodeArrivals.get(node.id));
       // Thousands of per-entry gradients dominate mobile drawing time. Keep
       // detailed lighting for hubs and selected nodes, and compact activity dots.
       if(data.nodes.length>1000&&node.kind==='entries'&&!emphasis){
@@ -407,7 +421,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(emphasis){ctx.beginPath();ctx.arc(node.x,node.y,radius+5/globalScale,0,2*Math.PI);ctx.strokeStyle=ink+'aa';ctx.lineWidth=1/globalScale;ctx.stroke();}
       ctx.restore();
     }
-    return <><ForceGraph2D ref={ref} width={size.width} height={size.height}
+    return <><ForceGraph2D ref={ref} width={size.width} height={size.height} autoPauseRedraw={!keepDrawing}
       graphData={data} enableNodeDrag={!readOnly&&!connectFrom&&!connectionBusy&&(!!board||!touchViewport)} enablePanInteraction={!connectFrom&&!connectionBusy} enableZoomInteraction={!connectFrom&&!connectionBusy} backgroundColor="rgba(0,0,0,0)" nodeLabel={()=>''}
       onRenderFramePost={(ctx,scale)=>{
         if(!ref.current||!Number.isFinite(scale)||scale<=0)return;
@@ -447,10 +461,13 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
         }));
         ctx.save();
         const obstacles=[sizeTools,actionTools,connectionTools].map(tool=>tool.current).filter(Boolean).map(el=>({x:el.offsetLeft,y:el.offsetTop,w:el.offsetWidth,h:el.offsetHeight}));
-        const labels=placeLabels(candidates,{width:size.width,height:size.height,zoom:scale,fullTitles:!!board,obstacles},(text,font)=>{
+        const labelKey=JSON.stringify([labelRevision,size.width,size.height,scale,origin.x,origin.y,activeId,selectedId,board?.id,!!sizeNode,!!actionNode,!!connection]);
+        const labels=labelLayout.current(candidates,{width:size.width,height:size.height,zoom:scale,fullTitles:!!board,obstacles},(text,font)=>{
           ctx.font=`500 ${font}px ${uiFont}`;return ctx.measureText(text).width;
-        });
+        },performance.now(),labelKey,reducedMotion);
+        labelRefreshAt=labels.nextUpdate;labelFadeUntil=labels.fadeUntil;
         for(const box of labels){
+          ctx.globalAlpha=box.alpha;
           const x=origin.x+box.x/scale,y=origin.y+box.y/scale,ink=color(box.node.kind);
           ctx.fillStyle=box.node.emphasis?'#142a42f5':'#0a1728ee';ctx.beginPath();
           ctx.roundRect(x,y,box.w/scale,box.h/scale,5/scale);ctx.fill();
@@ -462,7 +479,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       }}
       nodeCanvasObject={paintNode}
       nodePointerAreaPaint={(node,paint,ctx)=>{ctx.fillStyle=paint;ctx.beginPath();ctx.arc(node.x,node.y,(node.radius+4)/(ref.current?.zoom()||1),0,2*Math.PI);ctx.fill();}}
-      linkColor={link=>color(board?link.source.kind:link.target.kind)+(connection===link?'ff':activeId?(isLinked(link)?'df':'07'):(data.nodes.length<=35?'70':'32'))}
+      linkColor={link=>color(board?link.source.kind:link.target.kind)+Math.round(parseInt(connection===link?'ff':activeId?(isLinked(link)?'df':'07'):(data.nodes.length<=35?'70':'32'),16)*arrivalAlpha(edgeArrivals.get(arrivalKey(link)))).toString(16).padStart(2,'0')}
       linkDirectionalArrowLength={link=>board||link.direction==='none'?0:link.manual?4:['ideas','actions','goals','drafts','boards','lists','thoughts'].includes(link.source.kind)||['ideas','actions','goals','drafts','boards','lists','thoughts'].includes(link.target.kind)?4:0}
       linkDirectionalArrowRelPos={0.8}
       linkWidth={link=>board?([.7,1,1.4,1.9,2.5][(board.edge_widths?.[edgeKey(link)]||2)-1]+(connection===link?.4:0)):isLinked(link)?2:data.nodes.length<=35?1.1:.65} linkCurvature={link=>board?boardCurvature(link,ref.current?.zoom()||1,curveOffsets.get(link)||0):.16}
@@ -631,6 +648,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     renderedBoardId=board?.id||null;
     // Search and filters change visibility, never the board's geometry or camera.
     if(sameBoard)preserveLayout=true;
+    if(!preserveLayout)labelRevision++;
     const boardPositions=board?{...boardLayoutPositions,...board.positions,...window.HflIdeas.maps.pendingPositions}:null;
     const previousNodes=new Map(graphData.nodes.map(node=>[node.id,node]));
     const previousTargets=layoutTargets;
@@ -714,6 +732,14 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     if(window.HflIdeas)window.HflIdeas.maps.pendingPositions=null;
     // Supply endpoints from this render directly. Static board updates use zero
     // simulation ticks, so links must not wait for d3 to resolve string IDs.
+    const oldEdges=new Set(graphData.links.map(arrivalKey)),now=performance.now();
+    if(!preserveLayout){nodeArrivals.clear();edgeArrivals.clear();}
+    for(const node of nodes)if(preserveLayout&&!previousNodes.has(node.id))nodeArrivals.set(node.id,now);
+    for(const edge of edges)if(preserveLayout&&!oldEdges.has(arrivalKey(edge)))edgeArrivals.set(arrivalKey(edge),now);
+    if(!reducedMotion&&(nodeArrivals.size||edgeArrivals.size))arrivalFadeUntil=now+400;
+    for(const [id,time] of nodeArrivals)if(!byId.has(id)||now-time>=400)nodeArrivals.delete(id);
+    const edgeIds=new Set(edges.map(arrivalKey));
+    for(const [id,time] of edgeArrivals)if(!edgeIds.has(id)||now-time>=400)edgeArrivals.delete(id);
     graphData={nodes,viewport:restoredViewport,fitOnce:!preserveLayout,links:edges.map(e=>({...e,source:byId.get(e.source),target:byId.get(e.target),local:!!e.local}))};
     updatePresetMenu(layout.notice);
     $('map-count').textContent=nodes.length+' nodes · '+edges.length+' links';
