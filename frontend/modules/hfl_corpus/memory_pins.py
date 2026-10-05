@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -20,6 +21,7 @@ class PinCategory:
     name: str
     color: str
     instructions: str
+    workspace_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,8 @@ class MemoryPinStore:
             self._remove_legacy_color_uniqueness(connection)
             connection.execute("BEGIN IMMEDIATE")
             category_columns = {row['name'] for row in connection.execute('PRAGMA table_info(memory_pin_categories)')}
+            if 'workspace_ids' not in category_columns:
+                connection.execute("ALTER TABLE memory_pin_categories ADD COLUMN workspace_ids TEXT NOT NULL DEFAULT '[]'")
             range_columns = {row['name'] for row in connection.execute('PRAGMA table_info(memory_pin_ranges)')}
             if 'execution_hour' not in range_columns:
                 connection.execute('ALTER TABLE memory_pin_ranges ADD COLUMN execution_hour INTEGER NOT NULL DEFAULT 0')
@@ -157,7 +161,7 @@ class MemoryPinStore:
     def snapshot(self) -> dict[str, list[dict[str, object]]]:
         with self._connect() as connection:
             categories = connection.execute(
-                "SELECT id, name, color, instructions FROM memory_pin_categories WHERE archived_at IS NULL ORDER BY id"
+                "SELECT id, name, color, instructions, workspace_ids FROM memory_pin_categories WHERE archived_at IS NULL ORDER BY id"
             ).fetchall()
             ranges = connection.execute(
                 """SELECT id, category_id, start_date, end_date, note, updated_at, title, prompt, execution_hour, agent_enabled
@@ -165,7 +169,7 @@ class MemoryPinStore:
                    (SELECT id FROM memory_pin_categories WHERE archived_at IS NULL)
                    ORDER BY start_date, end_date, id"""
             ).fetchall()
-            archived = connection.execute("SELECT id, name, color, instructions, archived_at FROM memory_pin_categories WHERE archived_at IS NOT NULL ORDER BY name").fetchall()
+            archived = connection.execute("SELECT id, name, color, instructions, workspace_ids, archived_at FROM memory_pin_categories WHERE archived_at IS NOT NULL ORDER BY name").fetchall()
         # Read legacy opt-ins without activating old pins that never opted in.
         import os
         bridge_path = Path(os.getenv('HFL_AGENT_BRIDGE_STORE_PATH') or self.path.with_name('hfl-agent-bridge.sqlite3')).expanduser()
@@ -179,13 +183,15 @@ class MemoryPinStore:
             if str(pin['id']) in subscriptions:
                 pin['agent_enabled'] = subscriptions[str(pin['id'])] != 'off'
         return {
-            "categories": [asdict(PinCategory(**dict(row))) for row in categories],
+            "categories": [asdict(PinCategory(**(dict(row) | {'workspace_ids': json.loads(row['workspace_ids'])}))) for row in categories],
             "ranges": pin_ranges,
             "palette": list(PIN_COLORS),
-            "archived_categories": [dict(row) for row in archived],
+            "archived_categories": [dict(row) | {'workspace_ids': json.loads(row['workspace_ids'])} for row in archived],
         }
 
-    def save_category(self, *, category_id: int | None, name: str, color: str, instructions: str = "") -> int:
+    def save_category(self, *, category_id: int | None, name: str, color: str, instructions: str = "", workspace_ids: list[str] | None = None) -> int:
+        from workflows.hfl.intent_reuse import workspaces
+        assignments = json.dumps(workspaces({'workspace_ids': workspace_ids})) if workspace_ids is not None else None
         if len(instructions) > 20000:
             raise ValueError("Use 20,000 characters or fewer for instructions.")
         name = name.strip()
@@ -198,17 +204,17 @@ class MemoryPinStore:
             with self._connect() as connection:
                 if category_id:
                     cursor = connection.execute(
-                        """UPDATE memory_pin_categories SET name=?, color=?, instructions=?, updated_at=?
+                        """UPDATE memory_pin_categories SET name=?, color=?, instructions=?, updated_at=?, workspace_ids=COALESCE(?,workspace_ids)
                            WHERE id=?""",
-                        (name, color, instructions, now, category_id),
+                        (name, color, instructions, now, assignments, category_id),
                     )
                     if not cursor.rowcount:
                         raise ValueError("That category no longer exists.")
                 else:
                     cursor = connection.execute(
-                        """INSERT INTO memory_pin_categories(name, color, instructions, created_at, updated_at)
-                           VALUES (?, ?, ?, ?, ?)""",
-                        (name, color, instructions, now, now),
+                        """INSERT INTO memory_pin_categories(name, color, instructions, created_at, updated_at, workspace_ids)
+                           VALUES (?, ?, ?, ?, ?, ?)""",
+                        (name, color, instructions, now, now, assignments or '[]'),
                     )
                 return category_id or cursor.lastrowid
         except sqlite3.IntegrityError as exc:

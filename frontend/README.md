@@ -761,6 +761,11 @@ those edits to share them. A transition shows loading feedback, keeps the old re
 on failure with Retry, preserves scroll position for automatic changes, and
 fades the updated heatmap unless reduced motion is requested.
 
+Planned date categories support optional multiple workspace assignments. Their
+date blocks and heatmap markers appear when any assigned workspace is selected;
+All activity includes unassigned categories too. New categories start with the
+current workspace selection, and saving assignments refreshes the visible pins.
+
 The Memory Signal header identifies the current view(s), Dynamic ON/OFF, and
 Saved/Modified state. The combined view names identify every applied view. Combined results use a shared sort and page size.
 

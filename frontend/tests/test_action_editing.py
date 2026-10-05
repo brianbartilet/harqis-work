@@ -152,6 +152,48 @@ def create_action(client):
     return response.json()['item']
 
 
+def test_planned_categories_workspace_filter_and_editor(editor_page, workspace_corpus, tmp_path):
+    from datetime import date
+    from modules.hfl_shares.security import make_csrf_token
+    from playwright.sync_api import expect
+    page, client = editor_page
+    csrf = make_csrf_token('frontend-test-user')
+    views = [client.post('/hfl-corpus/workspace-views', headers={'X-CSRF-Token': csrf},
+             json={'name': name, 'state': {}}).json() for name in ['Work', 'Personal']]
+    def save(**values):
+        response = client.post('/hfl-corpus/memory-pins', json={'csrf': csrf, **values})
+        assert response.status_code == 200, response.text
+        return response.json()
+    cat = save(action='save_category', name='Shared plans', color='#3b82f6',
+               workspace_ids=[view['id'] for view in views])['categories'][0]
+    today = date.today().isoformat()
+    save(action='save_range', category_id=cat['id'], title='Shared trip', start_date=today, end_date=today)
+    other = save(action='save_category', name='Unassigned plans', color='#f59e0b')['categories'][-1]
+    save(action='save_range', category_id=other['id'], title='Unassigned trip', start_date=today, end_date=today)
+    for view in views:
+        page.goto('https://editing.test/hfl-corpus?workspace=' + view['id'])
+        if not page.locator('[data-activity-body]').is_visible():
+            page.locator('[data-activity-toggle]').click()
+        expect(page.locator('[data-activity-pin-list]')).to_contain_text('Shared trip')
+        expect(page.locator('[data-activity-pin-list]')).not_to_contain_text('Unassigned trip')
+    page.locator('[data-activity-pin-list]').get_by_role('button', name='Edit', exact=True).first.click()
+    host = page.locator('[data-memory-category-workspaces]')
+    host.locator('summary').click()
+    expect(host.get_by_label('Work', exact=True)).to_be_checked()
+    expect(host.get_by_label('Personal', exact=True)).to_be_checked()
+    page.screenshot(path=str(tmp_path / 'planned-category-workspaces.png'))
+    host.get_by_label('Personal', exact=True).uncheck()
+    page.locator('[data-memory-category-save]').click()
+    expect(page.locator('[data-memory-dialog]')).not_to_be_visible()
+    expect(page.locator('[data-activity-pin-list]')).not_to_contain_text('Shared trip')
+    expect(page.locator(f'[data-activity-day="{today}"]')).to_have_attribute('data-pinned', 'false')
+    page.goto('https://editing.test/hfl-corpus?views=')
+    if not page.locator('[data-activity-body]').is_visible():
+        page.locator('[data-activity-toggle]').click()
+    expect(page.locator('[data-activity-pin-list]')).to_contain_text('Shared trip')
+    expect(page.locator('[data-activity-pin-list]')).to_contain_text('Unassigned trip')
+
+
 @pytest.mark.parametrize('editor', ['timeline', 'idea', 'actionable'])
 @pytest.mark.parametrize('count', [0, 1, 2])
 def test_new_objects_inherit_selected_workspaces(editor_page, workspace_corpus, editor, count):

@@ -93,6 +93,7 @@
       categorySelect: memoryDialog.querySelector('[data-memory-category-select]'),
       categoryEditor: memoryDialog.querySelector('[data-memory-category-editor]'),
       categoryName: memoryDialog.querySelector('[data-memory-category-name]'),
+      categoryWorkspaces: memoryDialog.querySelector('[data-memory-category-workspaces]'),
       palette: memoryDialog.querySelector('[data-memory-palette]'),
       categorySave: memoryDialog.querySelector('[data-memory-category-save]'),
       categoryDelete: memoryDialog.querySelector('[data-memory-category-delete]'),
@@ -116,9 +117,18 @@
       return `ENDS ${day} ${month} ${value.getFullYear()}`;
     };
     const categoryFor = id => memoryState.categories.find(category => category.id === Number(id));
+    const selectedWorkspaceIds = () => {
+      const params = new URLSearchParams(location.search);
+      return (params.get('views') || params.get('workspace') || params.get('workspace_ids') || '').split(',').filter(Boolean);
+    };
+    const visibleRanges = () => {
+      const selected = selectedWorkspaceIds();
+      return selected.length ? memoryState.ranges.filter(range =>
+        (categoryFor(range.category_id)?.workspace_ids || []).some(id => selected.includes(id))) : memoryState.ranges;
+    };
     const rangeDuration = range => Date.parse(`${range.end_date}T00:00:00Z`)
       - Date.parse(`${range.start_date}T00:00:00Z`);
-    const rangesForDate = value => memoryState.ranges
+    const rangesForDate = value => visibleRanges()
       .filter(range => range.start_date <= value && value <= range.end_date)
       .sort((a, b) => rangeDuration(a) - rangeDuration(b)
         || b.updated_at.localeCompare(a.updated_at)
@@ -227,6 +237,11 @@
       editingCategory = category || null;
       selectedColor = category?.color || memoryState.palette.find(color => !memoryState.categories.some(item => item.color === color)) || memoryState.palette[0];
       memoryRefs.categoryName.value = category?.name || '';
+      memoryRefs.categoryWorkspaces.replaceChildren();
+      memoryRefs.workspacePicker = window.HflWorkspacePicker(memoryRefs.categoryWorkspaces, {
+        selected: category?.workspace_ids || (category ? [] : selectedWorkspaceIds()),
+        empty: 'No workspace', name: 'workspace_ids',
+      });
       promptEditors.category.set(category?.instructions);
       memoryRefs.categoryDelete.hidden = !category;
       memoryRefs.categoryDelete.textContent = category?.archived_at ? 'Restore category' : 'Archive category';
@@ -318,7 +333,7 @@
       );
       const pinScrollTop = pinList.scrollTop;
       pinList.replaceChildren();
-      const pinnedRanges = memoryState.ranges;
+      const pinnedRanges = visibleRanges();
       if (!pinnedRanges.length) {
         const empty = document.createElement('p');
         empty.className = 'activity-pin-empty';
@@ -824,12 +839,14 @@
       showMemoryError('');
       try {
         const name = memoryRefs.categoryName.value;
+        memoryRefs.workspacePicker.close();
         await postMemory({
           action:'save_category',
           category_id:editingCategory?.id || null,
           name,
           color:selectedColor,
           instructions:promptEditors.category.input.value,
+          workspace_ids: Array.from(memoryRefs.categoryWorkspaces.querySelectorAll('input[type="hidden"]'), input => input.value),
         });
         const saved = memoryState.categories.find(category => category.name.toLocaleLowerCase() === name.trim().toLocaleLowerCase());
         populateCategories(saved?.id);

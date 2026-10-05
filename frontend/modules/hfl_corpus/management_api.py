@@ -112,12 +112,14 @@ class UpdateAction(Command):
 
 
 class SaveCategory(Command):
+    workspace_ids: list[str] = Field(default_factory=list, max_length=30)
     name: str = Field(min_length=1, max_length=60)
     color: str = Field(description="A color from GET /categories palette.")
     instructions: str = Field(default="", max_length=20000)
 
 
 class UpdateCategory(Command):
+    workspace_ids: list[str] | None = Field(default=None, max_length=30)
     name: str | None = Field(default=None, min_length=1, max_length=60)
     color: str | None = None
     instructions: str | None = Field(default=None, max_length=20000)

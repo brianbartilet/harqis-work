@@ -44,6 +44,20 @@ def category(client):
     return response.json()["category"]
 
 
+def test_category_workspace_assignments_persist_and_preserve(management):
+    client, _ = management
+    response = client.post('/api/hfl/categories', json={
+        'name': 'Scoped plans', 'color': '#3b82f6', 'workspace_ids': ['work', 'personal', 'work']})
+    assert response.status_code == 201, response.text
+    item = response.json()['category']
+    assert item['workspace_ids'] == ['work', 'personal']
+    url = f"/api/hfl/categories/{item['id']}"
+    assert client.patch(url, json={'name': 'Renamed plans'}).json()['category']['workspace_ids'] == ['work', 'personal']
+    assert client.post(url + '/archive').json()['category']['workspace_ids'] == ['work', 'personal']
+    assert client.patch(url, json={'workspace_ids': ['']}).status_code == 422
+    assert client.patch(url, json={'workspace_ids': []}).json()['category']['workspace_ids'] == []
+
+
 @pytest.mark.parametrize("method,path,payload", [
     ("get", "/actions", None), ("post", "/actions", action()),
     ("get", "/actions/missing", None), ("patch", "/actions/missing", {"version": 1}),

@@ -154,6 +154,7 @@ class SecretPinRequest(BaseModel):
 
 
 class MemoryPinRequest(BaseModel):
+    workspace_ids: list[str] | None = None
     csrf: str
     action: str
     category_id: int | None = None
@@ -193,7 +194,7 @@ async def hfl_memory_pins(request: Request, payload: MemoryPinRequest):
     try:
         if payload.action == "save_category":
             store.save_category(
-                category_id=payload.category_id, name=payload.name, color=payload.color, instructions=payload.instructions
+                category_id=payload.category_id, name=payload.name, color=payload.color, instructions=payload.instructions, workspace_ids=payload.workspace_ids
             )
         elif payload.action in {"delete_category", "archive_category", "restore_category"} and payload.category_id:
             store.archive_category(payload.category_id, restore=payload.action == "restore_category")

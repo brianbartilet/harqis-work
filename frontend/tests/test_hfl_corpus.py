@@ -1670,7 +1670,7 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     pinned_header = page_source.split('class="activity-pin-controls"', 1)[1].split(
         'data-activity-pin-list', 1
     )[0]
-    assert "Pinned" in pinned_header
+    assert "Planned" in pinned_header
     assert "data-activity-today>Today</button>" in pinned_header
     assert page_source.count("data-activity-today>Today</button>") == 2
     assert "const todayShortcuts = Array.from" in page_source
@@ -1747,7 +1747,7 @@ def test_memory_pins_persist_categories_ranges_and_notes(authenticated_client):
     page = authenticated_client.get("/hfl-corpus?activity_year=2018")
     assert "Turning points" in page.text
     assert "Recall the week the direction changed." in page.text
-    assert "Nothing here" in page.text  # Client-side empty-state copy remains available.
+    assert "Nothing here" in authenticated_client.get('/static/js/activity-heatmap.js').text
 
 
 def test_memory_pin_categories_share_colors_and_exceed_palette_size(tmp_path):
@@ -1824,6 +1824,7 @@ def test_memory_pin_store_migrates_legacy_unique_colors_without_data_loss(tmp_pa
         "Existing",
         "Same color",
     ]
+    assert all(category['workspace_ids'] == [] for category in snapshot['categories'])
     assert snapshot["ranges"][0]["note"] == "Keep this"
     assert snapshot["ranges"][0]["title"] == "Keep this"
     assert snapshot["ranges"][0]["prompt"] == ""
