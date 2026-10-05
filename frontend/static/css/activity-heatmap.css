@@ -186,3 +186,6 @@
 [data-activity-panel][data-readonly="true"] .activity-day:hover{transform:none}[data-activity-panel][data-readonly="true"] .activity-day{cursor:grab}
 
 .activity-chart-legends{display:flex;align-items:center;justify-content:space-between;gap:8px 16px;flex-wrap:wrap}.activity-indicator-label{color:#64748b}.activity-chart-legends .activity-indicator-legend{margin-left:auto;justify-content:flex-end}
+
+.activity-cell-tooltip { position:fixed; z-index:10000; width:max-content; max-width:min(420px,calc(100vw - 16px)); max-height:min(420px,50vh); overflow:auto; box-sizing:border-box; padding:.75rem; border:1px solid #334155; border-radius:.6rem; background:#0b1221; color:#cbd5e1; box-shadow:0 8px 24px #02061799; white-space:pre-wrap; overflow-wrap:anywhere; font-size:.75rem; line-height:1.5; }
+.activity-cell-tooltip[hidden] { display:none; }

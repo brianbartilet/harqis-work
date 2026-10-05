@@ -12,9 +12,13 @@
       if (status) cell.dataset.timelineStatus = status; else delete cell.dataset.timelineStatus;
       cell.toggleAttribute('data-timeline-planned', Boolean(marker?.dot_status));
       cell.toggleAttribute('data-timeline-action', Boolean(marker?.actions?.length));
-      cell.dataset.indicatorLabel ||= cell.dataset.timelineLabel || cell.getAttribute('aria-label') || day;
-      const label = cell.dataset.indicatorLabel + (count ? `; ${count} actions${status ? ' (' + labels[status] + ')' : ''}` : '');
-      cell.title = label; cell.setAttribute('aria-label', label);
+      cell.dataset.activityActionLabel = count ? `${count} actions${status ? ' (' + labels[status] + ')' : ''}` : '';
+      if(window.HflActivityCellLabel)window.HflActivityCellLabel(cell);
+      else {
+        cell.dataset.indicatorLabel ||= cell.getAttribute('aria-label') || day;
+        const label = [cell.dataset.indicatorLabel,cell.dataset.activityActionLabel].filter(Boolean).join('\n');
+        cell.title = label;cell.setAttribute('aria-label',label);
+      }
     });
   }
   window.HflActivityIndicators = {setActions(value) { actions = value || {}; paint(); }};

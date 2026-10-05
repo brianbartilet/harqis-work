@@ -230,7 +230,9 @@
       day.toggleAttribute('data-timeline-action', Boolean(markers?.actions.length));
       if(!day.dataset.timelineLabel)day.dataset.timelineLabel=day.getAttribute('aria-label')||day.dataset.activityDay;
       const suffix=markers ? `; ${markers.planned.length} scheduled${markers.dot_status ? ' · '+({open:'In Review / Ready',in_progress:'In Progress',incomplete:'Incomplete',done:'All done'}[markers.dot_status]) : ''}, ${markers.actions.length} linked actions` : '';
-      day.setAttribute('aria-label',day.dataset.timelineLabel+suffix);day.title=day.dataset.timelineLabel+suffix;
+      day.dataset.activityActionLabel=suffix;
+      if(window.HflActivityCellLabel)window.HflActivityCellLabel(day);
+      else{day.setAttribute('aria-label',day.dataset.timelineLabel+suffix);day.title=day.dataset.timelineLabel+suffix;}
     });
   }
   new MutationObserver(records=>{if(records.some(record=>Array.from(record.addedNodes).some(n=>n.nodeType===1&&(n.matches('[data-activity-day]')||n.querySelector('[data-activity-day]')))))paintMarkers();}).observe(document.body,{childList:true,subtree:true});

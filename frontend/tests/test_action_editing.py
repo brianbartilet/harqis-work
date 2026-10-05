@@ -168,6 +168,8 @@ def test_planned_categories_workspace_filter_and_editor(editor_page, workspace_c
                workspace_ids=[view['id'] for view in views])['categories'][0]
     today = date.today().isoformat()
     save(action='save_range', category_id=cat['id'], title='Shared trip', start_date=today, end_date=today)
+    save(action='save_range', category_id=cat['id'], title='NTU AI Certification', start_date=today, end_date=today,
+         note='Long event notes ' * 80)
     other = save(action='save_category', name='Unassigned plans', color='#f59e0b')['categories'][-1]
     save(action='save_range', category_id=other['id'], title='Unassigned trip', start_date=today, end_date=today)
     for view in views:
@@ -176,6 +178,20 @@ def test_planned_categories_workspace_filter_and_editor(editor_page, workspace_c
             page.locator('[data-activity-toggle]').click()
         expect(page.locator('[data-activity-pin-list]')).to_contain_text('Shared trip')
         expect(page.locator('[data-activity-pin-list]')).not_to_contain_text('Unassigned trip')
+    cell = page.locator(f'[data-activity-day="{today}"]')
+    cell.hover()
+    tooltip = page.locator('#activity-cell-tooltip')
+    expect(tooltip).to_be_visible()
+    expect(tooltip).to_contain_text('NTU AI Certification')
+    expect(tooltip).to_contain_text('Shared trip')
+    page.evaluate('(day)=>window.HflActivityIndicators.setActions({[day]:{planned:["one"],actions:[],dot_status:"open"}})', today)
+    expect(tooltip).to_contain_text('NTU AI Certification')
+    expect(tooltip).to_contain_text('1 actions')
+    assert tooltip.evaluate('(el)=>el.scrollHeight>el.clientHeight')
+    bounds = tooltip.bounding_box()
+    assert bounds['x'] >= 0 and bounds['x'] + bounds['width'] <= 1280
+    page.keyboard.press('Escape')
+    expect(tooltip).not_to_be_visible()
     page.locator('[data-activity-pin-list]').get_by_role('button', name='Edit', exact=True).first.click()
     host = page.locator('[data-memory-category-workspaces]')
     host.locator('summary').click()
@@ -192,6 +208,23 @@ def test_planned_categories_workspace_filter_and_editor(editor_page, workspace_c
         page.locator('[data-activity-toggle]').click()
     expect(page.locator('[data-activity-pin-list]')).to_contain_text('Shared trip')
     expect(page.locator('[data-activity-pin-list]')).to_contain_text('Unassigned trip')
+    page.locator('[data-memory-category-new]').click()
+    page.locator('[data-memory-category-name]').fill('All workspace plans')
+    host = page.locator('[data-memory-category-workspaces]')
+    expect(host.locator('summary')).to_have_text('All workspaces')
+    host.locator('summary').click()
+    expect(host.get_by_label('Work', exact=True)).to_be_checked()
+    expect(host.get_by_label('Personal', exact=True)).to_be_checked()
+    host.get_by_role('button', name='No workspace', exact=True).click()
+    expect(host.locator('summary')).to_have_text('No workspace')
+    host.locator('summary').click()
+    host.get_by_role('button', name='Select all', exact=True).click()
+    expect(host.get_by_label('Work', exact=True)).to_be_checked()
+    expect(host.get_by_label('Personal', exact=True)).to_be_checked()
+    with page.expect_response(lambda response: response.url.endswith('/memory-pins') and response.request.method == 'POST') as saved:
+        page.locator('[data-memory-category-save]').click()
+    category = next(item for item in saved.value.json()['categories'] if item['name'] == 'All workspace plans')
+    assert set(category['workspace_ids']) == {view['id'] for view in views}
 
 
 @pytest.mark.parametrize('editor', ['timeline', 'idea', 'actionable'])

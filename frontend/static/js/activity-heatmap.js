@@ -1,5 +1,33 @@
 
 (() => {
+  const tooltip = document.createElement('div');
+  tooltip.id = 'activity-cell-tooltip';tooltip.className = 'activity-cell-tooltip';
+  tooltip.setAttribute('role', 'tooltip');tooltip.hidden = true;document.body.append(tooltip);
+  let hoveredCell = null, hideTimer;
+  const hideTooltip = () => {tooltip.hidden=true;hoveredCell?.removeAttribute('aria-describedby');hoveredCell=null;};
+  const showTooltip = cell => {
+    clearTimeout(hideTimer);hoveredCell?.removeAttribute('aria-describedby');hoveredCell=cell;
+    tooltip.textContent=cell.getAttribute('aria-label');tooltip.hidden=false;cell.setAttribute('aria-describedby',tooltip.id);
+    const rect=cell.getBoundingClientRect();
+    tooltip.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-tooltip.offsetWidth-8))+'px';
+    tooltip.style.top=Math.max(8,rect.bottom+tooltip.offsetHeight+8<window.innerHeight?rect.bottom+6:rect.top-tooltip.offsetHeight-6)+'px';
+  };
+  const deferHide = () => {hideTimer=setTimeout(hideTooltip,120);};
+  tooltip.addEventListener('mouseenter',()=>clearTimeout(hideTimer));tooltip.addEventListener('mouseleave',deferHide);
+  document.addEventListener('mouseover',event=>{const cell=event.target.closest('[data-activity-day]');if(cell)showTooltip(cell);});
+  document.addEventListener('mouseout',event=>{if(event.target.closest('[data-activity-day]'))deferHide();});
+  document.addEventListener('focusin',event=>{const cell=event.target.closest('[data-activity-day]');if(cell)showTooltip(cell);});
+  document.addEventListener('focusout',event=>{if(event.target.closest('[data-activity-day]'))deferHide();});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape')hideTooltip();});
+  document.addEventListener('pointerdown',event=>{if(!tooltip.contains(event.target))hideTooltip();});
+  window.addEventListener('resize',hideTooltip);
+  window.addEventListener('scroll',event=>{if(!(event.target instanceof Node)||!tooltip.contains(event.target))hideTooltip();},true);
+  window.HflActivityCellLabel = cell => {
+    cell.dataset.activityBaseLabel ||= cell.dataset.timelineLabel || cell.getAttribute('aria-label') || cell.dataset.activityDay;
+    const label=[cell.dataset.activityBaseLabel,cell.dataset.activityPinLabel,cell.dataset.activityActionLabel].filter(Boolean).join('\n');
+    cell.setAttribute('aria-label',label);cell.removeAttribute('title');
+    if(hoveredCell===cell)showTooltip(cell);
+  };
   const activityStateKey = 'hfl-corpus:activity-expanded';
   const readActivityState = () => {
     try { return window.sessionStorage.getItem(activityStateKey); }
@@ -239,7 +267,7 @@
       memoryRefs.categoryName.value = category?.name || '';
       memoryRefs.categoryWorkspaces.replaceChildren();
       memoryRefs.workspacePicker = window.HflWorkspacePicker(memoryRefs.categoryWorkspaces, {
-        selected: category?.workspace_ids || (category ? [] : selectedWorkspaceIds()),
+        selected: category?.workspace_ids || [], selectAll: true, defaultAll: !category,
         empty: 'No workspace', name: 'workspace_ids',
       });
       promptEditors.category.set(category?.instructions);
@@ -319,14 +347,12 @@
         day.dataset.pinned = String(Boolean(category));
         if (category) day.style.setProperty('--pin-color', category.color);
         else day.style.removeProperty('--pin-color');
-        const base = day.getAttribute('aria-label')?.split(' · Pinned:')[0] || '';
         const details = matches.map(range => {
           const itemCategory = categoryFor(range.category_id);
-          return `${itemCategory?.name || 'Pinned'}${range.note ? ` — ${range.note}` : ''}`;
+          return `${itemCategory?.name || 'Planned'} — ${range.title || 'Untitled period'}\n${formatRange(range)}${range.note ? `\n${range.note}` : ''}`;
         });
-        const label = details.length ? `${base} · Pinned: ${details.join('; ')}` : base;
-        day.setAttribute('aria-label', label);
-        day.title = label;
+        day.dataset.activityPinLabel = details.length ? `Planned:\n${details.join('\n\n')}` : '';
+        window.HflActivityCellLabel(day);
       });
       const collapsedCategories = new Set(
         [...pinList.querySelectorAll('details:not([open])')].map(details => details.dataset.categoryId)
