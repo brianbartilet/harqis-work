@@ -356,7 +356,7 @@ def owner_auth(request: Request):
     if not user:
         raise HTTPException(401, 'Sign in to manage agent work.')
     if request.method != 'GET' and not verify_csrf_token(request.headers.get('X-CSRF-Token', ''), user):
-        raise HTTPException(403, 'Invalid form token.')
+        raise HTTPException(403, 'Invalid form token. Please refresh the page and try again.')
     return user
 
 

@@ -198,13 +198,10 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             page.goto('http://localhost/hfl-corpus?reset=1')
             if width < 640:
                 create = page.locator('.corpus-create-menu > summary').bounding_box()
-                explore = page.locator('.corpus-tools > summary').bounding_box()
                 views = page.locator('[data-workspace-menu] > summary').bounding_box()
-                assert abs(explore['y'] - views['y']) < 2
-                assert abs(explore['width'] - views['width']) < 2
-                assert abs(create['x'] - explore['x']) < 2
-                assert abs(create['x']+create['width'] - views['x']-views['width']) < 2
-                assert views['y'] >= create['y'] + create['height']
+                assert (create['x'] + create['width'] <= views['x'] or
+                        create['y'] + create['height'] <= views['y'])
+                assert views['x'] + views['width'] <= width
             page.screenshot(path=str(tmp_path/f'header-menus-{width}.png'))
             page.locator('.corpus-create-menu > summary').click()
             page.locator('[data-create-action-open]').click()
@@ -213,7 +210,7 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             assert page.locator('#followup-form [name="due_date"]').input_value() == ''
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.screenshot(path=str(tmp_path/f'create-actionable-{width}.png'),full_page=True)
-            triage = page.locator('#followup-editor .action-triage')
+            triage = page.locator('#followup-editor .action-triage').filter(has=page.locator('[name=matrix]'))
             assert not triage.evaluate('(el) => el.open')
             triage.locator('summary').click()
             matrix = page.locator('#followup-form [name="matrix"]')
@@ -371,11 +368,8 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             assert page.locator('[data-workspace-action="save"]').is_enabled()
             assert page.locator('[data-workspace-save-hint]').is_hidden()
             assert '1 matching entries' in page.locator('[data-corpus-results]').inner_text()
-            page.locator('.corpus-tools > summary').click()
-            page.locator('[data-followups-open]').click()
-            playwright.expect(page.locator('#followups-board')).to_be_visible()
-            playwright.expect(page.locator('[data-board-context]')).to_contain_text('Work')
             page.wait_for_function("document.querySelector('[data-activity-body]').classList.contains('workspace-arrive')")
+            # Kanban is now a separate page (covered by the cross-tab workspace test).
             # A schedule gap loads all activity without disabling Dynamic mode.
             scheduled[:] = []
             page.evaluate("window.dispatchEvent(new Event('focus'))")
@@ -384,9 +378,6 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             assert '3 entries' in page.locator('[data-corpus-results]').inner_text()
             assert json.loads(parse_qs(urlparse(page.url).query)['scope'][0])['any'] == []
             assert authenticated_client.get('/hfl-corpus/workspace-views').json()['preferences']['dynamic'] is True
-            playwright.expect(page.locator('#followups-board')).to_be_visible()
-            playwright.expect(page.locator('[data-board-context]')).to_contain_text('All activity')
-            page.locator('[data-board-close]').click()
             page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
             page.locator('[data-view-picker] > summary').click()
             page.locator('[data-view-all]').click()

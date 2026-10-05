@@ -49,11 +49,15 @@
   const initialParams = new URLSearchParams(location.search);
   let activeIds = (initialParams.get('views') || initialParams.get('workspace_ids') || form.elements.workspace.value || '').split(',').filter(Boolean);
   const aggregateScope = JSON.parse(form.elements.scope?.value || '{"any":[]}');
+  const sharedFingerprint = data => JSON.stringify([data.preferences, data.views, data.active, data.today],
+    (key, value) => value && typeof value === 'object' && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value);
+  let observedShared = sharedFingerprint(viewData);
   let dynamicOn = initialParams.get('dynamic') === '1' && preferences.dynamic;
   let editTarget = null;
 
   let current = views.find(view => view.id === form.elements.workspace.value);
-  let operation = '', busy = false, disposed = false;
+  let operation = '', busy = false, disposed = false, arrivalMessage = '';
   const sources = [...form.querySelectorAll('[data-source-option]')];
   const sourcesDropdown = $('[data-workspace-sources]');
   document.addEventListener('click', event => {
@@ -105,12 +109,12 @@
       } else if (values.length > 1 && control.tagName === 'SELECT') {
         const option = new Option('Varies by view', fallback); option.dataset.inheritedOption = '';
         control.prepend(option);
-      } else if (values.length > 1) {
-        if (key === 'q') control.placeholder = 'Search within selected views';
+      } else if (values.length > 1 && key === 'q') {
+        control.placeholder = 'Search within selected views';
         const hint = document.createElement('span'); hint.className = 'workspace-inherited-hint';
-        hint.textContent = key === 'q' ? 'Search and tags vary by view' : 'Varies by view';
+        hint.textContent = 'Search and tags vary by view';
         hint.title = values.map(value => value || 'Any').join(' / ');
-        control.parentElement.insertAdjacentElement(key === 'q' ? 'afterend' : 'beforeend', hint);
+        control.parentElement.insertAdjacentElement('afterend', hint);
         control.addEventListener('input', () => { hint.hidden = true; });
       }
       control.value = display;
@@ -211,7 +215,7 @@
     return result;
   }
   function viewUrl(view) {
-    return workspacePath+'?' + new URLSearchParams({...view.state, workspace:view.id});
+    return workspacePath+'?' + new URLSearchParams({...view.state, workspace:view.id, workspace_revision:preferences.revision});
   }
   const viewLoading = $('[data-view-loading]');
   let viewLoadingTimer;
@@ -275,11 +279,11 @@
       if (action === 'remove') {
         const removed = (editTarget || current).id;
         await request('/' + removed + '?revision=' + (editTarget || current).revision, 'DELETE');
-        if (aggregateScope.any.length) {
-          dialog.close();
-          const updated = await request();
-          await loadCombined(updated, dynamicOn ? updated.active : activeIds.filter(id => id !== removed), dynamicOn);
-        } else location.assign(workspacePath+'?reset=1');
+        dialog.close();
+        const latest = await request(); preferences = latest.preferences;
+        const data = await savePreferences({manual:latest.preferences.manual.filter(id => id !== removed),
+          dynamic:latest.preferences.dynamic && latest.views.some(view => view.schedule?.length)});
+        await loadCombined(data, data.active, data.preferences.dynamic);
         return;
       }
       const existing = action === 'new' ? null : editTarget || current;
@@ -292,14 +296,11 @@
       views.sort((a,b) => a.name.localeCompare(b.name)); current = view;
       if (!aggregateScope.any.length) { activeIds = [view.id]; form.elements.workspace.value = view.id; }
       const url = new URL(location.href); url.searchParams.set('workspace', view.id); history.replaceState(null, '', url);
-      status.textContent = `Saved: ${view.name}`;
+      arrivalMessage = `Saved: ${view.name}`;
       dialog.close(); menu.open = true;
-      if(kanban){await loadCombined(viewData, action==='new'?[view.id]:activeIds, dynamicOn);}
-      else if (action === 'new' && aggregateScope.any.length) { await loadCombined(viewData, [view.id], false); }
-      else if (editTarget && aggregateScope.any.length && activeIds.includes(view.id)) {
-        const updated = await request();
-        await loadCombined(updated, activeIds, dynamicOn, true);
-      }
+      const data = await savePreferences({manual:action === 'new' ? [view.id] : activeIds, dynamic:dynamicOn,
+        applied:action === 'save' || action === 'new' ? {} : preferences.applied});
+      await loadCombined(data, data.active, data.preferences.dynamic);
     } catch (error) {
       status.textContent = error.message;
       $('[data-workspace-dialog-error]').textContent = error.message;
@@ -327,19 +328,32 @@
     form.requestSubmit();
   }));
   const search = $('[data-corpus-search]');
-  form.addEventListener('submit', () => {
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (busy || transitioning) return;
     syncSources();
     if (form.elements.scope) { const scope = JSON.parse(form.elements.scope.value); scope.all = snapshot(); form.elements.scope.value = JSON.stringify(scope); }
     search.disabled = true;
     search.setAttribute('aria-busy', 'true');
     search.querySelector('.workspace-spinner').hidden = false;
     $('[data-search-label]').textContent = 'Searching…';
+    busy = true;
+    try {
+      const data = await savePreferences({manual:activeIds, dynamic:dynamicOn, applied:snapshot()});
+      await loadCombined(data, data.active, data.preferences.dynamic);
+    } catch (error) {
+      status.textContent = error.message; menu.open = true;
+    } finally {
+      busy = false; search.disabled = false; search.removeAttribute('aria-busy');
+      search.querySelector('.workspace-spinner').hidden = true;
+      $('[data-search-label]').textContent = 'Search';
+    }
   });
   window.addEventListener('pageshow', event => {
     search.disabled = false; search.removeAttribute('aria-busy');
     search.querySelector('.workspace-spinner').hidden = true;
     $('[data-search-label]').textContent = 'Search';
-    if (event.persisted) location.replace(aggregateScope.any.length ? location.href : current ? viewUrl(current) : location.href);
+    if (event.persisted) checkDynamic(true);
   });
 
 
@@ -428,7 +442,9 @@
     });
     const data = await response.json();
     if (!response.ok) throw Error(typeof data.detail === 'string' ? data.detail : 'Check the timezone and selected views.');
-    preferences = data.preferences; viewData = data; return data;
+    preferences = data.preferences; viewData = data;
+    try { localStorage.setItem('corpus:workspace-change', String(Date.now())); } catch (_) {}
+    return data;
   }
   function combinedUrl(data, ids, dynamic) {
     const localDate = new Intl.DateTimeFormat('en-CA', {timeZone:data.preferences.timezone, year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
@@ -442,7 +458,13 @@
       }
       return state;
     });
-    return workspacePath+'?' + new URLSearchParams({views:ids.join(','), dynamic:dynamic ? '1' : '0', scope:JSON.stringify({any:clauses})});
+    const applied = data.preferences.applied || {};
+    const defaults = {q:'',source:'',date_field:'created',date_from:'',date_to:'',rolling:0,sort:'desc',page_size:20};
+    if (!dynamic && ids.length === 1 && Object.entries(applied).every(([key,value]) => value === defaults[key])) {
+      const view = data.views.find(view => view.id === ids[0]);
+      if (view) return viewUrl(view);
+    }
+    return workspacePath+'?' + new URLSearchParams({...applied, workspace_revision:data.preferences.revision, views:ids.join(','), dynamic:dynamic ? '1' : '0', scope:JSON.stringify({any:clauses, all:applied})});
   }
   let transitioning = false;
   async function loadCombined(data, ids, dynamic, automatic = false, explicitUrl = null) {
@@ -467,11 +489,11 @@
       if (!parsed.querySelector('#corpus-search-form') || parsed.querySelector('[data-corpus-load-error]')) throw Error('The corpus could not load. Your previous results are still shown.');
       const scroll = {window:window.scrollY, index:$('[data-corpus-index]')?.scrollTop || 0, results:$('[data-corpus-results-scroll]')?.scrollTop || 0};
       if (!automatic) form.dispatchEvent(new CustomEvent('corpus:view-search'));
-      try { sessionStorage.setItem('corpus:view-transition', JSON.stringify({automatic, scroll})); } catch (_) {}
+      try { sessionStorage.setItem('corpus:view-transition', JSON.stringify({automatic, scroll, message:arrivalMessage || status.textContent, menuOpen:!!arrivalMessage && menu.open})); } catch (_) {}
       clearInterval(dynamicTimer);
       window.dispatchEvent(new Event('hfl:view-replacing'));
       disposed = true;
-      history.pushState(null, '', url);
+      history[automatic ? 'replaceState' : 'pushState'](null, '', url);
       document.open(); document.write(html); document.close();
     } catch (error) {
       endViewLoading();
@@ -504,8 +526,8 @@
     try {
       const latest = await request(); preferences = latest.preferences;
       if (ids.some(id => !latest.views.some(view => view.id === id))) throw Error('A selected view was removed. Reopen Workspaces and try again.');
-      const data = await savePreferences({manual:ids, dynamic:false});
-      await loadCombined(data, ids, false, false, ids.length === 1 ? viewUrl(data.views.find(view => view.id === ids[0])) : null);
+      const data = await savePreferences({manual:ids, dynamic:false, applied:{}});
+      await loadCombined(data, ids, false);
     } catch (error) { endViewLoading(); status.textContent = error.message; menu.open = true; }
     finally { if (!disposed) { busy = false; options(); } }
   }
@@ -540,38 +562,47 @@
     finally { dynamicToggle.checked = dynamicOn; if (!disposed) updateDynamicAvailability(); }
   };
   let pollInFlight = false;
-  async function checkDynamic() {
-    if (!dynamicOn || transitioning || busy || pollInFlight || document.hidden || document.querySelector('#followups-board[data-busy=true]') || document.querySelector('dialog[open]:not(#followups-board)') || menu.open) return;
-    const modified = $('[data-active-view-modified]').dataset.state === 'modified' || JSON.stringify(snapshot()) !== initialFilterState;
-    if (modified) {
-      const notice = $('[data-adaptive-status]');
-      notice.textContent = 'Dynamic paused while filters are modified. ';
-      const resume = document.createElement('button');
-      resume.type = 'button'; resume.textContent = 'Clear additional filters to resume';
-      resume.onclick = () => loadCombined(viewData, activeIds, dynamicOn);
-      notice.append(resume);
+  async function checkDynamic(force = false) {
+    if (transitioning || busy || pollInFlight || disposed || document.hidden || document.querySelector('#followups-board[data-busy=true]') || document.querySelector('dialog[open]:not(#followups-board)') || menu.open) return;
+    // Applied filters are shared; unfinished typing stays local until submitted.
+    if (JSON.stringify(snapshot()) !== initialFilterState) {
+      $('[data-adaptive-status]').textContent = 'Workspace sync paused while filters are being edited. Apply your filters to sync.';
       return;
     }
     pollInFlight = true;
     try {
       const data = await request();
-      const wanted = data.preferences.dynamic ? data.active : data.preferences.manual;
-      const url = new URL(combinedUrl(data, wanted, data.preferences.dynamic), location.origin);
-      if (url.searchParams.get('scope') !== initialParams.get('scope') || [...wanted].sort().join(',') !== [...activeIds].sort().join(',') || !data.preferences.dynamic) {
-        await loadCombined(data, wanted, data.preferences.dynamic, true);
+      if (force === true || sharedFingerprint(data) !== observedShared) {
+        await loadCombined(data, data.active, data.preferences.dynamic, true);
       }
-    } catch (error) { $('[data-adaptive-status]').textContent = 'Could not check the schedule. Will retry shortly.'; }
-    finally { pollInFlight = false; }
+    } catch (error) {
+      const notice = $('[data-adaptive-status]');
+      notice.textContent = 'Could not sync workspaces. Will retry shortly. ';
+      const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = 'Retry';
+      retry.onclick = () => checkDynamic(true); notice.append(retry);
+    } finally { pollInFlight = false; }
   }
+  document.addEventListener('click', async event => {
+    const reset = event.target.closest('[data-workspace-reset]');
+    if (disposed || busy || transitioning || !reset || event.ctrlKey || event.metaKey || event.shiftKey || event.button) return;
+    event.preventDefault();
+    try {
+      const data = await savePreferences({applied:{}});
+      await loadCombined(data, data.active, data.preferences.dynamic);
+    } catch (error) { status.textContent = error.message; menu.open = true; }
+  });
   const dynamicTimer = setInterval(checkDynamic, 15000);
   document.addEventListener('visibilitychange', checkDynamic);
   window.addEventListener('focus', checkDynamic);
-  window.addEventListener('popstate', () => location.reload());
+  window.addEventListener('storage', event => { if (event.key === 'corpus:workspace-change') checkDynamic(); });
+  window.addEventListener('popstate', () => checkDynamic(true));
   function restoreTransition() {
     try {
       const transition = JSON.parse(sessionStorage.getItem('corpus:view-transition') || 'null');
       sessionStorage.removeItem('corpus:view-transition');
       if (transition) requestAnimationFrame(() => {
+        $('[data-workspace-status]').textContent = transition.message || '';
+        $('[data-workspace-menu]').open = !!transition.menuOpen;
         $('[data-activity-body]')?.classList.add('workspace-arrive');
         if (transition.automatic) {
           window.scrollTo(0, transition.scroll.window);
@@ -585,7 +616,7 @@
   }
   window.addEventListener('pageshow', restoreTransition);
   window.addEventListener('load', restoreTransition, {once:true});
-  // Explicit links keep their scope; only dynamic-mode visits follow the schedule.
+  // Explicit links keep their initial scope; subsequent shared changes sync in either mode.
   if (dynamicOn) setTimeout(checkDynamic, 500);
 
   const shareDialog = $('[data-corpus-share-dialog]');

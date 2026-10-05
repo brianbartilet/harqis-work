@@ -82,8 +82,15 @@ async def page(request: Request):
         from modules.hfl_corpus import workspace_views
         from modules.hfl_corpus.view_scope import parse_scope
         saved = await run_in_threadpool(workspace_views.listing)
+        if not request.query_params and (saved['preferences']['revision'] or saved['last_used']):
+            target = workspace_views.selection_url(saved, dynamic=saved['preferences']['dynamic'])
+            return RedirectResponse(target.replace('/hfl-corpus?', '/hfl-corpus/actions?', 1), status_code=303)
         try:
-            state = workspace_views.WorkspaceState.model_validate({key: value for key, value in request.query_params.items() if key in workspace_views.WorkspaceState.model_fields})
+            values = {key: value for key, value in request.query_params.items() if key in workspace_views.WorkspaceState.model_fields}
+            for key in ('rolling', 'page_size'):
+                if key in values:
+                    values[key] = int(values[key])
+            state = workspace_views.WorkspaceState.model_validate(values)
             scope = parse_scope(request.query_params.get('scope'))
         except ValueError:
             raise HTTPException(422, 'Invalid workspace filters.') from None
