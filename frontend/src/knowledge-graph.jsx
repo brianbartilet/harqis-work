@@ -44,7 +44,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   const touchViewport=window.matchMedia('(pointer: coarse)').matches;
   const uiFont=getComputedStyle(host).fontFamily;
   const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let connectionInteraction=false;
+  let connectionInteraction=false, graphEscapePending=false;
   const endpointId=value=>typeof value==='object'?value.id:value;
   const duration=reducedMotion?0:500;
   let preset='timeline', animationMode='off', motionTime=0, transition=null, motionSettling=false;
@@ -83,6 +83,62 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   document.addEventListener('change',scheduleStateSave);
   window.addEventListener('pagehide',saveGraphState);
   document.addEventListener('visibilitychange',()=>{if(document.hidden)saveGraphState();});
+
+  const shell=document.querySelector('.kg-shell');
+  let fullscreen=false, fullscreenScroll={x:0,y:0}, previousOverflow='', fullscreenCamera=null;
+  function updateFullscreen() {
+    if(readOnly)return;
+    shell.classList.toggle('kg-has-selection',!!selected);
+    const chips=[window.HflIdeas?.maps.current?.name||PRESETS[preset]];
+    const context=window.activityModals?.context();
+    if(context){
+      for(const [key,value] of new URLSearchParams(context))if(value)chips.push(key.replaceAll('_',' ')+': '+value);
+    }else chips.push('All activity');
+    if($('search').value)chips.push('Search: '+$('search').value);
+    chips.push($('density').selectedOptions[0].textContent);
+    if($('rolling').value!=='0')chips.push($('rolling').selectedOptions[0].textContent);
+    else for(const id of ['since','until'])if($(id).value)chips.push(id+': '+$(id).value);
+    if(selectedSources.size)chips.push('Sources: '+[...selectedSources].join(', '));
+    if($('shared').checked)chips.push('Shared connections only');
+    const excluded=[...$('types').querySelectorAll('input:not(:checked)')].map(input=>input.closest('label').textContent.trim());
+    if(excluded.length)chips.push('Hidden types: '+excluded.join(', '));
+    if(focusId)chips.push('Focused connection');
+    $('fullscreen-filters').replaceChildren(...chips.filter(Boolean).map(text=>{const chip=document.createElement('span');chip.textContent=text;return chip;}));
+  }
+  function setFullscreen(value) {
+    if(readOnly||fullscreen===value)return;
+    if(graphApi)fullscreenCamera={...graphApi.screen2GraphCoords(host.clientWidth/2,host.clientHeight/2),zoom:graphApi.zoom()};
+    fullscreen=value;
+    if(value){fullscreenScroll={x:scrollX,y:scrollY};previousOverflow=document.body.style.overflow;document.body.style.overflow='hidden';}
+    else document.body.style.overflow=previousOverflow;
+    shell.classList.toggle('kg-fullscreen',value);
+    shell.classList.remove('kg-show-boards');
+    $('toggle-boards').setAttribute('aria-expanded','false');
+    $('fullscreen').setAttribute('aria-expanded',String(value));
+    $('fullscreen-bar').hidden=!value;$('fullscreen-filters').hidden=!value;
+    updateFullscreen();
+    if(value)$('exit-fullscreen').focus({preventScroll:true});
+    else {window.scrollTo(fullscreenScroll.x,fullscreenScroll.y);$('fullscreen').focus({preventScroll:true});}
+  }
+  if(!readOnly){
+    $('fullscreen').onclick=()=>setFullscreen(true);
+    $('exit-fullscreen').onclick=()=>setFullscreen(false);
+    $('toggle-boards').onclick=()=>{
+      const open=shell.classList.toggle('kg-show-boards');
+      $('toggle-boards').setAttribute('aria-expanded',String(open));
+    };
+    // Capture dialog/gesture state before their own Escape handlers consume it.
+    document.addEventListener('keydown',event=>{
+      if(!fullscreen||event.key!=='Escape')return;
+      if(document.querySelector('dialog[open]')||graphEscapePending||event.target.closest?.('[role="menu"]')||!$('views-panel').hidden||!$('animation-panel').hidden||$('source-menu').open)return;
+      event.preventDefault();event.stopImmediatePropagation();setFullscreen(false);
+    },true);
+    document.addEventListener('focusin',event=>{
+      if(fullscreen&&!shell.contains(event.target)&&!document.querySelector('dialog[open]'))$('exit-fullscreen').focus();
+    });
+    shell.addEventListener('input',updateFullscreen);
+    shell.addEventListener('change',updateFullscreen);
+  }
 
   function followDrag(node,delta={x:0,y:0}){
     const starting=draggedNode!==node;
@@ -222,9 +278,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     useEffect(()=>{if(selectedId)setChosenEdge(null);},[selectedId]);
     useEffect(()=>{
       connectionInteraction=!!(hoverId||controlsFocused||connectFrom||connection||connectionBusy);
-      const cancel=event=>{if(event.key==='Escape'){setConnectFrom(null);setPreview(null);setChosenEdge(null);setConnectionMessage('');}};
+      graphEscapePending=!!(controlsFocused||connectFrom||connection||connectionBusy);
+      const cancel=event=>{if(event.key==='Escape'&&!document.querySelector('dialog[open]')){if(graphEscapePending)event.preventDefault();setControlsFocused(false);setConnectFrom(null);setPreview(null);setChosenEdge(null);setConnectionMessage('');}};
       document.addEventListener('keydown',cancel);
-      return()=>{connectionInteraction=false;document.removeEventListener('keydown',cancel);};
+      return()=>{connectionInteraction=false;graphEscapePending=false;document.removeEventListener('keydown',cancel);};
     },[hoverId,controlsFocused,connectFrom,connection,connectionBusy]);
     const cleanEdge=edge=>({source:endpointId(edge.source),target:endpointId(edge.target),relation:edge.relation||'related-to',direction:edge.direction||'forward'});
     async function connectionCommand(operation,replacement,extra={}){
@@ -307,6 +364,11 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       draw();
     }
     const [size,setSize]=useState({width:host.clientWidth,height:host.clientHeight});
+    useEffect(()=>{
+      if(!fullscreenCamera||!graphApi)return;
+      const camera=fullscreenCamera;fullscreenCamera=null;
+      graphApi.zoom(camera.zoom,0);graphApi.centerAt(camera.x,camera.y,0);
+    },[size]);
     useEffect(()=>{
       const observer=new ResizeObserver(()=>setSize({width:host.clientWidth,height:host.clientHeight}));
       observer.observe(host);return()=>observer.disconnect();
@@ -534,7 +596,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   function select(id) {
     if(readOnly){selected=null;draw();return;}
     nodeActions=[];
-    selected=id;const n=nodes.find(n=>n.id===id),near=connected(id);
+    selected=id;updateFullscreen();const n=nodes.find(n=>n.id===id),near=connected(id);
     highlight(id);
     $('detail').replaceChildren();$('detail').classList.toggle('kg-detail-empty',!n);
     const heading=document.createElement('h2'),description=document.createElement('p');
