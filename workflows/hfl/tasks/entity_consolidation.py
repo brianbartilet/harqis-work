@@ -29,10 +29,15 @@ def deliver(run_id):
             delivery['hfl'] = result
             delivery['url'] = corpus_document_url(result, fallback_filename=datetime.fromisoformat(run['created']).astimezone(ZoneInfo('Asia/Singapore')).strftime('%Y-%m-%d.md'))
             save(run)
-        if delivery.get('telegram_state') == 'sent':
+        if delivery.get('telegram_state') in {'sent', 'suppressed'}:
             return delivery
         if delivery.get('telegram_state') == 'sending':
             raise ValueError('Telegram outcome uncertain; reconcile before retrying to avoid duplicate notification')
+        if not any(pair['state'] == 'merged' for pair in run['pairs'].values()):
+            delivery['telegram_state'] = 'suppressed'
+            delivery.pop('error', None)
+            save(run)
+            return delivery
         counts = {}
         for pair in run['pairs'].values():
             counts.setdefault(pair['kind'], {'merged': 0, 'deferred': 0})

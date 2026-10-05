@@ -1,6 +1,6 @@
 ---
 name: auto-merge-entities
-description: Run the authorized daily Hermes entity consolidation across all Activity Corpus types, using editable aliases, partial hints, typo evidence and related-item counts, then publish grouped HFL and Telegram results.
+description: Run the authorized daily Hermes entity consolidation across all Activity Corpus types, using editable aliases, partial hints, typo evidence and related-item counts, then persist grouped HFL results and notify Telegram only for actual merges.
 ---
 
 # Automatic entity consolidation
@@ -71,10 +71,15 @@ Retry a transport failure at most twice with the exact payload, then retain the
 run/pair identifiers for recovery. A rejected decision is not a completed merge.
 
 Call `finish` only after all pairs have outcomes. It checkpoints the run and queues
-the durable grouped HFL/Telegram report. Poll status until delivery is confirmed;
-queued delivery is not completion. Report failures/partial progress truthfully.
+the durable grouped HFL report. Telegram is sent only if at least one pair's actual
+outcome is `merged`, not merely a proposed merge. Empty and deferred-only runs still
+persist HFL but remain silent on Telegram. Poll status until HFL persistence and
+`delivery.telegram_state` of `sent` or `suppressed` confirm completion. `suppressed`
+is successful terminal delivery, not a failure to retry. Queued delivery is not
+completion; `sending` is uncertain and requires reconciliation, not blind retries.
+Report failures/partial progress truthfully.
 Do not send additional Telegram messages or individual HFL merge entries: delivery
 belongs to the canonical task. Internal audit and undo remain per operation.
 
-Schedule: 09:00 Asia/Singapore daily, Hermes only. Repository schedule reconciliation:
+Schedule: 03:00 Asia/Singapore daily, Hermes only. Repository schedule reconciliation:
 `scripts/agents/hfl/setup_entity_consolidation.py`. No separate Beat trigger.

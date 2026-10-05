@@ -253,12 +253,12 @@ def dispatch_reports(run_id=None):
     dispatched = []
     with FileLock(str(store.path) + '.matching.lock', timeout=30):
         with store.connection() as db:
-            runs = [json.loads(r[0]) for r in db.execute("SELECT value FROM state WHERE key LIKE 'consolidation:%' AND json_extract(value, '$.state') = 'complete' AND coalesce(json_extract(value, '$.delivery.telegram_state'), '') NOT IN ('sent', 'sending')")]
+            runs = [json.loads(r[0]) for r in db.execute("SELECT value FROM state WHERE key LIKE 'consolidation:%' AND json_extract(value, '$.state') = 'complete' AND coalesce(json_extract(value, '$.delivery.telegram_state'), '') NOT IN ('sent', 'sending', 'suppressed')")]
         for run in runs:
             delivery = run['delivery']
             if run_id and run['id'] != run_id:
                 continue
-            if run['state'] != 'complete' or delivery.get('telegram_state') in {'sent', 'sending'}:
+            if run['state'] != 'complete' or delivery.get('telegram_state') in {'sent', 'sending', 'suppressed'}:
                 continue
             if delivery.get('queued_at', 0) > time.time() - 600:
                 continue

@@ -23,7 +23,7 @@ and workers; no new schedule or credential is required.
 
 ## Daily Hermes consolidation
 
-The `auto-merge-entities` skill provides daily autonomous cleanup at 09:00
+The `auto-merge-entities` skill provides daily autonomous cleanup at 03:00
 Asia/Singapore. Reconcile `scripts/agents/hfl/entity_consolidation_schedule.json`
 using `setup_entity_consolidation.py --apply` on the canonical Hermes host.
 Hermes owns the schedule and contextual decisions; the API owns validated,
@@ -67,12 +67,17 @@ replays recover receipts; changed replays conflict. Snapshots are revalidated be
 commit. Review/separate outcomes defer future reconsideration until evidence changes;
 only explicit Keep separate/unmerge creates a permanent exclusion.
 
-Each completed run produces one HFL report grouped by type and a concise Telegram
-summary linking to it, including no-change runs. Internal per-operation audit and
+Each completed run produces one HFL report grouped by type. A concise Telegram
+summary linking to it is sent only when at least one actual outcome is `merged`.
+Empty and deferred-only runs persist HFL without a Telegram notification. Internal per-operation audit and
 undo remain intact. **Automatic merges do not publish individual HFL audit entries**;
 manual operations retain individual delivery. This applies prospectively, without
 removing existing audit posts. Delivery state distinguishes HFL persistence, Telegram
-completion and uncertain sends. Retry reporting without repeating merges.
+completion and uncertain sends. With HFL persisted, `delivery.telegram_state` of
+`sent` or `suppressed` is successful terminal delivery; suppression means no actual
+merges and must not trigger retries or recovery dispatch. Queued delivery is not
+completion. `sending` is uncertain and requires reconciliation before retrying.
+Retry failed reporting without repeating merges.
 
 ## Legacy enrichment matching
 

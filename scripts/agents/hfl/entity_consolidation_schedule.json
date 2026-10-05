@@ -1,7 +1,7 @@
 {
   "name": "hfl-entity-consolidation-daily",
-  "schedule": "0 9 * * *",
+  "schedule": "0 3 * * *",
   "timezone": "Asia/Singapore",
   "skill": ".agents/skills/auto-merge-entities/SKILL.md",
-  "prompt": "Read and execute .agents/skills/auto-merge-entities/SKILL.md from the configured workdir. This scheduled job is authorized to consolidate all registered entity types, retain aliases and publish one grouped HFL/Telegram report through the canonical finish API. Resume unfinished work; do not stop after the first page of pairs. Use contextual evidence, defer uncertainty, and verify delivery. Do not send an additional cron notification."
+  "prompt": "Read and execute .agents/skills/auto-merge-entities/SKILL.md from the configured workdir. This daily 03:00 Asia/Singapore job is authorized to consolidate all registered entity types, retain aliases and persist one grouped HFL report through the canonical finish API. The canonical task sends Telegram only for actual merged outcomes; empty and deferred-only runs must remain silent. Resume unfinished work; do not stop after the first page of pairs. Use contextual evidence, defer uncertainty, and verify HFL persistence plus delivery.telegram_state sent or suppressed as terminal success. Do not retry suppressed delivery or send an additional cron notification."
 }
