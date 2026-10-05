@@ -805,6 +805,35 @@ and entry indexes → failure report + HFL audit + Telegram. **AI prompt:** none
 **Config:** existing HFL, Elasticsearch, and Telegram configuration; no new
 package, credential, or environment variable.
 
+### `deliver_entity_consolidation` (daily Hermes entity consolidation)
+
+**Runtime:** hybrid. Hermes owns adaptive identity decisions and the sole daily
+09:00 Asia/Singapore schedule. The canonical entity API validates same-type,
+evidence-grounded decisions, exclusions and current snapshots. The callable
+`workflows.hfl.tasks.entity_consolidation.deliver_entity_consolidation` Celery task
+persists the grouped HFL report and sends its Telegram summary. No Beat entry.
+
+**Data flow:** entity profiles/activity → Hermes `auto-merge-entities` skill →
+authenticated consolidation API → reversible merges → HFL persistence → Telegram.
+Initial runs inspect existing entities and suggestions; later runs use changed
+entity snapshots. Exact aliases and partial hints are editable and retain their
+user/LLM/merged-name provenance. Activity counts rank candidates and names without
+establishing identity. Ambiguous matches remain separate.
+
+**Queue / OS:** `HARQIS_ENTITIES_QUEUE` (default `hfl`), cross-platform. The API
+and delivery worker must share `HARQIS_ENTITIES_DB` on the canonical host.
+**Configuration:** existing HFL API URL/token, entity store, Hermes installation,
+and `TELEGRAM` default chat configuration. Reconcile the checked-in schedule with
+`scripts/agents/hfl/setup_entity_consolidation.py --apply` on the Hermes owner.
+
+**Outputs:** one report per run grouped by type, Telegram link, internal merge
+audits and undo references. Automatic merges suppress individual HFL audit posts;
+manual merge posts remain enabled. Reports are excluded from enrichment evidence.
+**Failure behavior:** operation receipts prevent repeated merges. Unfinished runs
+resume; stale pairs defer. HFL submission deduplicates and precedes Telegram.
+An uncertain Telegram send remains visible in run delivery state and requires
+reconciliation rather than blind resend. Report retries never repeat mutations.
+
 ### `activity_radar` (HFL activity watchdog)
 
 **Beat schedule disabled** in `tasks_config.py`; the Hermes agent owns the

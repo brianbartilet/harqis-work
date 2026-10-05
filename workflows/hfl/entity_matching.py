@@ -44,6 +44,8 @@ def blocked(db, ids):
 
 
 def request_scan(seeds=None):
+    if agent_owned():
+        return {'state': 'agent-owned', 'owner': 'hermes', 'run_id': get_store().state('consolidation-active')}
     if not enabled():
         return {'state': 'disabled'}
     seeds = sorted(set(seeds or []))
@@ -56,8 +58,12 @@ def request_scan(seeds=None):
     return {'id': identity, 'state': 'requested'}
 
 
+def agent_owned():
+    return get_store().state('entity-consolidation-owner') == 'hermes'
+
+
 def dispatch_pending():
-    if not enabled():
+    if agent_owned() or not enabled():
         return
     from core.apps.sprout.app.celery import SPROUT
     with get_store().connection() as db:
@@ -146,7 +152,7 @@ def evidence_entity(entity):
     return {'id': entity['id'], 'name': entity['label'], 'kind': entity['kind'], 'external_id':entity.get('external_id'),
             'profile': bounded_profile,
             'activity': [{'id': e['id'], 'text': (e.get('evidence') or '')[:2000]}
-                         for e in entity['entries'] if e.get('source') != 'entities-audit'][:8]}
+                         for e in entity['entries'] if e.get('source') not in {'entities-audit', 'entity-consolidation'}][:8]}
 
 
 def evaluate(pairs):
@@ -223,6 +229,8 @@ def curated_profile(entity):
 
 
 def process_batch(job_id):
+    if agent_owned():
+        return {'job_id': job_id, 'pending': 0, 'owner': 'hermes'}
     from modules.hfl_corpus import entities
     from modules.hfl_corpus.entity_merge_api import MergePreview, build_preview
     from workflows.hfl import entity_merges
@@ -232,7 +240,7 @@ def process_batch(job_id):
         if not job or job['state'] in {'complete','failed'}:
             return {'job_id':job_id,'pending':0}
     current = entities.entity_index()
-    current = [e for e in current if any(x.get('source') != 'entities-audit' for x in e['entries'])]
+    current = [e for e in current if any(x.get('source') not in {'entities-audit', 'entity-consolidation'} for x in e['entries'])]
     prepare(job_id, current)
     available = {e['id']: e for e in current}
     with store.connection() as db:
@@ -285,7 +293,8 @@ def process_batch(job_id):
             curated = [e for e in (a,b) if curated_profile(e)]
             result['protected_profile'] = bool(curated)
             if supported(decision, pair) and len(curated) <= 1:
-                target = curated[0] if curated else a
+                from workflows.hfl.entity_candidates import preferred
+                target = preferred([a, b])
                 request_id = str(uuid.uuid5(uuid.NAMESPACE_URL, pair['id']))
                 previous = entity_merges.operation(request_id, pair['id'])
                 if previous:
@@ -348,7 +357,9 @@ def status(limit=100):
         total = len(suggestions)
         if limit is not None:
             suggestions = suggestions[:limit]
-    return {'enabled':enabled(),'jobs':jobs,'suggestions':suggestions,'suggestions_total':total}
+    return {'enabled':enabled(), 'owner': 'hermes' if agent_owned() else 'celery',
+            'consolidation_run': get_store().state('consolidation-active'),
+            'jobs':jobs,'suggestions':suggestions,'suggestions_total':total}
 
 
 def dismiss(identity):

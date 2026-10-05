@@ -22,19 +22,15 @@
   window.addEventListener('hfl:action-saving',event=>{savingCards+=event.detail.saving?1:-1;},{signal:listeners.signal});
   const node = (tag, text, className) => {const el=document.createElement(tag);if(text!=null)el.textContent=text;if(className)el.className=className;return el;};
   function context() {
+    if(page){
+      $('[data-board-context]').textContent='';
+      $('[data-board-context]').hidden=true;
+      return;
+    }
     const caption = document.querySelector('[data-active-view-name]')?.textContent || 'All activity';
     const dynamic = document.querySelector('[data-dynamic-badge]')?.textContent || 'Dynamic OFF';
     const params=new URLSearchParams(location.search);
     const extra=['source','q','date_from','date_to'].filter(key=>params.get(key)).map(key=>({source:'Sources',q:'Search',date_from:'From',date_to:'To'}[key])+': '+params.get(key));
-    if(page){
-      const ids=(params.get('views')||params.get('workspace')||params.get('workspace_ids')||'').split(',').filter(Boolean);
-      let filtered=false;
-      try{const scope=JSON.parse(params.get('scope')||'{}');filtered=!!scope.any?.length||['q','source','date_from','date_to','rolling'].some(key=>scope.all?.[key]);}catch(_){filtered=true;}
-      const workspaceLabel=workspaceNames.join(' + ')||(workspaceLoadState==='loading'?'Loading workspaces…':'Workspaces unavailable');
-      $('[data-board-context]').textContent=all.checked?'All activity':[(ids.length?workspaceLabel:filtered||extra.length?'Corpus filters':'All activity'),...extra].join(' · ');
-      $('[data-board-context]').hidden = $('[data-board-context]').textContent === 'All activity';
-      return;
-    }
     $('[data-board-context]').textContent = (all.checked ? 'All activity · Current views: ' : 'Following views: ') + caption + ' · ' + dynamic + (!all.checked&&extra.length?' · '+extra.join(' · '):'');
     $('[data-board-context]').hidden = false;
   }

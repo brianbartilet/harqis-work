@@ -92,7 +92,7 @@ def enrich(*, entry_id=None, use_model=True, batch_size=8):
     requested_types = store.state('entity-types-backfill')
     extraction_types = entity_types.revision()
     accepted_versions = {VERSION} if use_model else {VERSION, VERSION + '-explicit'}
-    pending = [e for e in current if e['source'] != 'entities-audit' and (not entry_id or e['id'] == entry_id) and
+    pending = [e for e in current if e['source'] not in {'entities-audit', 'entity-consolidation'} and (not entry_id or e['id'] == entry_id) and
                (records.get(e['id'], {}).get('hash') != entry_hash(e) or
                 records.get(e['id'], {}).get('version') not in accepted_versions or
                 (use_model and requested_types and records.get(e['id'], {}).get('types_revision') != requested_types))]
@@ -155,7 +155,7 @@ def graph(source='', since='', until='', limit=100, query='', shared=False, cont
     from modules.hfl_corpus.ideas_api import canonical_snapshot
     from modules.hfl_corpus.ideas_graph import extend
     snapshot = canonical_snapshot()
-    if not any(snapshot[k] for k in ('ideas', 'actions', 'topics', 'links')):
+    if not any(snapshot.get(k) for k in ('ideas', 'actions', 'topics', 'links', 'goals', 'maps', 'lists')):
         return _corpus_graph(source, since, until, limit, query, shared, context)
     base = _corpus_graph(source, since, until, 0, '', False, context)
     return extend(base, snapshot, since=since, until=until, query=query, sources=source, context=context, shared=shared, limit=limit)

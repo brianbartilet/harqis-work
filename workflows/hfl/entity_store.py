@@ -77,7 +77,8 @@ class EntityStore:
                        (identity, content_hash, version, json.dumps(mentions), types_revision))
             if match and mentions:
                 from workflows.hfl.entity_matching import enabled
-                if enabled():
+                owner = db.execute("SELECT value FROM state WHERE key='entity-consolidation-owner'").fetchone()
+                if enabled() and not (owner and json.loads(owner[0]) == 'hermes'):
                     job_id = 'enrichment-' + digest([identity, content_hash, version, types_revision])
                     db.execute('INSERT OR IGNORE INTO entity_match_jobs(id,mode,seeds) VALUES (?,?,?)',
                                (job_id, 'enrichment', json.dumps(sorted({m['id'] for m in mentions}))))
@@ -146,6 +147,10 @@ class EntityStore:
             group = db.execute('SELECT * FROM entity_merges WHERE id=?', (identity,)).fetchone()
             if group and not group['active']:
                 raise ValueError('Entity was unmerged; refresh before editing its profile')
+            previous = db.execute('SELECT data FROM profiles WHERE id=?', (identity,)).fetchone()
+            old_sources = json.loads(previous[0]).get('alias_sources', {}) if previous else {}
+            data = dict(data)
+            data['alias_sources'] = {v: old_sources.get(v, 'user') for k in ('aliases', 'partial_aliases') for v in data.get(k, [])}
             if group:
                 from workflows.hfl.entity_merges import record_event
                 old = db.execute('SELECT data FROM profiles WHERE id=?', (identity,)).fetchone()

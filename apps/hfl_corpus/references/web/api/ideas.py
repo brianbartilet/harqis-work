@@ -45,6 +45,10 @@ class ApiServiceHflCorpusIdeas(ApiServiceHflCorpusExtended):
         """
         return self._json('GET', 'timeline/ideas/boards')
 
+    def get_board_context(self) -> dict:
+        """Read active boards with all permitted member objects and connections."""
+        return self._json('GET', 'timeline/ideas/board-context')
+
     def list_reuse_options(self, query: str = '', page: int = 1) -> dict:
         """Search actions and ideas available for independent copying."""
         return self._json('GET', 'timeline/ideas/reuse/options', params=dict(query=query, page=page))
@@ -156,7 +160,7 @@ class ApiServiceHflCorpusIdeas(ApiServiceHflCorpusExtended):
         Args:
             request_id: Caller-generated UUID; reuse with identical content when retrying.
             title: Title.
-            fields: Optional description, body, checklists, status, source, expected_outcome, matrix, matrix_confidence, matrix_reason, source_date.
+            fields: Optional description, body, checklists, status, source, expected_outcome, matrix, matrix_confidence, matrix_reason, source_date, workspace_ids, board_ids (optional list of active board IDs).
         """
         return self._json('POST', 'timeline/ideas/objects', payload={**(fields or {}), 'request_id': request_id, 'title': title})
 
@@ -166,7 +170,7 @@ class ApiServiceHflCorpusIdeas(ApiServiceHflCorpusExtended):
         Args:
             identity: Resource ID returned by the corresponding list/get operation.
             version: Latest object version; stale writes return 409. Read before retrying.
-            changes: Changed title, description, body, checklists, status, source, expected_outcome, matrix, matrix_confidence, matrix_reason, source_date.
+            changes: Changed title, description, body, checklists, status, source, expected_outcome, matrix, matrix_confidence, matrix_reason, source_date, workspace_ids, board_ids (optional list of active board IDs).
         """
         return self._json('PATCH', f'timeline/ideas/objects/{self._segment(identity)}', payload={**changes, 'version': version})
 
@@ -204,7 +208,7 @@ class ApiServiceHflCorpusIdeas(ApiServiceHflCorpusExtended):
         Args:
             request_id: Caller-generated UUID; reuse with identical content when retrying.
             name: Map name, 1–100 characters.
-            fields: Optional members, positions, node_sizes, edge_widths, prompt, purpose, root, goal_id, drafts, edges, board_date and color.
+            fields: Optional members, positions, node_sizes, edge_widths, prompt, purpose, root, goal_id, drafts, edges, board_date, active (boolean, default true) and color.
         """
         return self._json('POST', 'timeline/ideas/maps', payload={**(fields or {}), 'request_id': request_id, 'name': name})
 
@@ -214,7 +218,7 @@ class ApiServiceHflCorpusIdeas(ApiServiceHflCorpusExtended):
         Args:
             identity: Resource ID returned by the corresponding list/get operation.
             version: Latest object version; stale writes return 409. Read before retrying.
-            changes: Map fields to change: name, members, positions, node_sizes, edge_widths, prompt, purpose, root, goal_id, drafts, edges, board_date, color.
+            changes: Map fields to change: name, members, positions, node_sizes, edge_widths, prompt, purpose, root, goal_id, drafts, edges, board_date, active, color.
         """
         return self._json('PATCH', f'timeline/ideas/maps/{self._segment(identity)}', payload={**changes, 'version': version})
 

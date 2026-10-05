@@ -82,8 +82,15 @@ async def page(request: Request):
         from modules.hfl_corpus import workspace_views
         from modules.hfl_corpus.view_scope import parse_scope
         saved = await run_in_threadpool(workspace_views.listing)
+        if not request.query_params and (saved['preferences']['revision'] or saved['last_used']):
+            target = workspace_views.selection_url(saved, dynamic=saved['preferences']['dynamic'])
+            return RedirectResponse(target.replace('/hfl-corpus?', '/hfl-corpus/actions?', 1), status_code=303)
         try:
-            state = workspace_views.WorkspaceState.model_validate({key: value for key, value in request.query_params.items() if key in workspace_views.WorkspaceState.model_fields})
+            values = {key: value for key, value in request.query_params.items() if key in workspace_views.WorkspaceState.model_fields}
+            for key in ('rolling', 'page_size'):
+                if key in values:
+                    values[key] = int(values[key])
+            state = workspace_views.WorkspaceState.model_validate(values)
             scope = parse_scope(request.query_params.get('scope'))
         except ValueError:
             raise HTTPException(422, 'Invalid workspace filters.') from None
@@ -119,6 +126,9 @@ async def index(request: Request, source: str = '', since: str = '', until: str 
 
 class Profile(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    aliases: list[str] = Field(default_factory=list, max_length=100)
+    partial_aliases: list[str] = Field(default_factory=list, max_length=100)
+    preferred_name: bool = False
     categories: list[str] = Field(default_factory=list)
     emails: list[str] = Field(default_factory=list)
     phones: list[str] = Field(default_factory=list)
@@ -188,10 +198,12 @@ def validated_profile(payload: Profile):
     data['name'] = data['name'].strip()
     if not data['name'] or entities.is_link(data['name']):
         raise HTTPException(400, 'Use an entity name, not a link or email address')
-    for field in ('categories', 'emails', 'phones'):
+    for field in ('categories', 'emails', 'phones', 'aliases', 'partial_aliases'):
         data[field] = list(dict.fromkeys(v.strip() for v in data[field] if v.strip()))
         if any(len(v) > 200 for v in data[field]):
             raise HTTPException(400, 'Contact details and categories must be at most 200 characters each')
+    if any(len(v) < 3 for v in data['partial_aliases']):
+        raise HTTPException(400, 'Partial aliases need at least three characters')
     import re
     from urllib.parse import urlsplit
     data['references'] = list(dict.fromkeys(v.strip() for v in data['references'] if v.strip()))

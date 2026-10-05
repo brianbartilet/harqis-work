@@ -40,6 +40,96 @@ def test_multiple_sources_combine_with_tags_and_text(workspace_corpus):
     assert sum(activity_counts((document,), year=date.today().year, query='#work', source='git,notes').values()) == 2
 
 
+def test_shared_workspace_restore_and_revision(authenticated_client, workspace_corpus):
+    client = authenticated_client
+    headers = {'X-CSRF-Token': make_csrf_token('frontend-test-user')}
+    view = client.post('/hfl-corpus/workspace-views', json={'name': 'Work', 'state': {'q': '#work'}}, headers=headers).json()
+    prefs = client.get('/hfl-corpus/workspace-views').json()['preferences']
+    result = client.put('/hfl-corpus/view-preferences', json={**prefs, 'manual': [view['id']], 'applied': {'q': 'planning', 'source': 'git', 'rolling': 7}}, headers=headers)
+    assert result.status_code == 200
+    locations = []
+    for path in ('/hfl-corpus', '/hfl-corpus/actions'):
+        response = client.get(path, follow_redirects=False)
+        assert response.status_code == 303
+        locations.append(urlparse(response.headers['location']).query)
+        assert client.get(response.headers['location']).status_code == 200
+    assert locations[0] == locations[1]
+    assert parse_qs(locations[0])['q'] == ['planning']
+    assert client.put('/hfl-corpus/view-preferences', json=prefs, headers=headers).status_code == 409
+    prefs = result.json()['preferences']
+    cleared = client.put('/hfl-corpus/view-preferences', json={**prefs, 'manual': [], 'applied': {}}, headers=headers)
+    assert cleared.status_code == 200
+    for path in ('/hfl-corpus', '/hfl-corpus/actions'):
+        params = parse_qs(urlparse(client.get(path, follow_redirects=False).headers['location']).query, keep_blank_values=True)
+        assert params['views'] == [''] and params['q'] == ['']
+
+
+def test_workspace_cross_tab_sync_browser(authenticated_client, workspace_corpus):
+    playwright = pytest.importorskip('playwright.sync_api')
+    client = authenticated_client
+    headers = {'X-CSRF-Token': make_csrf_token('frontend-test-user')}
+    view = client.post('/hfl-corpus/workspace-views', json={'name': 'Work', 'state': {'q': '#work'},
+        'schedule': [{'days': list(range(7)), 'start': '00:00', 'end': '23:59'}]}, headers=headers).json()
+    with playwright.sync_playwright() as engine:
+        options = {'headless': True}
+        if not Path(engine.chromium.executable_path).exists():
+            options['channel'] = 'msedge'
+        browser = engine.chromium.launch(**options)
+        try:
+            context = browser.new_context()
+            def route_request(route):
+                req = route.request
+                response = client.request(req.method, req.url.replace('http://workspace.test', ''), content=req.post_data,
+                    headers={key: value for key, value in req.headers.items() if key in {'content-type', 'x-csrf-token'}}, follow_redirects=True)
+                route.fulfill(status=response.status_code, body=response.content,
+                    headers={key: value for key, value in response.headers.items() if key.lower() not in {'content-encoding', 'content-length'}})
+            context.route('http://workspace.test/**', route_request)
+            corpus = context.new_page()
+            corpus.goto('http://workspace.test' + workspace_views.selection_url(workspace_views.listing()))
+            board = context.new_page()
+            board.goto('http://workspace.test' + workspace_views.selection_url(workspace_views.listing()).replace('/hfl-corpus?', '/hfl-corpus/actions?'))
+            playwright.expect(board.locator('[data-view-picker-caption]')).to_have_text('Work')
+            corpus.locator('#q').fill('planning')
+            corpus.locator('[data-corpus-search]').click()
+            corpus.wait_for_url('**/hfl-corpus?**views=**')
+            board.evaluate("window.dispatchEvent(new Event('focus'))")
+            playwright.expect(board.locator('[name=q]')).to_have_value('planning')
+            # An unfinished corpus edit must survive a change from Kanban.
+            corpus.locator('#q').fill('unfinished')
+            board.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
+            board.locator('[data-view-picker]').evaluate('(el) => el.open = true')
+            board.locator('[data-view-all]').click()
+            board.wait_for_function("document.querySelector('[data-view-picker-caption]').textContent === 'All activity'")
+            corpus.evaluate("window.dispatchEvent(new Event('focus'))")
+            playwright.expect(corpus.locator('#q')).to_have_value('unfinished')
+            corpus.goto('http://workspace.test/hfl-corpus')
+            playwright.expect(corpus.locator('[data-view-picker-caption]')).to_have_text('All activity')
+            playwright.expect(corpus.locator('#q')).to_have_value('')
+            board.reload()
+            playwright.expect(board.locator('[data-view-picker-caption]')).to_have_text('All activity')
+            board.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
+            board.locator('[data-dynamic-toggle]').check()
+            board.wait_for_function("document.querySelector('[data-dynamic-toggle]').checked && !document.querySelector('[data-view-loading]').open")
+            corpus.evaluate("window.dispatchEvent(new Event('focus'))")
+            playwright.expect(corpus.locator('[data-dynamic-toggle]')).to_be_checked()
+            # An unchanged API snapshot must not reload the page just because
+            # Jinja's embedded JSON and API JSON order their keys differently.
+            corpus.evaluate("document.documentElement.dataset.syncProbe = 'retained'")
+            with corpus.expect_response('**/hfl-corpus/workspace-views'):
+                corpus.evaluate("window.dispatchEvent(new Event('focus'))")
+            corpus.wait_for_timeout(800)
+            assert corpus.locator('html').get_attribute('data-sync-probe') == 'retained'
+            board.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
+            board.locator('[data-dynamic-toggle]').uncheck()
+            board.wait_for_function("!document.querySelector('[data-dynamic-toggle]').checked && !document.querySelector('[data-view-loading]').open")
+            corpus.evaluate("window.dispatchEvent(new Event('focus'))")
+            playwright.expect(corpus.locator('[data-dynamic-toggle]')).not_to_be_checked()
+            corpus.go_back()
+            playwright.expect(corpus.locator('[data-dynamic-toggle]')).not_to_be_checked()
+        finally:
+            browser.close()
+
+
 def test_workspace_api_restore_conflicts_and_security(authenticated_client, workspace_corpus):
     client = authenticated_client
     headers = {'X-CSRF-Token': make_csrf_token('frontend-test-user')}
@@ -137,7 +227,7 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             page.locator('[data-corpus-search]').click()
             page.wait_for_load_state()
             assert page.evaluate("sessionStorage.getItem('search-feedback')") == 'Searching…'
-            assert '2 matching entries' in page.locator('[data-corpus-results]').inner_text()
+            playwright.expect(page.locator('[data-corpus-results]')).to_contain_text('2 matching entries')
             page.locator('[data-workspace-menu] > summary').click()
             page.locator('[data-workspace-action="new"]').click()
             page.locator('#workspace-name').fill('Work sources')
@@ -146,7 +236,7 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             view = authenticated_client.get('/hfl-corpus/workspace-views').json()['views'][0]
             assert view['state']['source'] == 'git,notes'
             assert view['state']['rolling'] == 7
-            assert page.locator('[data-active-view-name]').inner_text() == 'Work sources'
+            playwright.expect(page.locator('[data-active-view-name]')).to_have_text('Work sources')
             assert page.locator('[data-active-view-modified]').inner_text() == 'Saved'
             page.locator('#q').fill('#work changed')
             assert page.locator('[data-active-view-modified]').inner_text() == 'Modified'
@@ -250,7 +340,7 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             page.locator('#q').fill('temporary narrowing')
             page.locator('[data-workspace-reset]').first.click()
             playwright.expect(page.locator('#q')).to_have_value('#work planning')
-            assert page.locator('[data-active-view-name]').inner_text() == 'Work sources'
+            playwright.expect(page.locator('[data-active-view-name]')).to_have_text('Work sources')
             page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
             page.locator('[data-workspace-action="edit"]').click()
             page.locator('#workspace-name').fill('Renamed workspace')
@@ -266,8 +356,8 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
             page.locator('[data-workspace-action="remove"]').click()
             page.locator('[data-workspace-confirm]').click()
-            page.wait_for_url('**/hfl-corpus?reset=1')
-            assert page.locator('#q').input_value() == ''
+            playwright.expect(page.locator('[data-view-picker-caption]')).to_have_text('All activity')
+            playwright.expect(page.locator('#q')).to_have_value('')
             remaining = authenticated_client.get('/hfl-corpus/workspace-views').json()
             assert [item['name'] for item in remaining['views']] == ['Personal']
             assert remaining['last_used'] is None

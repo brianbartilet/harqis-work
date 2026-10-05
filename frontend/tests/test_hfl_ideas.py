@@ -371,7 +371,7 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         page.get_by_role('menuitem', name='Create action', exact=True).click()
         expect(modal.get_by_role('checkbox', name='Complete Compare bulbs')).not_to_be_checked()
         expect(modal.get_by_text('lighting.txt', exact=True)).to_be_visible()
-        modal.locator('.action-details > summary').click()
+        modal.locator('.action-details > summary').filter(has_text='Action plan').click()
         modal.get_by_label('Expected outcome').fill('A comfortable place to read')
         modal.get_by_role('button', name='Create', exact=True).click()
         expect(page.locator('.editor-save-confirmation')).to_contain_text('Action saved.')
@@ -470,7 +470,7 @@ def test_creation_save_feedback_and_upload_retry(ideas, authenticated_client, ki
             dialog = page.locator('#followup-editor')
         dialog.locator('[name=title]').fill('Save feedback test')
         if kind != 'idea':
-            dialog.locator('.action-details > summary').click()
+            dialog.locator('.action-details > summary').filter(has_text='Action plan').click()
             dialog.locator('[name=expected_outcome]').fill('Verify creation feedback')
         if with_files:
             dialog.locator('[data-input-files]').set_input_files({'name': 'brief.txt', 'mimeType': 'text/plain', 'buffer': b'Reference'})

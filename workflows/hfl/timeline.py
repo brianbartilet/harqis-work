@@ -121,7 +121,11 @@ def model_json(prompt, system, field):
 
 def synthesize(evidence, *, start, end):
     from workflows.hfl.prompts import load_prompt
-    return model_json(json.dumps({"period":{"start":start,"end":end},"evidence":evidence}),
+    from apps.hfl_corpus.config import CONFIG
+    from apps.hfl_corpus.references.web.api.ideas import ApiServiceHflCorpusIdeas
+    from workflows.hfl.tasks.activity_radar import redact_secrets
+    boards = ApiServiceHflCorpusIdeas(CONFIG).get_board_context()['boards']
+    return model_json(redact_secrets(json.dumps({"period":{"start":start,"end":end},"evidence":evidence,"available_boards":boards})),
                       load_prompt("timeline_suggestions"), 'findings')
 
 
@@ -177,7 +181,7 @@ def explore_period(start, end, *, run_id=None, store=None, collect=collect_perio
         for offset in range(0,len(rows),40):
             batch = rows[offset:offset+40]
             compact, lookup = _evidence_rows(batch,history)
-            findings = validate_findings(analyze(compact,start=start,end=end),set(lookup),lookup=lookup,include_matrix=True)
+            findings = validate_findings(analyze(compact,start=start,end=end),set(lookup),lookup=lookup,include_matrix=True,include_boards=True)
             for finding in findings[:8]:
                 ids = finding["evidence"]
                 primary_ids = [eid for eid in ids if eid.startswith("N")]

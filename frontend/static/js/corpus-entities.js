@@ -60,6 +60,8 @@
     const fields = {}, profile = entity.profile || {};
     for (const [key, title, multiline, value] of [
       ['name', 'Display name', false, profile.name || entity.label],
+      ['aliases', 'Aliases (one per line)', true, (profile.aliases || []).join('\n')],
+      ['partial_aliases', 'Partial matching hints (one per line)', true, (profile.partial_aliases || []).join('\n')],
       ['categories', 'Categories', true, (profile.categories || []).join('\n')],
       ['emails', 'Email addresses', true, (profile.emails || []).join('\n')],
       ['phones', 'Phone numbers', true, (profile.phones || []).join('\n')],
@@ -77,6 +79,8 @@
       if (['notes', 'references'].includes(key)) label.className = 'profile-wide';
       fields[key] = input; label.append(input); grid.append(label);
     }
+    const preferredLabel = el('label', 'Prefer this display name during automatic merges'), preferred = el('input'); preferred.type = 'checkbox'; preferred.checked = !!profile.preferred_name; preferred.defaultChecked = preferred.checked; preferredLabel.prepend(preferred); grid.append(preferredLabel);
+    const provenance = el('p', Object.entries(profile.alias_sources || {}).map(([name, source]) => `${name}: ${source}`).join(' · ')); grid.append(provenance);
     const button = el('button', 'Save profile'), feedback = el('span'); feedback.className = 'profile-feedback'; feedback.setAttribute('role', 'status');
     const actions = el('div'); actions.className = 'profile-actions';
     const cancel = el('button', 'Cancel'); cancel.type = 'button'; cancel.className = 'profile-cancel';
@@ -87,7 +91,8 @@
     form.onsubmit = async event => {
       event.preventDefault(); button.disabled = true; feedback.textContent = 'Saving…';
       try {
-        const data = Object.fromEntries(Object.entries(fields).map(([key, input]) => [key, ['categories', 'emails', 'phones', 'references'].includes(key) ? input.value.split('\n').map(v => v.trim()).filter(Boolean) : input.value]));
+        const data = Object.fromEntries(Object.entries(fields).map(([key, input]) => [key, ['categories', 'emails', 'phones', 'references', 'aliases', 'partial_aliases'].includes(key) ? input.value.split('\n').map(v => v.trim()).filter(Boolean) : input.value]));
+        data.preferred_name = preferred.checked;
         entity.profile = (await api('/profile/' + encodeURIComponent(entity.id), data)).profile;
         entity.label = entity.profile.name; entity.categories = entity.profile.categories;
         for (const input of Object.values(fields)) input.defaultValue = input.value;
@@ -98,7 +103,7 @@
   }
   function matchesFilters(e) {
     const q = $('entity-query').value.trim().toLowerCase(), contact = $('filter-contact').value;
-    const p = e.profile || {}, searchable = [e.label, kinds[e.kind] || e.kind, ...e.categories, ...(p.emails || []), ...(p.phones || []), ...(p.references || []), p.notes || ''].join(' ').toLowerCase();
+    const p = e.profile || {}, searchable = [e.label, kinds[e.kind] || e.kind, ...e.categories, ...(p.aliases || []), ...(p.partial_aliases || []), ...(p.emails || []), ...(p.phones || []), ...(p.references || []), p.notes || ''].join(' ').toLowerCase();
     return q.split(/\s+/).every(word => searchable.includes(word)) && (!selectedKinds.size || selectedKinds.has(e.kind)) && (!selectedCategories.size || [...selectedCategories].some(category => category === '__none__' ? !e.categories.length : e.categories.includes(category))) && (!selectedSources.size || e.entries.some(x => selectedSources.has(sourceValue(x)))) && (!contact || (contact === 'contact' ? p.emails?.length || p.phones?.length : contact === 'curated' ? e.profile : !e.profile));
   }
   function compareEntities(a, b) { return $('sort').value === 'activity' ? b.entries.length - a.entries.length || a.label.localeCompare(b.label) : $('sort').value === 'recent' ? (b.entries[0]?.date || '').localeCompare(a.entries[0]?.date || '') || a.label.localeCompare(b.label) : $('sort').value === 'name-desc' ? b.label.localeCompare(a.label) : a.label.localeCompare(b.label); }
@@ -271,7 +276,7 @@
       const status = $('matching-status');
       let caption = status.querySelector(':scope > p'), history = status.querySelector('details');
       if (!caption || !history) { status.replaceChildren(); caption = el('p'); history = el('details'); history.append(el('summary'), el('div')); history.lastChild.className = 'matching-jobs'; status.append(caption, history); }
-      caption.textContent = !data.enabled ? 'Automatic matching is disabled.' : `${active ? active + ' matching jobs active' : 'No matching jobs active'} · Awaiting review: ${data.suggestions_total ?? suggestions.length}`;
+      caption.textContent = data.owner === 'hermes' ? `Daily Hermes consolidation · Run: ${data.consolidation_run || 'not started'} · Legacy suggestions: ${data.suggestions_total ?? suggestions.length}` : !data.enabled ? 'Automatic matching is disabled.' : `${active ? active + ' matching jobs active' : 'No matching jobs active'} · Awaiting review: ${data.suggestions_total ?? suggestions.length}`;
       history.firstChild.textContent = `Recent matching jobs (${data.jobs.length})`;
       const jobs = history.lastChild, scroll = jobs.scrollTop; jobs.replaceChildren();
       for (const job of data.jobs) {

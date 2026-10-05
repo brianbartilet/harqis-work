@@ -181,6 +181,32 @@ def test_unfulfilled_prompt_becomes_incomplete(bridge, authenticated_client, kin
     assert actions.get(item['id'])['status'] == 'incomplete'
 
 
+def test_agent_board_context_and_additive_associations(bridge, authenticated_client, monkeypatch):
+    from workflows.hfl.ideas_store import IdeasStore
+    from modules.hfl_corpus import entities
+    module, store, actions = bridge
+    monkeypatch.setattr(entities, 'current_entries', lambda *args: [])
+    monkeypatch.setattr(entities, 'projection', lambda *args: [])
+    ideas = IdeasStore(actions)
+    boards = [ideas.save_map(dict(request_id=str(uuid4()), name=name, members=[], positions={}))
+              for name in ['Selected', 'Relevant', 'Now inactive']]
+    item = create_action(actions)
+    item = actions.update(item['id'], dict(version=1, board_ids=[boards[0]['id']]), actor='owner')
+    linked = ideas.save_idea(dict(request_id=str(uuid4()), title='Supporting idea', body='Full supporting detail', board_ids=[boards[1]['id']]), 'owner')
+    run = start(authenticated_client, item, auto=True)
+    source = run['snapshot']['source']
+    assert source['board_ids'] == [boards[0]['id']]
+    relevant = next(b for b in source['available_boards'] if b['id'] == boards[1]['id'])
+    assert relevant['members'][0]['id'] == 'idea:' + linked['id']
+    assert relevant['members'][0]['body'] == 'Full supporting detail'
+    ideas.save_map(dict(version=1, active=False), boards[2]['id'])
+    event(authenticated_client, run, 'plan', {'summary': 'Review board context'})
+    response = event(authenticated_client, run, 'succeeded', {**RESULT, 'board_ids': [boards[1]['id'], boards[2]['id'], 'removed']})
+    assert response.status_code == 200, response.text
+    assert actions.get(item['id'])['board_ids'] == sorted([boards[0]['id'], boards[1]['id']])
+    assert ideas.map(boards[1]['id'])['edges'] == []
+
+
 def test_pin_hour_backfill_and_older_gap_notice_are_deduplicated(bridge, monkeypatch):
     from datetime import datetime, timedelta
     from zoneinfo import ZoneInfo

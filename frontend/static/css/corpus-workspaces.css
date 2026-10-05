@@ -189,7 +189,7 @@
 .corpus-error-dismiss:focus-visible { outline:2px solid #fda4af; outline-offset:2px; }
 
 .workspace-dynamic-row { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
-.workspace-dynamic-row > button { margin-left:auto; padding:.4rem; color:#7dd3fc; text-decoration:underline; text-underline-offset:3px; }
+.workspace-dynamic-row > button { margin-left:auto; padding:.4rem; border:0; border-radius:0; background:transparent; font:inherit; color:#7dd3fc; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
 .view-color-label { display:block; margin-top:.8rem; font-size:.75rem; color:#94a3b8; }
 .view-color-palette { display:flex; gap:.4rem; overflow-x:auto; padding:.6rem .2rem; margin-bottom:.8rem; }
 .view-color-palette .view-color-swatch { flex:0 0 28px; width:28px; height:28px; min-height:28px; border-radius:50%; border:2px solid transparent; }

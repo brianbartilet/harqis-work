@@ -24,6 +24,20 @@ def action(**fields):
     return {"request_id": str(uuid4()), "title": "Review capture", "expected_outcome": "Document findings", **fields}
 
 
+def test_management_action_board_membership(management):
+    from workflows.hfl.ideas_store import IdeasStore
+    client, actions = management
+    ideas = IdeasStore(actions)
+    board = ideas.save_map(dict(request_id=str(uuid4()), name='Delivery', members=[]))
+    response = client.post('/api/hfl/actions', json=action(board_ids=[board['id']]))
+    assert response.status_code == 201, response.text
+    item = response.json()['item']
+    assert item['board_ids'] == [board['id']]
+    response = client.patch('/api/hfl/actions/' + item['id'], json=dict(version=1, board_ids=[]))
+    assert response.status_code == 200, response.text
+    assert ideas.map(board['id'])['members'] == []
+
+
 def category(client):
     response = client.post("/api/hfl/categories", json={"name": "Project", "color": "#3b82f6", "instructions": "Keep evidence"})
     assert response.status_code == 201, response.text

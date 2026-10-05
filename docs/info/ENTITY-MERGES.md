@@ -21,9 +21,62 @@ Authenticated endpoints include `POST /api/hfl/entities/types` (`name`, `color`,
 its `types` registry. Types are stored with the local entity database shared by the API
 and workers; no new schedule or credential is required.
 
-## Automatic matching
+## Daily Hermes consolidation
 
-Successful model enrichment durably records a matching job alongside the extracted
+The `auto-merge-entities` skill provides daily autonomous cleanup at 09:00
+Asia/Singapore. Reconcile `scripts/agents/hfl/entity_consolidation_schedule.json`
+using `setup_entity_consolidation.py --apply` on the canonical Hermes host.
+Hermes owns the schedule and contextual decisions; the API owns validated,
+transactional merges and Celery owns grouped report delivery. No extra Beat job.
+
+Profiles expose `aliases` (exact strings), `partial_aliases` (substring hints of
+at least three characters), and `preferred_name`. The directory editor and profile
+API support these fields. `alias_sources` is server-maintained provenance (`user`,
+`llm`, `merged-name`). Merged names are retained. Generated hints cannot supply
+independent corroboration. Names with more unique current related activities rank
+higher, after explicit preferred names and curated profiles.
+
+Same-type token/trigram discovery includes fuzzy OCR variants. Partial hints only
+shortlist candidates. The agent checks activity context: two independently supported
+facts normally, or one substantial specific shared fact for a strong name/identifier
+match with sparse activity. Similar spelling, popularity and model confidence alone
+never establish identity. Conflicting curated identities, explicit identifiers,
+keep-separate decisions and unmerges constrain automatic approval.
+
+The first `POST /api/hfl/entities/consolidation/begin` durably transfers automatic
+matching ownership to Hermes and includes historical entities and suggestions.
+Previously queued Celery matching tasks stop applying decisions. Later daily runs
+compare entity snapshots; unchanged deferred cases are not repeatedly evaluated.
+Interrupted runs resume before new runs. The candidate shortlist is bounded to five
+neighbors per changed entity, so this is not an exhaustive all-pairs identity scan.
+Newly merged groups can participate in the next daily pass.
+
+Agent endpoints under `/api/hfl/entities/consolidation`:
+
+| Method/path | Behavior |
+| --- | --- |
+| `POST /begin` | Start today's run or resume unfinished work. |
+| `GET /{run_id}` | Counts, delivery state and the next 20 pending pairs. |
+| `POST /{run_id}/decisions/{pair_id}` | Record an evidence-grounded merge, review or separate decision. |
+| `POST /{run_id}/decisions` | Up to 20 decisions keyed by pair ID; independent results. |
+| `POST /{run_id}/finish` | Checkpoint resolved work and enqueue grouped report delivery. Safe to repeat. |
+
+The helper `.agents/skills/auto-merge-entities/scripts/consolidate.py` handles
+machine configuration and authentication without exposing credentials. Exact decision
+replays recover receipts; changed replays conflict. Snapshots are revalidated before
+commit. Review/separate outcomes defer future reconsideration until evidence changes;
+only explicit Keep separate/unmerge creates a permanent exclusion.
+
+Each completed run produces one HFL report grouped by type and a concise Telegram
+summary linking to it, including no-change runs. Internal per-operation audit and
+undo remain intact. **Automatic merges do not publish individual HFL audit entries**;
+manual operations retain individual delivery. This applies prospectively, without
+removing existing audit posts. Delivery state distinguishes HFL persistence, Telegram
+completion and uncertain sends. Retry reporting without repeating merges.
+
+## Legacy enrichment matching
+
+Before Hermes takes ownership, successful model enrichment durably records a matching job alongside the extracted
 mentions. A one-time historical job is available from **Automatic matching and review
 suggestions → Scan existing entities once / resume**. Repeating that request resumes
 a failed job or returns the existing job; it does not repeat a completed historical scan.
@@ -163,8 +216,9 @@ Selections may contain up to 10,000 IDs per operation; duplicates do not add mem
 ## Audit delivery
 
 Every successful merge/unmerge records the actor, UTC time, source IDs/names, resulting
-identity, optional evidence and relevant profile snapshots locally. A pending audit
-delivery is committed in the same transaction. The background response handler submits
+identity, optional evidence and relevant profile snapshots locally. For manual operations, pending audit
+delivery is committed in the same transaction. Automatic merges retain internal
+audit with delivery `not-required`; their daily run provides grouped reporting. The background response handler submits
 an HFL entry with source **`entities-audit`**, using a deterministic event identity.
 Existing five-minute HFL outbox recovery retries pending deliveries. Entries summarize
 the operation; complete profile snapshots stay in the entity audit store. Profile edits

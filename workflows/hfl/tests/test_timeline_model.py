@@ -12,6 +12,8 @@ def response(text, stop_reason='end_turn'):
 
 @pytest.fixture
 def model(monkeypatch):
+    from apps.hfl_corpus.references.web.api.ideas import ApiServiceHflCorpusIdeas
+    monkeypatch.setattr(ApiServiceHflCorpusIdeas, 'get_board_context', lambda self: {'boards': []})
     from apps.antropic import config
     from apps.antropic.references.web import base_api_service
     calls, replies = [], []

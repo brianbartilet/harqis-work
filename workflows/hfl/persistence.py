@@ -498,6 +498,11 @@ def flush_outbox(*, limit: int = 100) -> dict[str, int]:
         dispatch_pending()
     except Exception:
         pass
+    from workflows.hfl.entity_consolidation import dispatch_reports
+    try:
+        dispatch_reports()
+    except Exception:
+        pass  # Committed run report intents remain recoverable.
     root = outbox_dir()
     counts = {"found": 0, "delivered": 0, "failed": 0, "invalid": 0}
     if not root.exists():

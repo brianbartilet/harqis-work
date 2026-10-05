@@ -67,6 +67,7 @@ class ViewPreferences(BaseModel):
     dynamic: bool = False
     timezone: str = 'Asia/Singapore'
     revision: int = Field(default=0, ge=0)
+    applied: WorkspaceState = Field(default_factory=WorkspaceState)
 
     @field_validator('timezone')
     @classmethod
@@ -121,6 +122,7 @@ def listing():
             view['schedule'] = schedules.get(view['id'], [])
         stored = db.execute('SELECT payload FROM corpus_view_preferences WHERE singleton=1').fetchone()
         prefs = json.loads(stored[0]) if stored else ViewPreferences(manual=[last[0]] if last and last[0] else []).model_dump()
+        prefs = ViewPreferences.model_validate(prefs).model_dump()
         prefs['timezone'] = profile_timezone
         prefs['manual'] = [identity for identity in prefs['manual'] if any(v['id'] == identity for v in views)]
         active = active_views(views, prefs)
@@ -146,12 +148,13 @@ def save(payload, identity=None):
         if payload.color is not None:
             db.execute('UPDATE corpus_workspace_views SET color=? WHERE id=?', (payload.color, identity))
         db.execute('INSERT INTO corpus_workspace_last VALUES (1,?) ON CONFLICT(singleton) DO UPDATE SET view_id=excluded.view_id', (identity,))
-        if creating:
-            row = db.execute('SELECT payload FROM corpus_view_preferences WHERE singleton=1').fetchone()
-            if row:
-                preferences = json.loads(row[0])
-                preferences.update(manual=[identity], dynamic=False, revision=preferences['revision']+1)
-                db.execute('UPDATE corpus_view_preferences SET payload=? WHERE singleton=1', (json.dumps(preferences),))
+        row = db.execute('SELECT payload FROM corpus_view_preferences WHERE singleton=1').fetchone()
+        if row:
+            preferences = json.loads(row[0])
+            preferences['revision'] += 1
+            if creating:
+                preferences.update(manual=[identity], dynamic=False, applied=WorkspaceState().model_dump())
+            db.execute('UPDATE corpus_view_preferences SET payload=? WHERE singleton=1', (json.dumps(preferences),))
         if payload.schedule is not None:
             db.execute('INSERT INTO corpus_view_schedules VALUES (?,?) ON CONFLICT(view_id) DO UPDATE SET payload=excluded.payload', (identity, json.dumps([block.model_dump() for block in payload.schedule])))
         result = decode(db.execute('SELECT * FROM corpus_workspace_views WHERE id=?', (identity,)).fetchone())
@@ -175,6 +178,14 @@ def delete(identity, revision):
             raise HTTPException(409, 'View changed or was removed in another browser. Reload before removing.')
         db.execute('DELETE FROM corpus_workspace_last WHERE view_id=?', (identity,))
         db.execute('DELETE FROM corpus_view_schedules WHERE view_id=?', (identity,))
+        row = db.execute('SELECT payload FROM corpus_view_preferences WHERE singleton=1').fetchone()
+        if row:
+            preferences = json.loads(row[0])
+            preferences['manual'] = [value for value in preferences['manual'] if value != identity]
+            preferences['revision'] += 1
+            if not any(json.loads(row[0]) for row in db.execute('SELECT payload FROM corpus_view_schedules')):
+                preferences['dynamic'] = False
+            db.execute('UPDATE corpus_view_preferences SET payload=? WHERE singleton=1', (json.dumps(preferences),))
 
 
 def active_views(views, preferences, now=None):
@@ -221,5 +232,8 @@ def selection_url(snapshot, identities=None, dynamic=False):
     identities = snapshot['active'] if identities is None else identities
     chosen = [v for v in snapshot['views'] if v['id'] in identities]
     today = datetime.now(ZoneInfo(snapshot['preferences']['timezone'])).date()
-    scope = {'any': [resolved(v['state'], today) for v in chosen]}
-    return '/hfl-corpus?' + urlencode({'views': ','.join(v['id'] for v in chosen), 'scope': json.dumps(scope, separators=(',', ':')), 'dynamic': int(dynamic)})
+    applied = snapshot['preferences'].get('applied', WorkspaceState().model_dump())
+    if not dynamic and len(chosen) == 1 and applied == WorkspaceState().model_dump():
+        return '/hfl-corpus?' + urlencode({**chosen[0]['state'], 'workspace': chosen[0]['id'], 'workspace_revision': snapshot['preferences']['revision']})
+    scope = {'any': [resolved(v['state'], today) for v in chosen], 'all': resolved(applied, today)}
+    return '/hfl-corpus?' + urlencode({**applied, 'views': ','.join(v['id'] for v in chosen), 'scope': json.dumps(scope, separators=(',', ':')), 'dynamic': int(dynamic), 'workspace_revision': snapshot['preferences']['revision']})

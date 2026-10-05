@@ -71,7 +71,7 @@ class ApiServiceHflCorpusTimeline(ApiServiceHflCorpusExtended):
         """Create/adopt an agenda item. May configure agent execution if explicitly requested. Destructive: writes remote state.
 
         Args:
-            item: Action fields: request_id UUID, title, expected_outcome, source, suggestion_id, review_date, due_date, prompt, notes, checklists, matrix, agent_enabled. Server validates; omission preserves normal defaults.
+            item: Action fields: request_id UUID, title, expected_outcome, source, suggestion_id, review_date, due_date, prompt, notes, checklists, matrix, agent_enabled, board_ids (optional active board IDs). Server validates; omission preserves normal defaults.
         """
         return self._json('POST', 'timeline/items', payload=item)
 
@@ -95,7 +95,7 @@ class ApiServiceHflCorpusTimeline(ApiServiceHflCorpusExtended):
         Args:
             followup_id: Followup id.
             version: Latest object version; stale writes return 409. Read before retrying.
-            changes: Action fields to change; status, dates, title, expected_outcome, prompt, notes, checklists, matrix, agent_enabled. Do not supply internal _agent_actor attribution.
+            changes: Action fields to change; status, dates, title, expected_outcome, prompt, notes, checklists, matrix, agent_enabled, board_ids (optional active board IDs). Do not supply internal _agent_actor attribution.
         """
         if '_agent_actor' in changes:
             raise ValueError('Internal worker attribution is not accepted by owner tools.')

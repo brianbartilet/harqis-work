@@ -88,6 +88,8 @@ def start_session(source_id: str, payload: dict):
     action = bridge.checked(bridge.action_call, 'GET', '/' + source_id)['item']
     settings = effective(source_id)
     settings['initial_context'] = {k: action.get(k, '') for k in ('title','status','prompt','expected_outcome','description','notes','completion_note')}
+    from modules.hfl_corpus.intent_board_context import context
+    settings['initial_context'].update(board_ids=action.get('board_ids', []), available_boards=context())
     previous = bridge.bridge_store().list('actionable:' + source_id, limit=1)
     if previous:
         settings['initial_context']['last_agent_result'] = previous[0]['result'].get('summary', '')
