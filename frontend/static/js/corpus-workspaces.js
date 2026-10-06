@@ -7,7 +7,7 @@
   const workspacePath=kanban?'/hfl-corpus/actions':'/hfl-corpus';
   const createMenu = document.querySelector('.corpus-create-menu');
   if (createMenu) {
-    const headerMenus = [...document.querySelectorAll('.corpus-navigation-actions > details')];
+    const headerMenus = [...document.querySelectorAll('.corpus-create-menu, .corpus-workspace-controls > [data-workspace-menu]')];
     headerMenus.forEach(dropdown => dropdown.addEventListener('toggle', () => {
       if (dropdown.open) headerMenus.forEach(other => { if (other !== dropdown) other.open = false; });
     }));

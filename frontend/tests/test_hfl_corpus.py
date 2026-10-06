@@ -1517,7 +1517,8 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     )[0]
     assert "corpus-secrets-control" in corpus_header
     assert "corpus-create-menu" in corpus_header
-    assert ".corpus-page-header,.corpus-header-actions { display:contents; }" in page_source
+    assert "corpus-workspace-controls" in page_source
+    assert "Search and browse captured moments" not in response.text
     assert 'data-activity-toggle aria-expanded="true"' in page_source
     assert "data-activity-body" in page_source
     assert 'data-activity-year aria-label="Activity year"' in page_source

@@ -6,7 +6,7 @@
       </div>
       {% if not activity_hide_header_actions %}
       <div class="flex items-center gap-2" data-activity-header-actions>
-        {% include "modules/hfl_corpus/partials/workspace_indicator.html" %}
+        {% if not activity_hide_workspace_indicator %}{% include "modules/hfl_corpus/partials/workspace_indicator.html" %}{% endif %}
         {% if not activity_always_expanded %}
         <button type="button" data-activity-toggle aria-expanded="true" aria-controls="activity-heatmap-body" aria-label="Hide activity heat map"
                 class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-cyan-300 ring-1 ring-slate-700 transition hover:bg-slate-800 hover:text-cyan-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400">
