@@ -56,6 +56,14 @@ def test_outside_members_opt_in_and_exclusions_win(context, sharing_corpus):
     assert snapshot.activity['goals'] == []
 
 
+def test_shared_board_keeps_only_approved_positions_and_sizes(context, sharing_corpus):
+    context['maps'][0]['positions'] = {'action:a': {'x': 120, 'y': 30}, 'action:secret': {'x': 900, 'y': 0}}
+    context['maps'][0]['node_sizes'] = {'action:a': 7, 'action:secret': 9}
+    graph = build_snapshot(recipe(), (sharing_corpus,)).activity['boards'][0]['graph']
+    assert graph['positions'] == {'action:a': {'x': 120, 'y': 30}}
+    assert graph['node_sizes'] == {'action:a': 7}
+
+
 def test_no_entry_share_does_not_leak_entry_labels(context, sharing_corpus):
     snapshot = build_snapshot(recipe(activity={'sections':['actions','boards','graph']}), (sharing_corpus,))
     assert not snapshot.entries
@@ -180,7 +188,7 @@ def test_large_entries_preview_is_paged_and_retains_reference_exclusions(editor_
     entries = tuple(replace(base.entries[0], id=f'entry-{i}', moment=f'Preview entry {i}',
                             text='Full entry body ' * 1000,
                             references=(replace(base.entries[0].references[0], id=f'reference-{i}'),))
-                    for i in range(125))
+                    for i in range(225))
     def snapshot(request, configuration, disabled_reference_ids, **kwargs):
         return replace(base, entries=tuple(replace(entry, references=tuple(
             replace(ref, enabled=ref.id not in disabled_reference_ids) for ref in entry.references
@@ -189,20 +197,27 @@ def test_large_entries_preview_is_paged_and_retains_reference_exclusions(editor_
     page, _ = editor_page
     page.goto('https://editing.test/sharing')
     page.get_by_role('tab', name='Entries', exact=True).click()
-    expect(page.get_by_text('Page 1 of 3', exact=False)).to_be_visible()
-    expect(page.locator('[name="enabled_reference_ids"]')).to_have_count(50)
+    scroller = page.locator('[data-entry-scroll]')
+    expect(scroller.locator('[name="enabled_reference_ids"]')).to_have_count(50)
     page.locator('[value="reference-0"][name="enabled_reference_ids"]').uncheck()
-    page.get_by_role('button', name='Next entries').click()
-    expect(page.get_by_text('Page 2 of 3', exact=False)).to_be_visible()
+    scroller.evaluate('(el) => {el.scrollTop=el.scrollHeight;el.dispatchEvent(new Event("scroll"));}')
+    expect(scroller.locator('[data-entry-page-items="2"]')).to_have_count(1)
     page.locator('[value="reference-50"][name="enabled_reference_ids"]').uncheck()
-    page.get_by_role('button', name='Previous entries').click()
-    expect(page.get_by_text('Page 1 of 3', exact=False)).to_be_visible()
+    scroller.evaluate('(el) => {el.scrollTop=el.scrollHeight;el.dispatchEvent(new Event("scroll"));}')
+    expect(scroller.locator('[data-entry-page-items="3"]')).to_have_count(1)
+    expect(scroller.locator('[name="enabled_reference_ids"]')).to_have_count(150)
     expect(page.locator('[value="reference-0"][name="enabled_reference_ids"]')).not_to_be_checked()
-    page.get_by_role('button', name='Next entries').click()
     expect(page.locator('[value="reference-50"][name="enabled_reference_ids"]')).not_to_be_checked()
-    page.get_by_role('button', name='Next entries').click()
-    expect(page.get_by_text('Page 3 of 3', exact=False)).to_be_visible()
-    expect(page.locator('[name="enabled_reference_ids"]')).to_have_count(25)
+    scroller.evaluate('(el) => {el.scrollTop=el.scrollHeight;el.dispatchEvent(new Event("scroll"));}')
+    expect(scroller.locator('[data-entry-page-items="4"]')).to_have_count(1)
+    expect(scroller.locator('[data-entry-page-items="1"]')).to_have_count(0)
+    expect(scroller.locator('[name="enabled_reference_ids"]')).to_have_count(150)
+    scroller.evaluate('(el) => {el.scrollTop=0;el.dispatchEvent(new Event("scroll"));}')
+    expect(scroller.locator('[data-entry-page-items="1"]')).to_have_count(1)
+    expect(page.locator('[value="reference-0"][name="enabled_reference_ids"]')).not_to_be_checked()
+    expect(page.locator('[value="reference-50"][name="enabled_reference_ids"]')).not_to_be_checked()
+    expect(page.get_by_role('button', name='Next entries')).to_have_count(0)
+
 
 
 @pytest.mark.parametrize('width', [1440, 390])
@@ -212,9 +227,22 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     page.set_viewport_size({'width':width, 'height':1000})
     page.goto('https://editing.test/sharing')
     expect(page.get_by_role('tab', name='Recipe', exact=True)).to_have_attribute('aria-selected', 'true')
-    page.get_by_role('tab', name='Actions & Ideas').click()
+    expect(page.locator('[data-preview-shell]')).not_to_be_visible()
+    expect(page.locator('[data-test-agent]')).not_to_be_visible()
+    assert page.locator('[data-share-tab="entries"]').evaluate('(el)=>getComputedStyle(el).cursor') == 'pointer'
+    assert page.locator('[data-recipe-fields]').evaluate('(el)=>{const access=[...el.querySelectorAll("details")].find(e=>e.textContent.includes("Access, expiry"));return !!(access.compareDocumentPosition(el.querySelector("[name=freeze_snapshot]")) & Node.DOCUMENT_POSITION_FOLLOWING)}')
+
+    page.get_by_role('tab', name='Actions and Ideas').click()
     page.locator('[name="activity_sections"][value="actions"]').check()
     expect(page.locator('[data-share-object="action:a"]')).to_be_visible(timeout=15000)
+    card = page.locator('.share-object-card').filter(has=page.locator('[data-share-object="action:a"]'))
+    expect(card).to_contain_text('Next steps')
+    page.locator('.share-tabs').scroll_into_view_if_needed()
+    page.screenshot(path=str(tmp_path / 'sharing-actions.png'))
+    card.get_by_role('button', name='Connections', exact=True).click()
+    expect(page.locator('.share-connections-dialog canvas')).to_be_visible()
+    expect(page.locator('.share-connections-dialog')).to_contain_text('Approved action')
+    page.get_by_role('button', name='Close connections').click()
     page.locator('[data-share-object="action:a"]').uncheck()
     expect(page.get_by_role('button', name='Restore Approved action')).to_be_visible()
     page.get_by_role('button', name='Restore Approved action').click()
@@ -223,7 +251,16 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     page.locator('[name="activity_sections"][value="boards"]').check()
     expect(page.locator('[data-outside-board="b"]')).to_be_visible()
     page.locator('[data-outside-board="b"]').check()
-    expect(page.locator('[data-preview-tab="boards"] svg')).to_be_visible()
+    expect(page.locator('[data-preview-tab="boards"] canvas')).to_be_visible()
+    board_graph = page.locator('[data-preview-tab="boards"] [data-shared-graph]').first
+    board_graph.locator('.share-graph-directory summary').click()
+    board_graph.get_by_role('searchbox', name='Find a shared graph object').fill('Thought')
+    expect(board_graph.locator('.share-graph-directory li')).to_have_count(1)
+    board_graph.locator('.share-graph-directory li button').click()
+    expect(board_graph.locator('.share-graph-selection')).to_contain_text('Thought')
+    expect(board_graph.locator('.share-graph-selection')).to_contain_text('Plan')
+    page.locator('.share-tabs').scroll_into_view_if_needed()
+    page.screenshot(path=str(tmp_path / 'sharing-boards.png'))
     page.get_by_role('tab', name='Filters', exact=True).click()
     expect(page.locator('[data-source-selector]')).to_be_visible()
     page.get_by_role('tab', name='Recipe', exact=True).click()
@@ -237,6 +274,6 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     page.goto('https://editing.test/sharing/shares/' + grant.id + '/preview')
     page.get_by_text('Explore shared actions, ideas, boards and graphs', exact=True).click()
     page.locator('.shared-activity-public summary').filter(has_text='Workspace board').click()
-    expect(page.locator('.shared-activity-public svg').first).to_be_visible()
+    expect(page.locator('.shared-activity-public canvas').first).to_be_visible()
     assert not page.locator('.shared-activity-public input').count()
     page.screenshot(path=str(tmp_path / 'workspace-share.png'), full_page=True)

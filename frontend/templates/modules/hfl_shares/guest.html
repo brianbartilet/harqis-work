@@ -1,6 +1,6 @@
 {% extends "share_base.html" %}
 {% block title %}{{ grant.name }} · HARQIS{% endblock %}
-{% block head %}{{ super() }}<link rel="stylesheet" href="/static/css/share-activity.css">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ static_asset('css/share-activity.css') }}">{% endblock %}
 {% block header_actions %}
 <button class="header-action" type="button" data-contact-open>Contact</button>
 <button class="header-action" type="button" data-manifesto-open
@@ -10,7 +10,8 @@
 {% endblock %}
 {% block main_class %} share-main{% endblock %}
 {% block content %}
-<script src="/static/js/share-activity.js" defer></script>
+<script src="{{ static_asset('js/share-graphs.js') }}" defer></script>
+<script src="{{ static_asset('js/share-activity.js') }}" defer></script>
 {% if owner_preview %}
 <div class="preview-toast" role="status" aria-live="polite">
   <div>
@@ -99,9 +100,9 @@
         {% if grant.snapshot.activity %}
         <details class="shared-activity-public"><summary>Explore shared actions, ideas, boards and graphs</summary>
           <p>Read-only context. Browse full object details and citations in the source drawer.</p>
-          {% for board in grant.snapshot.activity.get("boards", []) %}<details><summary>{{ board.title }}</summary><p>{{ board.get("purpose", "") }}</p>{% set graph = board.graph %}{% include "modules/hfl_shares/_activity_graph.html" %}</details>{% endfor %}
-          <details><summary>Connections</summary>{% set graph = grant.snapshot.activity.connections %}{% include "modules/hfl_shares/_activity_graph.html" %}</details>
-          {% if grant.snapshot.activity.graph.nodes %}<details><summary>Activity graph</summary>{% set graph = grant.snapshot.activity.graph %}{% include "modules/hfl_shares/_activity_graph.html" %}</details>{% endif %}
+          {% for board in grant.snapshot.activity.get("boards", []) %}<details><summary>{{ board.title }}</summary><p>{{ board.get("purpose", "") }}</p>{% set graph = board.graph %}{% set graph_layout = 'board' %}{% include "modules/hfl_shares/_activity_graph.html" %}</details>{% endfor %}
+          <details><summary>Connections</summary>{% set graph = grant.snapshot.activity.connections %}{% set graph_layout = 'connections' %}{% include "modules/hfl_shares/_activity_graph.html" %}</details>
+          {% if grant.snapshot.activity.graph.nodes %}<details><summary>Activity graph</summary>{% set graph = grant.snapshot.activity.graph %}{% set graph_layout = 'timeline' %}{% include "modules/hfl_shares/_activity_graph.html" %}</details>{% endif %}
         </details>
         {% endif %}
         {% if suggested_prompts %}

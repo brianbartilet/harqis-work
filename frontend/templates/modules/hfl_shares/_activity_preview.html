@@ -1,25 +1,32 @@
 {% if preview and preview.activity %}
 <div data-preview-tab="actions">
+<div class="share-intent-grid">
 {% for kind in ['actions', 'ideas'] %}
-<h3>{{ kind|title }} ({{ preview.activity.get(kind, [])|length }})</h3>
+<section class="share-intent-column"><h3>{{ kind|title }} <span class="pill">{{ preview.activity.get(kind, [])|length }}</span></h3>
 {% for obj in preview.activity.get(kind, []) %}
-<details class="item"><summary><label class="check"><input type="checkbox" checked {% if hide_preview_agent %}disabled{% endif %} data-share-object="{{ obj.id }}">{{ obj.title }}</label> <span class="pill">{{ obj.get('status', '') }}</span></summary>
-<p style="white-space:pre-wrap">{{ obj.get('body', obj.get('description', '')) }}</p>
-{% for checklist in obj.get('checklists', []) %}<strong>{{ checklist.title }}</strong>{% for item in checklist['items'] %}<p>{{ '☑' if item.done else '☐' }} {{ item.text }}</p>{% endfor %}{% endfor %}
-</details>{% else %}<p class="share-scope-note">No eligible {{ kind }} selected.</p>{% endfor %}
-{% endfor %}
-<h3>Connections</h3>
-{% set graph = preview.activity.connections %}{% include 'modules/hfl_shares/_activity_graph.html' %}
+<article class="share-object-card" data-kind="{{ kind }}">
+<div class="share-card-meta"><span class="share-kind-pill" data-kind="{{ kind }}">{{ 'Action' if kind == 'actions' else 'Idea' }}</span>{% if obj.get('status') %}<span class="pill">{{ obj.status }}</span>{% endif %}{% if obj.get('created_at') %}<time>{{ obj.created_at[:10] }}</time>{% endif %}</div>
+<label class="share-card-title"><input type="checkbox" checked {% if hide_preview_agent %}disabled{% endif %} data-share-object="{{ obj.id }}"><span>{{ obj.title }}</span></label>
+{% if obj.get('body', obj.get('description', '')) %}<p class="share-card-body">{{ obj.get('body', obj.get('description', '')) }}</p>{% endif %}
+{% if obj.get('due_date') %}<p class="share-scope-note">Due {{ obj.due_date }}</p>{% endif %}
+{% for checklist in obj.get('checklists', []) %}<div class="share-checklist"><h4>{{ checklist.title }}</h4>{% for item in checklist['items'] %}<p><span aria-label="{{ 'Done' if item.done else 'Not done' }}">{{ '☑' if item.done else '☐' }}</span> {{ item.text }}</p>{% endfor %}</div>{% endfor %}
+{% if obj.get('notes') %}<details><summary>Notes</summary><p class="share-card-body">{{ obj.notes }}</p></details>{% endif %}
+<button type="button" class="btn btn-soft share-connections-button" data-share-connections="{{ obj.id }}">Connections</button>
+</article>{% else %}<p class="share-scope-note">No eligible {{ kind }} selected.</p>{% endfor %}
+</section>{% endfor %}
 </div>
-<div data-preview-tab="boards">
+<script type="application/json" data-share-connections-data>{{ preview.activity.connections|tojson }}</script>
+</div>
+<div data-preview-tab="boards" class="share-board-list">
 {% for board in preview.activity.get('boards', []) %}
-<section class="item"><label class="check"><input type="checkbox" checked {% if hide_preview_agent %}disabled{% endif %} data-share-object="{{ board.id }}">{{ board.title }}</label>
-<p>{{ board.get('purpose', '') }}</p>
-<label class="check"><input type="checkbox" {% if hide_preview_agent %}disabled{% endif %} data-outside-board="{{ board.id[6:] }}">Include outside-workspace members</label>
-{% set graph = board.graph %}{% include 'modules/hfl_shares/_activity_graph.html' %}
-{% for node in graph.nodes if node.kind == 'thoughts' %}<details><summary>{{ node.label }}</summary><p style="white-space:pre-wrap">{{ node.body }}</p></details>{% endfor %}
-</section>{% else %}<p>No eligible boards selected.</p>{% endfor %}
-{% for goal in preview.activity.get('goals', []) %}<details class="item"><summary><label class="check"><input type="checkbox" checked {% if hide_preview_agent %}disabled{% endif %} data-share-object="{{ goal.id }}">{{ goal.title }}</label></summary><p>{{ goal.get('body', '') }}</p><p>{{ goal.get('success_criteria', '') }}</p></details>{% endfor %}
+<article class="share-object-card share-board-card" data-kind="boards">
+<div class="share-card-meta"><span class="share-kind-pill" data-kind="boards">Board</span><span>{{ board.graph.nodes|length }} objects</span></div>
+<label class="share-card-title"><input type="checkbox" checked {% if hide_preview_agent %}disabled{% endif %} data-share-object="{{ board.id }}"><span>{{ board.title }}</span></label>
+{% if board.get('purpose') %}<p class="share-card-body">{{ board.purpose }}</p>{% endif %}
+<label class="check share-outside-option"><input type="checkbox" {% if hide_preview_agent %}disabled{% endif %} data-outside-board="{{ board.id[6:] }}"><span>Include outside-workspace members</span></label>
+{% set graph = board.graph %}{% set graph_layout = 'board' %}{% include 'modules/hfl_shares/_activity_graph.html' %}
+</article>{% else %}<p class="share-scope-note">No eligible boards selected.</p>{% endfor %}
+{% for goal in preview.activity.get('goals', []) %}<article class="share-object-card" data-kind="goals"><div class="share-card-meta"><span class="share-kind-pill" data-kind="goals">Linked goal</span></div><label class="share-card-title"><input type="checkbox" checked {% if hide_preview_agent %}disabled{% endif %} data-share-object="{{ goal.id }}"><span>{{ goal.title }}</span></label><p class="share-card-body">{{ goal.get('body', '') }}</p><p>{{ goal.get('success_criteria', '') }}</p></article>{% endfor %}
 </div>
-<div data-preview-tab="graph">{% set graph = preview.activity.graph %}{% include 'modules/hfl_shares/_activity_graph.html' %}</div>
+<div data-preview-tab="graph">{% set graph = preview.activity.graph %}{% set graph_layout = 'timeline' %}{% include 'modules/hfl_shares/_activity_graph.html' %}</div>
 {% endif %}

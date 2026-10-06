@@ -199,7 +199,9 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
     edges = []
 
     def add_object(obj):
-        nodes[obj['id']] = {'id': obj['id'], 'label': obj['title'], 'kind': obj['kind']}
+        nodes[obj['id']] = {'id': obj['id'], 'label': obj['title'], 'kind': obj['kind'],
+                            'body': obj.get('body', obj.get('description', '')),
+                            'date': obj.get('created_at', '')[:10]}
 
     for rows in objects.values():
         for obj in rows:
@@ -299,7 +301,12 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
             key = identity + ':' + key if key.startswith('draft:') else key
             if key in local_nodes:
                 positions[key] = {axis: float(value.get(axis, 0)) for axis in ('x', 'y')}
-        view['graph'] = {'nodes': list(local_nodes.values()), 'edges': local_edges, 'positions': positions}
+        sizes = {}
+        for key, value in board.get('node_sizes', {}).items():
+            key = identity + ':' + key if key.startswith('draft:') else key
+            if key in local_nodes and isinstance(value, (int, float)) and 1 <= value <= 10:
+                sizes[key] = value
+        view['graph'] = {'nodes': list(local_nodes.values()), 'edges': local_edges, 'positions': positions, 'node_sizes': sizes}
         boards.append(view)
         nodes.update(local_nodes)
         edges.extend(local_edges)

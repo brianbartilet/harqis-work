@@ -269,10 +269,10 @@ def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
     assert "expiresAt.disabled = noExpiry.checked" in response.text
     assert "expiresAt.required = !noExpiry.checked" in response.text
     assert re.search(
-        r'<details class="expand-panel mb-4">\s*<summary>\s*<span>Additional filters',
+        r'<details class="expand-panel mb-4">\s*<summary>\s*<span>Tags, dates, and topic',
         response.text,
     )
-    additional_filters = response.text.split(">Additional filters</span>", 1)[1].split(
+    additional_filters = response.text.split(">Tags, dates, and topic</span>", 1)[1].split(
         "</details>", 1
     )[0]
     assert additional_filters.index('data-tag-filter') < additional_filters.index(

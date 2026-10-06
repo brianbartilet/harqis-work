@@ -248,11 +248,34 @@
             </div>
           </details>
         </div>
+        <details class="expand-panel mb-4">
+          <summary>
+            <span>Access, expiry, and reference controls</span>
+            <svg class="expand-arrow h-4 w-4 shrink-0 text-blue-400 transition" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
+          </summary>
+          <div class="p-4">
+          <label class="check mb-4">
+            <input type="checkbox" name="no_expiry" data-no-expiry {% if cfg and cfg.no_expiry %}checked{% endif %}>
+            <span>No expiry</span>
+          </label>
+          <div class="two">
+            <div class="field"><label for="email">Allowed email (email OTP mode)</label><input class="control" id="email" type="email" name="allowed_email" value="{{ cfg.allowed_email if cfg else '' }}"></div>
+            <div class="field"><label for="expires-at">Expires at</label><input class="control [color-scheme:dark]" id="expires-at" type="datetime-local" name="expires_at" required value="{{ default_expires_at }}" data-expires-at {% if cfg and cfg.no_expiry %}disabled{% endif %} onclick="if (this.showPicker) this.showPicker()"><input type="hidden" name="timezone_offset" data-timezone-offset></div>
+            <div class="field"><label for="devices">Concurrent sessions</label><input class="control" id="devices" type="number" min="1" max="{{ max_concurrent_sessions }}" name="device_limit" value="{{ [cfg.device_limit if cfg else defaults.hfl_share_default_device_limit, max_concurrent_sessions]|min }}"></div>
+            <div class="field"><label for="maximum-redemptions">Maximum redemptions</label><input class="control" id="maximum-redemptions" type="number" min="0" max="1000" step="1" name="browser_redemption_limit" value="{{ cfg.browser_redemption_limit if cfg else 5 }}" required aria-describedby="maximum-redemptions-help"></div>
+          </div>
+          <p id="maximum-redemptions-help" class="mb-3 text-xs leading-5 text-slate-500">Per browser, remembered by a cookie. Resuming an active session does not count. Use 0 for unlimited. Clearing cookies starts a new allowance.</p>
+          <p class="mb-3 text-xs leading-5 text-slate-500">Each browser receives a fixed session lasting {{ session_duration }}. Closing or expiry releases its slot; rescanning in the same browser resumes it.</p>
+          <label class="check mb-2"><input type="checkbox" name="single_use" {% if cfg and cfg.single_use %}checked{% endif %}><span>Allow only the first successful session (overrides Maximum redemptions)</span></label>
+          <label class="check"><input type="checkbox" name="references_enabled" {% if not cfg or cfg.references_enabled %}checked{% endif %}><span>Allow individually selected references. Canonical paths are never shown to guests.</span></label>
+          </div>
+        </details>
+
         <div class="field">
           <input type="hidden" name="freeze_snapshot" value="off">
           <label class="check">
             <input type="checkbox" name="freeze_snapshot" {% if not cfg or not cfg.live_updates %}checked{% endif %}>
-            <span>Freeze generated shares at creation (recommended)</span>
+            <span>Freeze generated shares at creation</span>
           </label>
           <p class="mt-2 text-xs text-slate-500">Uncheck to refresh included content using the live policies below. New references remain disabled.</p>
         </div>
@@ -270,7 +293,7 @@
 
         <details class="expand-panel mb-4">
           <summary>
-            <span>Additional filters</span>
+            <span>Tags, dates, and topic</span>
             <svg class="expand-arrow h-4 w-4 shrink-0 text-blue-400 transition" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
           </summary>
           <div class="p-4">
@@ -316,28 +339,7 @@
           </div>
         </details>
 
-        <details class="expand-panel mb-4">
-          <summary>
-            <span>Access, expiry, and reference controls</span>
-            <svg class="expand-arrow h-4 w-4 shrink-0 text-blue-400 transition" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
-          </summary>
-          <div class="p-4">
-          <label class="check mb-4">
-            <input type="checkbox" name="no_expiry" data-no-expiry {% if cfg and cfg.no_expiry %}checked{% endif %}>
-            <span>No expiry</span>
-          </label>
-          <div class="two">
-            <div class="field"><label for="email">Allowed email (email OTP mode)</label><input class="control" id="email" type="email" name="allowed_email" value="{{ cfg.allowed_email if cfg else '' }}"></div>
-            <div class="field"><label for="expires-at">Expires at</label><input class="control [color-scheme:dark]" id="expires-at" type="datetime-local" name="expires_at" required value="{{ default_expires_at }}" data-expires-at {% if cfg and cfg.no_expiry %}disabled{% endif %} onclick="if (this.showPicker) this.showPicker()"><input type="hidden" name="timezone_offset" data-timezone-offset></div>
-            <div class="field"><label for="devices">Concurrent sessions</label><input class="control" id="devices" type="number" min="1" max="{{ max_concurrent_sessions }}" name="device_limit" value="{{ [cfg.device_limit if cfg else defaults.hfl_share_default_device_limit, max_concurrent_sessions]|min }}"></div>
-            <div class="field"><label for="maximum-redemptions">Maximum redemptions</label><input class="control" id="maximum-redemptions" type="number" min="0" max="1000" step="1" name="browser_redemption_limit" value="{{ cfg.browser_redemption_limit if cfg else 5 }}" required aria-describedby="maximum-redemptions-help"></div>
-          </div>
-          <p id="maximum-redemptions-help" class="mb-3 text-xs leading-5 text-slate-500">Per browser, remembered by a cookie. Resuming an active session does not count. Use 0 for unlimited. Clearing cookies starts a new allowance.</p>
-          <p class="mb-3 text-xs leading-5 text-slate-500">Each browser receives a fixed session lasting {{ session_duration }}. Closing or expiry releases its slot; rescanning in the same browser resumes it.</p>
-          <label class="check mb-2"><input type="checkbox" name="single_use" {% if cfg and cfg.single_use %}checked{% endif %}><span>Allow only the first successful session (overrides Maximum redemptions)</span></label>
-          <label class="check"><input type="checkbox" name="references_enabled" {% if not cfg or cfg.references_enabled %}checked{% endif %}><span>Allow individually selected references. Canonical paths are never shown to guests.</span></label>
-          </div>
-        </details>
+
 
         <div class="preview-shell" data-preview-shell>
           <div class="preview-status" data-preview-status role="status" aria-live="polite" hidden><span class="mini-spinner" aria-hidden="true"></span><span>Refreshing your preview…</span></div>
@@ -615,6 +617,7 @@
   let previewTimer = 0;
   let previewController = null;
   let previewEntryPage = 1;
+  let entryPageController = null;
   const syncDisabledReferences = () => {
     const references = form.querySelectorAll('input[name="enabled_reference_ids"]');
     // Preserve a saved recipe's exclusions until its first automatic preview
@@ -634,9 +637,60 @@
       form.append(hidden);
     });
   };
+  const bindEntryScroll = () => {
+    const scroller = previewContent?.querySelector('[data-entry-scroll]');
+    if (!scroller || scroller.dataset.bound) return;
+    scroller.dataset.bound = 'true';
+    let loading = false;
+    const load = async direction => {
+      if (loading || previewContent.getAttribute('aria-busy') === 'true') return;
+      const pages = [...scroller.querySelectorAll('[data-entry-page-items]')];
+      const number = Number((direction > 0 ? pages.at(-1) : pages[0]).dataset.entryPageItems) + direction;
+      if (number < 1 || number > Number(scroller.dataset.pageCount)) return;
+      loading = true;
+      const status = scroller.querySelector(direction > 0 ? '[data-entry-load-after]' : '[data-entry-load-before]');
+      status.textContent = 'Loading entries…';
+      const controller = new AbortController();
+      entryPageController = controller;
+      syncDisabledReferences();
+      const body = new FormData(form);
+      body.set('preview_entry_page', String(number));
+      try {
+        const response = await fetch('/sharing/preview?fragment=true', {method:'POST', body, signal:controller.signal, headers:{Accept:'text/html'}});
+        if (!response.ok) throw new Error('Entries could not load.');
+        const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const next = doc.querySelector('[data-entry-page-items]');
+        if (!next || Number(next.dataset.entryPageItems) !== number) throw new Error('Entry scope changed. Refresh the preview.');
+        if (controller.signal.aborted || !scroller.isConnected) return;
+        const beforeHeight = scroller.scrollHeight, beforeTop = scroller.scrollTop;
+        if (direction > 0) status.before(next); else pages[0].before(next);
+        if (direction < 0) scroller.scrollTop = beforeTop + scroller.scrollHeight - beforeHeight;
+        // Keep at most three pages mounted; exclusions live outside this window.
+        const mounted = [...scroller.querySelectorAll('[data-entry-page-items]')];
+        if (mounted.length > 3) {
+          const old = direction > 0 ? mounted[0] : mounted.at(-1);
+          const height = old.getBoundingClientRect().height;
+          old.remove();
+          if (direction > 0) scroller.scrollTop -= height;
+        }
+        status.textContent = direction > 0 && number < Number(scroller.dataset.pageCount) ? 'Scroll for more entries' : '';
+        window.refreshShareActivity?.();
+      } catch(error) {
+        if (error.name !== 'AbortError' && scroller.isConnected) {
+          status.textContent = error.message + ' ';
+          const retry = document.createElement('button'); retry.type='button';retry.className='btn btn-soft';retry.textContent='Retry';retry.onclick=()=>load(direction);status.append(retry);
+        }
+      } finally { loading=false; }
+    };
+    scroller.addEventListener('scroll', () => {
+      if (scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 100) load(1);
+      else if (scroller.scrollTop <= 60) load(-1);
+    }, {passive:true});
+  };
   const refreshPreview = async () => {
     if (!previewContent || !previewStatus) return;
     previewController?.abort();
+    entryPageController?.abort();
     const controller = new AbortController();
     previewController = controller;
     previewStatus.hidden = false;
@@ -652,8 +706,10 @@
         signal: controller.signal,
       });
       const html = await response.text();
+      if (controller.signal.aborted || previewController !== controller) return;
       previewContent.innerHTML = html;
       window.refreshShareActivity?.();
+      bindEntryScroll();
       updateTestAgentState();
     } catch (error) {
       if (error.name === 'AbortError') return;
@@ -667,6 +723,7 @@
     }
   };
   const schedulePreview = () => {
+    previewEntryPage = 1;
     window.clearTimeout(previewTimer);
     previewTimer = window.setTimeout(refreshPreview, 450);
   };
@@ -743,12 +800,6 @@
     toggle.checked = selected === references.length;
     toggle.indeterminate = selected > 0 && selected < references.length;
     syncDisabledReferences();
-  });
-  previewContent?.addEventListener('click', event => {
-    const button = event.target.closest('[data-entry-page]');
-    if (!button || button.disabled) return;
-    previewEntryPage = Number(button.dataset.entryPage);
-    refreshPreview();
   });
   clearTags?.addEventListener('click', () => {
     tagCloud.querySelectorAll('input[name="tags"]:checked').forEach(input => {
@@ -839,6 +890,7 @@
     if (!submitter?.dataset.progressMessage || !progressOverlay) return;
     window.clearTimeout(previewTimer);
     previewController?.abort();
+    entryPageController?.abort();
     if (form.dataset.processing === 'true') {
       event.preventDefault();
       return;
@@ -924,11 +976,13 @@
     closeButton?.addEventListener('click', dismissToast);
     toastTimer = window.setTimeout(dismissToast, 5000);
   }
+  bindEntryScroll();
   updateSourceSummary();
   updateClearTags();
   updateTestAgentState();
   if (!previewContent?.querySelector('[data-preview-ready]')) schedulePreview();
 })();
 </script>
-<script src="/static/js/share-activity.js"></script>
+<script src="{{ static_asset('js/share-graphs.js') }}"></script>
+<script src="{{ static_asset('js/share-activity.js') }}"></script>
 {% endblock %}

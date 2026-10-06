@@ -424,13 +424,15 @@ The owner editor is named **Share Activity**, under Express. It contains:
 
 - **Recipe:** recipient/name, verification, expiry, freezing, and live inclusion policies.
 - **Filters:** sources, tags, topic, dates and inherited combined-view rules. The
-  explicit Replace workspace filters control removes inherited rules/membership.
+  Use custom filters instead control appears only for inherited workspace scope and removes its rules/membership.
 - **Entries:** full entry previews, entry exclusions, references and Include secrets.
-  The editor renders 50 entries per page to bound browser load. Reference exclusions
-  persist across pages; paging does not narrow the generated snapshot. Select all
-  references affects the current preview page only.
-- **Actions & Ideas:** active-object selection, optional completed/dismissed items,
-  descriptions/checklists and the read-only Connections graph.
+  The editor loads batches of 50 on scroll and keeps at most 150 cards mounted.
+  Scrolling back reloads earlier batches with exclusions intact. The floating loading
+  status replaces pagination buttons; loading does not narrow the generated snapshot.
+  Bulk reference selection affects loaded controls only.
+- **Actions and Ideas:** active-object selection, optional completed/dismissed items,
+  Kanban-style descriptions/checklists and a per-card Connections dialog limited to
+  approved direct neighbours.
 - **Boards:** board selection, draft thoughts, saved positions, member graphs and
   mapped goals; outside-workspace membership requires explicit per-board opt-in.
 - **Graph:** the activity graph derived from approved objects and entry entities.
@@ -526,3 +528,21 @@ installation must override `HFL_SHARE_STORE_PATH` in its machine-local configura
 if the shared environment contains a canonical host filesystem path. Local owner
 Preview uses the local grant; QR links continue to use `HFL_SHARE_PUBLIC_URL`, so a
 frontend-only test deployment does not move the public sharing origin.
+
+### Sharing review UI
+
+Recipe and Filters do not display an empty preview shell. Recipe places access/expiry
+controls before Freeze; the owner agent test belongs to Entries. The existing
+source, date, tag, and topic filters remain available. Custom recipes do not display
+the inherited-workspace reset control. Resetting inherited rules can broaden scope.
+
+Board cards retain approved saved positions and node sizes, with the Activity Graph
+type palette, gradient orbs, icon zoom controls, and a typed object directory. Draft
+thought details appear on node selection rather than a duplicate list below the map.
+The read-only graph renderer uses the same `graph-presets.mjs` timeline layout as
+Activity Graph, initially framing the newest week. All graph input comes from the
+approved share snapshot; connections never fetch the owner's live graph endpoints.
+
+Rebuild graph bundles with `npm run build:knowledge-graph` after editing
+`frontend/src/share-graphs.jsx`. These assets also serve the existing public graph
+containers; recipient layout and access controls remain unchanged.
