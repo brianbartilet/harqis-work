@@ -426,6 +426,9 @@ The owner editor is named **Share Activity**, under Express. It contains:
 - **Filters:** sources, tags, topic, dates and inherited combined-view rules. The
   explicit Replace workspace filters control removes inherited rules/membership.
 - **Entries:** full entry previews, entry exclusions, references and Include secrets.
+  The editor renders 50 entries per page to bound browser load. Reference exclusions
+  persist across pages; paging does not narrow the generated snapshot. Select all
+  references affects the current preview page only.
 - **Actions & Ideas:** active-object selection, optional completed/dismissed items,
   descriptions/checklists and the read-only Connections graph.
 - **Boards:** board selection, draft thoughts, saved positions, member graphs and

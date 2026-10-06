@@ -786,6 +786,7 @@ async def _preview_response(
                 "preview_answer": answer,
                 "suggested_prompts": _suggested_prompts(preview),
                 "preview_error": "",
+                "preview_entry_page": str(form.get("preview_entry_page") or "1"),
             },
         )
     return templates.TemplateResponse(
