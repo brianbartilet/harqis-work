@@ -113,16 +113,14 @@ backfill = "checkpointed"
 [[sources]]
 key = "weekly-summary"
 kind = "derived"
-monitor_mode = "scheduled"
+monitor_mode = "unscheduled"
 task = "workflows.hfl.tasks.summarize.summarize_hfl_week"
 entry_sources = ["summarize"]
-schedule = "Sunday 21:00"
-task_max_age_hours = 192
-entry_max_age_hours = 216
+schedule = "on-demand; former Sunday 21:00 AI summary intentionally disabled in tasks_config.py"
 expects_entry = true
 allow_empty = false
-auto_retry = true
-backfill = "date-argument"
+auto_retry = false
+backfill = "none"
 
 [[sources]]
 key = "weekly-retrieval"

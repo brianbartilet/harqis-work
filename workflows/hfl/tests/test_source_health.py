@@ -74,6 +74,21 @@ def test__registry_covers_every_active_hfl_task():
     }
 
 
+def test__weekly_summary_is_intentionally_unscheduled():
+    from workflows.hfl.source_health import configured_hfl_tasks
+
+    _, policies = load_source_registry()
+    policy = next(item for item in policies if item.key == "weekly-summary")
+    assert policy.task not in configured_hfl_tasks()
+    assert policy.monitor_mode == "unscheduled"
+    assert policy.task_max_age_hours is None
+    assert policy.entry_max_age_hours is None
+    assert not policy.auto_retry
+    assert policy.backfill == "none"
+    result = evaluate_source(policy, now=NOW, corpus={}, elasticsearch={}, tasks={})
+    assert result.status == "unmonitored"
+
+
 def test__weekly_retrieval_is_intentionally_unscheduled():
     from workflows.hfl.source_health import configured_hfl_tasks
 
