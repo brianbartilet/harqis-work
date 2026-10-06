@@ -32,8 +32,6 @@
         <span id="kg-animation-status" role="status">Motion is off</span>
       </div>
     </div>
-    <button id="kg-entities" type="button">Entities</button>
-    <button id="kg-open-filters" type="button" aria-haspopup="dialog" aria-controls="kg-filter-drawer" aria-expanded="false">Filters</button>
     <div class="kg-views-menu" id="kg-views-menu">
       <button id="kg-open-views" type="button" aria-controls="kg-views-panel" aria-expanded="false">Views<span class="kg-menu-caret" aria-hidden="true"></span></button>
       <div id="kg-views-panel" class="kg-menu-panel" role="region" aria-label="Presets" hidden>
@@ -58,6 +56,8 @@
     <div class="corpus-workspace-controls kg-workspace-controls">
       {% include "modules/hfl_corpus/partials/workspace_indicator.html" %}
       {% include "modules/hfl_corpus/partials/workspace_views.html" %}
+    <button id="kg-entities" type="button">Entities</button>
+    <button id="kg-open-filters" type="button" aria-haspopup="dialog" aria-controls="kg-filter-drawer" aria-expanded="false">Filters</button>
     </div>
   </div>
   <p id="kg-preset-notice" role="status" hidden></p>
@@ -67,7 +67,7 @@
   <dialog id="kg-filter-drawer" class="kg-additional kg-filter-drawer" aria-labelledby="kg-filter-title">
   <div class="kg-drawer-heading"><h2 id="kg-filter-title">Filters</h2><button id="kg-close-filters" type="button" aria-label="Close filters"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
   <div class="kg-toolbar kg-filter-grid">
-    <div class="kg-source-field"><span>Sources</span><details id="kg-source-menu"><summary id="kg-source-caption">All sources</summary><div id="kg-source-options"></div></details></div>
+    <div class="kg-source-field"><span>Sources</span><details id="kg-source-menu"><summary id="kg-source-caption">All sources</summary><div id="kg-source-options"></div></details><p id="kg-source-inherited" class="kg-source-inherited"></p></div>
 
     <label class="kg-density">From<input id="kg-since" type="date"></label><label class="kg-density">To<input id="kg-until" type="date"></label>
     <label>Date range<select id="kg-rolling"><option value="0">Fixed dates</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last 365 days</option></select></label>

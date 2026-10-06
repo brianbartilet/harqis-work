@@ -579,7 +579,7 @@
   };
   let pollInFlight = false;
   async function checkDynamic(force = false) {
-    if (transitioning || busy || pollInFlight || disposed || document.hidden || document.querySelector('#followups-board[data-busy=true]') || document.querySelector('dialog[open]:not(#followups-board)') || menu.open) return;
+    if (transitioning || busy || pollInFlight || disposed || document.hidden || document.querySelector('#followups-board[data-busy=true]') || document.querySelector('dialog[open]:not(#followups-board)') || (menu.open && !(graph && dynamicOn && !picker.open && !pickerChanged))) return;
     // Applied filters are shared; unfinished typing stays local until submitted.
     if (JSON.stringify(snapshot()) !== initialFilterState) {
       $('[data-adaptive-status]').textContent = 'Workspace sync paused while filters are being edited. Apply your filters to sync.';
@@ -588,7 +588,9 @@
     pollInFlight = true;
     try {
       const data = await request();
-      if (force === true || sharedFingerprint(data) !== observedShared) {
+      // A bookmarked Dynamic URL may already lag the server's current block.
+      const scheduleChanged = dynamicOn && data.preferences.dynamic && [...data.active].sort().join(',') !== [...activeIds].sort().join(',');
+      if (force === true || scheduleChanged || sharedFingerprint(data) !== observedShared) {
         await loadCombined(data, data.active, data.preferences.dynamic, true);
       }
     } catch (error) {

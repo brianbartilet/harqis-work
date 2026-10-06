@@ -763,14 +763,31 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     $('workspace').inert=value;
   }
   function sourceOptions(values) {
+    const params=new URLSearchParams(window.activityModals?.context()||'');
+    const scope=JSON.parse(params.get('scope')||'{"any":[],"all":{}}');
+    const split=value=>String(value||'').split(',').map(s=>s.trim()).filter(Boolean);
+    const clauses=(scope.any||[]).map(state=>split(state.source));
+    // Selected workspaces are OR-ed; additional shared filters narrow that union.
+    let inherited=clauses.length&&clauses.every(sources=>sources.length)?[...new Set(clauses.flat())]:null;
+    const additional=split(params.has('source')?params.get('source'):scope.all?.source);
+    if(additional.length)inherited=inherited?inherited.filter(source=>additional.includes(source)):additional;
+    const scoped=!!(params.get('workspace')||params.get('views')||inherited);
+    const baseline=scoped?'Workspace sources':'All sources';
+    $('source-inherited').textContent=scoped
+      ? 'Inherited: '+(inherited===null?'all sources':inherited.length?inherited.join(', '):'no overlapping sources')+'. Selections below narrow this graph only.'
+      : 'Selections narrow this graph only.';
     $('source-options').replaceChildren();
-    for(const value of ['',...new Set([...values,...selectedSources])]) {
+    const reset=document.createElement('button');reset.type='button';reset.dataset.sourceReset='';
+    reset.textContent=scoped?'Reset to workspace sources':'Reset to all sources';
+    reset.onclick=()=>{selectedSources.clear();sourceOptions(values);};
+    $('source-options').append(reset);
+    for(const value of [...new Set([...(inherited||[]),...values,...selectedSources])].sort()) {
       const label=document.createElement('label'),input=document.createElement('input');
-      input.type='checkbox';input.checked=value?selectedSources.has(value):!selectedSources.size;
-      input.onchange=()=>{if(!value)selectedSources.clear();else input.checked?selectedSources.add(value):selectedSources.delete(value);sourceOptions(values);};
-      label.append(input,document.createTextNode(value||'All sources'));$('source-options').append(label);
+      input.type='checkbox';input.value=value;input.checked=selectedSources.has(value);
+      input.onchange=()=>{input.checked?selectedSources.add(value):selectedSources.delete(value);sourceOptions(values);};
+      label.append(input,document.createTextNode(value));$('source-options').append(label);
     }
-    $('source-caption').textContent=selectedSources.size?selectedSources.size+' sources selected':'All sources';
+    $('source-caption').textContent=selectedSources.size?selectedSources.size+' sources selected':baseline;
   }
   async function load(force=false) {
     delete $('info').dataset.error;

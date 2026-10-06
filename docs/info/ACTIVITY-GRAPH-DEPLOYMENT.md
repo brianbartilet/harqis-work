@@ -44,3 +44,11 @@ The initial entity directory loads 100 entities with Load more entities for addi
 ## Validation included with this PR
 
 Regression tests cover owner access, secret/deleted/stale entry suppression, occurrence/source filters, bounded responses, profile preservation, signed direct document loading, durable broker-failure recovery, two-batch continuation, and new/edited entry propagation into entity/source/date edges. Model and broker behavior in propagation tests are mocked; production credentials, queue consumption and historical completion must be verified after deployment.
+
+### Workspace toolbar and scheduled changes
+
+The right-hand toolbar groups workspace indicators, Workspace, Entities, and Filters in that order. Animation, Views, Reset, and Refresh remain beside search. Board mode continues to hide activity-only Filters.
+
+Scheduled Dynamic mode uses the same workspace schedules and profile timezone as Corpus and Kanban. The graph checks shared workspace state every 15 seconds and on focus. An open Workspace menu does not pause scheduled changes, but an open workspace selection list, unsaved selection, or dialog does. Returning to an old Dynamic URL reconciles its selection with the current schedule. Outside scheduled blocks, the graph follows All activity while Dynamic mode remains enabled.
+
+The graph Sources filter inherits the selected workspace source scope and displays it below the selector. Multiple workspace source lists form a union; shared additional source filters narrow it. A workspace without a source restriction permits all sources. Graph source selections only narrow this inherited scope and never edit saved workspace settings. **Reset to workspace sources**, followed by **Apply filters**, clears the graph-only source selection. With unrestricted All activity, the selector reads **All sources**.

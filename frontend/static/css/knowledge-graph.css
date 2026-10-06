@@ -274,3 +274,15 @@
   .kg-shell .kg-main-toolbar .kg-inline-info { display:block; flex-basis:100%; order:4 }
   .kg-shell .kg-main-toolbar .kg-workspace-controls { order:5 }
 }
+
+.kg-workspace-controls > button { flex-shrink:0; white-space:nowrap }
+@media(max-width:760px){
+  .kg-workspace-controls { position:relative; flex-wrap:wrap; gap:8px }
+  .kg-workspace-controls > .workspace-menu { position:static }
+  .kg-workspace-controls > .activity-view-context { flex-basis:100%; justify-content:flex-end }
+}
+
+@media(min-width:761px){ .kg-main-toolbar .kg-inline-info { flex-basis:80px } }
+
+.kg-shell .kg-source-inherited { margin:6px 0 0; font-size:11px; line-height:1.5 }
+#kg-source-options > button { width:100%; text-align:left; margin-bottom:5px }

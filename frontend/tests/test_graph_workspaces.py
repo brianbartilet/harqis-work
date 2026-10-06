@@ -122,6 +122,12 @@ def test_workspace_boards_and_global_entities_browser(ideas, authenticated_clien
                 assert animation['x'] >= search['x']+search['width']
                 assert animation['x'] < search['x']+search['width']+30
                 assert workspace['x'] > refresh['x']+refresh['width']
+                entities = page.locator('#kg-entities').bounding_box()
+                filters = page.locator('#kg-open-filters').bounding_box()
+                assert entities['x'] >= workspace['x']+workspace['width']
+                # Board mode intentionally hides the activity Filters button.
+                if filters:
+                    assert filters['x'] >= entities['x']+entities['width']
 
             panel = page.locator('.workspace-menu-panel').bounding_box()
             assert panel['x'] >= 0 and panel['x']+panel['width'] <= width+1
@@ -138,6 +144,18 @@ def test_workspace_boards_and_global_entities_browser(ideas, authenticated_clien
                 page.unroute('**/timeline/ideas/maps/*/graph?**')
                 page.locator('[data-adaptive-status]').get_by_role('button', name='Retry').click()
                 expect(page.locator('[data-active-view-name]')).to_have_text('All activity')
+            page.locator('[data-workspace-menu]').evaluate('(el)=>el.open=false')
+            page.get_by_role('button', name='Explore Activity Graph', exact=True).click()
+            expect(page.locator('#kg-open-filters')).to_be_visible()
+            if width == 1440:
+                entities = page.locator('#kg-entities').bounding_box()
+                filters = page.locator('#kg-open-filters').bounding_box()
+                assert filters['x'] >= entities['x']+entities['width']
+                assert abs(filters['y']-page.locator('#kg-search').bounding_box()['y']) <= 2
+            page.screenshot(path=str(tmp_path / ('graph-toolbar-'+str(width)+'.png')))
+            page.locator('[data-workspace-menu] > summary').click()
+            panel = page.locator('.workspace-menu-panel').bounding_box()
+            assert panel['x'] >= 0 and panel['x']+panel['width'] <= width+1
             assert not errors, errors
         finally:
             browser.close()
