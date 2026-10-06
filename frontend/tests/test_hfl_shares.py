@@ -250,9 +250,9 @@ def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
     response = authenticated_client.get("/sharing")
 
     assert response.status_code == 200
-    assert "<title>Share Corpus · HARQIS</title>" in response.text
-    assert ">Share Corpus</h1>" in response.text
-    assert "Save selection recipes, then generate fixed or live shares from matching entries." in response.text
+    assert "<title>Share Activity · HARQIS</title>" in response.text
+    assert ">Share Activity</h1>" in response.text
+    assert "Review workspace context, then generate frozen or live read-only shares." in response.text
     assert response.text.count('class="owner-list-arrow-shell"') == 2
     assert ">New recipe</h2>" in response.text
     assert "Verification mode" in response.text
@@ -420,7 +420,8 @@ def test_automatic_preview_fragment_defaults_references_and_places_tags_below_ti
 
     assert response.status_code == 200
     assert "data-preview-ready" in response.text
-    assert 'required data-test-question' in response.text
+    assert 'data-test-question' in response.text
+    assert 'required data-test-question' not in response.text
     assert 'name="reference_selection_initialized" value="1"' in response.text
     assert re.search(
         r"Planned the Japan trip</strong>.*?#travel.*?#japan",

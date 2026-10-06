@@ -21,6 +21,42 @@ tags:
 - name: hfl-management
   description: Actions, Memory Signal categories, and date pins
 paths:
+  /api/hfl/timeline/ideas/share-context/attachments/{kind}/{source_id}/{attachment_id}:
+    get:
+      summary: Download immutable workspace sharing attachment input
+      description: Service bearer authentication only. Browser/proxy requests are forbidden. Publication authorization is enforced by the sharing service.
+      operationId: hfl_workspace_share_attachment
+      tags: [hfl-corpus-api]
+      parameters:
+      - {name: kind, in: path, required: true, schema: {type: string, enum: [actionable, idea]}}
+      - {name: source_id, in: path, required: true, schema: {type: string}}
+      - {name: attachment_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Attachment bytes
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary}
+        '401': {description: Invalid bearer token}
+        '403': {description: Browser/proxy access forbidden}
+        '404': {description: Attachment unavailable}
+  /api/hfl/timeline/ideas/share-context:
+    get:
+      summary: Read canonical input for workspace sharing
+      description: Service-bearer-only canonical object snapshot. Browser proxy access is forbidden. The sharing service must enforce PIN authorization and publication scope before exposing any content.
+      operationId: hfl_workspace_share_context
+      tags: [hfl-corpus-api]
+      responses:
+        '200':
+          description: Canonical actions, ideas, maps, goals, lists and links for server-side projection
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          description: Invalid service bearer token
+        '403':
+          description: Browser or proxy access forbidden
   /api/hfl/timeline/items/{followup_id}/checklist-action:
     post:
       tags:

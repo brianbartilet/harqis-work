@@ -676,6 +676,7 @@
       if (controller.signal.aborted) return;
       if (!response.ok && response.status !== 422) throw Error('The preview could not load. Please try again.');
       shareContent.innerHTML = html;
+      window.refreshShareActivity?.();
       shareStatus.textContent = '';
     } catch (error) {
       if (error.name !== 'AbortError') shareStatus.textContent = error.message;

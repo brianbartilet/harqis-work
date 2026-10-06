@@ -97,6 +97,36 @@ def snapshot(request: Request):
     return permitted_snapshot()
 
 
+@router.get('/share-context')
+def share_context(request: Request):
+    """Service-only input; the sharing service applies PIN and publication scope.
+
+    The API router requires its bearer credential. Browser/proxy access is
+    explicitly denied by TimelineRoute, including authenticated owner sessions.
+    """
+    if not request.url.path.startswith('/api/hfl/'):
+        raise HTTPException(403, 'Service access required.')
+    timeline.owner(request)
+    data = store().snapshot()
+    from modules.hfl_corpus.attachments import source_store
+    for collection, kind in [('actions', 'actionable'), ('ideas', 'idea')]:
+        for item in data.get(collection, []):
+            files, source = source_store(kind, item['id'])
+            item['_share_attachments'] = files.list(source)
+    return data
+
+
+@router.get('/share-context/attachments/{kind}/{source_id}/{attachment_id}')
+def share_context_attachment(request: Request, kind: str, source_id: str, attachment_id: str):
+    if not request.url.path.startswith('/api/hfl/') or kind not in {'actionable', 'idea'}:
+        raise HTTPException(403, 'Service access required.')
+    timeline.owner(request)
+    from modules.hfl_corpus.attachments import source_store
+    files, source = source_store(kind, source_id)
+    manifest = files.get(source, attachment_id)
+    return FileResponse(files.path(manifest), filename=manifest['name'], media_type='application/octet-stream')
+
+
 @router.get('/connection-availability')
 def connection_availability(request: Request):
     timeline.owner(request)

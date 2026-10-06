@@ -31,10 +31,10 @@ MODULES: tuple[ModuleDefinition, ...] = (
     ),
     ModuleDefinition(
         key="sharing",
-        label="Share",
+        label="Share Activity",
         route="/sharing",
-        description="Recipes stay live while every generated snapshot freezes a fresh view.",
-        detail="Shape Activity Corpus sources, tags, and filters into temporary portals with expiring guest access.",
+        description="Share selected activity as frozen snapshots or configurable live views.",
+        detail="Review entries, actions, ideas, boards, goals, and graphs with read-only guest access.",
     ),
     ModuleDefinition(
         key="manifesto",

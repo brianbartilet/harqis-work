@@ -150,6 +150,9 @@ def build_snapshot(
     allow_secrets: bool = False,
     secret_tags: tuple[str, ...] = (),
 ) -> ScopeSnapshot:
+    all_documents = documents
+    from modules.hfl_shares.activity_models import selection
+    controls = selection(configuration)
     if configuration.corpus_scope:
         from modules.hfl_corpus.view_scope import filter_scope, parse_scope
         documents = filter_scope(documents, parse_scope(configuration.corpus_scope))
@@ -179,6 +182,7 @@ def build_snapshot(
         else disabled_reference_ids
     )
     entries: list[SnapshotEntry] = []
+    matching_ids: set[str] = set()
     dates: list[date] = []
     available_references = 0
     missing_sources = set() if all_sources else set(sources)
@@ -222,6 +226,12 @@ def build_snapshot(
             searchable = sanitized_text.casefold()
             if topic_terms and not all(term in searchable for term in topic_terms):
                 continue
+            matching_ids.add(entry_id)
+            if configuration.activity:
+                if "entry:" + entry_id in controls.excluded_ids:
+                    continue
+                if controls.approved_ids is not None and "entries" not in controls.automatic and entry_id not in controls.approved_ids.get("entries", []):
+                    continue
             entry_chars = len(sanitized_text)
             if used_chars + entry_chars > max_chars:
                 if not entries:
@@ -285,7 +295,7 @@ def build_snapshot(
         warnings.append("References exist but sharing is disabled.")
     if not entries:
         warnings.append("No corpus entries match this configuration.")
-    return ScopeSnapshot(
+    snapshot = ScopeSnapshot(
         entries=tuple(entries),
         created_at=utc_now().isoformat(),
         sources=(
@@ -319,13 +329,20 @@ def build_snapshot(
         context_prompt=configuration.context_prompt,
         recipient=configuration.recipient,
     )
+    if configuration.activity:
+        from modules.hfl_shares.activity import project
+        snapshot = project(configuration, snapshot, all_documents, allow_secrets=allow_secrets, secret_tags=protected_tags,
+                           enabled_reference_ids=enabled_reference_ids, disabled_reference_ids=disabled_reference_ids,
+                           matching_ids=matching_ids)
+    return snapshot
+
 
 
 def suggested_prompts(
     snapshot: ScopeSnapshot,
     owner_name: str = "P",
 ) -> tuple[str, ...]:
-    if not snapshot.entries:
+    if not snapshot.all_entries:
         return ()
     owner = owner_name.strip() or "P"
     suggestions = [
@@ -345,4 +362,4 @@ def suggested_prompts(
 
 
 def snapshot_entry(snapshot: ScopeSnapshot, entry_id: str) -> SnapshotEntry | None:
-    return next((entry for entry in snapshot.entries if entry.id == entry_id), None)
+    return next((entry for entry in snapshot.all_entries if entry.id == entry_id), None)

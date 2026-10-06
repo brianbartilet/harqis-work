@@ -423,3 +423,15 @@ they mutate the canonical corpus.
 - `get_hfl_corpus_list`: Read a standalone or owner-linked checklist entity.
 - `create_hfl_corpus_list`: Create a standalone checklist with a caller-generated UUID. Writes remote state.
 - `update_hfl_corpus_list`: Update a standalone or owner-linked checklist at its expected revision. Writes remote state.
+
+
+### Workspace sharing service context
+
+`GET /api/hfl/timeline/ideas/share-context` returns canonical object input to the
+sharing service under the existing bearer authentication. Browser owner routes
+cannot proxy this endpoint. The sharing service must apply its PIN-authorized
+secrets policy, workspace selection, explicit exclusions and safe public projection
+before persisting or returning recipient data. See
+[workspace sharing](../../docs/info/HFL-CORPUS-SHARING.md#workspace-context-sharing).
+Older canonical servers support ordinary sharing through the existing filtered
+snapshot; mixed secret-backed sharing requires the updated service endpoint.

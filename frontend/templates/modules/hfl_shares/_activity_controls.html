@@ -1,0 +1,44 @@
+{% set activity = cfg.activity if cfg and cfg.activity else {} %}
+{% set sections = activity.get('sections', ['entries']) %}
+<input type="hidden" name="activity_version" value="1">
+<input type="hidden" name="workspace_ids" value="{{ activity.get('workspace_ids', [])|join(',') }}">
+<input type="hidden" name="excluded_object_labels" value="{{ activity.get('excluded_labels', {})|tojson|forceescape }}">
+<div data-object-exclusions>{% for identity in activity.get('excluded_ids', []) %}<input type="hidden" name="excluded_object_ids" value="{{ identity }}">{% endfor %}</div>
+<nav class="share-tabs" role="tablist" aria-label="Share recipe sections">
+  {% for key, label in [('recipe','Recipe'),('filters','Filters'),('entries','Entries'),('actions','Actions & Ideas'),('boards','Boards'),('graph','Graph')] %}
+  <button type="button" role="tab" id="share-tab-{{ key }}" aria-controls="share-panel-{{ key }}" aria-selected="{{ 'true' if loop.first else 'false' }}" data-share-tab="{{ key }}">{{ label }}</button>
+  {% endfor %}
+</nav>
+<p class="share-scope-note" data-share-secrets-status>Secrets excluded · All recipient content is read-only.</p>
+{% for key in ['recipe','filters','entries','actions','boards','graph'] %}
+<section id="share-panel-{{ key }}" role="tabpanel" aria-labelledby="share-tab-{{ key }}" data-share-panel="{{ key }}" {% if key != 'recipe' %}hidden{% endif %}>
+{% if key == 'recipe' %}
+<div data-recipe-fields></div>
+<fieldset class="field automatic-inclusion"><legend>Automatically include</legend><p class="share-scope-note">When Freeze is off, checked sections also include newly matching objects. Unchecked sections refresh approved objects only. Exclusions always apply.</p>
+{% for section, label in [('entries','Entries'),('actions','Actions'),('ideas','Ideas'),('boards','Boards and their members')] %}
+<label class="check"><input type="checkbox" name="automatic_sections" value="{{ section }}" {% if section in activity.get('automatic', ['entries'] if not activity else []) %}checked{% endif %}><span>{{ label }}</span></label>
+{% endfor %}</fieldset>
+{% elif key == 'filters' %}
+<p class="share-scope-note">Entry filters apply to corpus entries and inherited objects. Explicitly workspace-linked actions and ideas remain eligible independently of entry source/date filters. Boards use workspace membership; goals follow selected boards.</p>
+<div data-filter-fields></div>
+<button class="btn btn-soft" type="button" data-replace-workspace>Replace workspace filters</button>
+<p class="share-scope-note">Replace clears inherited combined rules and workspace membership; the editable filters below become the complete scope.</p>
+{% elif key == 'entries' %}
+<label class="check"><input type="checkbox" name="activity_sections" value="entries" {% if 'entries' in sections %}checked{% endif %} data-activity-control>Include entries</label>
+<div data-entry-fields></div>
+{% elif key == 'actions' %}
+{% for section, label in [('actions','Actions'),('ideas','Ideas')] %}<label class="check"><input type="checkbox" name="activity_sections" value="{{ section }}" {% if section in sections %}checked{% endif %} data-activity-control>Include {{ label|lower }}</label>{% endfor %}
+<label class="check"><input type="checkbox" name="include_completed" {% if activity.get('include_completed') %}checked{% endif %} data-activity-control>Include completed / closed actions</label>
+<label class="check"><input type="checkbox" name="include_dismissed" {% if activity.get('include_dismissed') %}checked{% endif %} data-activity-control>Include dismissed ideas</label>
+<p class="share-scope-note">Selecting an object shares its description, status, dates, notes, and checklists. Connections include approved content only. Selected boards may also include members here; exclude an object to remove it everywhere.</p>
+{% elif key == 'boards' %}
+<label class="check"><input type="checkbox" name="activity_sections" value="boards" {% if 'boards' in sections %}checked{% endif %} data-activity-control>Include boards and mapped goals</label>
+<p class="share-scope-note">Boards include draft thoughts and eligible members. Outside-workspace members require the per-board option. Goals do not pull in other boards.</p>
+<div data-outside-board-values>{% for identity in activity.get('outside_board_ids', []) %}<input type="hidden" name="outside_board_ids" value="{{ identity }}">{% endfor %}</div>
+{% elif key == 'graph' %}
+<label class="check"><input type="checkbox" name="activity_sections" value="graph" {% if 'graph' in sections %}checked{% endif %} data-activity-control>Include activity graph</label>
+<p class="share-scope-note">Only approved shared objects and their derived entities appear. Graphs never add unrelated objects.</p>
+{% endif %}
+</section>
+{% endfor %}
+<div data-excluded-summary></div>

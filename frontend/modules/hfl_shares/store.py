@@ -121,8 +121,6 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_session
 ON chat_messages(session_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_share_embeddings_share
 ON share_embeddings(share_id, model_name);
-CREATE INDEX IF NOT EXISTS idx_shares_owner_list
-ON shares(instant, created_at DESC);
 """
 
 
@@ -171,6 +169,13 @@ class ShareStore:
                     "UPDATE shares SET snapshot_entry_count="
                     "COALESCE(json_array_length(snapshot, '$.entries'), 0)"
                 )
+
+            # Older databases predate instant shares. Create this index only
+            # after adding its columns, otherwise startup fails before migration.
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_shares_owner_list "
+                "ON shares(instant, created_at DESC)"
+            )
 
             # One-time upgrade: retain explicit allowances and every grant's lifecycle.
             if not connection.in_transaction:
