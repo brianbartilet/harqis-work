@@ -63,7 +63,7 @@
   </div>
   {% include "modules/hfl_shares/_activity_preview.html" %}
   {% if preview.activity_entries %}<div data-preview-tab="entries"><h3>Object references</h3>{% for entry in preview.activity_entries %}{% for reference in entry.references %}<label class="check"><input type="checkbox" name="enabled_reference_ids" value="{{ reference.id }}" {% if reference.enabled %}checked{% endif %}>{{ entry.moment }} — {{ reference.label }}</label>{% endfor %}{% endfor %}</div>{% endif %}
-  <div data-preview-tab="entries" class="share-agent-test">
+  <div data-preview-tab="recipe" class="share-agent-test">
   {% if not hide_preview_agent %}
   <div class="field mt-4"><label for="question">Test this preview with the owner-only agent</label><input class="control" id="question" name="question" value="{{ preview_question }}" placeholder="What are the main open items?" data-test-question></div>
   {% if suggested_prompts %}<p class="text-xs text-slate-500">Suggestions: {{ suggested_prompts|join(' · ') }}</p>{% endif %}

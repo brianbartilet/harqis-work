@@ -530,8 +530,8 @@ frontend-only test deployment does not move the public sharing origin.
 
 ### Sharing review UI
 
-Recipe and Filters do not display an empty preview shell. Recipe places access/expiry
-controls before Freeze; the owner agent test belongs to Entries. The existing
+Filters does not display a preview shell. Recipe places access/expiry
+controls before Freeze and includes the owner-only agent question, suggestions, and answer. The existing
 source, date, tag, and topic filters remain available. Custom recipes do not display
 the inherited-workspace reset control. Resetting inherited rules can broaden scope.
 
@@ -542,7 +542,7 @@ Shared graphs use Kanban collision-aware labels, centered SVG controls, and temp
 Dragging never persists board positions or changes the approved snapshot. Connections dialogs
 select the originating card and show sanitized Markdown in the adjacent inspector.
 Entry details and action/idea descriptions use the same sanitized Markdown renderer as Corpus.
-The owner-only agent test stays with Entries; Recipe does not show it.
+The owner-only agent test and Test agent button appear on Recipe, not Entries.
 The read-only graph renderer uses the same `graph-presets.mjs` timeline layout as
 Activity Graph, initially framing the newest week. All graph input comes from the
 approved share snapshot; connections never fetch the owner's live graph endpoints.

@@ -228,8 +228,8 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     page.set_viewport_size({'width':width, 'height':1000})
     page.goto('https://editing.test/sharing')
     expect(page.get_by_role('tab', name='Recipe', exact=True)).to_have_attribute('aria-selected', 'true')
-    expect(page.locator('[data-preview-shell]')).not_to_be_visible()
-    expect(page.locator('[data-test-agent]')).not_to_be_visible()
+    expect(page.locator('[data-preview-shell]')).to_be_visible()
+    expect(page.locator('[data-test-agent]')).to_be_visible()
     assert page.locator('[data-share-tab="entries"]').evaluate('(el)=>getComputedStyle(el).cursor') == 'pointer'
     assert page.locator('[data-recipe-fields]').evaluate('(el)=>{const access=[...el.querySelectorAll("details")].find(e=>e.textContent.includes("Access, expiry"));return !!(access.compareDocumentPosition(el.querySelector("[name=freeze_snapshot]")) & Node.DOCUMENT_POSITION_FOLLOWING)}')
 
@@ -269,6 +269,8 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     page.locator('.share-tabs').scroll_into_view_if_needed()
     board_graph.screenshot(path=str(tmp_path / 'sharing-boards.png'))
     page.get_by_role('tab', name='Entries', exact=True).click()
+    expect(page.locator('.share-agent-test')).not_to_be_visible()
+    expect(page.locator('[data-test-agent]')).not_to_be_visible()
     entry = page.locator('.share-entry-card').first
     entry.locator('summary').click()
     expect(entry.locator('.share-entry-content.markdown-body')).to_be_visible()
@@ -277,6 +279,9 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     page.get_by_role('tab', name='Filters', exact=True).click()
     expect(page.locator('[data-source-selector]')).to_be_visible()
     page.get_by_role('tab', name='Recipe', exact=True).click()
+    expect(page.locator('.share-agent-test')).to_be_visible()
+    expect(page.locator('[data-test-question]')).to_be_visible()
+    expect(page.locator('[data-test-agent]')).to_be_visible()
     page.locator('#name').fill('Workspace demo')
     page.locator('#recipient').fill('Reviewer')
     page.locator('#auth-mode').select_option('qr')

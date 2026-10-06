@@ -27,7 +27,7 @@
 .share-entry-card details{margin-top:.8rem}.share-entry-card summary{cursor:pointer;font-weight:600}.share-entry-card p{line-height:1.65}
 .share-scroll-state{position:sticky;bottom:0;z-index:1;background:linear-gradient(transparent,#0f172a 35%);padding:1rem .4rem .4rem;color:#94a3b8;font-size:.8rem;text-align:center}
 .share-scroll-state:empty{display:none}.share-scroll-state[data-entry-load-before]{top:0;bottom:auto;background:linear-gradient(#0f172a 65%,transparent);padding:.4rem .4rem 1rem}
-.share-agent-test{margin-top:1.5rem;padding-top:1rem;border-top:1px solid #334155}
+.share-agent-test{margin:0;padding:0}
 .share-intent-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}.share-intent-column{min-width:0}.share-intent-column>h3{font-weight:700;margin-bottom:1rem}
 .share-object-card{border:1px solid #2a3a50;border-left:3px solid #93c5fd;border-radius:.85rem;padding:1rem;background:#0b1424;margin-bottom:1rem;min-width:0;overflow-wrap:anywhere}
 .share-object-card[data-kind=actions]{border-left-color:#fb8ca6}.share-object-card[data-kind=ideas]{border-left-color:#f9ca74}.share-object-card[data-kind=goals]{border-left-color:#a7f3d0}

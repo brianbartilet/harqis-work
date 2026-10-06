@@ -8,9 +8,9 @@
   const selectTab = key => {
     active = key;
     const shell = form?.querySelector('[data-preview-shell]');
-    if (shell) shell.hidden = ['recipe', 'filters'].includes(key);
+    if (shell) shell.hidden = key === 'filters';
     const test = form?.querySelector('[data-test-agent]');
-    if (test) test.hidden = key !== 'entries';
+    if (test) test.hidden = key !== 'recipe';
     form?.querySelectorAll('[data-share-tab]').forEach(b => {
       b.setAttribute('aria-selected', String(b.dataset.shareTab === key));
       b.tabIndex = b.dataset.shareTab === key ? 0 : -1;
