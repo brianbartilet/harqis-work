@@ -74,6 +74,114 @@ def test__registry_covers_every_active_hfl_task():
     }
 
 
+def test__weekly_summary_is_intentionally_unscheduled():
+    from workflows.hfl.source_health import configured_hfl_tasks
+
+    _, policies = load_source_registry()
+    policy = next(item for item in policies if item.key == "weekly-summary")
+    assert policy.task not in configured_hfl_tasks()
+    assert policy.monitor_mode == "unscheduled"
+    assert policy.task_max_age_hours is None
+    assert policy.entry_max_age_hours is None
+    assert not policy.auto_retry
+    assert policy.backfill == "none"
+    result = evaluate_source(policy, now=NOW, corpus={}, elasticsearch={}, tasks={})
+    assert result.status == "unmonitored"
+
+
+def test__weekly_retrieval_is_intentionally_unscheduled():
+    from workflows.hfl.source_health import configured_hfl_tasks
+
+    _, policies = load_source_registry()
+    policy = next(item for item in policies if item.key == "weekly-retrieval")
+    assert policy.task not in configured_hfl_tasks()
+    assert policy.monitor_mode == "unscheduled"
+    assert policy.task_max_age_hours is None
+    assert not policy.auto_retry
+    result = evaluate_source(policy, now=NOW, corpus={}, elasticsearch={}, tasks={})
+    assert result.status == "unmonitored"
+
+
+@pytest.mark.parametrize("paused, mismatch, expected", [
+    (True, False, "unmonitored"), (True, True, "failed"),
+    (False, False, "failed"),
+])
+def test__hermes_pause_only_suspends_freshness(paused, mismatch, expected):
+    _, policies = load_source_registry()
+    policy = next(item for item in policies if item.key == "activity-radar")
+    old = NOW - timedelta(days=20)
+    result = evaluate_source(
+        policy, now=NOW,
+        corpus={"activity-radar": EntryEvidence(old, "hfl-one")},
+        elasticsearch={"activity-radar": EntryEvidence(old, "hfl-two" if mismatch else "hfl-one")},
+        tasks={policy.task: TaskEvidence(old, passed=10)},
+        scheduler={"available": True, "job_id": "92a8b3452c78",
+                   "enabled": not paused, "state": "paused" if paused else "scheduled",
+                   "paused_at": old.isoformat(), "last_status": "ok",
+                   "last_run_at": old.isoformat(), "schedule": "0 8,12,16,20 * * *"},
+    )
+    assert result.status == expected
+    assert result.evidence["scheduler"]["enabled"] is not paused
+    assert ("scheduled task heartbeat is stale or missing" in result.reasons) is not paused
+
+
+@pytest.mark.parametrize("payload", [None, "invalid json", '{"jobs": []}', '{"jobs": [null]}'])
+def test__hermes_scheduler_unavailable_is_not_a_pause(tmp_path, payload):
+    from workflows.hfl.source_health import load_hermes_scheduler_evidence
+
+    path = tmp_path / "jobs.json"
+    if payload is not None:
+        path.write_text(payload)
+    evidence = load_hermes_scheduler_evidence(["job-one"], path=path)
+    assert evidence["job-one"]["available"] is False
+
+
+def test__scan_reads_exact_hermes_job_without_changing_it(tmp_path, monkeypatch):
+    import json
+    from workflows.hfl.source_health import scan_activity_corpus_sources
+
+    home = tmp_path / "hermes"
+    (home / "cron").mkdir(parents=True)
+    path = home / "cron" / "jobs.json"
+    raw = json.dumps({"jobs": [
+        {"id": "unrelated", "enabled": True, "state": "scheduled"},
+        {"id": "92a8b3452c78", "enabled": False, "state": "paused",
+         "paused_at": NOW.isoformat(), "last_status": "ok",
+         "last_run_at": (NOW - timedelta(days=20)).isoformat(),
+         "schedule": {"expr": "0 8,12,16,20 * * *"}},
+    ]})
+    path.write_text(raw)
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    snapshot = scan_activity_corpus_sources(
+        now=NOW, corpus_loader=lambda _: {}, es_loader=lambda _: {},
+        task_loader=lambda _: {}, upstream_loader=lambda **_: UpstreamEvidence(),
+    )
+    result = next(item for item in snapshot.sources if item.key == "activity-radar")
+    assert result.status == "unmonitored"
+    assert result.evidence["scheduler"]["schedule"] == "0 8,12,16,20 * * *"
+    assert path.read_text() == raw
+
+
+@pytest.mark.parametrize("scheduler, expected", [
+    (None, "degraded"),
+    ({"available": False}, "degraded"),
+    ({"available": True, "job_id": "different", "enabled": False, "state": "paused"}, "degraded"),
+    ({"available": True, "job_id": "92a8b3452c78", "enabled": True, "state": "paused", "last_status": "error"}, "failed"),
+    ({"available": True, "job_id": "92a8b3452c78", "enabled": True, "state": "scheduled", "last_status": "ok"}, "healthy"),
+])
+def test__hermes_missing_or_failed_scheduler_is_not_suppressed(scheduler, expected):
+    _, policies = load_source_registry()
+    policy = next(item for item in policies if item.key == "activity-radar")
+    fresh = NOW - timedelta(minutes=10)
+    result = evaluate_source(
+        policy, now=NOW, scheduler=scheduler,
+        corpus={"activity-radar": EntryEvidence(fresh, "hfl-one")},
+        elasticsearch={"activity-radar": EntryEvidence(fresh, "hfl-one")},
+        tasks={policy.task: TaskEvidence(fresh, passed=1)},
+    )
+    assert result.status == expected
+
+
 def test__evaluate_source_identifies_hermes_capture_gap_not_es_failure():
     policy = _policy()
     old = NOW - timedelta(days=12)

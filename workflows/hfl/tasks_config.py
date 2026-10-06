@@ -274,28 +274,9 @@ WORKFLOW_HFL = {
         },
     },
 
-    # Weekly rollup — Sundays at 21:00 local, summarizes the past 7 days.
-    'run-job--summarize_hfl_week': {
-        'task': 'workflows.hfl.tasks.summarize.summarize_hfl_week',
-        'schedule': crontab(day_of_week='sun', hour=21, minute=0),
-        'kwargs': {
-            'cfg_id__anthropic': 'ANTHROPIC',
-            'model': 'claude-haiku-4-5-20251001',
-            'window_days': 7,
-            'resolve_references': False,
-        },
-        'options': {
-            'queue': WorkflowQueue.HFL,
-            'expires': 60 * 60 * 12,
-        },
-        'manifesto': {
-            'code_role': 'distill+express',
-            'para_bucket': 'area',
-            'express_target': 'file:hfl_summary+es_log',
-            'review_artifact': 'es_log+file',
-            'hfl_signal': True,
-        },
-    },
+    # Weekly AI rollup disabled at owner request, alongside the
+    # retrieval email digest below. On-demand summarize_hfl_week remains
+    # available; no automatic retry or historical backfill is requested.
 
     # Weekly retrieval email digest disabled at owner request. Keep this
     # schedule as a manual re-enable reference; on-demand retrieval remains

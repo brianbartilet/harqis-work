@@ -113,28 +113,25 @@ backfill = "checkpointed"
 [[sources]]
 key = "weekly-summary"
 kind = "derived"
-monitor_mode = "scheduled"
+monitor_mode = "unscheduled"
 task = "workflows.hfl.tasks.summarize.summarize_hfl_week"
 entry_sources = ["summarize"]
-schedule = "Sunday 21:00"
-task_max_age_hours = 192
-entry_max_age_hours = 216
+schedule = "on-demand; former Sunday 21:00 AI summary intentionally disabled in tasks_config.py"
 expects_entry = true
 allow_empty = false
-auto_retry = true
-backfill = "date-argument"
+auto_retry = false
+backfill = "none"
 
 [[sources]]
 key = "weekly-retrieval"
 kind = "operation"
-monitor_mode = "scheduled"
+monitor_mode = "unscheduled"
 task = "workflows.hfl.tasks.retrieve.retrieve_hfl_corpus"
 entry_sources = []
-schedule = "Sunday 20:00"
-task_max_age_hours = 192
+schedule = "on-demand; former Sunday 20:00 email digest intentionally disabled in tasks_config.py"
 expects_entry = false
 allow_empty = true
-auto_retry = true
+auto_retry = false
 backfill = "none"
 
 [[sources]]
@@ -298,9 +295,10 @@ depends_on = ["agent-session"]
 key = "activity-radar"
 kind = "source"
 monitor_mode = "hermes"
+hermes_job_id = "92a8b3452c78"
 task = "workflows.hfl.tasks.activity_radar.activity_radar"
 entry_sources = ["activity-radar"]
-schedule = "Hermes 08:00-22:00 every two hours; HFL write only when explicitly enabled"
+schedule = "Hermes 08:00,12:00,16:00,20:00 (0 8,12,16,20 * * *); freshness only while enabled; HFL write only when explicitly enabled"
 task_max_age_hours = 14
 entry_max_age_hours = 168
 expects_entry = true
@@ -341,6 +339,18 @@ monitor_mode = "self"
 task = "workflows.hfl.tasks.check_activity_corpus_sources.check_activity_corpus_sources"
 entry_sources = []
 schedule = "Monday 07:30 via Celery Beat"
+expects_entry = false
+allow_empty = true
+auto_retry = false
+backfill = "none"
+
+[[sources]]
+key = "entity-consolidation-delivery"
+kind = "operation"
+monitor_mode = "unscheduled"
+task = "workflows.hfl.tasks.entity_consolidation.deliver_entity_consolidation"
+entry_sources = []
+schedule = "dispatched by the Hermes-owned daily entity-consolidation workflow; no independent Beat schedule"
 expects_entry = false
 allow_empty = true
 auto_retry = false
