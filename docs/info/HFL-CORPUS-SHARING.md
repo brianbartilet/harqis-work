@@ -30,9 +30,8 @@ joining a guest device to the HARQIS VPN or exposing the HARQIS topology. A QR
 code is only a convenient encoding of a high-entropy capability link. It does
 not install software, enroll a device, or grant network access.
 
-Run Sharing on the canonical Activity Corpus host. A frontend configured as a
-remote corpus reader fails closed rather than freezing data from its local
-disk.
+Sharing reads the configured canonical corpus, including from a remote-reader
+frontend. It never substitutes a stale local corpus when the canonical read fails.
 
 ## Lifecycle
 
@@ -237,7 +236,7 @@ questions still need iterative retrieval rather than one unbounded prompt.
 
 ## Dedicated Hermes profile
 
-Never point public Share Corpus Q&A at the normal Hermes profile. The standard
+Never point public Share Activity Q&A at the normal Hermes profile. The standard
 Hermes API server layers client instructions over its core agent and can expose
 memory, skills, files, and terminal tools. HARQIS calls Hermes server-side over
 loopback, but prompt injection still makes profile isolation mandatory.
@@ -417,3 +416,106 @@ Before production use, test the public hostname from a non-VPN phone, confirm
 that owner paths are denied, verify PIN and revocation behavior, verify guest
 pages contain no canonical paths, and confirm the tunnel forwards HTTPS
 identity headers only on the email path.
+
+
+## Workspace context sharing
+
+The owner editor is named **Share Activity**, under Express. It contains:
+
+- **Recipe:** recipient/name, verification, expiry, freezing, and live inclusion policies.
+- **Filters:** sources, tags, topic, dates and inherited combined-view rules. The
+  explicit Replace workspace filters control removes inherited rules/membership.
+- **Entries:** full entry previews, entry exclusions, references and Include secrets.
+- **Actions & Ideas:** active-object selection, optional completed/dismissed items,
+  descriptions/checklists and the read-only Connections graph.
+- **Boards:** board selection, draft thoughts, saved positions, member graphs and
+  mapped goals; outside-workspace membership requires explicit per-board opt-in.
+- **Graph:** the activity graph derived from approved objects and entry entities.
+
+Corpus, Graph and Kanban workspace handoffs preselect eligible sections and retain
+workspace IDs. Current unsaved filter controls are transferred; rolling dates are
+resolved once. Search text remains excluded. Source/date/tag filters select entries
+and inherited intents; explicitly assigned workspace actions/ideas remain eligible
+without an entry. Board eligibility follows workspace membership. Completed actions
+and dismissed ideas are excluded unless requested. Individual exclusions are durable.
+Board selection also authorizes its displayed eligible members; object exclusions
+still win over board membership. Goals include details/milestones but never recurse
+through their other linked objects. Shares need at least one entry or object.
+
+### Snapshot and refresh behavior
+
+Legacy recipes/grants default to entries-only; no existing share gains objects on
+upgrade. Versioned `activity` recipe controls and `activity`/`activity_entries`
+snapshot fields are additive JSON data in the existing SQLite store.
+
+Freeze captures the complete mixed snapshot. A live grant stores its own recipe
+copy and approved IDs. Each of Entries, Actions, Ideas and Boards can admit newly
+matching objects independently; otherwise only originally approved IDs refresh.
+Approved-only boards also pin their member IDs. Explicit exclusions always win.
+An object that is deleted, protected or no longer eligible disappears on successful
+refresh. A successful refresh may produce an empty share. Failed reads retain the
+last successful snapshot and display a refresh-failure notice. Changes to a saved
+recipe do not change previously generated shares.
+
+Reference selection applies to entry references, object HTTPS links and immutable
+input attachments. Attachments download through the existing authenticated share
+session using opaque reference IDs; canonical paths and bearer tokens are not sent
+to guests. Remote attachment bytes are checked against their captured digest.
+New references in live refreshes remain disabled. Object text suppresses embedded
+URLs and local paths; enabled links are exposed through reference controls.
+
+The existing QR, PIN, email OTP, owner-approval, expiry, revocation, session and
+browser-redemption controls remain in force. Public graphs support inspection,
+pan and zoom without mutation controls. Object details join the existing evidence
+drawer. The sharing assistant retrieves entries and object evidence together,
+validates citations against that snapshot, and has no action tools.
+
+### Secrets and canonical API compatibility
+
+Include secrets is recipe-wide, off by default, and requires the existing owner
+Activity Corpus PIN before preview/testing/generation. Live grants retain the
+explicitly approved secret policy; the recipient never unlocks owner data directly.
+All object source/evidence references must resolve against permitted corpus entries.
+Graphs are rebuilt from approved objects; excluded nodes, labels, locators, paths,
+unrelated edges and global counts are not copied from owner graphs.
+
+The canonical API adds `GET /api/hfl/timeline/ideas/share-context`. It requires the
+service bearer credential and returns input for server-side publication filtering.
+It also provides a bearer-only attachment endpoint beneath
+`/api/hfl/timeline/ideas/share-context/attachments/{kind}/{source_id}/{attachment_id}`.
+The corresponding browser routes are explicitly forbidden, including owner-session
+proxy requests. This endpoint is not a guest API and does not itself grant sharing.
+
+A remote canonical host on an older version falls back to the existing permission-
+filtered ideas snapshot for ordinary local testing. **Secret-backed workspace
+objects require the canonical host update.** Attempting mixed secret sharing against
+an older host gives an actionable error rather than silently omitting objects.
+Entries-only secret sharing continues through its existing API. Deploying only a
+remote-reader frontend does not upgrade the canonical API.
+
+### Local acceptance checks
+
+1. Generate an unsaved recipe from each workspace entry point; verify selection and
+   combined-view filters, then test replacing inherited scope.
+2. Exclude an action; verify it disappears from objects, boards, graphs and assistant
+   context. Restore it and verify the preview updates.
+3. Compare a board with outside-workspace inclusion off/on; verify its goal never
+   brings in another board. Verify draft thoughts, lists and saved positions.
+4. Toggle secrets while locked; require PIN, then check protected content across
+   previews and generated pages on an updated canonical host.
+5. Generate frozen and hybrid live shares; change approved objects, add matching
+   objects, remove eligible objects, and verify per-section policies and exclusions.
+6. Redeem QR access and inspect public object evidence, graphs and citations. Verify
+   expiration/revocation still block all content and attachment access.
+7. Repeat the editor and public view at desktop and mobile widths.
+
+Focused regression: `frontend/tests/test_workspace_sharing.py`,
+`frontend/tests/test_hfl_shares.py`, and `frontend/tests/test_corpus_share_handoff.py`.
+
+
+For older local sharing databases, startup adds legacy columns before creating the
+owner-list index. Existing recipes and grants are retained. A Windows remote-reader
+installation must override `HFL_SHARE_STORE_PATH` in its machine-local configuration
+if the shared environment contains a canonical host filesystem path. Local owner
+Preview uses the local grant; QR links continue to use `HFL_SHARE_PUBLIC_URL`, so a
+frontend-only test deployment does not move the public sharing origin.

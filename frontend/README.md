@@ -830,7 +830,7 @@ create presets, classify entries automatically, or filter by action-matrix data.
 
 Saved views provide control over which activity you review, helping you decide
 what is relevant to a particular audience. Below the view controls,
-**Generate share recipe** opens Share Corpus with an unsaved draft, and **Sharing preview**
+**Generate share recipe** opens Share Activity with an unsaved draft, and **Sharing preview**
 opens the sharing preview in a responsive dialog without leaving Activity Corpus.
 
 Both use the current controls, including unsaved changes: activity sources, tags,
@@ -843,7 +843,7 @@ filters entry headings. Existing recipes continue to use Entry date. Rolling
 ranges become fixed dates; preview and its handoff reuse the resolved range.
 
 The preview includes scope statistics, up to 250 listed entries, and reference
-selection. Agent testing remains available on the Share Corpus page. Reference exclusions
+selection. Agent testing remains available on the Share Activity page. Reference exclusions
 carry into the draft. Changing filter controls invalidates the earlier preview's
 reference choices. Secrets are excluded by default, even if unlocked in Activity
 Corpus. Broad-scope and size-limit warnings use the existing sharing rules.
@@ -950,3 +950,29 @@ responsive navigation, corpus filtering, and reference downloads.
   HTTPS tunnel or reverse proxy, `BEHIND_PROXY=true`, owner protection for all
   non-guest routes, and explicit public policy only for the intended
   `/share/access/*` and guest-session paths.
+
+
+#### Workspace context sharing
+
+Express > **Share Activity** now has Recipe, Filters, Entries, Actions & Ideas,
+Boards, and Graph tabs. Generate share recipe from Corpus, Graph, or Kanban
+preselects eligible workspace context in an unsaved draft. Saved recipes and
+generated-share lists retain their existing controls.
+
+Entry filters preserve combined-view rules. Filters can edit those rules or
+explicitly replace inherited workspace scope. Explicit workspace assignments
+retain standalone actions/ideas even without matching entries. Defaults exclude
+completed actions and dismissed ideas. Board members outside the workspace
+require per-board opt-in; mapped goals never recursively include other boards.
+Excluded objects remain excluded during live refresh. Source objects are never
+modified by sharing.
+
+Frozen shares capture all content together. Live recipes independently choose
+approved-object updates or automatic matching for entries, actions, ideas, and
+boards. New references stay disabled after generation. Secrets remain excluded
+unless the owner enables Include secrets and unlocks the Activity Corpus PIN.
+That switch applies across all object types. Public graphs and assistant citations
+are projected from the same approved snapshot, and public routes expose no edits.
+
+See [sharing operations and compatibility](../docs/info/HFL-CORPUS-SHARING.md#workspace-context-sharing)
+for canonical API requirements and local acceptance checks.

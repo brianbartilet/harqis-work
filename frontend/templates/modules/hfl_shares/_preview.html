@@ -3,6 +3,7 @@
 {% elif preview %}
 <section class="rounded-xl border border-slate-700 bg-slate-950 p-4" data-preview-ready>
   <input type="hidden" name="reference_selection_initialized" value="1">
+  <div data-preview-tab="entries">
   <div class="stat-grid">
     <div class="stat"><strong>{{ preview.entries|length }}</strong><span>Entries</span></div>
     <div class="stat"><strong>{{ preview.source_counts|length }}</strong><span>Sources</span></div>
@@ -12,7 +13,7 @@
   <p class="mt-3 text-xs text-slate-500">Date range: {{ preview.earliest or "unknown" }} → {{ preview.latest or "unknown" }}</p>
   {% for warning in preview.warnings %}<p class="message mt-3 mb-0">{{ warning }}</p>{% endfor %}
   {% set reference_state = namespace(total=0, enabled=0) %}
-  {% for entry in preview.entries[:250] %}
+  {% for entry in (preview.entries[:250] if hide_preview_agent else preview.entries) %}
     {% for reference in entry.references %}
       {% set reference_state.total = reference_state.total + 1 %}
       {% if reference.enabled %}{% set reference_state.enabled = reference_state.enabled + 1 %}{% endif %}
@@ -25,9 +26,10 @@
   </label>
   {% endif %}
   <div class="mt-4 max-h-96 overflow-y-auto pr-2">
-    {% for entry in preview.entries[:250] %}
+    {% for entry in (preview.entries[:250] if hide_preview_agent else preview.entries) %}
     <div class="item">
       <div class="preview-entry-heading">
+        {% if preview.activity %}<input type="checkbox" checked {% if hide_preview_agent %}disabled{% endif %} data-share-object="entry:{{ entry.id }}" aria-label="Include {{ entry.moment or entry.header }}">{% endif %}
         <strong class="wrap text-sm text-white">{{ entry.moment or entry.header }}</strong>
         <span class="pill source-pill">{{ entry.source }}</span>
       </div>
@@ -37,6 +39,7 @@
       </div>
       {% endif %}
       <p class="mt-2 text-xs text-slate-400">{{ entry.what_happened }}</p>
+      {% if not hide_preview_agent %}<details><summary>Full entry</summary><p style="white-space:pre-wrap">{{ entry.text }}</p></details>{% endif %}
       {% if entry.references %}
       <div class="mt-2">
         {% for reference in entry.references %}
@@ -46,12 +49,17 @@
       {% endif %}
     </div>
     {% endfor %}
-    {% if preview.entries|length > 250 %}<p class="mt-3 text-xs text-amber-300">Preview list shows the first 250 entries. The generated share will retain the complete matching snapshot within the size limit.</p>{% endif %}
+    {% if hide_preview_agent and preview.entries|length > 250 %}<p class="mt-3 text-xs text-amber-300">Preview list shows the first 250 entries. The generated share will retain the complete matching snapshot within the size limit.</p>{% endif %}
   </div>
+  </div>
+  {% include "modules/hfl_shares/_activity_preview.html" %}
+  {% if preview.activity_entries %}<div data-preview-tab="entries"><h3>Object references</h3>{% for entry in preview.activity_entries %}{% for reference in entry.references %}<label class="check"><input type="checkbox" name="enabled_reference_ids" value="{{ reference.id }}" {% if reference.enabled %}checked{% endif %}>{{ entry.moment }} — {{ reference.label }}</label>{% endfor %}{% endfor %}</div>{% endif %}
+  <div data-preview-tab="recipe">
   {% if not hide_preview_agent %}
-  <div class="field mt-4"><label for="question">Test this preview with the owner-only agent</label><input class="control" id="question" name="question" value="{{ preview_question }}" placeholder="What are the main open items?" required data-test-question></div>
+  <div class="field mt-4"><label for="question">Test this preview with the owner-only agent</label><input class="control" id="question" name="question" value="{{ preview_question }}" placeholder="What are the main open items?" data-test-question></div>
   {% if suggested_prompts %}<p class="text-xs text-slate-500">Suggestions: {{ suggested_prompts|join(' · ') }}</p>{% endif %}
   {% if preview_answer %}<div class="markdown-body mt-3 rounded-lg bg-slate-900 p-3 text-sm text-slate-200">{{ preview_answer }}</div>{% endif %}
   {% endif %}
+  </div>
 </section>
 {% endif %}

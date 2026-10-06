@@ -1,7 +1,8 @@
 {% extends "base.html" %}
 {% from "modules/hfl_shares/partials/action_icon.html" import action_icon %}
-{% block title %}Share Corpus · HARQIS{% endblock %}
+{% block title %}Share Activity · HARQIS{% endblock %}
 {% block head %}
+<link rel="stylesheet" href="/static/css/share-activity.css">
 <style>
   .share-grid { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(270px,.8fr); gap:1.25rem; }
   .share-grid > *, .two > *, .field, .control { min-width:0; }
@@ -174,8 +175,8 @@
 <main class="share-page mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
   <div class="page-header mb-4">
     <p class="page-header-eyebrow">Activity Corpus</p>
-    <h1 class="page-header-title">Share Corpus</h1>
-    <p class="page-header-description">Save selection recipes, then generate fixed or live shares from matching entries.</p>
+    <h1 class="page-header-title">Share Activity</h1>
+    <p class="page-header-description">Review workspace context, then generate frozen or live read-only shares.</p>
   </div>
 
   {% if error %}<div class="message error">{{ error }}</div>{% endif %}
@@ -204,6 +205,7 @@
         {% endif %}
         <input type="hidden" name="configuration_id" value="{{ cfg.id if cfg else '' }}">
         {% if cfg %}{% for reference_id in cfg.disabled_reference_ids %}<input type="hidden" name="disabled_reference_ids" value="{{ reference_id }}" data-disabled-reference>{% endfor %}{% endif %}
+        {% include "modules/hfl_shares/_activity_controls.html" %}
         <div class="two">
           <div class="field"><label for="name">Configuration name</label><input class="control" id="name" name="name" required value="{{ cfg.name if cfg else '' }}" placeholder="Work context"></div>
           <div class="field"><label for="recipient">Recipient</label><input class="control" id="recipient" name="recipient" required maxlength="20" value="{{ cfg.recipient if cfg and not corpus_draft else '' }}" placeholder="Who is this for?"></div>
@@ -252,7 +254,7 @@
             <input type="checkbox" name="freeze_snapshot" {% if not cfg or not cfg.live_updates %}checked{% endif %}>
             <span>Freeze generated shares at creation (recommended)</span>
           </label>
-          <p class="mt-2 text-xs text-slate-500">Uncheck to let active links refresh from the latest entries matching these saved rules. New references remain disabled.</p>
+          <p class="mt-2 text-xs text-slate-500">Uncheck to refresh included content using the live policies below. New references remain disabled.</p>
         </div>
         <div class="field">
           {% if secrets_configured %}
@@ -483,6 +485,7 @@
     }
     includeSecrets.dataset.secretsAuthorized = 'true';
     form.dispatchEvent(new Event('change', {bubbles: true}));
+    form.dispatchEvent(new Event('activitychange'));
   });
   const progressOverlay = document.querySelector('[data-progress-overlay]');
   const progressHeading = progressOverlay?.querySelector('[data-progress-heading]');
@@ -644,6 +647,7 @@
       });
       const html = await response.text();
       previewContent.innerHTML = html;
+      window.refreshShareActivity?.();
       updateTestAgentState();
     } catch (error) {
       if (error.name === 'AbortError') return;
@@ -660,6 +664,9 @@
     window.clearTimeout(previewTimer);
     previewTimer = window.setTimeout(refreshPreview, 450);
   };
+
+  form.addEventListener("activitychange", schedulePreview);
+  form.addEventListener("change", event => { if (event.target.matches("[data-include-secrets]")) schedulePreview(); });
 
   let tagRequest = 0;
   const refreshTags = async () => {
@@ -911,4 +918,5 @@
   if (!previewContent?.querySelector('[data-preview-ready]')) schedulePreview();
 })();
 </script>
+<script src="/static/js/share-activity.js"></script>
 {% endblock %}

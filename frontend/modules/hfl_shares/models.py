@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, replace, field
 from datetime import datetime, timezone
 from typing import Any
 
@@ -53,8 +53,12 @@ class ShareConfiguration:
     updated_at: str = ""
     date_field: str = "entry"
     corpus_scope: str = ""
+    activity: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if self.activity:
+            from modules.hfl_shares.activity_models import ActivitySelection
+            ActivitySelection.model_validate(self.activity)
         if self.corpus_scope:
             from modules.hfl_corpus.view_scope import parse_scope
             parse_scope(self.corpus_scope)
@@ -195,6 +199,12 @@ class ScopeSnapshot:
     warnings: tuple[str, ...] = ()
     context_prompt: str = ""
     recipient: str = ""
+    activity: dict[str, Any] = field(default_factory=dict)
+    activity_entries: tuple[SnapshotEntry, ...] = ()
+
+    @property
+    def all_entries(self):
+        return self.entries + self.activity_entries
 
     def to_record(self) -> dict[str, Any]:
         return {
@@ -212,6 +222,8 @@ class ScopeSnapshot:
             "warnings": list(self.warnings),
             "context_prompt": self.context_prompt,
             "recipient": self.recipient,
+            "activity": self.activity,
+            "activity_entries": [entry.to_record() for entry in self.activity_entries],
         }
 
     @classmethod
@@ -242,6 +254,8 @@ class ScopeSnapshot:
             warnings=tuple(str(item) for item in value.get("warnings") or []),
             context_prompt=str(value.get("context_prompt") or ""),
             recipient=str(value.get("recipient") or ""),
+            activity=dict(value.get("activity") or {}),
+            activity_entries=tuple(SnapshotEntry.from_record(item) for item in value.get("activity_entries") or []),
         )
 
 
@@ -266,6 +280,7 @@ class ShareGrant:
     revoked_at: str = ""
     pin_failures: int = 0
     browser_redemption_limit: int = 0
+    refresh_error: str = ""
 
     @property
     def expired(self) -> bool:

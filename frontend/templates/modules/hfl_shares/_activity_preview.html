@@ -1,0 +1,25 @@
+{% if preview and preview.activity %}
+<div data-preview-tab="actions">
+{% for kind in ['actions', 'ideas'] %}
+<h3>{{ kind|title }} ({{ preview.activity.get(kind, [])|length }})</h3>
+{% for obj in preview.activity.get(kind, []) %}
+<details class="item"><summary><label class="check"><input type="checkbox" checked {% if hide_preview_agent %}disabled{% endif %} data-share-object="{{ obj.id }}">{{ obj.title }}</label> <span class="pill">{{ obj.get('status', '') }}</span></summary>
+<p style="white-space:pre-wrap">{{ obj.get('body', obj.get('description', '')) }}</p>
+{% for checklist in obj.get('checklists', []) %}<strong>{{ checklist.title }}</strong>{% for item in checklist['items'] %}<p>{{ '☑' if item.done else '☐' }} {{ item.text }}</p>{% endfor %}{% endfor %}
+</details>{% else %}<p class="share-scope-note">No eligible {{ kind }} selected.</p>{% endfor %}
+{% endfor %}
+<h3>Connections</h3>
+{% set graph = preview.activity.connections %}{% include 'modules/hfl_shares/_activity_graph.html' %}
+</div>
+<div data-preview-tab="boards">
+{% for board in preview.activity.get('boards', []) %}
+<section class="item"><label class="check"><input type="checkbox" checked {% if hide_preview_agent %}disabled{% endif %} data-share-object="{{ board.id }}">{{ board.title }}</label>
+<p>{{ board.get('purpose', '') }}</p>
+<label class="check"><input type="checkbox" {% if hide_preview_agent %}disabled{% endif %} data-outside-board="{{ board.id[6:] }}">Include outside-workspace members</label>
+{% set graph = board.graph %}{% include 'modules/hfl_shares/_activity_graph.html' %}
+{% for node in graph.nodes if node.kind == 'thoughts' %}<details><summary>{{ node.label }}</summary><p style="white-space:pre-wrap">{{ node.body }}</p></details>{% endfor %}
+</section>{% else %}<p>No eligible boards selected.</p>{% endfor %}
+{% for goal in preview.activity.get('goals', []) %}<details class="item"><summary><label class="check"><input type="checkbox" checked {% if hide_preview_agent %}disabled{% endif %} data-share-object="{{ goal.id }}">{{ goal.title }}</label></summary><p>{{ goal.get('body', '') }}</p><p>{{ goal.get('success_criteria', '') }}</p></details>{% endfor %}
+</div>
+<div data-preview-tab="graph">{% set graph = preview.activity.graph %}{% include 'modules/hfl_shares/_activity_graph.html' %}</div>
+{% endif %}

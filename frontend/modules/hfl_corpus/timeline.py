@@ -25,6 +25,8 @@ class TimelineRoute(APIRoute):
     def get_route_handler(self):
         handler = super().get_route_handler()
         async def route(request):
+            if request.url.path.startswith('/hfl-corpus/') and '/ideas/share-context' in request.url.path:
+                raise HTTPException(403, 'Sharing context is available only to the authenticated sharing service.')
             if request.url.path.startswith('/hfl-corpus/'):
                 owner(request)
                 settings = get_settings()

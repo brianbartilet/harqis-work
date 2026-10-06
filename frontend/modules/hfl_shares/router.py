@@ -46,6 +46,7 @@ from modules.manifesto.service import load_manifesto
 from modules.profile.store import get_profile_store
 from modules.hfl_shares.agent import AgentUnavailable, answer_question
 from modules.hfl_shares.audit import record_share_audit
+from modules.hfl_shares.activity_models import live_configuration as _live_configuration
 from modules.hfl_shares.models import (
     ALL_SOURCES,
     ScopeSnapshot,
@@ -143,7 +144,7 @@ def _sharing_documents(
             client = RemoteCorpusClient.from_settings()
             requested_sources = sources
             if not requested_sources or ALL_SOURCES in requested_sources:
-                catalog = client.index(params={"page": "1", "page_size": "20"})
+                catalog = client.index(params={"page": "1", "page_size": "20", **({"include_secrets": "true"} if include_secrets else {})})
                 requested_sources = tuple(catalog["sources"])
             if include_secrets:
                 return client.sharing_documents(
@@ -197,7 +198,7 @@ def _refresh_live_grant(grant: ShareGrant) -> ShareGrant:
         snapshot = build_snapshot(
             configuration,
             _sharing_documents(
-                configuration.sources,
+                configuration.sources if not configuration.activity else (ALL_SOURCES,),
                 force=True,
                 include_secrets=configuration.include_secrets,
             ),
@@ -205,11 +206,9 @@ def _refresh_live_grant(grant: ShareGrant) -> ShareGrant:
             allow_secrets=configuration.include_secrets,
             secret_tags=normalize_secret_tags(_profile().secret_tags),
         )
-        if not snapshot.entries:
-            raise ValueError("A live share cannot refresh to an empty scope.")
         snapshot = _stable_live_citations(snapshot, grant.snapshot)
     except (TypeError, ValueError):
-        return grant
+        return replace(grant, refresh_error="Content could not refresh. This is the last successfully shared snapshot.")
     if not get_share_store().update_share_snapshot(grant.id, snapshot):
         return grant
     return replace(grant, snapshot=snapshot)
@@ -330,6 +329,7 @@ def _configuration_from_form(
             f"Concurrent sessions must be between one and {session_cap}."
         )
     no_expiry = form.get("no_expiry") == "on"
+    from modules.hfl_shares.activity_models import from_form
     return ShareConfiguration(
         id=str(form.get("configuration_id") or ""),
         name=str(form.get("name") or "").strip() or ("Preview" if preview else ""),
@@ -345,6 +345,7 @@ def _configuration_from_form(
         date_to=str(form.get("date_to") or "").strip(),
         topic=str(form.get("topic") or "").strip(),
         selected_entry_ids=(),
+        activity=from_form(form),
         context_prompt=str(form.get("context_prompt") or "").strip(),
         auth_mode=str(form.get("auth_mode") or "pin"),
         allowed_email=str(form.get("allowed_email") or "").strip(),
@@ -700,15 +701,18 @@ def _build_preview_snapshot(
     request: Request,
     configuration: ShareConfiguration,
     disabled_reference_ids: tuple[str, ...],
+    *, force: bool = False,
 ) -> ScopeSnapshot:
     """Keep corpus loading and reference resolution off the request event loop."""
+    secret_options = _secret_snapshot_options(request, configuration)
     return build_snapshot(
         configuration,
         _sharing_documents(
-            configuration.sources, include_secrets=configuration.include_secrets
+            configuration.sources if not configuration.activity else (ALL_SOURCES,), include_secrets=configuration.include_secrets,
+            force=force,
         ),
         disabled_reference_ids=disabled_reference_ids,
-        **_secret_snapshot_options(request, configuration),
+        **secret_options,
     )
 
 
@@ -854,6 +858,8 @@ async def recipe_from_corpus(request: Request, mode: str = 'recipe'):
             sources=sources, tags=tags, date_field=state.date_field,
             date_from=start, date_to=end, context_prompt=provenance,
             references_enabled=True, ttl_seconds=86_400,
+            activity={"version": 1, "sections": ["entries", "actions", "ideas", "boards", "graph"],
+                      "workspace_ids": list(filter(None, str(form.get("views") or form.get("workspace") or "").split(",")))},
             device_limit=min(get_settings().hfl_share_default_device_limit, hfl_share_concurrent_session_cap()),
             disabled_reference_ids=_disabled_references(form),
         )
@@ -981,17 +987,10 @@ async def generate_share(request: Request):
     existing = store.get_configuration(str(form.get("configuration_id") or ""))
     try:
         configuration = _configuration_from_form(form, existing=existing)
-        snapshot = build_snapshot(
-            configuration,
-            _sharing_documents(
-                configuration.sources,
-                force=True,
-                include_secrets=configuration.include_secrets,
-            ),
-            disabled_reference_ids=_disabled_references(form),
-            **_secret_snapshot_options(request, configuration),
+        snapshot = await asyncio.to_thread(
+            _build_preview_snapshot, request, configuration, _disabled_references(form), force=True,
         )
-        if not snapshot.entries:
+        if not snapshot.all_entries:
             raise ValueError("A share cannot be generated from an empty scope.")
         settings = get_settings()
         if snapshot.estimated_chars > settings.hfl_share_max_snapshot_chars:
@@ -1016,7 +1015,7 @@ async def generate_share(request: Request):
             allowed_email=configuration.allowed_email,
             snapshot=snapshot,
             live_configuration=(
-                configuration if configuration.live_updates else None
+                _live_configuration(configuration, snapshot)
             ),
             ttl_seconds=configuration.ttl_seconds,
             no_expiry=configuration.no_expiry,
@@ -1132,7 +1131,7 @@ async def preview_generated_share(
     grant = get_share_store().get_share(share_id)
     if not grant:
         raise HTTPException(status_code=404, detail="Share not found.")
-    grant = _refresh_live_grant(grant) if grant.available else grant
+    grant = await asyncio.to_thread(_refresh_live_grant, grant) if grant.available else grant
     selected_tags = tuple(request.query_params.getlist("tag"))
     context = _guest_context(
         request,
@@ -1187,16 +1186,10 @@ async def generate_instant_share(request: Request, configuration_id: str):
         single_use=True,
     )
     try:
-        snapshot = build_snapshot(
-            configuration,
-            _sharing_documents(
-                configuration.sources,
-                force=True,
-                include_secrets=configuration.include_secrets,
-            ),
-            **_secret_snapshot_options(request, configuration),
+        snapshot = await asyncio.to_thread(
+            _build_preview_snapshot, request, configuration, configuration.disabled_reference_ids, force=True,
         )
-        if not snapshot.entries:
+        if not snapshot.all_entries:
             raise ValueError("A share cannot be generated from an empty scope.")
         settings = get_settings()
         if snapshot.estimated_chars > settings.hfl_share_max_snapshot_chars:
@@ -1215,7 +1208,7 @@ async def generate_instant_share(request: Request, configuration_id: str):
             allowed_email="",
             snapshot=snapshot,
             live_configuration=(
-                configuration if configuration.live_updates else None
+                _live_configuration(configuration, snapshot)
             ),
             ttl_seconds=86_400,
             no_expiry=False,
@@ -1306,7 +1299,7 @@ async def preview_generated_share_chat(request: Request, share_id: str):
             for item in raw_history[-8:]
             if isinstance(item, dict) and str(item.get("content") or "").strip()
         )
-        grant = _refresh_live_grant(grant) if grant.available else grant
+        grant = await asyncio.to_thread(_refresh_live_grant, grant) if grant.available else grant
         answer = await answer_question(
             grant.snapshot,
             question,
@@ -1581,7 +1574,7 @@ def _guest_entries(
     selected_tags = {tag.casefold() for tag in _normalized_guest_tags(tags)}
     matches = tuple(
         entry
-        for entry in grant.snapshot.entries
+        for entry in grant.snapshot.all_entries
         if (
             not needle
             or needle
@@ -1691,7 +1684,7 @@ def _reference_views(entry, *, base_url: str) -> dict[str, dict[str, str]]:
             "media_url": "",
             "thumbnail_url": "",
         }
-        if reference.kind != "external":
+        if reference.kind not in {"external", "activity_attachment"}:
             preview = classify_preview(Path(reference.target))
             if preview:
                 view.update(
@@ -1796,7 +1789,7 @@ def _guest_context(
 ) -> dict[str, Any]:
     tag_counts: Counter[str] = Counter()
     tag_labels: dict[str, str] = {}
-    for entry in grant.snapshot.entries:
+    for entry in grant.snapshot.all_entries:
         entry_tags: set[str] = set()
         for tag in entry.tags:
             key = tag.casefold()
@@ -1901,7 +1894,7 @@ async def guest_portal(
             status_code=422,
             detail="Search queries must be 500 characters or fewer.",
         )
-    grant = _refresh_live_grant(grant)
+    grant = await asyncio.to_thread(_refresh_live_grant, grant)
     selected_tags = tuple(request.query_params.getlist("tag"))
     context = _guest_context(
         request,
@@ -1952,7 +1945,7 @@ async def guest_chat(request: Request):
     )
     try:
         question = _validated_question(form.get("question"))
-        grant = _refresh_live_grant(grant)
+        grant = await asyncio.to_thread(_refresh_live_grant, grant)
         if not store.allow_chat(
             grant.id, get_settings().hfl_share_chat_limit_per_hour
         ):
@@ -2033,7 +2026,7 @@ def _enabled_reference(grant, reference_id: str):
     return next(
         (
             reference
-            for entry in grant.snapshot.entries
+            for entry in grant.snapshot.all_entries
             for reference in entry.references
             if reference.id == reference_id and reference.enabled
         ),
@@ -2062,6 +2055,11 @@ def _download_response(grant, reference_id: str):
     reference = _enabled_reference(grant, reference_id)
     if not reference:
         raise HTTPException(status_code=404, detail="Reference unavailable.")
+    if reference.kind == 'activity_attachment':
+        from modules.hfl_shares.activity_references import download
+        response = download(reference)
+        record_share_audit(event="reference-downloaded", share_id=grant.id)
+        return response
     if reference.kind == "external":
         parsed = urlparse(reference.target)
         if (
