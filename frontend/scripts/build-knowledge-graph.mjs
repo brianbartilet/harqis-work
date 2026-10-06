@@ -1,6 +1,6 @@
 import {build} from 'esbuild';
 import {readFile, readdir, writeFile} from 'node:fs/promises';
-for (const name of ['knowledge-graph', 'action-connections']) {
+for (const name of ['knowledge-graph', 'action-connections', 'share-graphs']) {
 const result = await build({
   entryPoints: [`frontend/src/${name}.jsx`],
   outfile: `frontend/static/js/${name}.js`,

@@ -954,7 +954,7 @@ responsive navigation, corpus filtering, and reference downloads.
 
 #### Workspace context sharing
 
-Express > **Share Activity** now has Recipe, Filters, Entries, Actions & Ideas,
+Express > **Share Activity** now has Recipe, Filters, Entries, Actions and Ideas,
 Boards, and Graph tabs. Generate share recipe from Corpus, Graph, or Kanban
 preselects eligible workspace context in an unsaved draft. Saved recipes and
 generated-share lists retain their existing controls.
@@ -976,3 +976,9 @@ are projected from the same approved snapshot, and public routes expose no edits
 
 See [sharing operations and compatibility](../docs/info/HFL-CORPUS-SHARING.md#workspace-context-sharing)
 for canonical API requirements and local acceptance checks.
+
+Sharing review uses bounded entry scroll loading (50 per batch, 150 mounted),
+Kanban-style action/idea cards with per-item Connections, and read-only board/timeline
+canvas graphs from approved snapshot data. Recipe/Filters hide the preview region;
+workspace-reset controls only appear for inherited scope. Graph assets are rebuilt
+by `npm run build:knowledge-graph`, including `share-graphs.jsx`.

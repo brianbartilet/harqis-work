@@ -1,7 +1,5 @@
-<div class="shared-graph" data-shared-graph>
+<div class="shared-graph" data-shared-graph data-graph-layout="{{ graph_layout|default('board' if graph.get('positions') else 'timeline') }}">
 <script type="application/json" data-graph-data>{{ graph|tojson }}</script>
 <div data-graph-canvas></div>
-<details><summary>Accessible graph: {{ graph.nodes|length }} objects, {{ graph.edges|length }} connections</summary>
-<ul>{% for node in graph.nodes %}<li>{{ node.label }} ({{ node.kind }})</li>{% endfor %}</ul>
-</details>
+
 </div>
