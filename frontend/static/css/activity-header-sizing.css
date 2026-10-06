@@ -31,6 +31,11 @@
   margin-right:17px;
 }
 
+[data-corpus-index] .corpus-create-menu > summary.corpus-header-link,
+[data-corpus-index] .workspace-menu > summary.workspace-select {
+  width:8rem;
+}
+
 @media (max-width:639px) {
   [data-corpus-index] .corpus-header-actions { margin-right:9px; }
 }

@@ -8,7 +8,7 @@
   .activity-year-option { display:block; width:100%; border-radius:.35rem; padding:.35rem .45rem; color:#94a3b8; font:650 .7rem/1 ui-monospace,SFMono-Regular,Consolas,monospace; text-align:center; }
   .activity-year-option:hover { background:#0f172a; color:#e0f2fe; }
   .activity-year-option[aria-selected="true"] { background:#164e63; color:#cffafe; }
-  .activity-toggle-chevron { transition:transform .15s ease; }
+  .activity-toggle-chevron { transform:rotate(180deg); transition:transform .15s ease; }
   [data-activity-toggle][aria-expanded="false"] .activity-toggle-chevron { transform:rotate(90deg); }
   .activity-layout { display:flex; min-width:0; flex-direction:column; gap:.65rem; }
   .activity-pin-controls { min-width:0; }
