@@ -10,7 +10,6 @@
   {% if request.query_params.get('readonly') == '1' %}<div class="kg-preview-heading"><span>Timeline · Overview</span><span>View only · Pan and zoom to explore</span></div>{% endif %}
   {% if request.query_params.get('readonly') != '1' %}
   <div class="kg-fullscreen-bar" id="kg-fullscreen-bar" hidden>
-    <strong>Activity Graph</strong>
     <button id="kg-toggle-boards" type="button" aria-expanded="false" aria-controls="kg-boards">Boards</button>
     <button id="kg-exit-fullscreen" type="button">Exit fullscreen <span aria-hidden="true">↙</span></button>
   </div>
