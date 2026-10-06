@@ -64,7 +64,11 @@ def test_shared_workspace_restore_and_revision(authenticated_client, workspace_c
         assert params['views'] == [''] and params['q'] == ['']
 
 
-def test_workspace_cross_tab_sync_browser(authenticated_client, workspace_corpus):
+@pytest.mark.parametrize('surface', ['actions', 'graph'])
+def test_workspace_cross_tab_sync_browser(authenticated_client, workspace_corpus, monkeypatch, surface):
+    if surface == 'graph':
+        from modules.hfl_corpus import entities
+        monkeypatch.setattr(entities, 'graph', lambda *args, **kwargs: dict(nodes=[], edges=[], sources=[], total_nodes=0))
     playwright = pytest.importorskip('playwright.sync_api')
     client = authenticated_client
     headers = {'X-CSRF-Token': make_csrf_token('frontend-test-user')}
@@ -87,12 +91,17 @@ def test_workspace_cross_tab_sync_browser(authenticated_client, workspace_corpus
             corpus = context.new_page()
             corpus.goto('http://workspace.test' + workspace_views.selection_url(workspace_views.listing()))
             board = context.new_page()
-            board.goto('http://workspace.test' + workspace_views.selection_url(workspace_views.listing()).replace('/hfl-corpus?', '/hfl-corpus/actions?'))
+            board.goto('http://workspace.test' + workspace_views.selection_url(workspace_views.listing()).replace('/hfl-corpus?', '/hfl-corpus/'+surface+'?'))
             playwright.expect(board.locator('[data-view-picker-caption]')).to_have_text('Work')
             corpus.locator('#q').fill('planning')
             corpus.locator('[data-corpus-search]').click()
             corpus.wait_for_url('**/hfl-corpus?**views=**')
-            board.evaluate("window.dispatchEvent(new Event('focus'))")
+            try:
+                board.evaluate("window.dispatchEvent(new Event('focus'))")
+            except playwright.Error as error:
+                if 'Execution context was destroyed' not in str(error):
+                    raise
+                board.wait_for_load_state()
             playwright.expect(board.locator('[name=q]')).to_have_value('planning')
             # An unfinished corpus edit must survive a change from Kanban.
             corpus.locator('#q').fill('unfinished')
@@ -387,3 +396,109 @@ def test_last_selected_view_survives_new_login(authenticated_client, workspace_c
     assert client.get('/hfl-corpus?q=explicit', follow_redirects=False).status_code == 200
     assert client.get('/hfl-corpus?reset=1', follow_redirects=False).status_code == 200
     assert client.get('/hfl-corpus/workspace-views').json()['last_used'] == first['id']
+
+
+def test_graph_dynamic_schedule_switches_with_menu_open_and_stale_url(authenticated_client, workspace_corpus, monkeypatch):
+    from zoneinfo import ZoneInfo
+    from modules.hfl_corpus import entities
+    playwright = pytest.importorskip('playwright.sync_api')
+    clock = {'hour': 10}
+    active_views = workspace_views.active_views
+    monkeypatch.setattr(workspace_views, 'active_views', lambda views, prefs: active_views(
+        views, prefs, datetime(2026, 10, 5, clock['hour'], 30, tzinfo=ZoneInfo(prefs['timezone']))))
+    contexts = []
+    def graph(*args, **kwargs):
+        contexts.append(args[-1] if args else kwargs.get('context', ''))
+        return dict(nodes=[], edges=[], sources=[], total_nodes=0)
+    monkeypatch.setattr(entities, 'graph', graph)
+    first = workspace_views.save(workspace_views.WorkspaceWrite(name='Morning', state={'source':'git'},
+        schedule=[{'days':[0], 'start':'10:00', 'end':'11:00'}]))
+    second = workspace_views.save(workspace_views.WorkspaceWrite(name='Later', state={'source':'notes'},
+        schedule=[{'days':[0], 'start':'11:00', 'end':'12:00'}]))
+    prefs = workspace_views.listing()['preferences']
+    data = workspace_views.save_preferences(workspace_views.ViewPreferences(**{**prefs, 'dynamic':True}))
+    old_url = 'http://workspace.test' + workspace_views.selection_url(data, dynamic=True).replace('/hfl-corpus?', '/hfl-corpus/graph?')
+    with playwright.sync_playwright() as engine:
+        browser = engine.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page()
+        def respond(route):
+            req = route.request
+            response = authenticated_client.request(req.method, req.url.replace('http://workspace.test', ''), content=req.post_data,
+                headers={k:v for k,v in req.headers.items() if k in {'content-type','x-csrf-token'}}, follow_redirects=True)
+            route.fulfill(status=response.status_code, body=response.content,
+                headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding','content-length'}})
+        page.route('http://workspace.test/**', respond)
+        try:
+            page.goto(old_url)
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.locator('[data-workspace-menu] > summary').click()
+            clock['hour'] = 11
+            page.evaluate("window.dispatchEvent(new Event('focus'))")
+            playwright.expect(page.locator('[data-active-view-name]')).to_have_text('Later')
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            assert second['id'] in contexts[-1]
+            assert workspace_views.listing()['preferences']['revision'] == data['preferences']['revision']
+            # Reloading an old Dynamic URL must reconcile the already-active schedule.
+            page.goto(old_url)
+            playwright.expect(page.locator('[data-active-view-name]')).to_have_text('Later')
+            playwright.expect(page.locator('[data-dynamic-toggle]')).to_be_checked()
+            # No scheduled block means All activity, with Dynamic mode still enabled.
+            clock['hour'] = 12
+            page.evaluate("window.dispatchEvent(new Event('focus'))")
+            playwright.expect(page.locator('[data-active-view-name]')).to_have_text('All activity')
+            playwright.expect(page.locator('[data-dynamic-toggle]')).to_be_checked()
+        finally:
+            browser.close()
+
+
+@pytest.mark.parametrize('unrestricted', [False, True])
+def test_graph_sources_inherit_and_reset_without_editing_workspaces(authenticated_client, workspace_corpus, monkeypatch, unrestricted):
+    import json
+    from urllib.parse import urlencode
+    from modules.hfl_corpus import entities
+    playwright = pytest.importorskip('playwright.sync_api')
+    calls = []
+    def graph(source='', since='', until='', limit=0, query='', shared=False, context=''):
+        calls.append((source, context))
+        return dict(nodes=[], edges=[], sources=['git', 'notes'], total_nodes=0)
+    monkeypatch.setattr(entities, 'graph', graph)
+    first = workspace_views.save(workspace_views.WorkspaceWrite(name='Work', state={'source':'git'}))
+    second = workspace_views.save(workspace_views.WorkspaceWrite(name='Home', state={'source':'' if unrestricted else 'notes'}))
+    before = workspace_views.listing()
+    scope = {'any':[first['state'], second['state']], 'all':{}}
+    query = urlencode({'views':first['id']+','+second['id'], 'scope':json.dumps(scope)})
+    with playwright.sync_playwright() as engine:
+        browser = engine.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page()
+        def respond(route):
+            req = route.request
+            response = authenticated_client.request(req.method, req.url.replace('http://workspace.test',''), content=req.post_data,
+                headers={k:v for k,v in req.headers.items() if k in {'content-type','x-csrf-token'}}, follow_redirects=True)
+            route.fulfill(status=response.status_code, body=response.content,
+                headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding','content-length'}})
+        page.route('http://workspace.test/**', respond)
+        try:
+            page.goto('http://workspace.test/hfl-corpus/graph?'+query)
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.locator('#kg-open-filters').click()
+            playwright.expect(page.locator('#kg-source-caption')).to_have_text('Workspace sources')
+            playwright.expect(page.locator('#kg-source-inherited')).to_contain_text('Inherited: '+('all sources' if unrestricted else 'git, notes'))
+            page.locator('#kg-source-caption').click()
+            page.locator('#kg-source-options input[value=git]').check()
+            page.locator('#kg-filter').click()
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            assert calls[-1][0] == ['git']
+            assert parse_qs(calls[-1][1])['scope'] == [json.dumps(scope)]
+            page.locator('#kg-open-filters').click()
+            page.locator('#kg-source-caption').click()
+            page.get_by_role('button', name='Reset to workspace sources', exact=True).click()
+            playwright.expect(page.locator('#kg-source-caption')).to_have_text('Workspace sources')
+            page.locator('#kg-filter').click()
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            assert not calls[-1][0]
+            assert workspace_views.listing() == before
+            page.goto('http://workspace.test/hfl-corpus/graph?views=')
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            playwright.expect(page.locator('#kg-source-caption')).to_have_text('All sources')
+        finally:
+            browser.close()

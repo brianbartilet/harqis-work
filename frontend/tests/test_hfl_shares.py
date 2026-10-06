@@ -923,7 +923,7 @@ def test_saved_recipe_actions_share_alignment_and_control_sizing(
     )
 
     assert response.status_code == 200
-    assert 'class="actions recipe-actions"' in response.text
+    assert 'class="actions recipe-actions card-actions"' in response.text
     assert 'class="btn btn-soft"' in response.text
     assert 'class="btn btn-danger"' in response.text
     assert ".recipe-actions form { display:inline-flex; margin:0; }" in response.text
@@ -2090,8 +2090,8 @@ def test_generated_share_statuses_use_active_expired_and_revoked_colors(
     assert 'class="status-pill status-active">active</span>' in response.text
     assert 'class="status-pill status-revoked">revoked</span>' in response.text
     assert 'class="status-pill status-expired">expired</span>' in response.text
-    assert response.text.count(">Preview</a>") == 3
-    assert response.text.count(">Revoke now</button>") == 1
+    assert response.text.count('title="Preview"') == 3
+    assert response.text.count('title="Revoke now"') == 1
     for grant in shares.values():
         preview = authenticated_client.get(f"/sharing/shares/{grant.id}/preview")
         assert preview.status_code == 200
@@ -3489,5 +3489,5 @@ def test_legacy_share_has_no_recoverable_link(authenticated_client, sharing_corp
     grant = store.list_shares()[0]
     with store._connect() as connection:
         connection.execute("DELETE FROM share_handoffs WHERE share_id=?", (grant.id,))
-    assert "QR &amp; link unavailable" in authenticated_client.get("/sharing").text
+    assert 'disabled title="QR + link unavailable. Generate a new share to retain its QR and link."' in authenticated_client.get("/sharing").text
     assert authenticated_client.get(f"/sharing/shares/{grant.id}/handoff").status_code == 404

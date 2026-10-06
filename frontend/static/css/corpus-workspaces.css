@@ -264,3 +264,14 @@
 }
 @media(max-width:800px) { .visualizer-toolbar h2 { white-space:normal; } }
 .activity-view-caption [data-active-view-name] { display:inline-block; border:1px solid #334155; border-radius:.3rem; padding:.12rem .35rem; font-weight:500; }
+
+/* Shared workspace trigger appearance in Corpus, Kanban, and Graph. */
+.workspace-menu > summary.corpus-header-link {
+  display:inline-flex; align-items:center; justify-content:center;
+  height:36px; min-height:36px; padding:0 2.5rem 0 1rem;
+  border-radius:.5rem; font-size:.875rem; font-weight:600; line-height:1.25rem;
+  white-space:nowrap; margin-top:0; width:auto; background-color:#2563eb;
+  color:#fff; box-shadow:0 10px 15px -3px #17255466; text-decoration:none;
+}
+.workspace-menu > summary.corpus-header-link:hover { background-color:#3b82f6 }
+.workspace-menu > summary.corpus-header-link:focus-visible { outline:2px solid #60a5fa; outline-offset:2px }

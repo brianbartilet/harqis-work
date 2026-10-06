@@ -76,13 +76,19 @@ Directory follow-up validation: 17 focused tests passed. Live desktop/mobile bro
 
 ## Bounded graph responses
 
-The graph API accepts `limit` (1–1,000, default 100), `query`, `shared`, `source` (or repeated `sources`), `since`, and `until`. It filters before selection, favors recent matching entries and their connected neighbors, and returns at most `limit` nodes and `4 * limit` links. Metadata includes `total_nodes`, `matching_entries`, and `truncated`. The UI sends search/detail/shared changes to the server and discards superseded responses. Type toggles and focus operate within the returned view. Source reads still scan the current permitted corpus; this bounds graph construction and transfer, not ingestion/source-reading cost. No stale-result cache is introduced.
+The graph API accepts `limit` (0 for all matching nodes, otherwise 1–1,000; API default 100), `query`, `shared`, `source` (or repeated `sources`), `since`, and `until`. It filters before selection, favors recent matching entries and their connected neighbors, and bounds results when a nonzero limit is requested. Activity Graph requests `limit=0`. Metadata includes `total_nodes`, `matching_entries`, and `truncated`. The UI sends search/shared changes to the server and discards superseded responses. Type toggles and focus operate within the returned view. Source reads still scan the current permitted corpus; this bounds graph construction and transfer, not ingestion/source-reading cost. No stale-result cache is introduced.
 
 ## Browser layout saving
 
-The graph automatically saves node positions and pan/zoom in localStorage, scoped to the signed-in user. It retains the latest ten views keyed by search, detail, sources, dates, shared-only, grouping, types and focus. Returning to the same view restores its coordinates; newly appearing nodes still receive a layout. Reset removes the current view layout before resetting display controls. Saved layouts are local to this browser/origin, are not synchronized to the server, and contain node IDs/coordinates plus filter values rather than entry text. Storage failure is shown in the view status.
+The graph automatically saves node positions and pan/zoom in localStorage, scoped to the signed-in user. It retains the latest ten views keyed by search, sources, dates, shared-only, grouping, types and focus. Returning to the same view restores its coordinates; newly appearing nodes still receive a layout. Reset removes the current view layout before resetting display controls. Saved layouts are local to this browser/origin, are not synchronized to the server, and contain node IDs/coordinates plus filter values rather than entry text. Storage failure is shown in the view status.
 
-Graph detail limits are now Overview 100, Expanded 500 and Dense 1,000 (API default 100, maximum 1,000). The latest selected detail, search, applied source/date filters, shared-only setting and grouping are remembered per user/browser and restored before the initial graph request.
+Activity Graph always loads all matching nodes in its shared workspace context.
+Overview, Expanded, Dense, and the separate All activity switch have been removed.
+Use Workspace → All activity to clear workspace selection; Corpus, Kanban, and
+Graph synchronize selections and Dynamic mode. Graph presets and additional
+filters operate within that scope. Entities opens all authorized entities.
+The information helper distinguishes matching, displayed, and locally hidden nodes.
+Old browser detail limits are ignored.
 
 Saved graph coordinates restore starting positions. Manually dragged nodes also retain their drop constraints; dragging a connected node releases its neighbors so they can follow. Earlier snapshots without constraint flags remain compatible.
 

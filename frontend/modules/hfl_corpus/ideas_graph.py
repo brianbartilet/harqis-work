@@ -2,7 +2,7 @@
 from workflows.hfl.ideas_store import local_day
 
 
-def extend(base, snapshot, *, since='', until='', query='', sources=None, context='', shared=False, limit=100):
+def extend(base, snapshot, *, since='', until='', query='', sources=None, context='', shared=False, limit=100, workspace_scoped=False):
     nodes = {n['id']: n for n in base['nodes']}
     edges = list(base['edges'])
     corpus_ids = set(nodes)
@@ -55,7 +55,7 @@ def extend(base, snapshot, *, since='', until='', query='', sources=None, contex
         for item in snapshot.get(collection, []):
             source = item.get('source') or {}
             source_entry = item.get('graph_source_id') or 'entry:' + source.get('entry_id', '')
-            if context and prefix + item['id'] not in reachable:
+            if context and not (workspace_scoped and collection in ('ideas', 'actions', 'boards', 'goals')) and prefix + item['id'] not in reachable:
                 continue
             if sources and prefix + item['id'] not in reachable and 'manual-entry' not in sources:
                 continue

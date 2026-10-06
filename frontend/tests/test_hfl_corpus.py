@@ -1517,14 +1517,16 @@ def test_activity_heatmap_filters_document_cards_and_is_mobile_traversable(
     )[0]
     assert "corpus-secrets-control" in corpus_header
     assert "corpus-create-menu" in corpus_header
-    assert ".corpus-page-header,.corpus-header-actions { display:contents; }" in page_source
+    assert "corpus-workspace-controls" in page_source
+    assert "Search and browse captured moments" in response.text
     assert 'data-activity-toggle aria-expanded="true"' in page_source
     assert "data-activity-body" in page_source
     assert 'data-activity-year aria-label="Activity year"' in page_source
     from bs4 import BeautifulSoup
     activity_header_actions = str(BeautifulSoup(page_source, "html.parser").select_one('[data-activity-header-actions]'))
     assert 'data-activity-year aria-label="Activity year"' not in activity_header_actions
-    assert "data-activity-toggle" in activity_header_actions
+    assert "data-activity-toggle" not in activity_header_actions
+    assert BeautifulSoup(page_source, "html.parser").select_one(".activity-panel-header [data-activity-toggle]") is not None
     assert 'data-activity-year-list role="listbox"' in page_source
     assert 'data-activity-year-trigger aria-haspopup="listbox" aria-expanded="false"' in page_source
     assert 'data-activity-year-trigger-value>2026</span>' in page_source

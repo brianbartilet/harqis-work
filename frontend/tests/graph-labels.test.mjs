@@ -88,3 +88,49 @@ test('interaction during a fade does not flash an unchanged label to full opacit
   assert.equal(layout([candidate],viewport,measure,350,'pan')[0].alpha,0.75);
   assert.equal(layout([candidate],viewport,measure,400,'pan')[0].alpha,1);
 });
+
+
+test('animation resolves only visible labels without rebuilding or remeasuring all nodes',async()=>{
+  const {createLabelLayout}=await import('../src/graph-labels.mjs');
+  const layout=createLabelLayout();
+  const nodes=Array.from({length:5000},(_,i)=>({...node('orb'+i),x:200+i*100}));
+  const byId=new Map(nodes.map(n=>[n.id,n]));
+  let scans=0,measurements=0,resolved=0;
+  const source=()=>{scans++;return nodes;};
+  const width=text=>{measurements++;return measure(text);};
+  const resolve=id=>{resolved++;return byId.get(id);};
+  layout(source,viewport,width,0,'view',true,resolve);
+  const count=measurements;
+  resolved=0;
+  nodes[0].x+=10;
+  const frame=layout(source,viewport,width,16,'view',true,resolve);
+  assert.equal(scans,1);
+  assert.equal(measurements,count);
+  assert.equal(resolved,frame.length);
+  assert.ok(resolved<10);
+  assert.equal(frame[0].node.x,210);
+  layout(source,viewport,width,8000,'view',true,resolve);
+  assert.equal(scans,2);
+  assert.equal(measurements,count);
+});
+
+test('camera motion holds labels then lays out once settled; selection stays immediate',async()=>{
+  const {createLabelLayout}=await import('../src/graph-labels.mjs');
+  const layout=createLabelLayout(),candidate=node('moving');
+  let scans=0;
+  const source=()=>{scans++;return [candidate];};
+  const resolve=()=>candidate;
+  layout(source,{...viewport,cameraKey:'0'},measure,0,'view',true,resolve);
+  for(let i=1;i<=60;i++){
+    candidate.x=200+i;
+    const boxes=layout(source,{...viewport,cameraKey:String(i)},measure,i*16,'view',true,resolve);
+    assert.equal(boxes[0].node.x,candidate.x);
+  }
+  assert.equal(scans,1);
+  layout(source,{...viewport,cameraKey:'60'},measure,1080,'view',true,resolve);
+  assert.equal(scans,2);
+  candidate.emphasis=true;
+  const selected=layout(source,{...viewport,cameraKey:'61'},measure,1081,'selected',true,resolve);
+  assert.equal(scans,3);
+  assert.equal(selected[0].font,14);
+});

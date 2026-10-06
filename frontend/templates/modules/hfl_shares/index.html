@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "modules/hfl_shares/partials/action_icon.html" import action_icon %}
 {% block title %}Share Corpus · HARQIS{% endblock %}
 {% block head %}
 <style>
@@ -74,15 +75,23 @@
   .owner-sidebar .actions { align-items:center; padding-top:.85rem; }
   .owner-sidebar .actions form { display:inline-flex; margin:0; }
   .generated-share-items { display:grid; grid-auto-rows:1fr; }
-  .generated-share-item { display:flex; flex-direction:column; min-height:8.5rem; }
-  .generated-share-item .actions { margin-top:auto; }
+  .generated-share-item { display:flex; flex-direction:column; min-height:6.5rem; }
+  .generated-share-description { padding-top:.25rem; }
+  .owner-list-panel > .saved-recipes-content, .owner-list-panel > .generated-shares-content { margin-top:.9rem; border-top:1px solid #334155; padding-top:.35rem; }
+  .card-title-row { display:flex; align-items:center; justify-content:space-between; gap:.65rem; }
+  .card-title-row > .wrap { min-width:0; }
+  .owner-sidebar .card-actions { flex:0 0 auto; flex-wrap:nowrap; gap:.35rem; padding:0; margin:0; }
+  .owner-sidebar .card-actions .btn { width:1.875rem; height:1.875rem; min-height:1.875rem; padding:0; border:1px solid transparent; border-radius:.45rem; flex:0 0 auto; background:#1e293b; color:#cbd5e1; }
+  .owner-sidebar .card-actions .btn:hover:not(:disabled) { background:#334155; color:#f1f5f9; }
+  .owner-sidebar .card-actions .btn:focus-visible { outline:2px solid #94a3b8; outline-offset:2px; }
+  .owner-sidebar .card-actions svg { width:.875rem; height:.875rem; }
+  .owner-sidebar .card-actions form { width:auto; }
+  .share-status-row { padding-top:.5rem; margin-top:auto; }
   .generated-shares-content > .owner-pagination { align-self:start; }
   .recipe-actions { align-items:center; }
   .recipe-item { margin:0 -.65rem; padding:.8rem .65rem; border-radius:.65rem; }
   .recipe-item-active { border:1px solid rgba(51,65,85,.8); background:rgba(15,23,42,.55); box-shadow:inset 2px 0 0 rgba(56,189,248,.65); }
   .recipe-actions form { display:inline-flex; margin:0; }
-  .recipe-title-row { display:flex; align-items:flex-start; justify-content:space-between; gap:.65rem; }
-  .recipe-title-row .wrap { min-width:0; }
   .instant-share-button { flex:0 0 auto; border:1px solid #1d4ed8; background:#172554; color:#bfdbfe; }
   .instant-share-button:hover { background:#1e3a8a; color:#eff6ff; }
   .instant-share-button:focus-visible { outline:2px solid #60a5fa; outline-offset:2px; }
@@ -360,21 +369,20 @@
         {% for row in configurations %}
         {% set item = row.configuration %}
         <div class="item recipe-item{% if cfg and cfg.id == item.id %} recipe-item-active{% endif %}">
-          <div class="recipe-title-row">
+          <div class="card-title-row">
             <a class="wrap text-sm font-semibold text-sky-300" href="/sharing?configuration_id={{ item.id }}" data-recipe-load{% if cfg and cfg.id == item.id %} aria-current="true"{% endif %}>{{ item.name }}</a>
-            <button class="btn instant-share-button" type="button"
-                    data-instant-share
-                    data-instant-url="/sharing/configurations/{{ item.id }}/instant"
-                    aria-label="Instant share {{ item.name }}">Instant share</button>
+            <div class="actions recipe-actions card-actions">
+              <button class="btn instant-share-button" type="button" data-instant-share
+                      data-instant-url="/sharing/configurations/{{ item.id }}/instant"
+                      title="Instant share" aria-label="Instant share {{ item.name }}">{{ action_icon('instant') }}</button>
+              <a class="btn btn-soft" href="/sharing?configuration_id={{ item.id }}&duplicate=true" data-recipe-load title="Duplicate" aria-label="Duplicate {{ item.name }}">{{ action_icon('duplicate') }}</a>
+              {% if not cfg or cfg.id != item.id %}
+              <form method="post" action="/sharing/configurations/{{ item.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-danger" type="submit" title="Delete" aria-label="Delete {{ item.name }}">{{ action_icon('delete') }}</button></form>
+              {% endif %}
+            </div>
           </div>
           <p class="mt-1 text-xs text-slate-500">{{ "All sources" if all_sources_value in item.sources else item.sources|join(', ') }}</p>
           <p class="mt-1 text-xs text-slate-500">{{ row.expiration_summary }}</p>
-          <div class="actions recipe-actions">
-            <a class="btn btn-soft" href="/sharing?configuration_id={{ item.id }}&duplicate=true" data-recipe-load>Duplicate</a>
-            {% if not cfg or cfg.id != item.id %}
-            <form method="post" action="/sharing/configurations/{{ item.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-danger" type="submit">Delete</button></form>
-            {% endif %}
-          </div>
         </div>
         {% else %}<p class="mt-2 text-xs text-slate-500">No saved recipes yet.</p>{% endfor %}
         {% if recipe_total_pages > 1 %}

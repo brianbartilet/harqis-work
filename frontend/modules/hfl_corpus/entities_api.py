@@ -78,13 +78,22 @@ async def page(request: Request):
         template = 'actions_board.html'
     from modules.hfl_shares.security import make_csrf_token
     workspace_context = {}
-    if template == 'actions_board.html':
+    if template in ('actions_board.html', 'knowledge_graph.html'):
         from modules.hfl_corpus import workspace_views
         from modules.hfl_corpus.view_scope import parse_scope
         saved = await run_in_threadpool(workspace_views.listing)
-        if not request.query_params and (saved['preferences']['revision'] or saved['last_used']):
+        if template == 'knowledge_graph.html' and request.query_params.get('context'):
+            from urllib.parse import parse_qsl, urlencode
+            params = dict(parse_qsl(request.query_params['context']))
+            params.update({k: v for k, v in request.query_params.items() if k != 'context'})
+            return RedirectResponse(request.url.path + '?' + urlencode(params), status_code=303)
+        graph_navigation = template == 'knowledge_graph.html' and set(request.query_params).issubset({'board', 'map', 'select', 'graph_filters'})
+        if (not request.query_params or graph_navigation) and (saved['preferences']['revision'] or saved['last_used']):
             target = workspace_views.selection_url(saved, dynamic=saved['preferences']['dynamic'])
-            return RedirectResponse(target.replace('/hfl-corpus?', '/hfl-corpus/actions?', 1), status_code=303)
+            if graph_navigation and request.query_params:
+                from urllib.parse import urlencode
+                target += '&' + urlencode(dict(request.query_params))
+            return RedirectResponse(target.replace('/hfl-corpus?', request.url.path + '?', 1), status_code=303)
         try:
             values = {key: value for key, value in request.query_params.items() if key in workspace_views.WorkspaceState.model_fields}
             for key in ('rolling', 'page_size'):

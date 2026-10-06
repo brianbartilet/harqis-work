@@ -154,11 +154,14 @@ def projection(source='', since='', until='', context=''):
 def graph(source='', since='', until='', limit=100, query='', shared=False, context=''):
     from modules.hfl_corpus.ideas_api import canonical_snapshot
     from modules.hfl_corpus.ideas_graph import extend
+    from modules.hfl_corpus.graph_workspace import active_context, scope_snapshot
+    context = active_context(context)
     snapshot = canonical_snapshot()
+    snapshot = scope_snapshot(snapshot, context)
     if not any(snapshot.get(k) for k in ('ideas', 'actions', 'topics', 'links', 'goals', 'maps', 'lists')):
         return _corpus_graph(source, since, until, limit, query, shared, context)
     base = _corpus_graph(source, since, until, 0, '', False, context)
-    return extend(base, snapshot, since=since, until=until, query=query, sources=source, context=context, shared=shared, limit=limit)
+    return extend(base, snapshot, since=since, until=until, query=query, sources=source, context=context, shared=shared, limit=limit, workspace_scoped=bool(context))
 
 
 def _corpus_graph(source='', since='', until='', limit=100, query='', shared=False, context=''):

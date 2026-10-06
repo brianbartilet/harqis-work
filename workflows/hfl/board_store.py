@@ -17,10 +17,12 @@ def text(value, label, limit, required=False):
 def normalize_board(item):
     """Read old maps additively, preserving their IDs and revisions."""
     return {'purpose': item['name'], 'root': '', 'goal_id': '', 'drafts': [], 'edges': [],
-            'created_at': '', 'updated_at': '', 'board_date': '', 'active': True, 'color': PIN_COLORS[0], 'node_sizes': {}, 'edge_widths': {}, **item}
+            'created_at': '', 'updated_at': '', 'board_date': '', 'active': True, 'workspace_ids': [], 'color': PIN_COLORS[0], 'node_sizes': {}, 'edge_widths': {}, **item}
 
 
 def validate_board(item, extra_ids=()):
+    from workflows.hfl.intent_reuse import workspaces
+    item['workspace_ids'] = workspaces(item)
     item.setdefault('active', True)
     if type(item['active']) is not bool:
         raise ValueError('Board active must be a boolean.')

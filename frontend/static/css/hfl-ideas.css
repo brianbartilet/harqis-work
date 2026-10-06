@@ -4,6 +4,18 @@
 .idea-dialog label { display:block; font-size:.85rem; margin:12px 0; color:#adc1d6; }
 .idea-dialog input:not([type=checkbox]),.idea-dialog textarea,.idea-dialog select,.idea-map-tools input,.idea-map-tools select,.idea-checklist input:not([type=checkbox]) { display:block; width:100%; color:#e2e8f0; background:#101e33; border:1px solid #40516a; border-radius:6px; padding:8px; margin-top:5px; }
 .idea-dialog textarea { min-height:90px; }
+.idea-dialog .agenda-form-body .board-active-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px; margin:16px 0; border:1px solid #334155; border-radius:10px; cursor:pointer; }
+.board-active-row strong { display:block; color:#e2e8f0; font-size:.85rem; }
+.board-active-row .board-hint { display:block; margin-top:4px; font-weight:400; }
+.idea-dialog .agenda-form-body .board-active-row input { appearance:none; display:block; flex:0 0 44px; width:44px; height:26px; padding:3px; margin:0; border:1px solid #64748b; border-radius:999px; background:#334155; cursor:pointer; }
+.board-active-row input::before { content:''; display:block; width:18px; height:18px; border-radius:50%; background:#f8fafc; }
+.idea-dialog .agenda-form-body .board-active-row input:checked { background:#2563eb; border-color:#60a5fa; }
+.board-active-row input:checked::before { transform:translateX(18px); }
+.board-active-row input:focus-visible { outline:2px solid #67e8f9; outline-offset:4px; }
+.board-workspace-field { margin:16px 0; min-width:0; }
+.board-field-label { margin:0 0 6px; color:#94a3b8; font-size:.8rem; font-weight:650; }
+.board-settings-dialog .workspace-view-options { max-height:240px; overflow-y:auto; }
+.idea-dialog.board-settings-dialog .agenda-form-body > label { font-size:.8rem; }
 .idea-dialog button,.idea-map-tools button,.idea-checklist button { border:1px solid #475569; border-radius:6px; padding:6px 10px; margin:4px; background:#16263e; color:#dbeafe; cursor:pointer; }
 .idea-dialog button:disabled { opacity:.5; cursor:wait; }
 .idea-dialog button[type=submit] { background:#2563eb; }

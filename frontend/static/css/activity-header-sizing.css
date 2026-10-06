@@ -1,6 +1,8 @@
 /* Keep header controls the same height as the corpus Search button. */
 :is(.corpus-header-shell .corpus-header-link,
     .corpus-header-shell .corpus-secrets-control,
+    .activity-panel-header .workspace-menu > summary.workspace-select,
+    .activity-panel-header [data-activity-toggle],
     #followups-board .followups-toolbar .board-create-menu > summary,
     #followups-board .followups-toolbar .ideas-drawer-toggle,
     #followups-board .followups-toolbar .board-workspace-filter > summary,
@@ -18,6 +20,24 @@
   display:inline-flex;
   align-items:center;
   justify-content:center;
+}
+
+.activity-panel-header [data-activity-toggle] {
+  width:36px;
+  min-width:36px;
+}
+
+[data-corpus-index] .corpus-header-actions {
+  margin-right:17px;
+}
+
+[data-corpus-index] .corpus-create-menu > summary.corpus-header-link,
+[data-corpus-index] .workspace-menu > summary.workspace-select {
+  width:8rem;
+}
+
+@media (max-width:639px) {
+  [data-corpus-index] .corpus-header-actions { margin-right:9px; }
 }
 
 #followups-board .followups-toolbar .ideas-drawer-toggle {

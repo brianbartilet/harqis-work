@@ -3,7 +3,8 @@
   if (window.activityModals) return;
   const embedded = window.parent !== window;
   const params = new URLSearchParams(location.search);
-  const inherited = params.get('context') || '';
+  const graphPage=!!document.querySelector('.kg-shell');
+  const inherited = params.get('context') || (graphPage ? location.search.slice(1) : '');
   const scopeButton = document.querySelector('[data-activity-all]');
   const defaultAll = scopeButton?.getAttribute('aria-checked') === 'true';
   let all = defaultAll;
@@ -21,7 +22,7 @@
   function open(kind, context, extra = '', navigation = '') {
     if(kind==='graph') {
       const url=new URL('/hfl-corpus/graph',location.origin);
-      if(context)url.searchParams.set('context',context);
+      if(context)for(const [key,value] of new URLSearchParams(context))url.searchParams.set(key,value);
       if(extra)url.searchParams.set('graph_filters',extra);
       for(const [key,value] of new URLSearchParams(navigation))url.searchParams.set(key,value);
       location.assign(url);return;
@@ -57,7 +58,7 @@
     return dialog;
   }
   window.activityModals = {open, context:()=>all ? '' : inherited, isAll:()=>all,
-    setAll:value=>{all=value===true;updateScope();},
+    setAll:value=>{all=graphPage?false:value===true;updateScope();},
     reset:()=>{all=defaultAll;updateScope();}};
   document.querySelector('[data-activity-close]')?.addEventListener('click',close);
   document.getElementById('activity-standalone')?.addEventListener('cancel',event=>{event.preventDefault();close();});
