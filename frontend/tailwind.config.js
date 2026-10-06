@@ -1,9 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: [
-    './frontend/templates/**/*.html',
-    './frontend/**/*.py',
-  ],
+  // Source paths are declared relative to assets/tailwind.css with @source.
   theme: {
     extend: {
       fontFamily: {

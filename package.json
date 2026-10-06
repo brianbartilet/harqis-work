@@ -2,10 +2,11 @@
   "name": "harqis-work-frontend-assets",
   "private": true,
   "scripts": {
-    "build:frontend-assets": "tailwindcss -c frontend/tailwind.config.js -i frontend/assets/tailwind.css -o frontend/static/css/app.min.css --minify && node frontend/scripts/vendor-assets.mjs && npm run build:knowledge-graph",
+    "build:frontend-assets": "tailwindcss -i frontend/assets/tailwind.css -o frontend/static/css/app.min.css --minify && node frontend/scripts/vendor-assets.mjs && npm run build:knowledge-graph",
     "build:knowledge-graph": "node frontend/scripts/build-knowledge-graph.mjs"
   },
   "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
     "alpinejs": "3.14.1",
     "esbuild": "0.28.2",
     "htmx.org": "1.9.12",

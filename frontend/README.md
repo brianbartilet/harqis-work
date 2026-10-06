@@ -93,6 +93,11 @@ npm ci
 npm run build:frontend-assets
 ```
 
+Tailwind 4 uses the separately pinned `@tailwindcss/cli` package. The CSS input
+loads the JavaScript theme with `@config` and explicitly scans templates and Python
+files using `@source`; source paths are relative to the CSS input. CI builds these
+assets and checks that representative utilities were generated.
+
 Run the build whenever template utility classes or pinned dependency versions
 change. The runtime does not need Node.js because generated assets are tracked.
 Rendered URLs include a content digest query, static responses are cacheable for

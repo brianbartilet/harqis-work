@@ -1999,6 +1999,13 @@
       "reason": "Session-authenticated frontend operation; dedicated machine-facing service/auth contract is deferred."
     },
     {
+      "method": "GET",
+      "path": "/sharing/shares/{share_id}/handoff",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner-authenticated HTML handoff page for the existing share link and QR; browser-specific presentation."
+    },
+    {
       "method": "POST",
       "path": "/sharing/shares/{share_id}/revoke",
       "status": "deferred",
