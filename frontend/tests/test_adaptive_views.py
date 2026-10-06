@@ -202,6 +202,8 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
                 assert (create['x'] + create['width'] <= views['x'] or
                         create['y'] + create['height'] <= views['y'])
                 assert views['x'] + views['width'] <= width
+            caret_styles = page.locator('.corpus-create-menu > summary, [data-workspace-menu] > summary').evaluate_all('(els)=>els.map(el=>{const s=getComputedStyle(el);return [s.backgroundImage,s.backgroundPosition,s.backgroundSize,s.paddingRight]})')
+            assert caret_styles[0] == caret_styles[1]
             page.screenshot(path=str(tmp_path/f'header-menus-{width}.png'))
             page.locator('.corpus-create-menu > summary').click()
             page.locator('[data-create-action-open]').click()

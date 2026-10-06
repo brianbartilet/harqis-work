@@ -147,6 +147,14 @@ def test_workspace_boards_and_global_entities_browser(ideas, authenticated_clien
             page.locator('[data-workspace-menu]').evaluate('(el)=>el.open=false')
             page.get_by_role('button', name='Explore Activity Graph', exact=True).click()
             expect(page.locator('#kg-open-filters')).to_be_visible()
+            expect(page.locator('.kg-map-caption')).to_be_hidden()
+            workspace_style = trigger.evaluate('(el)=>[getComputedStyle(el).height,getComputedStyle(el).fontSize,getComputedStyle(el).fontWeight]')
+            for selector in ['#kg-entities','#kg-open-filters']:
+                assert page.locator(selector).evaluate('(el)=>[getComputedStyle(el).height,getComputedStyle(el).fontSize,getComputedStyle(el).fontWeight]') == workspace_style
+            for selector in ['#kg-fit','#kg-fullscreen']:
+                assert page.locator(selector).inner_text() == ''
+                assert page.locator(selector).get_attribute('aria-label')
+                expect(page.locator(selector+' svg')).to_be_visible()
             if width == 1440:
                 entities = page.locator('#kg-entities').bounding_box()
                 filters = page.locator('#kg-open-filters').bounding_box()

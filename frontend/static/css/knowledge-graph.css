@@ -286,3 +286,11 @@
 
 .kg-shell .kg-source-inherited { margin:6px 0 0; font-size:11px; line-height:1.5 }
 #kg-source-options > button { width:100%; text-align:left; margin-bottom:5px }
+
+.kg-shell .kg-workspace-controls > :is(#kg-entities,#kg-open-filters) {
+  box-sizing:border-box; height:36px; min-height:36px; padding:0 1rem;
+  display:inline-flex; align-items:center; justify-content:center;
+  font-size:.875rem; font-weight:600; line-height:1.25rem;
+}
+.kg-shell:not(.has-board) .kg-map-caption { display:none }
+.kg-shell .kg-zoom svg { width:16px; height:16px; pointer-events:none }
