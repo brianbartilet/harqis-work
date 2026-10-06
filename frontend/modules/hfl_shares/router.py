@@ -1106,6 +1106,18 @@ async def revoke_share(request: Request, share_id: str):
     return RedirectResponse("/sharing", status_code=303)
 
 
+@owner_router.post("/shares/{share_id}/delete")
+async def delete_share(request: Request, share_id: str):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    form = await request.form()
+    _require_csrf(form, user)
+    if get_share_store().delete_share(share_id):
+        record_share_audit(event="deleted", share_id=share_id)
+    return RedirectResponse("/sharing", status_code=303)
+
+
 @owner_router.get("/shares/{share_id}/preview", response_class=HTMLResponse)
 async def preview_generated_share(
     request: Request,

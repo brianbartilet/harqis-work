@@ -5,6 +5,64 @@ import time
 import pytest
 
 
+def test_motion_keeps_drawing_while_hovered(authenticated_client, monkeypatch):
+    playwright = pytest.importorskip('playwright.sync_api')
+    from modules.hfl_corpus import entities
+    monkeypatch.setattr(entities, 'graph', lambda *args: dict(
+        nodes=[dict(id='source:notes', kind='sources', label='Notes')],
+        edges=[], total_nodes=1, sources=['notes']))
+    with playwright.sync_playwright() as engine:
+        options = {'headless': True}
+        if not Path(engine.chromium.executable_path).exists(): options['channel'] = 'msedge'
+        browser = engine.chromium.launch(**options)
+        try:
+            page = browser.new_page(viewport={'width': 1440, 'height': 1000})
+            def route_request(route):
+                r = route.request
+                response = authenticated_client.request(r.method, r.url.replace('http://graph.test', ''), content=r.post_data)
+                route.fulfill(status=response.status_code, body=response.content,
+                              headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding','content-length'}})
+            page.route('http://graph.test/**', route_request)
+            page.goto('http://graph.test/hfl-corpus/graph')
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            # Observe actual node paints, rather than just browser frame callbacks.
+            page.evaluate('''() => {
+                const canvas=document.querySelector('#kg-canvas canvas'),ctx=canvas.getContext('2d');
+                const arc=ctx.arc;
+                window.motionPaints=[];
+                ctx.arc=function(x,y,...args){
+                    window.motionPaints.push({x,y,time:performance.now()});
+                    return arc.call(this,x,y,...args);
+                };
+            }''')
+            page.click('#kg-open-animation')
+            page.click('[data-animation="drift"]')
+            page.wait_for_timeout(1200)
+            point = page.evaluate('''() => {
+                const canvas=document.querySelector('#kg-canvas canvas'),rect=canvas.getBoundingClientRect();
+                const p=window.motionPaints.at(-1),z=canvas.__zoom;
+                return {x:rect.x+z.x+p.x*z.k,y:rect.y+z.y+p.y*z.k};
+            }''')
+            page.mouse.move(point['x'], point['y'])
+            page.wait_for_function("document.querySelector('#kg-canvas').style.cursor==='pointer'")
+            # Cross the end of label fading, when idle redraw suppression takes over.
+            result = page.evaluate('''() => new Promise(resolve => {
+                window.motionPaints=[];
+                const states=[],start=performance.now();let frames=0;
+                function frame(now){
+                    frames++;states.push(document.querySelector('#kg-canvas').dataset.motion);
+                    if(now-start<1200){requestAnimationFrame(frame);return;}
+                    const positions=new Set(window.motionPaints.map(p=>`${p.x}:${p.y}`));
+                    resolve({frames,positions:positions.size,paused:states.includes('paused')});
+                }
+                requestAnimationFrame(frame);
+            })''')
+            assert not result['paused'], result
+            assert result['positions'] >= result['frames'] * .85, result
+        finally:
+            browser.close()
+
+
 @pytest.mark.parametrize('width,height', [(1907, 907), (1440, 1000), (390, 844)])
 def test_timeline_centered_on_load_and_resize(authenticated_client, monkeypatch, width, height):
     from datetime import date, timedelta

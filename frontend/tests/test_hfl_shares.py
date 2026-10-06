@@ -2072,7 +2072,7 @@ def test_generated_share_statuses_use_active_expired_and_revoked_colors(
     for name in ("Active example", "Revoked example", "Expired example"):
         response = authenticated_client.post(
             "/sharing/generate",
-            data=_form(name=name),
+            data=_form(name=name, single_use="", browser_redemption_limit="5"),
         )
         assert response.status_code == 200
 
@@ -2094,10 +2094,49 @@ def test_generated_share_statuses_use_active_expired_and_revoked_colors(
     assert 'class="status-pill status-expired">expired</span>' in response.text
     assert response.text.count('title="Preview"') == 3
     assert response.text.count('title="Revoke now"') == 1
+    assert response.text.count('title="QR + link unavailable for ') == 2
+    for name in ("Revoked example", "Expired example"):
+        assert f'aria-label="Delete {name}"' in response.text
+    assert 'aria-label="Delete Active example"' not in response.text
+    for card in response.text.split('<div class="item generated-share-item">')[1:]:
+        assert card.index('5 redemptions per browser') < card.index('class="share-status-row"')
     for grant in shares.values():
         preview = authenticated_client.get(f"/sharing/shares/{grant.id}/preview")
         assert preview.status_code == 200
         assert "Booked Kyoto accommodation" in preview.text
+
+
+@pytest.mark.parametrize('inactive_status', ['revoked', 'expired'])
+def test_owner_deletes_only_inactive_shares(authenticated_client, sharing_corpus, inactive_status):
+    from fastapi.testclient import TestClient
+    from main import app
+
+    store = get_share_store()
+    authenticated_client.post('/sharing/generate', data=_form())
+    grant = store.list_shares()[0]
+    session = store.create_session(grant.id, 'delete-test-session', browser_hash='delete-test-browser')
+    assert session
+    url = f'/sharing/shares/{grant.id}/delete'
+    csrf = {'csrf': make_csrf_token('frontend-test-user')}
+    # Active grants cannot be deleted through a crafted request.
+    assert authenticated_client.post(url, data=csrf, follow_redirects=False).status_code == 303
+    assert store.get_share(grant.id)
+    if inactive_status == 'revoked':
+        store.revoke_share(grant.id)
+    else:
+        with store._connect() as connection:
+            connection.execute('UPDATE shares SET expires_at=? WHERE id=?',
+                               ((datetime.now(timezone.utc)-timedelta(minutes=1)).isoformat(), grant.id))
+    with TestClient(app) as guest:
+        assert guest.post(url, data=csrf, follow_redirects=False).status_code in (302, 303)
+    assert authenticated_client.post(url, data={'csrf': 'invalid'}).status_code == 403
+    assert store.get_share(grant.id)
+    assert authenticated_client.post(url, data=csrf, follow_redirects=False).status_code == 303
+    assert store.get_share(grant.id) is None
+    with store._connect() as connection:
+        for table in ('sessions', 'share_handoffs', 'browser_redemptions'):
+            assert connection.execute(f'SELECT COUNT(*) FROM {table} WHERE share_id=?', (grant.id,)).fetchone()[0] == 0
+    assert authenticated_client.get(f'/sharing/shares/{grant.id}/preview').status_code == 404
 
 
 def test_owner_can_preview_active_share_without_guest_verification(

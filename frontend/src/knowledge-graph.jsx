@@ -231,15 +231,17 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     !!document.querySelector('dialog[open]:not(#activity-standalone)')||!$('views-panel').hidden||!$('animation-panel').hidden;}
   function animate(now){
     requestAnimationFrame(animate);
-    const redraw=!document.hidden&&(now>=labelRefreshAt||now<labelFadeUntil+50||now<arrivalFadeUntil+50);
+    const paused=motionPaused();
+    const moving=!paused&&!draggedNode&&!dragNodes.size&&!!graphApi&&(!!transition||animationMode!=='off'||motionSettling);
+    // Motion owns continuous drawing; label refreshes only wake an idle graph.
+    const redraw=!document.hidden&&(moving||now>=labelRefreshAt||now<labelFadeUntil+50||now<arrivalFadeUntil+50);
     if(setGraphRedraw&&redraw!==graphRedraw){graphRedraw=redraw;setGraphRedraw(redraw);}
     const delta=Math.min(100,now-(lastClock||now));lastClock=now;
-    const paused=motionPaused(),state=paused?'Paused':animationMode==='off'?'Motion is off':PRESETS[preset]+' · '+animationMode;
+    const state=paused?'Paused':animationMode==='off'?'Motion is off':PRESETS[preset]+' · '+animationMode;
     if($('animation-status').textContent!==state)$('animation-status').textContent=state;
     host.dataset.motion=paused?'paused':animationMode;
-    if(paused||draggedNode||dragNodes.size||!graphApi||(!transition&&animationMode==='off'&&!motionSettling)){lastMotionFrame=now;return;}
+    if(!moving){lastMotionFrame=now;return;}
     motionTime+=delta;if(transition)transition.elapsed+=delta;
-    if(now-lastMotionFrame<(nodes.length>1000?1000/15:1000/30))return;
     const elapsed=Math.min(100,now-lastMotionFrame);lastMotionFrame=now;
     const progress=transition?(reducedMotion?1:Math.min(1,transition.elapsed/1000)):1,ease=progress*progress*(3-2*progress);
     let unsettled=false;
@@ -255,7 +257,6 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     }
     if(progress===1)transition=null;
     motionSettling=unsettled;
-    graphApi.d3ReheatSimulation();
   }
   function Graph({data,activeId,selectedId}) {
     const ref=useRef();
@@ -282,12 +283,12 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     useEffect(()=>{setChosenEdge(null);setConnectFrom(null);setPreview(null);setConnectionMessage('');},[board?.id]);
     useEffect(()=>{if(selectedId)setChosenEdge(null);},[selectedId]);
     useEffect(()=>{
-      connectionInteraction=!!(hoverId||controlsFocused||connectFrom||connection||connectionBusy);
+      connectionInteraction=!!board&&!!(hoverId||controlsFocused||connectFrom||connection||connectionBusy);
       graphEscapePending=!!(controlsFocused||connectFrom||connection||connectionBusy);
       const cancel=event=>{if(event.key==='Escape'&&!document.querySelector('dialog[open]')){if(graphEscapePending)event.preventDefault();setControlsFocused(false);setConnectFrom(null);setPreview(null);setChosenEdge(null);setConnectionMessage('');}};
       document.addEventListener('keydown',cancel);
       return()=>{connectionInteraction=false;graphEscapePending=false;document.removeEventListener('keydown',cancel);};
-    },[hoverId,controlsFocused,connectFrom,connection,connectionBusy]);
+    },[board,hoverId,controlsFocused,connectFrom,connection,connectionBusy]);
     const cleanEdge=edge=>({source:endpointId(edge.source),target:endpointId(edge.target),relation:edge.relation||'related-to',direction:edge.direction||'forward'});
     async function connectionCommand(operation,replacement,extra={}){
       if(connectionBusy)return;

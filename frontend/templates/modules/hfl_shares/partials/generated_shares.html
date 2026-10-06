@@ -7,19 +7,21 @@
     <strong class="wrap text-sm text-slate-200">{{ share.name }}</strong>
     <div class="actions card-actions">
       <a class="btn btn-soft" href="/sharing/shares/{{ share.id }}/preview" target="_blank" rel="noopener" title="Preview" aria-label="Preview {{ share.name }}">{{ action_icon('preview') }}</a>
-      {% if share.available %}
-      {% if row.has_link %}
+      {% if share.available and row.has_link %}
       <a class="btn btn-soft" href="/sharing/shares/{{ share.id }}/handoff" target="_blank" rel="noopener" title="QR + link" aria-label="QR + link for {{ share.name }}">{{ action_icon('qr') }}</a>
       {% else %}
-      <button class="btn btn-soft" type="button" disabled title="QR + link unavailable. Generate a new share to retain its QR and link." aria-label="QR + link for {{ share.name }}">{{ action_icon('qr') }}</button>
+      <button class="btn btn-soft" type="button" disabled title="{% if not share.available %}QR + link unavailable for {{ row.status }} shares.{% else %}QR + link unavailable. Generate a new share to retain its QR and link.{% endif %}" aria-label="QR + link for {{ share.name }}">{{ action_icon('qr') }}</button>
       {% endif %}
+      {% if share.available %}
       <form method="post" action="/sharing/shares/{{ share.id }}/revoke"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-danger" title="Revoke now" aria-label="Revoke {{ share.name }}">{{ action_icon('revoke') }}</button></form>
+      {% else %}
+      <form method="post" action="/sharing/shares/{{ share.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-danger" type="submit" title="Delete" aria-label="Delete {{ share.name }}">{{ action_icon('delete') }}</button></form>
       {% endif %}
     </div>
   </div>
   <p class="generated-share-description text-xs text-slate-500">{{ share.entry_count }} entries · {{ "live recipe" if share.live_updates else "fixed snapshot" }} · {% if share.no_expiry %}no expiry{% else %}expires {{ row.expires_at_display }}{% endif %}</p>
-  <div class="share-status-row"><span class="status-pill status-{{ row.status }}">{{ row.status }}</span></div>
   {% if share.browser_redemption_limit %}<p class="text-xs text-slate-500">{{ share.browser_redemption_limit }} redemptions per browser</p>{% endif %}
+  <div class="share-status-row"><span class="status-pill status-{{ row.status }}">{{ row.status }}</span></div>
 </div>
 {% else %}<p class="mt-2 text-xs text-slate-500">No shares generated yet.</p>{% endfor %}
 </div>

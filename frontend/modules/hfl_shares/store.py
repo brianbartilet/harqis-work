@@ -735,6 +735,18 @@ class ShareStore:
             )
         return result.rowcount > 0
 
+    def delete_share(self, share_id: str) -> bool:
+        """Delete an inactive grant and its dependent records, keeping its recipe."""
+        with self._lock, self._connect() as connection:
+            result = connection.execute(
+                """
+                DELETE FROM shares WHERE id=? AND
+                (status<>'active' OR (no_expiry=0 AND expires_at<=?))
+                """,
+                (share_id, utc_now().isoformat()),
+            )
+        return result.rowcount > 0
+
     def revoke_share(self, share_id: str) -> bool:
         now = utc_now().isoformat()
         with self._lock, self._connect() as connection:
