@@ -41,6 +41,10 @@
   .clear-tags:disabled { color:#475569; cursor:not-allowed; }
   .help-icon { display:inline-flex; width:1.1rem; height:1.1rem; align-items:center; justify-content:center; margin-left:.3rem; border:1px solid #475569; border-radius:999px; color:#93c5fd; font-size:.68rem; line-height:1; cursor:help; }
   .help-icon:focus-visible { outline:2px solid #60a5fa; outline-offset:2px; }
+  .field-heading { display:flex; align-items:baseline; gap:.3rem; margin-bottom:.4rem; }
+  .field-heading label { margin-bottom:0; }
+  .field-help { margin:0 0 .6rem; border-left:2px solid #38bdf8; padding:.45rem .65rem; background:#172554; color:#bfdbfe; font-size:.78rem; line-height:1.5; }
+  .field-help[hidden] { display:none; }
   .two { display:grid; grid-template-columns:1fr 1fr; gap:.8rem; }
   .actions { display:flex; flex-wrap:wrap; gap:.55rem; }
   .btn { border-radius:.55rem; padding:.58rem .85rem; font-size:.78rem; font-weight:700; }
@@ -314,9 +318,10 @@
               <p class="mt-2 text-xs text-slate-500">No selection includes all available tags.</p>
             </div>
             <div class="field">
-              <label for="topic">Topic phrase filter
-                <span class="help-icon" tabindex="0" role="img" aria-label="Entries must contain every word in this phrase." title="Entries must contain every word in this phrase.">?</span>
-              </label>
+              <div class="field-heading"><label for="topic">Topic phrase filter</label>
+                <button type="button" class="help-icon" data-field-help aria-label="Help with topic phrase filter" aria-expanded="false" aria-controls="topic-help">?</button>
+              </div>
+              <p id="topic-help" class="field-help" hidden>Entries must contain every word in this phrase.</p>
               <textarea class="control" id="topic" name="topic" rows="3" data-preview-filter>{{ cfg.topic if cfg else '' }}</textarea>
             </div>
             <div class="field"><label for="share-date-field">Date type</label>
@@ -331,9 +336,10 @@
               <div class="field"><label for="date-to">To date</label><input class="control [color-scheme:dark]" id="date-to" type="date" name="date_to" value="{{ cfg.date_to if cfg else '' }}" data-preview-filter onclick="if (this.showPicker) this.showPicker()"></div>
             </div>
             <div class="field mb-0">
-              <label for="context-prompt">Background for HARQIS
-                <span class="help-icon" tabindex="0" role="img" aria-label="Optional background guidance for the agent. It cannot override share-scoped privacy and safety rules." title="Optional background guidance for the agent. It cannot override share-scoped privacy and safety rules.">?</span>
-              </label>
+              <div class="field-heading"><label for="context-prompt">Background for HARQIS</label>
+                <button type="button" class="help-icon" data-field-help aria-label="Help with background for HARQIS" aria-expanded="false" aria-controls="context-prompt-help">?</button>
+              </div>
+              <p id="context-prompt-help" class="field-help" hidden>Optional background guidance for the agent. It cannot override share-scoped privacy and safety rules.</p>
               <textarea class="control" id="context-prompt" name="context_prompt" rows="4" maxlength="4000" data-preview-filter>{{ cfg.context_prompt if cfg else '' }}</textarea>
             </div>
           </div>

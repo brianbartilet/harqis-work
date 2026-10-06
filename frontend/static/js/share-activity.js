@@ -1,16 +1,16 @@
 (() => {
   'use strict';
   const form = document.querySelector('[data-social-form]');
-  let active = 'recipe';
+  let active = window.location.pathname === '/sharing/preview/chat' ? 'agent' : 'recipe';
   const labels = new Map();
   const savedLabels = form?.querySelector('[name="excluded_object_labels"]');
   if (savedLabels) Object.entries(JSON.parse(savedLabels.value)).forEach(([id,label])=>labels.set(id,label));
   const selectTab = key => {
     active = key;
     const shell = form?.querySelector('[data-preview-shell]');
-    if (shell) shell.hidden = key === 'filters';
+    if (shell) shell.hidden = key === 'filters' || key === 'recipe';
     const test = form?.querySelector('[data-test-agent]');
-    if (test) test.hidden = key !== 'recipe';
+    if (test) test.hidden = key !== 'agent';
     form?.querySelectorAll('[data-share-tab]').forEach(b => {
       b.setAttribute('aria-selected', String(b.dataset.shareTab === key));
       b.tabIndex = b.dataset.shareTab === key ? 0 : -1;
@@ -40,6 +40,22 @@
     renderGraphs();
   };
   if (form) {
+    form.querySelectorAll('[data-field-help]').forEach(button => {
+      const help = document.getElementById(button.getAttribute('aria-controls'));
+      let pinned = false;
+      const show = visible => {
+        help.hidden = !visible;
+        button.setAttribute('aria-expanded', String(visible));
+      };
+      button.addEventListener('pointerenter', () => show(true));
+      button.addEventListener('pointerleave', () => { if (!pinned && document.activeElement !== button) show(false); });
+      button.addEventListener('focus', () => show(true));
+      button.addEventListener('blur', () => { pinned = false; show(false); });
+      button.addEventListener('click', () => { pinned = !pinned; show(pinned); });
+      button.addEventListener('keydown', event => {
+        if (event.key === 'Escape') { pinned = false; show(false); }
+      });
+    });
     form.addEventListener('invalid', event => {
       const panel = event.target.closest('[data-share-panel]');
       if (panel) selectTab(panel.dataset.sharePanel);

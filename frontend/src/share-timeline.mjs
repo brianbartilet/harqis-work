@@ -38,9 +38,13 @@ export function shareTimeline(nodes, edges) {
       positions.set(node.id, {x: x + (i % 2 ? 65 : -65), y: direction * (90 + Math.floor(i / 2) * 65)});
     });
   }
-  const recent = new Set(dates.slice(-10).map(n => n.id));
-  const fitIds = new Set(nodes.filter(n => recent.has(owners.get(n.id))).map(n => n.id));
-  return {positions, fitIds, dateCount: Math.min(10, dates.length)};
+  // Older snapshots lack entry timestamps; use their linked date as a fallback.
+  const dateLabels = new Map(dates.map(n => [n.id, n.label || n.id.replace(/^daily:/, '')]));
+  const entryDate = node => node.date || dateLabels.get(owners.get(node.id)) || '';
+  const latestEntry = nodes.filter(n => n.kind === 'entries').sort((a, b) => entryDate(b).localeCompare(entryDate(a)))[0];
+  const focusId = latestEntry?.id || dates.at(-1).id;
+  const fitIds = new Set([focusId, ...adjacent.get(focusId)]);
+  return {positions, fitIds, focusId, hasEntry: !!latestEntry};
 }
 
 export function timelineBounds(nodes, fitIds) {

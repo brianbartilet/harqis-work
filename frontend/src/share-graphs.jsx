@@ -3,7 +3,8 @@ import {createRoot} from 'react-dom/client';
 import ForceGraph2D from 'react-force-graph-2d';
 import {placeLabels} from './graph-labels.mjs';
 import {GraphIcon} from './graph-icons.jsx';
-import {presetLayout, timelineFitPoints} from './graph-presets.mjs';
+import {presetLayout} from './graph-presets.mjs';
+import {shareTimeline, timelineBounds} from './share-timeline.mjs';
 
 // Same type palette and sizing conventions as the Activity Graph.
 const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3', ideas:'#f9ca74', actions:'#fb8ca6', goals:'#a7f3d0', drafts:'#c4b5fd', lists:'#5eead4', thoughts:'#c4b5fd', boards:'#93c5fd', sources:'#e9c96c'};
@@ -19,21 +20,21 @@ function SharedGraph({data, layout = 'timeline', rootId}) {
     data.edges.forEach(e => [e.source,e.target].forEach(id => degree.set(id,(degree.get(id)||0)+1)));
     const nodes = data.nodes.map(n => ({...n, visibleDegree:degree.get(n.id)||0,
       radius:layout === 'board' ? 7+1.5*(data.node_sizes?.[n.id]||3) : layout==='connections' ? Math.min(22,10+4*Math.log2(1+(degree.get(n.id)||0))) : n.kind==='entries' ? 5 : Math.min(16,6+2*Math.log2(1+(degree.get(n.id)||0)))}));
-    const positions = presetLayout(nodes, data.edges, layout === 'timeline' ? 'timeline' : 'mindmap', 0, rootId).positions;
+    const timeline = layout === 'timeline' ? shareTimeline(nodes, data.edges) : null;
+    const positions = timeline?.positions || presetLayout(nodes, data.edges, layout === 'timeline' ? 'timeline' : 'mindmap', 0, rootId).positions;
     nodes.forEach(n => {
       const p = layout === 'board' && data.positions?.[n.id] || positions.get(n.id) || {x:0,y:0};
       n.x=n.fx=Number.isFinite(p.x)?p.x:0; n.y=n.fy=Number.isFinite(p.y)?p.y:0;
       if(layout==='connections'){delete n.fx;delete n.fy;}
     });
-    return {nodes, links:data.edges.map(e=>({...e}))};
+    return {nodes, links:data.edges.map(e=>({...e})), timeline};
   }, [data, layout, rootId]);
   const fit = () => {
     if (!graph.current || !model.nodes.length) return;
-    if (layout === 'timeline' && model.nodes.some(n=>n.kind==='daily')) {
-      const points = timelineFitPoints(model.nodes,new Map(model.nodes.map(n=>[n.id,n])));
-      const a=points[0], b=points[1];
-      graph.current.centerAt((a.x+b.x)/2,(a.y+b.y)/2,0);
-      graph.current.zoom(Math.min((width-80)/(b.x-a.x),380/(b.y-a.y)),0);
+    const bounds = model.timeline && timelineBounds(model.nodes, model.timeline.fitIds);
+    if (bounds) {
+      graph.current.centerAt((bounds.left+bounds.right)/2,(bounds.top+bounds.bottom)/2,0);
+      graph.current.zoom(Math.max(.01, Math.min(1, (width-48)/(bounds.right-bounds.left),340/(bounds.bottom-bounds.top))),0);
     } else graph.current.zoomToFit(250,90);
   };
   useEffect(() => {
@@ -57,7 +58,7 @@ function SharedGraph({data, layout = 'timeline', rootId}) {
       setSelected(model.nodes[(i+(event.key==='ArrowRight'?1:model.nodes.length-1)+model.nodes.length)%model.nodes.length]);
     }}>
     {model.nodes.length ? <ForceGraph2D ref={graph} width={width} height={440} graphData={model}
-      backgroundColor="#0b1728" enableNodeDrag={true} cooldownTicks={layout==='connections'?100:0} maxZoom={4}
+      backgroundColor="#0b1728" enableNodeDrag={layout!=='timeline'} cooldownTicks={layout==='connections'?100:0} minZoom={.01} maxZoom={4}
       onEngineStop={()=>{if(!fitted.current){fitted.current=true;fit();}}}
       nodeLabel={node=>{const tip=document.createElement('span');tip.textContent=node.label;return tip;}}
       onNodeDragEnd={node=>{node.fx=node.x;node.fy=node.y;}}
@@ -69,8 +70,8 @@ function SharedGraph({data, layout = 'timeline', rootId}) {
             if (!graph.current) return;
             const origin = graph.current.screen2GraphCoords(0, 0);
             const candidates = model.nodes.map(node => ({...node, ...graph.current.graph2ScreenCoords(node.x, node.y),
-              radius: node.radius, degree:node.visibleDegree, preferred:model.nodes.length<40||node.kind==='daily',
-              emphasis:node.id === rootId || node.id === selected?.id}));
+              radius: node.radius, degree:node.kind==='daily'?Number.MAX_SAFE_INTEGER:node.visibleDegree, preferred:model.nodes.length<40||node.kind!=='entries',
+              emphasis:node.id === rootId || node.id === selected?.id || node.id === model.timeline?.focusId}));
             const obstacles = [{x:width-130,y:0,w:130,h:48}, ...candidates.map(n => ({x:n.x-n.radius,y:n.y-n.radius,w:n.radius*2,h:n.radius*2}))];
             const labels = placeLabels(candidates, {width, height:440, zoom:scale, obstacles}, (text, font) => {
               ctx.font = `${font}px system-ui`; return ctx.measureText(text).width;
@@ -108,7 +109,7 @@ function SharedGraph({data, layout = 'timeline', rootId}) {
     </div>
     {selected && <aside className="share-graph-inspector share-graph-selection"><span className="share-kind-pill" data-kind={selected.kind}>{kindName(selected.kind)}</span><h3>{selected.label}</h3><div className="markdown-body" dangerouslySetInnerHTML={{__html:selected.body_html||''}}/><h4>Connections</h4><ul>{peers.slice(0,100).map((e,i)=>{const other=model.nodes.find(n=>n.id===(identity(e.source)===selected.id?identity(e.target):identity(e.source)));return <li key={i}><button type="button" onClick={()=>setSelected(other)}>{other?.label}</button><small>{e.relation}</small></li>;})}</ul></aside>}
     </div>
-    <p className="share-graph-hint">Drag to explore · Scroll to zoom · Select an orb for details. Positions reset when reopened.</p>
+    <p className="share-graph-hint">{model.timeline && `${model.timeline.hasEntry ? 'Latest entry and its connections' : 'Latest available date'} · Oldest to newest, left to right · Entries above, entities below. `}Drag to explore · Scroll to zoom · Select an orb for details. Positions reset when reopened.</p>
     <div className="share-graph-legend">{[...new Set(model.nodes.map(n=>n.kind))].map(kind=><span className="share-kind-pill" data-kind={kind} key={kind}><i style={{background:palette[kind]||'#e9c96c'}}/>{kindName(kind)}</span>)}</div>
     <details className="share-graph-directory" onToggle={event=>setDirectoryOpen(event.currentTarget.open)}>
       <summary>Objects and connections · {model.nodes.length} objects · {model.links.length} connections</summary>

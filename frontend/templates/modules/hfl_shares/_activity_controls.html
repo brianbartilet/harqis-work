@@ -5,12 +5,12 @@
 <input type="hidden" name="excluded_object_labels" value="{{ activity.get('excluded_labels', {})|tojson|forceescape }}">
 <div data-object-exclusions>{% for identity in activity.get('excluded_ids', []) %}<input type="hidden" name="excluded_object_ids" value="{{ identity }}">{% endfor %}</div>
 <nav class="share-tabs" role="tablist" aria-label="Share recipe sections">
-  {% for key, label in [('recipe','Recipe'),('filters','Filters'),('entries','Entries'),('actions','Actions and Ideas'),('boards','Boards'),('graph','Graph')] %}
+  {% for key, label in [('recipe','Recipe'),('filters','Filters'),('entries','Entries'),('actions','Actions and Ideas'),('boards','Boards'),('graph','Graph'),('agent','Agent')] %}
   <button type="button" role="tab" id="share-tab-{{ key }}" aria-controls="share-panel-{{ key }}" aria-selected="{{ 'true' if loop.first else 'false' }}" data-share-tab="{{ key }}">{{ label }}</button>
   {% endfor %}
 </nav>
 <p class="share-scope-note" data-share-secrets-status>Secrets excluded · All recipient content is read-only.</p>
-{% for key in ['recipe','filters','entries','actions','boards','graph'] %}
+{% for key in ['recipe','filters','entries','actions','boards','graph','agent'] %}
 <section id="share-panel-{{ key }}" role="tabpanel" aria-labelledby="share-tab-{{ key }}" data-share-panel="{{ key }}" {% if key != 'recipe' %}hidden{% endif %}>
 {% if key == 'recipe' %}
 <div data-recipe-fields></div>

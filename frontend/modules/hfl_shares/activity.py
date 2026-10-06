@@ -194,7 +194,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
                                         enabled_reference_ids=enabled_reference_ids, disabled_reference_ids=disabled_reference_ids)
         published_entries = tuple({e.id: e for e in [*published_entries, *board_snapshot.entries]}.values())
         published_entries = tuple(replace(e, citation='S' + str(i + 1)) for i, e in enumerate(published_entries))
-    entry_nodes = {'entry:' + e.id: {'id': 'entry:' + e.id, 'label': safe_text(e.moment or e.header), 'kind': 'entries'} for e in published_entries}
+    entry_nodes = {'entry:' + e.id: {'id': 'entry:' + e.id, 'label': safe_text(e.moment or e.header), 'kind': 'entries', 'date': e.header[:19]} for e in published_entries}
     nodes = dict(entry_nodes)
     edges = []
 
