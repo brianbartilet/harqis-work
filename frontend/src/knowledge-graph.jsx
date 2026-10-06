@@ -2,7 +2,7 @@ import {readGraphState} from './graph-state.mjs';
 import {createLabelLayout} from './graph-labels.mjs';
 import {boardCurvature} from './graph-curves.mjs';
 import {exampleGraph} from './knowledge-graph-example.js';
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import ForceGraph2D from 'react-force-graph-2d';
 import {configureDragForces, releaseDragNeighbors, settleDragNodes} from './graph-drag.mjs';
@@ -394,6 +394,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       else if(data.fitOnce){data.fitOnce=false;requestAnimationFrame(()=>fitTargets(false));}
       stateReady=true;scheduleStateSave();
     },[data]);
+    const labelNodes=useMemo(()=>new Map(data.nodes.map(node=>[node.id,node])),[data]);
     const near=connected(activeId);
     const isLinked=link=>activeId&&(endpointId(link.source)===activeId||endpointId(link.target)===activeId);
     function paintNode(node,ctx,globalScale){
@@ -454,17 +455,20 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
           const target=ref.current.screen2GraphCoords(preview.x,preview.y);
           ctx.save();ctx.strokeStyle=color(connectorNode.kind);ctx.lineWidth=1.5/scale;ctx.setLineDash([4/scale,4/scale]);ctx.beginPath();ctx.moveTo(connectorNode.x,connectorNode.y);ctx.lineTo(target.x,target.y);ctx.stroke();ctx.restore();
         }
-        const candidates=data.nodes.filter(n=>board||!activeId||n.id===activeId||n.id===selectedId||near.has(n.id)).map(n=>({
+        const projectLabel=n=>({
           id:n.id,label:n.label,kind:n.kind,x:(n.x-origin.x)*scale,y:(n.y-origin.y)*scale,
           radius:n.radius,degree:n.visibleDegree,preferred:n.kind===(preset==='timeline'?'daily':preset)||defaultLabelKinds.has(n.kind),
           pinned:!!n.manual,emphasis:n.id===activeId||n.id===selectedId
-        }));
+        });
+        const candidates=()=>data.nodes.filter(n=>board||!activeId||n.id===activeId||n.id===selectedId||near.has(n.id)).map(projectLabel);
         ctx.save();
         const obstacles=[sizeTools,actionTools,connectionTools].map(tool=>tool.current).filter(Boolean).map(el=>({x:el.offsetLeft,y:el.offsetTop,w:el.offsetWidth,h:el.offsetHeight}));
-        const labelKey=JSON.stringify([labelRevision,size.width,size.height,scale,origin.x,origin.y,activeId,selectedId,board?.id,!!sizeNode,!!actionNode,!!connection]);
-        const labels=labelLayout.current(candidates,{width:size.width,height:size.height,zoom:scale,fullTitles:!!board,obstacles},(text,font)=>{
+        const labelKey=JSON.stringify([labelRevision,size.width,size.height,activeId,selectedId,board?.id,!!sizeNode,!!actionNode,!!connection]);
+        const labels=labelLayout.current(candidates,{width:size.width,height:size.height,zoom:scale,fullTitles:!!board,obstacles,cameraKey:`${scale}:${origin.x}:${origin.y}`},(text,font)=>{
           ctx.font=`500 ${font}px ${uiFont}`;return ctx.measureText(text).width;
-        },performance.now(),labelKey,reducedMotion);
+        },performance.now(),labelKey,reducedMotion,id=>{
+          const node=labelNodes.get(id);return node?projectLabel(node):null;
+        });
         labelRefreshAt=labels.nextUpdate;labelFadeUntil=labels.fadeUntil;
         for(const box of labels){
           ctx.globalAlpha=box.alpha;

@@ -75,6 +75,7 @@
   .owner-sidebar .actions form { display:inline-flex; margin:0; }
   .generated-share-items { display:grid; grid-auto-rows:1fr; }
   .generated-share-item { display:flex; flex-direction:column; min-height:8.5rem; }
+  .generated-share-description { padding-top:.5rem; }
   .generated-share-item .actions { margin-top:auto; }
   .generated-shares-content > .owner-pagination { align-self:start; }
   .recipe-actions { align-items:center; }
@@ -362,14 +363,14 @@
         <div class="item recipe-item{% if cfg and cfg.id == item.id %} recipe-item-active{% endif %}">
           <div class="recipe-title-row">
             <a class="wrap text-sm font-semibold text-sky-300" href="/sharing?configuration_id={{ item.id }}" data-recipe-load{% if cfg and cfg.id == item.id %} aria-current="true"{% endif %}>{{ item.name }}</a>
-            <button class="btn instant-share-button" type="button"
-                    data-instant-share
-                    data-instant-url="/sharing/configurations/{{ item.id }}/instant"
-                    aria-label="Instant share {{ item.name }}">Instant share</button>
           </div>
           <p class="mt-1 text-xs text-slate-500">{{ "All sources" if all_sources_value in item.sources else item.sources|join(', ') }}</p>
           <p class="mt-1 text-xs text-slate-500">{{ row.expiration_summary }}</p>
           <div class="actions recipe-actions">
+            <button class="btn instant-share-button" type="button"
+                    data-instant-share
+                    data-instant-url="/sharing/configurations/{{ item.id }}/instant"
+                    aria-label="Instant share {{ item.name }}">Instant share</button>
             <a class="btn btn-soft" href="/sharing?configuration_id={{ item.id }}&duplicate=true" data-recipe-load>Duplicate</a>
             {% if not cfg or cfg.id != item.id %}
             <form method="post" action="/sharing/configurations/{{ item.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-danger" type="submit">Delete</button></form>

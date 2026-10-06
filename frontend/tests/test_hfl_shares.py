@@ -3489,5 +3489,5 @@ def test_legacy_share_has_no_recoverable_link(authenticated_client, sharing_corp
     grant = store.list_shares()[0]
     with store._connect() as connection:
         connection.execute("DELETE FROM share_handoffs WHERE share_id=?", (grant.id,))
-    assert "QR &amp; link unavailable" in authenticated_client.get("/sharing").text
+    assert 'disabled title="Generate a new share to retain its QR and link.">QR + link</button>' in authenticated_client.get("/sharing").text
     assert authenticated_client.get(f"/sharing/shares/{grant.id}/handoff").status_code == 404
