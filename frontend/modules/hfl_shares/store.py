@@ -54,6 +54,10 @@ CREATE TABLE IF NOT EXISTS shares (
     revoked_at TEXT NOT NULL DEFAULT '',
     pin_failures INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS share_handoffs (
+    share_id TEXT PRIMARY KEY REFERENCES shares(id) ON DELETE CASCADE,
+    encrypted_link TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     share_id TEXT NOT NULL REFERENCES shares(id) ON DELETE CASCADE,
@@ -352,6 +356,7 @@ class ShareStore:
         configuration_id: str,
         name: str,
         token_hash: str,
+        encrypted_link: str = "",
         pin_hash: str,
         auth_mode: str,
         allowed_email: str,
@@ -411,7 +416,20 @@ class ShareStore:
                     len(snapshot.entries),
                 ),
             )
+            if encrypted_link:
+                connection.execute(
+                    "INSERT INTO share_handoffs(share_id, encrypted_link) VALUES (?, ?)",
+                    (grant.id, encrypted_link),
+                )
         return grant
+
+    def get_share_link(self, share_id: str) -> str:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT encrypted_link FROM share_handoffs WHERE share_id=?",
+                (share_id,),
+            ).fetchone()
+        return str(row["encrypted_link"]) if row else ""
 
     def update_share_snapshot(self, share_id: str, snapshot: ScopeSnapshot) -> bool:
         with self._lock, self._connect() as connection:

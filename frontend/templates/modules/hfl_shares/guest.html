@@ -13,7 +13,7 @@
 <div class="preview-toast" role="status" aria-live="polite">
   <div>
     <strong>Owner preview</strong>
-    <span>This page bypasses verification for preview only. Guests still verify before entering.</span>
+    <span>{% if grant.available %}This page bypasses verification for preview only. Guests still verify before entering.{% else %}Reviewing the last saved content. This share is {{ "revoked" if grant.status == "revoked" else "expired" }}; guest access is blocked.{% endif %}</span>
   </div>
   <button class="preview-toast-close" type="button" data-preview-toast-close aria-label="Dismiss owner preview message">×</button>
 </div>

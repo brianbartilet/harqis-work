@@ -62,6 +62,8 @@ from modules.hfl_shares.security import (
     clear_guest_cookie,
     current_grant,
     current_session,
+    decrypt_share_link,
+    encrypt_share_link,
     hash_pin,
     issue_session,
     make_csrf_token,
@@ -435,6 +437,7 @@ def _generated_shares_context_sync(request: Request, user: str) -> dict[str, Any
                     else "expired" if share.expired else share.status
                 ),
                 "expires_at_display": _expiry_display(share),
+                "has_link": bool(store.get_share_link(share.id)),
             }
             for share in share_page_items
         ),
@@ -542,6 +545,7 @@ def _owner_context_sync(
                     else "expired" if share.expired else share.status
                 ),
                 "expires_at_display": _expiry_display(share),
+                "has_link": bool(store.get_share_link(share.id)),
             }
             for share in share_page_items
         ),
@@ -1003,6 +1007,7 @@ async def generate_share(request: Request):
             configuration_id=configuration.id,
             name=configuration.name,
             token_hash=opaque_hash(public_token),
+            encrypted_link=encrypt_share_link(link),
             pin_hash=hash_pin(pin) if pin else "",
             auth_mode=configuration.auth_mode,
             allowed_email=configuration.allowed_email,
@@ -1038,6 +1043,10 @@ async def generate_share(request: Request):
             ),
             status_code=422,
         )
+    return _share_handoff_response(request, generated)
+
+
+def _share_handoff_response(request: Request, generated: dict[str, Any]):
     response = templates.TemplateResponse(
         request,
         "modules/hfl_shares/generated.html",
@@ -1051,6 +1060,34 @@ async def generate_share(request: Request):
         "frame-ancestors 'none'; base-uri 'none'"
     )
     return response
+
+
+@owner_router.get("/shares/{share_id}/handoff", response_class=HTMLResponse)
+async def share_handoff(request: Request, share_id: str):
+    _, redirect = require_user(request)
+    if redirect:
+        return redirect
+    store = get_share_store()
+    grant = store.get_share(share_id)
+    if not grant or not grant.available:
+        raise HTTPException(status_code=404, detail="Active share not found.")
+    encrypted = store.get_share_link(share_id)
+    if not encrypted:
+        raise HTTPException(status_code=404, detail="Generate a new share to retain its QR and link.")
+    try:
+        link = decrypt_share_link(encrypted)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _share_handoff_response(request, {
+        "grant": grant,
+        "link": link,
+        "pin": "",
+        "reopened": True,
+        "qr": qr_data_uri(link),
+        "expires_at_display": _expiry_display(grant),
+        "share_recipient": grant.snapshot.recipient,
+        "session_duration": _session_duration_summary(),
+    })
 
 
 @owner_router.post("/shares/{share_id}/revoke")
@@ -1077,9 +1114,9 @@ async def preview_generated_share(
     if redirect:
         return redirect
     grant = get_share_store().get_share(share_id)
-    if not grant or not grant.available:
-        raise HTTPException(status_code=404, detail="Active share not found.")
-    grant = _refresh_live_grant(grant)
+    if not grant:
+        raise HTTPException(status_code=404, detail="Share not found.")
+    grant = _refresh_live_grant(grant) if grant.available else grant
     selected_tags = tuple(request.query_params.getlist("tag"))
     context = _guest_context(
         request,
@@ -1214,7 +1251,7 @@ async def preview_generated_share_manifesto(
             headers={"Cache-Control": "no-store"},
         )
     grant = get_share_store().get_share(share_id)
-    if not grant or not grant.available:
+    if not grant:
         return HTMLResponse(
             '<p class="notice error">This shared Manifesto is no longer available.</p>',
             status_code=404,
@@ -1229,8 +1266,8 @@ async def preview_generated_share_chat(request: Request, share_id: str):
     if redirect:
         return JSONResponse({"detail": "Authentication required."}, status_code=401)
     grant = get_share_store().get_share(share_id)
-    if not grant or not grant.available:
-        return JSONResponse({"detail": "Active share not found."}, status_code=404)
+    if not grant:
+        return JSONResponse({"detail": "Share not found."}, status_code=404)
     form = await request.form()
     try:
         _require_csrf(form, user)
@@ -1253,7 +1290,7 @@ async def preview_generated_share_chat(request: Request, share_id: str):
             for item in raw_history[-8:]
             if isinstance(item, dict) and str(item.get("content") or "").strip()
         )
-        grant = _refresh_live_grant(grant)
+        grant = _refresh_live_grant(grant) if grant.available else grant
         answer = await answer_question(
             grant.snapshot,
             question,
@@ -2125,8 +2162,8 @@ def _owner_preview_grant(request: Request, share_id: str):
     if redirect:
         raise HTTPException(status_code=401, detail="Authentication required.")
     grant = get_share_store().get_share(share_id)
-    if not grant or not grant.available:
-        raise HTTPException(status_code=404, detail="Active share not found.")
+    if not grant:
+        raise HTTPException(status_code=404, detail="Share not found.")
     return grant
 
 

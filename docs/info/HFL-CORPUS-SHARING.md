@@ -74,7 +74,9 @@ workflow and its `apps/sqlite_vec` database.
    grant.
 3. **Generate:** the corpus is read again so generation cannot rely on a stale
    preview. The resolved `ScopeSnapshot` is serialized into `shares.snapshot`,
-   and the capability token and optional PIN are stored only as hashes.
+   and the capability token and optional PIN are hashed for verification.
+   Newly generated non-instant shares also retain the capability link encrypted
+   with a key derived from the sharing secret for owner-only QR/link retrieval.
 4. **Browse:** guest pages read directly from the authorized stored snapshot.
    Browsing does not require vector retrieval and never opens arbitrary corpus
    documents.
@@ -358,7 +360,7 @@ for `sharing audit persistence failed`.
 | Snapshot oversharing | Source-first filters, explicit preview, warnings, fresh generation | Owners must review broad or sensitive sources before generation. |
 | Corpus prompt injection | Escaped delimiters, untrusted-context instruction, no tools, snapshot-only prompt | Model behavior is probabilistic; do not share secrets in the snapshot. |
 | Local file disclosure | Disabled by default, individual opt-in, allowed-root and symlink revalidation, no canonical guest labels | The SQLite snapshot necessarily retains enabled server targets. |
-| Token leakage in logs/history | Tokens are HMAC-hashed at rest; referrer policy is `no-referrer`; guest responses are `no-store` | Tunnel/access logs and recipient browser history can contain the URL. Keep expiry short. |
+| Token leakage in logs/history | Tokens are HMAC-hashed for verification; new non-instant share links are also encrypted at rest; referrer policy is `no-referrer`; guest responses are `no-store` | Tunnel/access logs and recipient browser history can contain the URL. Keep expiry short. |
 | Cookie theft | HTTP-only, same-site, secure behind HTTPS, server-side session hash | A compromised guest browser can act until expiry or revocation. |
 | Proxy-header spoofing | Trust disabled by default; dedicated Access path; locked-down origin required | Misconfigured origin exposure invalidates this boundary. |
 | Revocation race | Session validation checks grant status on every request; revocation updates all sessions transactionally | A response already in flight may complete. |
@@ -374,8 +376,11 @@ to avoid publishing a reconnaissance map of owner and guest routes.
 
 - Lost PIN: revoke the grant and generate another. PINs cannot be recovered.
 - Wrong scope: revoke and generate from a corrected recipe.
-- Lost capability link: revoke and generate another; plaintext tokens are not
-  recoverable from SQLite.
+- Lost capability link: use **QR & link** on a newly generated active share.
+  Older shares and instant shares have no retained link; generate a new share
+  when their original link is lost. PINs are never retained for recovery.
+- Expired/revoked shares remain previewable by the authenticated owner using
+  their last saved snapshot; guest access remains blocked.
 - Suspected leak: revoke immediately, inspect `sharing-audit`, and rotate
   `HFL_SHARE_SECRET_KEY` if the signing boundary may be compromised. Rotating
   the key invalidates every guest and approval cookie and makes existing

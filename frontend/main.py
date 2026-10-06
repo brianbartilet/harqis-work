@@ -309,7 +309,7 @@ async def add_security_headers(request: Request, call_next):
     activity_frame = request.url.path in {'/hfl-corpus/graph', '/hfl-corpus/entities'}
     response.headers["X-Frame-Options"] = "SAMEORIGIN" if activity_frame else "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Referrer-Policy"]        = "strict-origin-when-cross-origin"
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers["Permissions-Policy"]     = "geolocation=(), microphone=(), camera=()"
     if request.url.path.startswith("/static/") and response.status_code == 200:
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"

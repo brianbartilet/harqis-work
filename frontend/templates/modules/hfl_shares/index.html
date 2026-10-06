@@ -69,15 +69,21 @@
   .toast-close { display:inline-flex; min-height:1.75rem; min-width:1.75rem; align-items:center; justify-content:center; border-radius:.4rem; color:#6ee7b7; line-height:1; }
   .toast-close:hover { background:#064e3b; color:#ecfdf5; }
   .toast-close:focus-visible { outline:2px solid #34d399; outline-offset:2px; }
+  .owner-sidebar .btn { display:inline-flex; min-height:2.3rem; align-items:center; justify-content:center; line-height:1.25; cursor:pointer; }
+  .owner-sidebar .btn:disabled { opacity:.5; cursor:not-allowed; }
+  .owner-sidebar .actions { align-items:center; padding-top:.85rem; }
+  .owner-sidebar .actions form { display:inline-flex; margin:0; }
+  .generated-share-items { display:grid; grid-auto-rows:1fr; }
+  .generated-share-item { display:flex; flex-direction:column; min-height:8.5rem; }
+  .generated-share-item .actions { margin-top:auto; }
+  .generated-shares-content > .owner-pagination { align-self:start; }
   .recipe-actions { align-items:center; }
   .recipe-item { margin:0 -.65rem; padding:.8rem .65rem; border-radius:.65rem; }
   .recipe-item-active { border:1px solid rgba(51,65,85,.8); background:rgba(15,23,42,.55); box-shadow:inset 2px 0 0 rgba(56,189,248,.65); }
   .recipe-actions form { display:inline-flex; margin:0; }
-  .recipe-action { display:inline-flex; min-height:1.75rem; align-items:center; border:0; background:transparent; padding:.2rem 0; font-size:.75rem; line-height:1.25; cursor:pointer; }
-  .recipe-action:focus-visible { border-radius:.25rem; outline:2px solid #60a5fa; outline-offset:2px; }
   .recipe-title-row { display:flex; align-items:flex-start; justify-content:space-between; gap:.65rem; }
   .recipe-title-row .wrap { min-width:0; }
-  .instant-share-button { flex:0 0 auto; border:1px solid #1d4ed8; border-radius:.45rem; background:#172554; color:#bfdbfe; padding:.35rem .55rem; font-size:.7rem; font-weight:700; line-height:1.2; }
+  .instant-share-button { flex:0 0 auto; border:1px solid #1d4ed8; background:#172554; color:#bfdbfe; }
   .instant-share-button:hover { background:#1e3a8a; color:#eff6ff; }
   .instant-share-button:focus-visible { outline:2px solid #60a5fa; outline-offset:2px; }
   .recipe-header-actions { display:flex; flex:0 0 auto; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:.55rem; }
@@ -341,11 +347,12 @@
     </section>
 
     <aside class="owner-sidebar space-y-5">
-      <details class="panel saved-recipes-panel owner-list-panel" open>
+      <details class="panel saved-recipes-panel owner-list-panel">
         <summary>
           <span>
             <span class="block text-base font-semibold text-white">Saved recipes</span>
-            <span class="mt-1 block text-xs font-normal text-slate-500">Click on recipe to load · {{ recipe_count }} total</span>
+            <span class="mt-1 block text-xs font-normal text-slate-500">{{ recipe_count }} total</span>
+            <span class="mt-1 block text-xs font-normal text-slate-400">Select a recipe to load.</span>
           </span>
           <span class="owner-list-arrow-shell" aria-hidden="true"><svg class="owner-list-arrow h-4 w-4 transition" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg></span>
         </summary>
@@ -355,17 +362,17 @@
         <div class="item recipe-item{% if cfg and cfg.id == item.id %} recipe-item-active{% endif %}">
           <div class="recipe-title-row">
             <a class="wrap text-sm font-semibold text-sky-300" href="/sharing?configuration_id={{ item.id }}" data-recipe-load{% if cfg and cfg.id == item.id %} aria-current="true"{% endif %}>{{ item.name }}</a>
-            <button class="instant-share-button" type="button"
+            <button class="btn instant-share-button" type="button"
                     data-instant-share
                     data-instant-url="/sharing/configurations/{{ item.id }}/instant"
                     aria-label="Instant share {{ item.name }}">Instant share</button>
           </div>
           <p class="mt-1 text-xs text-slate-500">{{ "All sources" if all_sources_value in item.sources else item.sources|join(', ') }}</p>
           <p class="mt-1 text-xs text-slate-500">{{ row.expiration_summary }}</p>
-          <div class="actions recipe-actions mt-2">
-            <a class="recipe-action text-slate-400" href="/sharing?configuration_id={{ item.id }}&duplicate=true" data-recipe-load>Duplicate</a>
+          <div class="actions recipe-actions">
+            <a class="btn btn-soft" href="/sharing?configuration_id={{ item.id }}&duplicate=true" data-recipe-load>Duplicate</a>
             {% if not cfg or cfg.id != item.id %}
-            <form method="post" action="/sharing/configurations/{{ item.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="recipe-action text-red-400" type="submit">Delete</button></form>
+            <form method="post" action="/sharing/configurations/{{ item.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-danger" type="submit">Delete</button></form>
             {% endif %}
           </div>
         </div>
@@ -393,9 +400,12 @@
 
       <details class="panel generated-shares-panel owner-list-panel" data-generated-shares-panel{% if share_page > 1 %} open{% endif %}>
         <summary>
-          <span class="text-base font-semibold text-white">Generated shares</span>
-          <span class="flex items-center gap-3">
-            <span class="text-xs text-slate-500">{{ share_count }} total</span>
+          <span>
+            <span class="block text-base font-semibold text-white">Generated shares</span>
+            <span class="mt-1 block text-xs font-normal text-slate-500">{{ share_count }} total</span>
+            <span class="mt-1 block text-xs font-normal text-slate-400">Review shared content and manage access.</span>
+          </span>
+          <span>
             <span class="owner-list-arrow-shell" aria-hidden="true"><svg class="owner-list-arrow h-4 w-4 transition" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg></span>
           </span>
         </summary>

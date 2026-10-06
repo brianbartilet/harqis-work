@@ -923,14 +923,15 @@ def test_saved_recipe_actions_share_alignment_and_control_sizing(
     )
 
     assert response.status_code == 200
-    assert 'class="actions recipe-actions mt-2"' in response.text
-    assert 'class="recipe-action text-slate-400"' in response.text
-    assert 'class="recipe-action text-red-400"' in response.text
+    assert 'class="actions recipe-actions"' in response.text
+    assert 'class="btn btn-soft"' in response.text
+    assert 'class="btn btn-danger"' in response.text
     assert ".recipe-actions form { display:inline-flex; margin:0; }" in response.text
     assert "recipe-item-active" in selected.text
     assert 'data-recipe-load aria-current="true"' in selected.text
     assert 'href="/sharing" data-recipe-clear>Clear</a>' in selected.text
-    assert "Click on recipe to load" in selected.text
+    assert "Select a recipe to load." in selected.text
+    assert 'class="panel saved-recipes-panel owner-list-panel">' in selected.text
     assert "'Clearing recipe'" in selected.text
     assert "Returning to a fresh recipe…" in selected.text
     assert "'Loading recipe'" in response.text
@@ -1040,7 +1041,7 @@ def test_owner_page_paginates_recipes_and_shares_with_mobile_first_saved_list(
     assert "data-generated-shares-content" in first.text
     assert "data-generated-shares-page" in first.text
     assert "fragmentUrl.pathname = '/sharing/generated-shares';" in first.text
-    assert 'class="panel saved-recipes-panel owner-list-panel" open' in first.text
+    assert 'class="panel saved-recipes-panel owner-list-panel">' in first.text
     assert (
         'class="panel generated-shares-panel owner-list-panel" '
         'data-generated-shares-panel>'
@@ -1588,7 +1589,7 @@ def test_shared_manifesto_modal_uses_scoped_guest_and_owner_access(
         authenticated_client.get(
             f"/sharing/shares/{grant.id}/preview/manifesto"
         ).status_code
-        == 404
+        == 200
     )
 
 
@@ -2089,7 +2090,12 @@ def test_generated_share_statuses_use_active_expired_and_revoked_colors(
     assert 'class="status-pill status-active">active</span>' in response.text
     assert 'class="status-pill status-revoked">revoked</span>' in response.text
     assert 'class="status-pill status-expired">expired</span>' in response.text
-    assert response.text.count(">Preview</a>") == 1
+    assert response.text.count(">Preview</a>") == 3
+    assert response.text.count(">Revoke now</button>") == 1
+    for grant in shares.values():
+        preview = authenticated_client.get(f"/sharing/shares/{grant.id}/preview")
+        assert preview.status_code == 200
+        assert "Booked Kyoto accommodation" in preview.text
 
 
 def test_owner_can_preview_active_share_without_guest_verification(
@@ -3444,3 +3450,44 @@ def test_share_viewer_rejects_invalid_ranges_and_disabled_references(
         "/share/session/references/not-enabled/preview"
     )
     assert unavailable.status_code == 404
+
+
+@pytest.mark.parametrize("auth_mode", ["pin", "qr", "email_otp"])
+def test_owner_reopens_encrypted_share_link(authenticated_client, sharing_corpus, auth_mode):
+    from fastapi.testclient import TestClient
+    from main import app
+    from modules.hfl_shares.security import decrypt_share_link
+
+    response = authenticated_client.post(
+        "/sharing/generate", data=_form(auth_mode=auth_mode, allowed_email="avery@example.test")
+    )
+    assert response.status_code == 200
+    link = re.search(r'id="share-link"[^>]*value="([^"]+)"', response.text).group(1)
+    store = get_share_store()
+    grant = store.list_shares()[0]
+    encrypted = store.get_share_link(grant.id)
+    assert link not in encrypted
+    assert decrypt_share_link(encrypted) == link
+    url = f"/sharing/shares/{grant.id}/handoff"
+    reopened = authenticated_client.get(url)
+    assert reopened.status_code == 200
+    assert link in reopened.text
+    assert 'id="generated-pin"' not in reopened.text
+    assert reopened.headers["cache-control"] == "no-store"
+    assert reopened.headers["referrer-policy"] == "no-referrer"
+    assert url in authenticated_client.get("/sharing").text
+    with TestClient(app) as anonymous:
+        assert anonymous.get(url, follow_redirects=False).status_code == 302
+    store.revoke_share(grant.id)
+    assert authenticated_client.get(url).status_code == 404
+    assert authenticated_client.get(link).status_code == 404
+
+
+def test_legacy_share_has_no_recoverable_link(authenticated_client, sharing_corpus):
+    authenticated_client.post("/sharing/generate", data=_form())
+    store = get_share_store()
+    grant = store.list_shares()[0]
+    with store._connect() as connection:
+        connection.execute("DELETE FROM share_handoffs WHERE share_id=?", (grant.id,))
+    assert "QR &amp; link unavailable" in authenticated_client.get("/sharing").text
+    assert authenticated_client.get(f"/sharing/shares/{grant.id}/handoff").status_code == 404

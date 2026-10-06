@@ -636,8 +636,10 @@ The owner workflow supports:
 - configurable expiry, device/session count, and single-use redemption;
 - reference sharing disabled by default, with individual files enabled only
   after preview;
-- QR, a pasteable capability link, and a PIN displayed only in the generation
-  response; and
+- QR and a pasteable capability link, reopenable by the owner for newly generated
+  active shares; PINs are displayed only in the generation response;
+- owner previews for active, expired, and revoked shares, with inactive shares
+  retaining their last saved snapshot; and
 - immediate revocation of the share and every active guest session.
 
 Guests can browse/search only the frozen entries and ask the configured model
@@ -650,7 +652,9 @@ chat is diagnostic and is not audited as guest activity.
 Storage defaults to `.harqis-data/hfl-shares.sqlite3`. The database contains
 recipes, immutable snapshots, HMAC hashes of capability tokens, scrypt PIN
 hashes, signed-cookie session hashes, approval requests, and revocation state.
-It never stores a generated PIN or public capability token in plaintext.
+Newly generated shares also retain an encrypted capability link in `share_handoffs`,
+using a key derived from the sharing secret. Existing links cannot be recovered
+retroactively. It never stores a generated PIN or public capability token in plaintext.
 
 Detailed deployment, Cloudflare routing, lifecycle, recovery, and threat-model
 guidance is in

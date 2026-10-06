@@ -10,3 +10,4 @@ pydantic-settings>=2.5,<3
 Markdown>=3.6,<4
 bleach>=6,<7
 Pillow>=11,<13
+cryptography>=46,<47

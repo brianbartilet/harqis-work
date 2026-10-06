@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import re
 import secrets
 from dataclasses import dataclass
 
+from cryptography.fernet import Fernet, InvalidToken
 from fastapi import Request, Response
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
@@ -36,6 +38,24 @@ def opaque_hash(value: str) -> str:
         (value or "").encode("utf-8"),
         hashlib.sha256,
     ).hexdigest()
+
+
+def _handoff_cipher() -> Fernet:
+    key = hmac.new(
+        _secret().encode("utf-8"), b"hfl-share-handoff-v1", hashlib.sha256
+    ).digest()
+    return Fernet(base64.urlsafe_b64encode(key))
+
+
+def encrypt_share_link(link: str) -> str:
+    return _handoff_cipher().encrypt(link.encode("utf-8")).decode("ascii")
+
+
+def decrypt_share_link(encrypted: str) -> str:
+    try:
+        return _handoff_cipher().decrypt(encrypted.encode("ascii")).decode("utf-8")
+    except (InvalidToken, ValueError, UnicodeError) as exc:
+        raise ValueError("The saved share link is unavailable.") from exc
 
 
 def new_public_token() -> str:
