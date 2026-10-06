@@ -10,6 +10,76 @@ def board_payload(**changes):
             'root': 'draft:seed', 'drafts': [{'id': 'draft:seed', 'title': 'Packing', 'body': 'Try batching'}], **changes}
 
 
+def test_board_workspaces_persist_validate_and_clear(ideas, authenticated_client):
+    client = authenticated_client
+    board = client.post(BASE+'/maps', json=board_payload()).json()['item']
+    assert board['workspace_ids'] == []
+    uri = BASE+'/maps/'+board['id']
+    result = client.patch(uri, json={'version':1, 'workspace_ids':['work', 'home', 'work'], 'active':False})
+    assert result.status_code == 200, result.text
+    assert client.get(uri).json()['item']['workspace_ids'] == ['work', 'home']
+    for invalid in [None, 'work', [1], [''], ['x'*101], [str(i) for i in range(31)]]:
+        assert client.patch(uri, json={'version':2, 'workspace_ids':invalid}).status_code == 422
+    preserved = client.patch(uri, json={'version':2, 'name':'Renamed'}).json()['item']
+    assert preserved['workspace_ids'] == ['work', 'home']
+    assert preserved['active'] is False
+    cleared = client.patch(uri, json={'version':3, 'workspace_ids':[]}).json()['item']
+    assert cleared['workspace_ids'] == []
+
+
+@pytest.mark.parametrize('width', [390, 1280])
+def test_board_settings_switch_and_workspaces_browser(ideas, authenticated_client, width, tmp_path):
+    from urllib.parse import urlparse
+    from playwright.sync_api import sync_playwright, expect
+    board = ideas.save_map(board_payload())
+    with sync_playwright() as driver:
+        browser = driver.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page(viewport={'width':width, 'height':1000})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        def route(intercept):
+            req = intercept.request
+            url = urlparse(req.url)
+            if url.path == '/hfl-corpus/workspace-views':
+                intercept.fulfill(json={'views':[{'id':'work','name':'Work'}, {'id':'home','name':'Home'}]})
+                return
+            response = authenticated_client.request(req.method, url.path+('?' + url.query if url.query else ''),
+                content=req.post_data_buffer, headers={'content-type':'application/json'})
+            intercept.fulfill(status=response.status_code, body=response.content,
+                headers={'content-type':response.headers.get('content-type','text/html')})
+        page.route('**/*', route)
+        page.goto('https://boards.test/hfl-corpus/ideas?board='+board['id'])
+        page.wait_for_selector('#kg-workspace:not([inert])')
+        page.evaluate('window.HflIdeas.maps.edit(window.HflIdeas.maps.current)')
+        dialog = page.get_by_role('dialog', name='Settings', exact=True)
+        toggle = dialog.get_by_role('switch', name='Active', exact=True)
+        expect(toggle).to_be_checked()
+        toggle.focus()
+        page.keyboard.press('Space')
+        expect(toggle).not_to_be_checked()
+        dialog.get_by_label('Workspaces', exact=True).click()
+        dialog.get_by_role('checkbox', name='Work', exact=True).check()
+        dialog.get_by_role('checkbox', name='Home', exact=True).check()
+        page.screenshot(path=str(tmp_path / ('board-settings-'+str(width)+'.png')))
+        assert dialog.evaluate('(el)=>el.scrollWidth <= el.clientWidth')
+        dialog.get_by_role('button', name='Save board', exact=True).click()
+        expect(dialog).to_have_count(0)
+        assert ideas.map(board['id'])['workspace_ids'] == ['home', 'work']
+        assert ideas.map(board['id'])['active'] is False
+        page.reload()
+        page.wait_for_selector('#kg-workspace:not([inert])')
+        page.evaluate('window.HflIdeas.maps.edit(window.HflIdeas.maps.current)')
+        expect(dialog.get_by_role('switch', name='Active')).not_to_be_checked()
+        dialog.get_by_label('Workspaces', exact=True).click()
+        expect(dialog.get_by_role('checkbox', name='Work', exact=True)).to_be_checked()
+        dialog.get_by_role('button', name='No workspace', exact=True).click()
+        dialog.get_by_role('button', name='Save board', exact=True).click()
+        expect(dialog).to_have_count(0)
+        assert ideas.map(board['id'])['workspace_ids'] == []
+        assert not errors
+        browser.close()
+
+
 def test_board_orb_sizes_validate_and_survive_promotion(ideas, authenticated_client):
     client = authenticated_client
     board = client.post(BASE+'/maps', json=board_payload(node_sizes={'draft:seed':20})).json()['item']
