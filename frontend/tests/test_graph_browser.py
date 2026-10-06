@@ -96,7 +96,7 @@ def test_presets_motion_and_large_graph(authenticated_client, monkeypatch, tmp_p
             def route_request(route):
                 r=route.request;requests.append(r.url)
                 response=authenticated_client.request(r.method,r.url.replace('http://graph.test',''),content=r.post_data,
-                    headers={'content-type':r.headers.get('content-type','application/json')})
+                    headers={key:value for key,value in r.headers.items() if key in {'content-type','x-csrf-token'}})
                 route.fulfill(status=response.status_code,body=response.content,
                     headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding','content-length'}})
             page.route('http://graph.test/**',route_request)
@@ -144,11 +144,8 @@ def test_presets_motion_and_large_graph(authenticated_client, monkeypatch, tmp_p
             image=canvas.evaluate('(el)=>el.toDataURL()');page.wait_for_timeout(300)
             assert canvas.evaluate('(el)=>el.toDataURL()')==image
             page.screenshot(path=str(tmp_path/('presets-mobile.png' if mobile else 'presets-desktop.png')))
-            for detail in ['1000','0']:
-                start=time.monotonic();page.select_option('#kg-density',detail)
-                page.wait_for_selector('#kg-workspace:not([inert])')
-                print(f'Detail {detail} ({mobile=}): {time.monotonic()-start:.2f}s')
-                assert ('6000 / 6000' if detail=='0' else '1000 / 6000') in page.locator('#kg-status').text_content()
+            assert page.locator('#kg-density').count() == 0
+            assert '6000 / 6000' in page.locator('#kg-status').text_content()
             page.click('#kg-open-animation');page.click('[data-animation="breathing"]')
             gaps=page.evaluate("""() => new Promise(resolve => {
               const gaps=[]; let last=performance.now(),start=last;
@@ -162,11 +159,11 @@ def test_presets_motion_and_large_graph(authenticated_client, monkeypatch, tmp_p
             page.reload();page.wait_for_selector('#kg-workspace:not([inert])')
             assert page.locator('#kg-canvas').get_attribute('data-animation')=='off'
             assert page.locator('#kg-canvas').get_attribute('data-preset')=='sources'
-            assert page.locator('#kg-density').input_value()=='0'
+            assert page.locator('#kg-density').count()==0
             assert '6000 / 6000' in page.locator('#kg-status').text_content()
             page.click('#kg-reset');page.wait_for_selector('#kg-workspace:not([inert])')
             page.reload();page.wait_for_selector('#kg-workspace:not([inert])')
-            assert page.locator('#kg-density').input_value()=='100'
+            assert page.locator('#kg-density').count()==0
             page.click('#kg-open-views');page.click('[data-preset="people"]')
             page.wait_for_timeout(1100)
             page.click('#kg-open-filters')
@@ -176,19 +173,19 @@ def test_presets_motion_and_large_graph(authenticated_client, monkeypatch, tmp_p
             page.get_by_label('notes',exact=True).check()
             page.click('#kg-filter')
             page.wait_for_selector('#kg-workspace:not([inert])')
-            page.click('[data-activity-all]')
+            assert page.locator('[data-activity-all]').count() == 0
             page.wait_for_selector('#kg-workspace:not([inert])')
             page.click('#kg-in');page.wait_for_timeout(1100)
             state_script="JSON.parse(localStorage.getItem(Object.keys(localStorage).find(k=>k.startsWith('hfl:graph:state:v1:'))))"
             before=page.evaluate(state_script)
-            assert before['preset']=='people' and before['all']
+            assert before['preset']=='people'
             page.reload();page.wait_for_selector('#kg-workspace:not([inert])')
             page.wait_for_timeout(800)
             after=page.evaluate(state_script)
             assert page.locator('#kg-canvas').get_attribute('data-preset')=='people'
             assert page.locator('#kg-rolling').input_value()=='30'
             assert page.locator('#kg-shared').is_checked()
-            assert page.locator('[data-activity-all]').get_attribute('aria-checked')=='true'
+            assert page.locator('[data-view-picker-caption]').text_content()=='All activity'
             assert after['sources']==['notes']
             assert after['positions']==before['positions']
             assert after['viewport']['zoom']==pytest.approx(before['viewport']['zoom'])
@@ -378,8 +375,8 @@ def test_readonly_timeline_overview(authenticated_client, monkeypatch, tmp_path,
         page.goto('https://graph.test/hfl-corpus/graph?embed=1&readonly=1')
         page.wait_for_selector('#kg-workspace:not([inert])')
         playwright.expect(page.locator('#kg-canvas')).to_have_attribute('data-preset', 'timeline')
-        assert page.locator('#kg-density').input_value() == '100'
-        assert queries and queries[0]['limit'] == ['100']
+        assert page.locator('#kg-density').count() == 0
+        assert queries and queries[0]['limit'] == ['0']
         playwright.expect(page.locator('.kg-main-toolbar')).to_be_hidden()
         assert page.locator('#followup-editor').count() == 0
         page.locator('#kg-canvas canvas').click(position={'x': width/2, 'y': 180})
@@ -469,7 +466,7 @@ def test_background_graph_arrivals_fade_without_resetting_view(authenticated_cli
             def respond(route):
                 r=route.request
                 response=authenticated_client.request(r.method,r.url.replace('http://graph.test',''),content=r.post_data,
-                    headers={'content-type':r.headers.get('content-type','application/json')})
+                    headers={key:value for key,value in r.headers.items() if key in {'content-type','x-csrf-token'}})
                 route.fulfill(status=response.status_code,body=response.content,
                     headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding','content-length'}})
             page.route('http://graph.test/**',respond)

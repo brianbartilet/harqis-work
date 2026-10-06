@@ -199,7 +199,7 @@ def get_board(request: Request, identity: str):
 
 
 @router.get('/maps/{identity}/graph')
-def board_graph(request: Request, identity: str):
+def board_graph(request: Request, identity: str, context: str = ''):
     timeline.owner(request)
     board = call(store().map, identity)
     if not board['members']:
@@ -209,9 +209,10 @@ def board_graph(request: Request, identity: str):
     from modules.hfl_corpus.entities import graph
     shared = graph(limit=0)
     available = {n['id']: n for n in shared['nodes']}
+    eligible = {n['id'] for n in graph(limit=0, context=context)['nodes']} if context else set(available)
     members = set(board['members'])
     members.update(n['id'] for n in shared['nodes'] if n.get('list_id') in members and n['id'] not in board.get('hidden_members', []))
-    return {'nodes': [available[i] for i in members if i in available],
+    return {'nodes': [{**available[i], 'outside_workspace': i not in eligible} for i in members if i in available],
             'edges': [e for e in shared['edges'] if e['source'] in members and e['target'] in members
                       and e['source'] in available and e['target'] in available], 'sources': []}
 

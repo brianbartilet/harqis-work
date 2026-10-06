@@ -4,7 +4,8 @@
   if (!form || !menu) return;
   const $ = selector => document.querySelector(selector);
   const kanban=!!document.querySelector('[data-actions-page]');
-  const workspacePath=kanban?'/hfl-corpus/actions':'/hfl-corpus';
+  const graph=!!document.querySelector('.kg-shell');
+  const workspacePath=graph?'/hfl-corpus/graph':kanban?'/hfl-corpus/actions':'/hfl-corpus';
   const createMenu = document.querySelector('.corpus-create-menu');
   if (createMenu) {
     const headerMenus = [...document.querySelectorAll('.corpus-create-menu, .corpus-workspace-controls > [data-workspace-menu]')];
@@ -479,9 +480,23 @@
     const slow = setTimeout(() => { $('#view-loading-detail').textContent = 'Still searching. Larger views can take a little longer.'; }, 8000);
     try {
       const target = new URL(explicitUrl || combinedUrl(data, ids, dynamic), location.origin);
-      if(kanban)target.pathname=workspacePath;
+      if(kanban||graph)target.pathname=workspacePath;
+      if(graph){
+        await window.HflIdeas?.maps.flush();
+        const board=window.HflIdeas?.maps.current;
+        if(board&&(!ids.length||(board.workspace_ids||[]).some(id=>ids.includes(id))))target.searchParams.set('board',board.id);
+      }
       if (automatic && new URL(location.href).searchParams.has('activity_year')) target.searchParams.set('activity_year', new URL(location.href).searchParams.get('activity_year'));
       const url = target.pathname + target.search;
+      if(graph){
+        // Validate the data transition while the previous canvas is still intact.
+        // A failed read must not strand the user on an empty replacement page.
+        const path=target.searchParams.has('board')
+          ? '/hfl-corpus/timeline/ideas/maps/'+encodeURIComponent(target.searchParams.get('board'))+'/graph'
+          : '/api/hfl/entities/graph';
+        const probe=await fetch(path+'?'+new URLSearchParams({limit:'0',context:target.searchParams.toString()}),{signal:controller.signal,cache:'no-store'});
+        if(!probe.ok)throw Error('The graph could not load. Your previous view and edits are retained.');
+      }
       const response = await fetch(url, {signal:controller.signal, cache:'no-store'});
       if (!response.ok || response.redirected) throw Error('The views could not load. Please retry, or sign in again.');
       const html = await response.text();
@@ -493,6 +508,7 @@
       clearInterval(dynamicTimer);
       window.dispatchEvent(new Event('hfl:view-replacing'));
       disposed = true;
+      if(graph){location[automatic?'replace':'assign'](url);return;}
       history[automatic ? 'replaceState' : 'pushState'](null, '', url);
       document.open(); document.write(html); document.close();
     } catch (error) {
@@ -521,8 +537,8 @@
   async function applyPicker() {
     if (!pickerChanged || busy || transitioning) return;
     const ids = [...pendingIds]; pickerChanged = false; busy = true;
-    $('#view-loading-title').textContent = `Loading ${views.filter(view => ids.includes(view.id)).map(view => view.name).join(' + ') || 'All activity'}…`;
-    $('#view-loading-detail').textContent = 'Applying selected views…'; viewLoading.showModal();
+    $('#view-loading-title').textContent = `Loading ${views.filter(view => ids.includes(view.id)).map(view => view.name).join(' + ') || 'All activity'}â€¦`;
+    $('#view-loading-detail').textContent = 'Applying selected viewsâ€¦'; viewLoading.showModal();
     try {
       const latest = await request(); preferences = latest.preferences;
       if (ids.some(id => !latest.views.some(view => view.id === id))) throw Error('A selected view was removed. Reopen Workspaces and try again.');

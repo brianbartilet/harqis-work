@@ -64,7 +64,11 @@ def test_shared_workspace_restore_and_revision(authenticated_client, workspace_c
         assert params['views'] == [''] and params['q'] == ['']
 
 
-def test_workspace_cross_tab_sync_browser(authenticated_client, workspace_corpus):
+@pytest.mark.parametrize('surface', ['actions', 'graph'])
+def test_workspace_cross_tab_sync_browser(authenticated_client, workspace_corpus, monkeypatch, surface):
+    if surface == 'graph':
+        from modules.hfl_corpus import entities
+        monkeypatch.setattr(entities, 'graph', lambda *args, **kwargs: dict(nodes=[], edges=[], sources=[], total_nodes=0))
     playwright = pytest.importorskip('playwright.sync_api')
     client = authenticated_client
     headers = {'X-CSRF-Token': make_csrf_token('frontend-test-user')}
@@ -87,12 +91,17 @@ def test_workspace_cross_tab_sync_browser(authenticated_client, workspace_corpus
             corpus = context.new_page()
             corpus.goto('http://workspace.test' + workspace_views.selection_url(workspace_views.listing()))
             board = context.new_page()
-            board.goto('http://workspace.test' + workspace_views.selection_url(workspace_views.listing()).replace('/hfl-corpus?', '/hfl-corpus/actions?'))
+            board.goto('http://workspace.test' + workspace_views.selection_url(workspace_views.listing()).replace('/hfl-corpus?', '/hfl-corpus/'+surface+'?'))
             playwright.expect(board.locator('[data-view-picker-caption]')).to_have_text('Work')
             corpus.locator('#q').fill('planning')
             corpus.locator('[data-corpus-search]').click()
             corpus.wait_for_url('**/hfl-corpus?**views=**')
-            board.evaluate("window.dispatchEvent(new Event('focus'))")
+            try:
+                board.evaluate("window.dispatchEvent(new Event('focus'))")
+            except playwright.Error as error:
+                if 'Execution context was destroyed' not in str(error):
+                    raise
+                board.wait_for_load_state()
             playwright.expect(board.locator('[name=q]')).to_have_value('planning')
             # An unfinished corpus edit must survive a change from Kanban.
             corpus.locator('#q').fill('unfinished')

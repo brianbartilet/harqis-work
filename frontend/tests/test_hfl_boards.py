@@ -404,6 +404,8 @@ def test_board_graph_keeps_permitted_derived_edges_only(ideas, authenticated_cli
 def test_board_edits_work_while_save_is_slow_and_retry(ideas, authenticated_client, width, tmp_path):
     from urllib.parse import urlparse
     from playwright.sync_api import sync_playwright, expect
+    from modules.hfl_corpus import workspace_views
+    workspace = workspace_views.save(workspace_views.WorkspaceWrite(name='Save boundary', state={}))
     with sync_playwright() as engine:
         browser = engine.chromium.launch(channel='chrome', headless=True)
         page = browser.new_page(viewport={'width':width,'height':1000})
@@ -414,7 +416,7 @@ def test_board_edits_work_while_save_is_slow_and_retry(ideas, authenticated_clie
             r = route.request
             u = urlparse(r.url)
             response = authenticated_client.request(r.method, u.path + ('?' + u.query if u.query else ''),
-                content=r.post_data_buffer, headers={'content-type':'application/json'})
+                content=r.post_data_buffer, headers={key:value for key,value in r.headers.items() if key in {'content-type','x-csrf-token'}})
             route.fulfill(status=response.status_code, body=response.content,
                           headers={'content-type':response.headers.get('content-type','text/html')})
         def route_request(route):
@@ -428,7 +430,7 @@ def test_board_edits_work_while_save_is_slow_and_retry(ideas, authenticated_clie
             else: respond(route)
         page.route('https://boards.test/**', route_request)
         try:
-            page.goto('https://boards.test/hfl-corpus/graph')
+            page.goto('https://boards.test/hfl-corpus/graph?workspace='+workspace['id'])
             page.wait_for_selector('#kg-workspace:not([inert])')
             if width < 760: page.locator('.kg-boards [data-section=boards] > summary').click()
             count = len(graph_requests)
@@ -490,12 +492,15 @@ def test_board_edits_work_while_save_is_slow_and_retry(ideas, authenticated_clie
             page.get_by_role('menuitem',name='Edit thought',exact=True).click()
             dialog.get_by_label('Thought',exact=True).fill('Saved before closing')
             dialog.get_by_role('button',name='Save thought',exact=True).click()
-            page.locator('[data-activity-close]').click()
+            page.locator('[data-workspace-menu] > summary').click()
+            page.locator('[data-view-picker] > summary').click()
+            page.locator('[data-view-all]').click()
             page.wait_for_timeout(150)
             assert pending and '/hfl-corpus/graph' in page.url
             hold = False
             respond(pending.pop())
-            page.wait_for_url('https://boards.test/hfl-corpus')
+            page.wait_for_url('**/hfl-corpus/graph?**views=**')
+            expect(page.locator('[data-view-picker-caption]')).to_have_text('All activity')
             assert any(t['title'] == 'Saved before closing' for t in ideas.maps()[0]['drafts'])
         finally:
             browser.close()

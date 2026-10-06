@@ -457,7 +457,7 @@ Markdown list; source corpus files are never rewritten.
 Graph opens from Activity Corpus as a dedicated page at `/hfl-corpus/graph`.
 It inherits the active workspace and corpus filters. The selected board is kept
 in the URL and the graph retains its view state across refreshes. Back to corpus
-returns to the inherited context. Entities still opens as a scoped dialog.
+returns to the inherited context. Entities opens all authorized entities without inherited workspace or graph filters.
 The board sidebar keeps Explore Activity Graph, Add, and Board guide pinned while
 scrolling, with Filters, Fit graph, and Reset layout grouped under Controls.
 
@@ -527,15 +527,30 @@ creates one next future occurrence atomically, resets checklist completion, and
 preserves the completed record. Month-end dates clamp without losing the original
 anchor. Reopening and completing an occurrence again does not create a second successor.
 
-`/hfl-corpus/graph` supports Overview (100 nodes), Expanded (500), Dense
-(1,000), and All matching nodes. All mode uses `limit=0` on the graph API and
-includes every matching node and connection. Capped views prioritize source
-coverage, then recent entries and connected nodes, filling unused capacity.
-Counts distinguish matching nodes, the detail limit, and local view filters.
-Shared connections, dates, sources and search still apply in All mode.
+`/hfl-corpus/graph` uses the shared Workspace picker, including All activity,
+combined selections, and Dynamic mode. Corpus, Kanban, and Graph synchronize
+workspace selection and applied corpus filters through the existing owner profile
+and cross-tab updates. Graph-only filters and presets further narrow that scope.
+The graph always requests `limit=0`, including every matching node and connection;
+Overview, Expanded, Dense, and the separate All activity switch are removed.
+The information helper reports matching/displayed nodes, locally hidden nodes,
+and visible connections. Old browser detail settings are ignored.
 
-Views now contains five calculated **Presets**: Sources (the default on each
-open), Timeline (oldest dates on the left; initial zoom and Fit frame the latest 30 available days), People, Tools, and Companies.
+Boards use explicit workspace assignments, not matching member content. All
+activity includes unassigned boards. New boards default to all currently selected
+workspaces; under All activity they start unassigned. **Add → Existing board**
+adds assignments without replacing previous ones. Settings can remove assignments
+without deleting the board. Opening a board retains all authorized members;
+members outside workspace filters are dimmed and identified in the inspector
+and node list. Goals remain independent of workspace assignment. Switching
+workspace flushes pending board saves and returns to exploration if the board
+is outside the new selection; failed saves retain edits and offer Retry.
+
+Recipient sharing of complete assigned boards (including drafts, local edges,
+and attachments) is a future feature. Existing share recipes still describe
+corpus filters and do not grant access to those board contents.
+
+Views now contains five calculated **Presets**: Sources, Timeline (the initial default; oldest dates on the left; initial zoom and Fit frame the latest 30 available days), People, Tools, and Companies.
 Sources surround activity; the entity presets bring highly connected target
 orbs toward the center. Missing target types fall back to Sources with a notice.
 Switching presets moves existing nodes into place over approximately one second
@@ -561,7 +576,7 @@ after expensive reads or failures. Hidden tabs and active interactions defer
 updates. Returning to the tab checks again. New and removed nodes preserve the
 surviving layout and viewport. Rolling windows
 use the browser's local calendar dates. A stale indicator accompanies failures.
-Full graphs can take several seconds to lay out; smaller presets remain useful
+Full graphs can take several seconds to lay out; narrower workspace filters remain useful
 for quick navigation. The neighbor list shows up to 200 items at a time.
 
 ### References and downloads
@@ -753,9 +768,9 @@ selection; gaps show all entries (subject to normal secret-access restrictions).
 selection. Choosing views manually turns it off. Explicit filter links retain
 their own scope; ordinary landing-page visits restore persisted preferences.
 
-Activity Corpus and Actions Kanban share selections, Dynamic mode, saved-view
+Activity Corpus, Actions Kanban, and Activity Graph share selections, Dynamic mode, saved-view
 edits, and applied search/source/tag/date filters in the owner profile database.
-Both landing pages restore this state. Open tabs receive change notifications
+All three landing pages restore this state. Open tabs receive change notifications
 and check for updates every 15 seconds and when focus returns, in either mode.
 Generated navigation URLs carry a revision so stale refresh/back navigation can
 restore the latest shared state. Explicit filter links retain their own scope.

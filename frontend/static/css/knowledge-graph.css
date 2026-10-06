@@ -251,3 +251,26 @@
 }
 
 .kg-shell .kg-zoom #kg-fullscreen{font-family:inherit;font-size:12px;font-weight:500}
+
+/* Shared workspace controls remain reachable above the graph canvas. */
+.kg-main-toolbar > .workspace-menu { flex-shrink:0; position:relative; z-index:55 }
+.kg-main-toolbar .workspace-menu-panel { left:0; right:auto; max-width:calc(100vw - 24px) }
+.kg-inline-info .activity-view-context { display:flex; flex-wrap:wrap; gap:6px; align-items:center }
+.kg-outside-workspace { border-left:2px solid #94a3b8; padding-left:8px; color:#cbd5e1 }
+@media(max-width:760px){
+  .kg-main-toolbar > .workspace-menu { grid-column:1/3; grid-row:2 }
+  .kg-main-toolbar > .kg-detail-help { grid-column:3; grid-row:2 }
+}
+
+.kg-main-toolbar .workspace-menu-panel { width:288px; box-sizing:border-box }
+@media(max-width:760px){
+  .activity-modal-page .kg-shell .kg-main-toolbar .kg-toolbar-actions { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); width:100%; gap:6px }
+  .kg-shell .kg-main-toolbar .kg-toolbar-actions > .kg-animation-menu,
+  .kg-shell .kg-main-toolbar .kg-toolbar-actions > .kg-views-menu,
+  .kg-shell .kg-toolbar-actions > #kg-entities,
+  .kg-shell .kg-toolbar-actions > #kg-open-filters,
+  .kg-shell .kg-toolbar-actions > #kg-reset,
+  .kg-shell .kg-toolbar-actions > #kg-reload { grid-column:auto; grid-row:auto; min-width:0 }
+  .kg-shell .kg-main-toolbar .kg-inline-info { display:block; flex-basis:100%; order:4 }
+  .kg-shell .kg-main-toolbar .activity-view-context { justify-content:flex-start }
+}

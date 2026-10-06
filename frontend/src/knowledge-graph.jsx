@@ -55,12 +55,6 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   const duration=reducedMotion?0:500;
   let preset='timeline', animationMode='off', motionTime=0, transition=null, motionSettling=false;
   const animationKey='hfl:graph:animation:'+document.querySelector('.kg-shell').dataset.viewOwner;
-  const detailKey='hfl:graph:detail:'+document.querySelector('.kg-shell').dataset.viewOwner;
-  function saveDetail(){try {localStorage.setItem(detailKey,$('density').value);} catch {}}
-  try {
-    const detail=localStorage.getItem(detailKey);
-    if(!readOnly&&['100','500','1000','0'].includes(detail))$('density').value=detail;
-  } catch {}
   function savedAnimation(){
     try {const mode=localStorage.getItem(animationKey);return !reducedMotion&&['off','breathing','ripple','drift'].includes(mode)?mode:'off';}
     catch {return 'off';}
@@ -76,7 +70,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   function saveGraphState(){
     if(readOnly)return;
     if(!stateReady||loading||!graphApi||window.HflIdeas?.maps.current)return;
-    const filters=Object.fromEntries(['search','density','rolling','since','until'].map(id=>[id,$(id).value]));
+    const filters=Object.fromEntries(['search','rolling','since','until'].map(id=>[id,$(id).value]));
     filters.shared=$('shared').checked;
     const positions=Object.fromEntries(nodes.slice(0,10000).map(n=>[n.id,{...(layoutTargets.get(n.id)||{x:n.x,y:n.y}),manual:!!n.manual}]));
     const center=graphApi.screen2GraphCoords(host.clientWidth/2,host.clientHeight/2);
@@ -96,12 +90,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     if(readOnly)return;
     shell.classList.toggle('kg-has-selection',!!selected);
     const chips=[window.HflIdeas?.maps.current?.name||PRESETS[preset]];
-    const context=window.activityModals?.context();
-    if(context){
-      for(const [key,value] of new URLSearchParams(context))if(value)chips.push(key.replaceAll('_',' ')+': '+value);
-    }else chips.push('All activity');
+    chips.push(document.querySelector('[data-active-view-name]')?.textContent||'All activity');
     if($('search').value)chips.push('Search: '+$('search').value);
-    chips.push($('density').selectedOptions[0].textContent);
+    chips.push('All matching nodes');
     if($('rolling').value!=='0')chips.push($('rolling').selectedOptions[0].textContent);
     else for(const id of ['since','until'])if($(id).value)chips.push(id+': '+$(id).value);
     if(selectedSources.size)chips.push('Sources: '+[...selectedSources].join(', '));
@@ -186,9 +177,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     params.set('since',date(start));params.set('until',date(end));
   }
   function requestParams(){
-    const params=new URLSearchParams({since:$('since').value,until:$('until').value,rolling:$('rolling').value,limit:$('density').value,query:$('search').value,shared:String($('shared').checked)});
+    const params=new URLSearchParams({since:$('since').value,until:$('until').value,rolling:$('rolling').value,limit:'0',query:$('search').value,shared:String($('shared').checked)});
     const context=window.activityModals?.context();if(context)params.set('context',context);
-    if(window.HflIdeas?.maps.current||new URL(location.href).searchParams.has('select'))return new URLSearchParams({limit:'0'});
+    if(window.HflIdeas?.maps.current)return new URLSearchParams({limit:'0'});
     selectedSources.forEach(source=>params.append('sources',source));applyRollingDates(params);return params;
   }
   $('rolling').onchange=syncDates;
@@ -402,7 +393,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       const visible=!activeId||node.id===activeId||near.has(node.id);
       const radius=node.radius/globalScale;
       const ink=color(node.kind),emphasis=node.id===activeId||node.id===selectedId||window.HflIdeas?.maps.selection.has(node.id);
-      ctx.save();ctx.globalAlpha=(visible?(node.status==='dismissed'?.35:1):.075)*arrivalAlpha(nodeArrivals.get(node.id));
+      ctx.save();ctx.globalAlpha=(visible?(node.status==='dismissed'?.35:node.outside_workspace?.55:1):.075)*arrivalAlpha(nodeArrivals.get(node.id));
       // Thousands of per-entry gradients dominate mobile drawing time. Keep
       // detailed lighting for hubs and selected nodes, and compact activity dots.
       if(data.nodes.length>1000&&node.kind==='entries'&&!emphasis){
@@ -552,7 +543,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     $('list').replaceChildren();
     items.sort((a,b)=>Number(b.kind==='sources')-Number(a.kind==='sources') || b.visibleDegree-a.visibleDegree || a.label.localeCompare(b.label)).slice(0,200).forEach(n => {
       const button=document.createElement('button'),dot=document.createElement('span'),name=document.createElement('span'),meta=document.createElement('small');
-      dot.className='kg-dot';dot.style.background=color(n.kind);name.textContent=n.label;meta.textContent=n.visibleDegree+' links';button.title=n.label+' · '+kindLabel(n.kind);
+      dot.className='kg-dot';dot.style.background=color(n.kind);name.textContent=n.label;meta.textContent=n.outside_workspace?'Outside workspace filters':n.visibleDegree+' links';button.title=n.label+' · '+kindLabel(n.kind);
       if(selected){const link=edges.find(e=>(e.source===selected&&e.target===n.id)||(e.target===selected&&e.source===n.id));if(link){const evidence=document.createElement('small');evidence.textContent=(link.relation||'linked')+' · '+(link.evidence||'');evidence.style.cssText='grid-column:2 / 4;white-space:normal;font-size:11px';button.append(evidence);button.title=link.evidence||n.label;}}
       button.prepend(dot,name,meta);button.onclick=event=>{window.HflIdeas?.maps.selectNode(n.id,event.shiftKey||event.ctrlKey||event.metaKey);select(n.id);};$('list').append(button);
     });
@@ -625,6 +616,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     heading.textContent=n?n.label:'';
     description.textContent=n?[kindLabel(n.kind),n.date,n.source,near.size+' visible connections'].filter(Boolean).join(' · '):window.HflIdeas?.maps.current?'Select an orb to build on a thought, connect ideas, or take the next step.':'Select an orb to explore its linked entries and entities.';
     if(n)$('detail').append(heading);$('detail').append(description);
+    if(n?.outside_workspace){const note=document.createElement('p');note.className='kg-outside-workspace';note.textContent='Outside workspace filters · Included as a member of this board.';$('detail').append(note);}
     if(n?.href&&n.kind==='entries') {const button=document.createElement('button');button.textContent='Open entry';button.className='kg-open-entry';button.onclick=()=>openEntry(n.id.replace(/^entry:/,''),n.locator);$('detail').append(button);}
     if(!exampleMode)window.HflIdeas?.inspect(n,$('detail'),data.edges);
     if(n){const focus=document.createElement('button');focus.textContent='Focus on this connection';focus.className='kg-focus-button';focus.onclick=()=>{focusId=n.id;render();};$('detail').append(focus);}
@@ -663,24 +655,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     const query=exampleMode||window.HflIdeas?.maps.current?$('search').value.trim().toLocaleLowerCase():'';
     if(query){const matches=new Set(filtered.filter(n=>n.label.toLocaleLowerCase().includes(query)).map(n=>n.id)),near=new Set(matches);data.edges.forEach(e=>{if(matches.has(e.source))near.add(e.target);if(matches.has(e.target))near.add(e.source);});filtered=filtered.filter(n=>near.has(n.id));}
     if(focusId){const keep=new Set([focusId]);data.edges.forEach(e=>{if(e.source===focusId)keep.add(e.target);if(e.target===focusId)keep.add(e.source);});filtered=filtered.filter(n=>keep.has(n.id));}
-    const budget=window.HflIdeas?.maps.current?Infinity:(Number($('density').value)||Infinity),limited=filtered.length>budget;
-    const ranked=filtered.slice().sort((a,b)=>(degrees.get(b.id)||0)-(degrees.get(a.id)||0));
-    // Reserve space for both sides of the bipartite graph so hubs retain their entries.
-    let chosen=ranked;
-    if(limited){
-      const entries=ranked.filter(n=>n.kind==='entries').slice(0,Math.floor(budget*.5));
-      const entryIds=new Set(entries.map(n=>n.id)),localDegrees=new Map();
-      data.edges.forEach(e=>{if(entryIds.has(e.source))localDegrees.set(e.target,(localDegrees.get(e.target)||0)+1);});
-      const others=ranked.filter(n=>n.kind!=='entries'&&localDegrees.has(n.id)).sort((a,b)=>(localDegrees.get(b.id)||0)-(localDegrees.get(a.id)||0)).slice(0,budget-entries.length);
-      const used=new Set([...entries,...others].map(n=>n.id));
-      chosen=[...entries,...others,...ranked.filter(n=>!used.has(n.id))].slice(0,budget);
-      const ids=new Set(chosen.map(n=>n.id)),linked=new Set();
-      data.edges.forEach(e=>{if(ids.has(e.source)&&ids.has(e.target)){linked.add(e.source);linked.add(e.target);}});
-      if(linked.size)chosen=chosen.filter(n=>linked.has(n.id));
-    }
-    // Explicit navigation/selection must survive the detail budget.
-    const selectedNode=filtered.find(n=>n.id===selected);
-    if(selectedNode&&!chosen.some(n=>n.id===selected))chosen=[...chosen.slice(0,Math.max(0,budget-1)),selectedNode];
+    const chosen=filtered.slice().sort((a,b)=>(degrees.get(b.id)||0)-(degrees.get(a.id)||0));
     nodes=chosen.map((n,index)=>({...n,index,degree:degrees.get(n.id)||0}));
     const byId=new Map(nodes.map(n=>[n.id,n]));
     edges=data.edges.filter(e=>byId.has(e.source)&&byId.has(e.target)).map(e=>({...e,a:byId.get(e.source),b:byId.get(e.target)}));
@@ -747,7 +722,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     graphData={nodes,viewport:restoredViewport,fitOnce:!preserveLayout,links:edges.map(e=>({...e,source:byId.get(e.source),target:byId.get(e.target),local:!!e.local}))};
     updatePresetMenu(layout.notice);
     $('map-count').textContent=nodes.length+' nodes · '+edges.length+' links';
-    showInfo('status',nodes.length+' / '+(data.total_nodes ?? data.nodes.length)+' matching nodes · '+Math.max(0,(data.total_nodes??data.nodes.length)-data.nodes.length)+' outside detail limit · '+(data.nodes.length-nodes.length)+' hidden by view filters · '+edges.length+' connections'+(data.omitted_sources?' · '+data.omitted_sources+' sources outside limit':'')+(limited||data.truncated?' · '+$('density').selectedOptions[0].text.split(' · ')[0]+'; search or increase detail to explore more.':'')+(!nodes.length?' · No matching nodes. Clear your search or change the filters.':''),!nodes.length);
+    showInfo('status',nodes.length+' / '+(data.total_nodes ?? data.nodes.length)+' matching nodes · '+(data.nodes.length-nodes.length)+' hidden by view filters · '+edges.length+' connections'+(!nodes.length?' · No matching nodes. Clear your search or change the filters.':''),!nodes.length);
     select(byId.has(selected)?selected:null);
   }
   function configureData(next,preserveLayout=false) {
@@ -812,8 +787,8 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       appliedParams=null;
       try{
         let shared={nodes:board.members.map(id=>window.HflIdeas.maps.nodes.get(id)).filter(Boolean),edges:[...window.HflIdeas.maps.sharedEdges.values()],sources:[]};
-        if(force===true||board.members.some(id=>id.startsWith('list:'))||shared.nodes.length!==board.members.length){
-          shared=await window.HflIdeas.api('/maps/'+board.id+'/graph');
+        if(force===true||board.members.some(id=>id.startsWith('list:'))||shared.nodes.length!==board.members.length||(window.activityModals?.context()&&shared.nodes.some(n=>n.outside_workspace===undefined))){
+          shared=await window.HflIdeas.api('/maps/'+board.id+'/graph?'+new URLSearchParams({context:window.activityModals?.context()||''}));
           if(version!==requestVersion||window.HflIdeas.maps.current?.id!==board.id)return;
           board.members.forEach(id=>window.HflIdeas.maps.nodes.delete(id));
           for(const [key,edge] of window.HflIdeas.maps.sharedEdges)if(board.members.includes(edge.source)&&board.members.includes(edge.target))window.HflIdeas.maps.sharedEdges.delete(key);
@@ -880,12 +855,11 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   window.addEventListener('pagehide',()=>{backgroundController?.abort();});
   let searchTimer;$('search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>exampleMode?render():load(),300);};
   $('filter').onclick=()=>{$('filter-drawer').close();if(!exampleMode)load();};
-  $('density').onchange=()=>{saveDetail();exampleMode?render():load();};$('shared').onchange=()=>exampleMode?render():load();$('in').onclick=()=>zoom(1.3);$('out').onclick=()=>zoom(1/1.3);$('fit').onclick=()=>fitTargets(true,true);$('reload').onclick=async()=>{try{await window.HflIdeas?.maps.reload();await load(true);}catch(error){showInfo('status',error.message,true);}};
+  $('shared').onchange=()=>exampleMode?render():load();$('in').onclick=()=>zoom(1.3);$('out').onclick=()=>zoom(1/1.3);$('fit').onclick=()=>fitTargets(true,true);$('reload').onclick=async()=>{try{await window.HflIdeas?.maps.reload();await load(true);}catch(error){showInfo('status',error.message,true);}};
   $('reset').onclick=()=>{
     pendingState=null;try {localStorage.removeItem(stateKey);} catch {}
     window.activityModals?.reset();preset='timeline';setAnimation('off');
-    $('search').value='';$('density').value='100';$('rolling').value='0';$('since').value='';$('until').value='';
-    saveDetail();
+    $('search').value='';$('rolling').value='0';$('since').value='';$('until').value='';
     selectedSources.clear();sourceOptions(data.sources||[]);syncDates();$('shared').checked=false;
     enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts']);selected=null;focusId=null;exampleMode?render():load();
   };
@@ -917,13 +891,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   document.addEventListener('keydown',e=>{if(e.key==='Escape')$('source-menu').open=false;});
   sourceOptions([]);
   window.addEventListener('hfl:activity-scope',()=>{focusId=null;selected=null;load();});
-  $('entities').onclick=()=>{
-    const params=new URLSearchParams(appliedParams||requestParams());
-    const context=params.get('context')||'';params.delete('context');
-    window.activityModals.open('entities',context,params.toString());
-  };
+  $('entities').onclick=()=>window.activityModals.open('entities','');
+
   if(pendingState){
-    for(const id of ['search','density','rolling','since','until']){
+    for(const id of ['search','rolling','since','until']){
       const value=pendingState.filters[id];
       if(typeof value==='string'&&($(id).tagName!=='SELECT'||[...$(id).options].some(o=>o.value===value)))$(id).value=value;
     }

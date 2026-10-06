@@ -67,6 +67,25 @@ pending edits so the owner can retry.
 Existing maps retain IDs, layouts, members, and prompts; purpose defaults to their name.
 The old Ideas navigation and map toolbar are replaced by the board sidebar.
 
+## Activity workspaces
+
+Activity Graph shares Workspace selection and Dynamic mode with Corpus and Kanban.
+Selected workspaces include explicitly assigned boards; All activity also includes
+unassigned boards. New boards default to every currently selected workspace.
+Use Add → Existing board to add a board to those workspaces, or Settings to edit
+its assignments. Removing an assignment preserves the board and its contents.
+
+Opening an assigned board shows all authorized members, including members outside
+the selected workspace filters. Those members are dimmed and labeled in the
+inspector and node list. Changing workspace finishes pending board saves first;
+if the board is excluded, Graph returns to exploration. A save failure retains
+edits and offers Retry. Goals remain workspace-agnostic, and Entities opens the
+full authorized directory. Presets and animations remain graph controls.
+
+Future recipient sharing is intended to include full assigned-board contents,
+including drafts, local connections, and attachments. This workspace integration
+does not implement that sharing or broaden existing recipient access.
+
 ## Goals
 
 Goals are shared graph objects with a title, description, success criteria,

@@ -1,7 +1,7 @@
 {% extends "modules/hfl_corpus/modal_base.html" if request.query_params.get('embed') == '1' else "base.html" %}
 {% block body_class %}activity-modal-page activity-workspace-page{% endblock %}
 {% block title %}HARQIS — Activity Graph{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ static_asset('css/hfl-timeline.css') }}"><link rel="stylesheet" href="{{ static_asset('css/knowledge-graph.css') }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ static_asset('css/corpus-workspaces.css') }}"><link rel="stylesheet" href="{{ static_asset('css/hfl-timeline.css') }}"><link rel="stylesheet" href="{{ static_asset('css/knowledge-graph.css') }}">{% endblock %}
 {% block content %}
 <main class="kg-shell{% if request.query_params.get('readonly') == '1' %} kg-readonly{% endif %}" data-readonly="{{ 'true' if request.query_params.get('readonly') == '1' else 'false' }}" data-view-owner="{{ user }}">
   {% if request.query_params.get('embed') == '1' %}
@@ -18,14 +18,15 @@
   {% endif %}
   <div class="kg-toolbar kg-main-toolbar">
     <label>Find a node<input id="kg-search" type="search" placeholder="Search entries or entities" autocomplete="off"></label>
-    <div class="kg-detail-control"><select id="kg-density" aria-label="Graph detail"><option value="100">Overview</option><option value="500">Expanded</option><option value="1000">Dense</option><option value="0">All matching nodes</option></select><details class="kg-detail-help"><summary aria-label="About graph detail">i</summary><p>Overview: up to 100 nodes.<br>Expanded: up to 500 nodes.<br>Dense: up to 1,000 nodes.<br>All: every matching node and connection.<br>A node is an entry, entity, source or date. Filters may return fewer nodes.</p></details></div>
+    {% include "modules/hfl_corpus/partials/workspace_views.html" %}
+    <details class="kg-detail-help"><summary aria-label="About graph counts">i</summary><p>All matching nodes and connections are loaded within the selected workspace context. A node may be an entry, entity, source, date, or saved object. Presets and additional filters can hide matching nodes. Board members outside workspace filters remain visible and are marked as outside the workspace filters.</p></details>
     <div id="kg-info" class="kg-inline-info" tabindex="0" aria-label="Graph information">
-      <span data-activity-context class="activity-context"></span>
+      {% include "modules/hfl_corpus/partials/workspace_indicator.html" %}
       <span id="kg-status">Loading your graph…</span>
       <span id="kg-view-status" hidden>Sources preset</span>
     </div>
     <div class="kg-toolbar-actions">
-    <button type="button" data-activity-all role="switch" aria-checked="false">All activity<span class="activity-switch-track" aria-hidden="true"></span></button>
+
     <div class="kg-animation-menu" id="kg-animation-menu">
       <button id="kg-open-animation" type="button" aria-controls="kg-animation-panel" aria-expanded="false">Animation <span id="kg-animation-pill" data-mode="off">Off</span><svg class="kg-animation-caret" aria-hidden="true" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"/></svg></button>
       <div id="kg-animation-panel" class="kg-menu-panel" role="region" aria-label="Animation modes" hidden>
@@ -54,7 +55,7 @@
         </div>
       </div>
     </div>
-    <button id="kg-reset" type="button">Reset</button><button id="kg-reload" type="button">Refresh</button>
+    <button id="kg-reset" data-workspace-reset type="button">Reset</button><button id="kg-reload" type="button">Refresh</button>
     </div>
   </div>
   <p id="kg-preset-notice" role="status" hidden></p>
@@ -99,5 +100,8 @@
 {% include "modules/hfl_corpus/partials/action_editor.html" %}
 <script src="{{ static_asset('js/hfl-document-actions.js') }}" defer></script>
 {% endif %}
+{% include "modules/hfl_corpus/partials/kanban_workspace_state.html" %}
+<script src="{{ static_asset('js/corpus-workspaces.js') }}" defer></script>
+<script src="{{ static_asset('js/view-visualizer.js') }}" defer></script>
 <script src="{{ static_asset('js/knowledge-graph.js') }}" defer></script>
 {% endblock %}
