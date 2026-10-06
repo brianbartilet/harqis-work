@@ -18,13 +18,6 @@
   {% endif %}
   <div class="kg-toolbar kg-main-toolbar">
     <label>Find a node<input id="kg-search" type="search" placeholder="Search entries or entities" autocomplete="off"></label>
-    {% include "modules/hfl_corpus/partials/workspace_views.html" %}
-    <details class="kg-detail-help"><summary aria-label="About graph counts">i</summary><p>All matching nodes and connections are loaded within the selected workspace context. A node may be an entry, entity, source, date, or saved object. Presets and additional filters can hide matching nodes. Board members outside workspace filters remain visible and are marked as outside the workspace filters.</p></details>
-    <div id="kg-info" class="kg-inline-info" tabindex="0" aria-label="Graph information">
-      {% include "modules/hfl_corpus/partials/workspace_indicator.html" %}
-      <span id="kg-status">Loading your graph…</span>
-      <span id="kg-view-status" hidden>Sources preset</span>
-    </div>
     <div class="kg-toolbar-actions">
 
     <div class="kg-animation-menu" id="kg-animation-menu">
@@ -56,6 +49,15 @@
       </div>
     </div>
     <button id="kg-reset" data-workspace-reset type="button">Reset</button><button id="kg-reload" type="button">Refresh</button>
+    </div>
+    <details class="kg-detail-help"><summary aria-label="About graph counts">i</summary><p>All matching nodes and connections are loaded within the selected workspace context. A node may be an entry, entity, source, date, or saved object. Presets and additional filters can hide matching nodes. Board members outside workspace filters remain visible and are marked as outside the workspace filters.</p></details>
+    <div id="kg-info" class="kg-inline-info" tabindex="0" aria-label="Graph information">
+      <span id="kg-status">Loading your graph…</span>
+      <span id="kg-view-status" hidden>Sources preset</span>
+    </div>
+    <div class="corpus-workspace-controls kg-workspace-controls">
+      {% include "modules/hfl_corpus/partials/workspace_indicator.html" %}
+      {% include "modules/hfl_corpus/partials/workspace_views.html" %}
     </div>
   </div>
   <p id="kg-preset-notice" role="status" hidden></p>

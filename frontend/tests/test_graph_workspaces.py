@@ -108,6 +108,21 @@ def test_workspace_boards_and_global_entities_browser(ideas, authenticated_clien
             page.locator('.activity-entities-drawer').evaluate('(el)=>el.close()')
             page.locator('[data-workspace-menu] > summary').click()
             expect(page.locator('[data-view-picker]')).to_be_visible()
+            first_label = page.locator('[data-view-choices] label').first
+            assert float(first_label.evaluate('(el)=>getComputedStyle(el).fontSize').removesuffix('px')) > 0
+            trigger = page.locator('[data-workspace-menu] > summary')
+            page.mouse.move(0, 0)
+            assert trigger.evaluate('(el)=>getComputedStyle(el).backgroundColor') == 'rgb(37, 99, 235)'
+            assert trigger.bounding_box()['height'] == 36
+            if width == 1440:
+                search = page.locator('#kg-search').bounding_box()
+                animation = page.locator('#kg-open-animation').bounding_box()
+                workspace = trigger.bounding_box()
+                refresh = page.locator('#kg-reload').bounding_box()
+                assert animation['x'] >= search['x']+search['width']
+                assert animation['x'] < search['x']+search['width']+30
+                assert workspace['x'] > refresh['x']+refresh['width']
+
             panel = page.locator('.workspace-menu-panel').bounding_box()
             assert panel['x'] >= 0 and panel['x']+panel['width'] <= width+1
             assert panel['width'] >= min(280, width-24)
