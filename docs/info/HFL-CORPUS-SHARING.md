@@ -485,6 +485,10 @@ It also provides a bearer-only attachment endpoint beneath
 `/api/hfl/timeline/ideas/share-context/attachments/{kind}/{source_id}/{attachment_id}`.
 The corresponding browser routes are explicitly forbidden, including owner-session
 proxy requests. This endpoint is not a guest API and does not itself grant sharing.
+The MCP coverage manifest classifies these two internal service endpoints and
+their forbidden browser counterparts as protocol routes, without MCP tools. The
+coverage checker permits only these exact canonical GET routes as exceptions;
+other canonical endpoints still require dedicated tools.
 
 A remote canonical host on an older version falls back to the existing permission-
 filtered ideas snapshot for ordinary local testing. **Secret-backed workspace
