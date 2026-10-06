@@ -328,9 +328,11 @@
             <div class="field"><label for="email">Allowed email (email OTP mode)</label><input class="control" id="email" type="email" name="allowed_email" value="{{ cfg.allowed_email if cfg else '' }}"></div>
             <div class="field"><label for="expires-at">Expires at</label><input class="control [color-scheme:dark]" id="expires-at" type="datetime-local" name="expires_at" required value="{{ default_expires_at }}" data-expires-at {% if cfg and cfg.no_expiry %}disabled{% endif %} onclick="if (this.showPicker) this.showPicker()"><input type="hidden" name="timezone_offset" data-timezone-offset></div>
             <div class="field"><label for="devices">Concurrent sessions</label><input class="control" id="devices" type="number" min="1" max="{{ max_concurrent_sessions }}" name="device_limit" value="{{ [cfg.device_limit if cfg else defaults.hfl_share_default_device_limit, max_concurrent_sessions]|min }}"></div>
+            <div class="field"><label for="maximum-redemptions">Maximum redemptions</label><input class="control" id="maximum-redemptions" type="number" min="0" max="1000" step="1" name="browser_redemption_limit" value="{{ cfg.browser_redemption_limit if cfg else 5 }}" required aria-describedby="maximum-redemptions-help"></div>
           </div>
+          <p id="maximum-redemptions-help" class="mb-3 text-xs leading-5 text-slate-500">Per browser, remembered by a cookie. Resuming an active session does not count. Use 0 for unlimited. Clearing cookies starts a new allowance.</p>
           <p class="mb-3 text-xs leading-5 text-slate-500">Each browser receives a fixed session lasting {{ session_duration }}. Closing or expiry releases its slot; rescanning in the same browser resumes it.</p>
-          <label class="check mb-2"><input type="checkbox" name="single_use" {% if not cfg or cfg.single_use %}checked{% endif %}><span>Allow only the first successful session</span></label>
+          <label class="check mb-2"><input type="checkbox" name="single_use" {% if cfg and cfg.single_use %}checked{% endif %}><span>Allow only the first successful session (overrides Maximum redemptions)</span></label>
           <label class="check"><input type="checkbox" name="references_enabled" {% if not cfg or cfg.references_enabled %}checked{% endif %}><span>Allow individually selected references. Canonical paths are never shown to guests.</span></label>
           </div>
         </details>

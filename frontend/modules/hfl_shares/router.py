@@ -356,6 +356,7 @@ def _configuration_from_form(
         no_expiry=no_expiry,
         device_limit=device_limit,
         single_use=form.get("single_use") == "on",
+        browser_redemption_limit=int(str(form.get("browser_redemption_limit") or "5")),
         created_at=existing.created_at if existing else "",
         updated_at=existing.updated_at if existing else "",
     )
@@ -1020,6 +1021,7 @@ async def generate_share(request: Request):
             ttl_seconds=configuration.ttl_seconds,
             no_expiry=configuration.no_expiry,
             single_use=configuration.single_use,
+            browser_redemption_limit=configuration.browser_redemption_limit,
             device_limit=configuration.device_limit,
         )
         generated = {
@@ -1412,6 +1414,19 @@ async def redeem_share(request: Request, token: str):
     if existing_session and existing_session[0].id == grant.id:
         record_share_audit(event="session-resumed", share_id=grant.id)
         return RedirectResponse("/share/session", status_code=303)
+    browser_hash = ""
+    if grant.browser_redemption_limit:
+        identity = browser_identity(request)
+        if not identity:
+            response = templates.TemplateResponse(
+                request,
+                "modules/hfl_shares/access.html",
+                _access_context(request, grant, token, error="Enable cookies, then try opening the share again."),
+                status_code=400,
+            )
+            ensure_browser_cookie(request, response)
+            return response
+        browser_hash = opaque_hash(identity)
     form = await _guest_form(request)
     if grant.auth_mode == "pin":
         settings = get_settings()
@@ -1473,19 +1488,6 @@ async def redeem_share(request: Request, token: str):
     elif grant.auth_mode != "qr":
         return _unavailable(request)
 
-    browser_hash = ""
-    if grant.browser_redemption_limit:
-        identity = browser_identity(request)
-        if not identity:
-            response = templates.TemplateResponse(
-                request,
-                "modules/hfl_shares/access.html",
-                _access_context(request, grant, token, error="Enable cookies, then try opening the share again."),
-                status_code=400,
-            )
-            ensure_browser_cookie(request, response)
-            return response
-        browser_hash = opaque_hash(identity)
     issued = issue_session(store, grant.id, browser_hash=browser_hash)
     if not issued:
         if grant.browser_redemption_limit and store.browser_redemption_count(grant.id, browser_hash) >= grant.browser_redemption_limit:
@@ -1521,7 +1523,13 @@ async def pending_access(request: Request):
         return _unavailable(request)
     if access_request["status"] == "approved":
         existing_session = current_session(request, store)
-        issued = issue_session(store, access_request["share_id"])
+        grant = store.get_share(access_request["share_id"])
+        identity = browser_identity(request)
+        if not grant or (grant.browser_redemption_limit and not identity):
+            return _unavailable(request, status_code=403)
+        issued = issue_session(
+            store, grant.id, browser_hash=opaque_hash(identity) if identity else ""
+        )
         if not issued:
             return _unavailable(request, status_code=403)
         if existing_session:

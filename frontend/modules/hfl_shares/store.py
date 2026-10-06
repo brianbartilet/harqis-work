@@ -25,6 +25,9 @@ from modules.hfl_shares.models import (
 _SCHEMA = """
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
+CREATE TABLE IF NOT EXISTS share_migrations (
+    name TEXT PRIMARY KEY
+);
 CREATE TABLE IF NOT EXISTS configurations (
     id TEXT PRIMARY KEY,
     payload TEXT NOT NULL,
@@ -169,6 +172,22 @@ class ShareStore:
                     "COALESCE(json_array_length(snapshot, '$.entries'), 0)"
                 )
 
+            # One-time upgrade: retain explicit allowances and every grant's lifecycle.
+            if not connection.in_transaction:
+                connection.execute("BEGIN IMMEDIATE")
+            migration = "default-browser-redemptions-v1"
+            if not connection.execute("SELECT 1 FROM share_migrations WHERE name=?", (migration,)).fetchone():
+                connection.execute(
+                    "UPDATE shares SET browser_redemption_limit=5, single_use=0 "
+                    "WHERE browser_redemption_limit=0"
+                )
+                for row in connection.execute("SELECT id,payload FROM configurations").fetchall():
+                    payload = json.loads(row["payload"])
+                    if "browser_redemption_limit" not in payload:
+                        payload.update(browser_redemption_limit=5, single_use=False)
+                        connection.execute("UPDATE configurations SET payload=? WHERE id=?", (json.dumps(payload), row["id"]))
+                connection.execute("INSERT INTO share_migrations(name) VALUES (?)", (migration,))
+
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=15)
         connection.row_factory = sqlite3.Row
@@ -264,6 +283,8 @@ class ShareStore:
             )
         else:
             payload.pop("test_prompts", None)
+        if "browser_redemption_limit" not in payload:
+            payload.update(browser_redemption_limit=5, single_use=False)
         return ShareConfiguration(**payload)
 
     @staticmethod
@@ -381,7 +402,11 @@ class ShareStore:
         live_configuration: ShareConfiguration | None = None,
         single_use: bool,
         device_limit: int,
+        browser_redemption_limit: int = 0,
     ) -> ShareGrant:
+        if type(browser_redemption_limit) is not int or not 0 <= browser_redemption_limit <= 1000:
+            raise ValueError("Maximum redemptions must be between zero and 1000.")
+        browser_redemption_limit = 0 if single_use else browser_redemption_limit
         now = utc_now()
         grant = ShareGrant(
             id=str(uuid.uuid4()),
@@ -399,6 +424,7 @@ class ShareStore:
             status="active",
             single_use=single_use,
             device_limit=device_limit,
+            browser_redemption_limit=browser_redemption_limit,
             no_expiry=no_expiry,
             instant=instant,
             live_updates=live_configuration is not None,
@@ -411,8 +437,8 @@ class ShareStore:
                     id, configuration_id, name, token_hash, pin_hash,
                     auth_mode, allowed_email, snapshot, created_at, expires_at,
                     status, single_use, device_limit, no_expiry, instant,
-                    live_updates, live_configuration, snapshot_entry_count
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    live_updates, live_configuration, snapshot_entry_count, browser_redemption_limit
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     grant.id, configuration_id, name, token_hash, pin_hash,
@@ -428,6 +454,7 @@ class ShareStore:
                         else ""
                     ),
                     len(snapshot.entries),
+                    browser_redemption_limit,
                 ),
             )
             if encrypted_link:

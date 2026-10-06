@@ -1,10 +1,18 @@
 # Activity Corpus Sharing
 
-Existing anonymous QR grants can be given a per-browser redemption allowance
-with `ShareStore.set_browser_redemption_limit(share_id, limit)`. This replaces
-the grant's single-use restriction without changing its URL, snapshot, expiry,
-or concurrent-session cap. It is an operational setting, not a saved-recipe field.
-Existing grants default to no browser allowance and retain their prior behavior.
+The access settings include **Maximum redemptions** beside Concurrent sessions.
+It defaults to **5 per browser**, accepts 0 (unlimited) through 1000, and is saved
+with the recipe and copied into generated grants. Resuming an active session
+is free. The optional first-successful-session checkbox overrides this allowance;
+it is unchecked by default. Anonymous QR, PIN, email OTP, and manual approval
+shares all enforce the configured browser allowance when issuing a session.
+
+A one-time migration gives existing shares and legacy recipes the
+five-redemption default and removes their old global single-use restriction.
+Explicit browser allowances are retained. Expiry, revocation, share URLs,
+content, concurrent-session caps, and existing browser counts are preserved.
+New instant QR shares retain their deliberately single-use behavior. Subsequent
+startups do not overwrite saved limits, including an explicit unlimited value.
 
 For enabled grants, a signed, HttpOnly browser cookie identifies the browser;
 `browser_redemptions` stores counts by grant and hashed browser identifier.
@@ -138,7 +146,7 @@ used for semantic retrieval.
 | Manual approval | Capability token plus one owner-approved browser request | Guest waiting cookie is HTTP-only and expires after one hour. |
 | QR possession | Capability token only | Suitable only for low-risk context; link possession is authorization. A no-expiry QR can issue bounded sessions as slots become free. |
 
-The default grant lasts one hour, permits one session, is single-use, disables
+The default grant lasts one hour, permits one concurrent session and five redemptions per browser, disables
 references, and terminates active sessions when revoked.
 
 ## Required configuration

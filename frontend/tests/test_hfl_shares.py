@@ -163,6 +163,7 @@ def _configuration(**overrides) -> ShareConfiguration:
         "ttl_seconds": 3600,
         "device_limit": 1,
         "single_use": True,
+        "browser_redemption_limit": 0,
     }
     values.update(overrides)
     return ShareConfiguration(**values)
@@ -210,6 +211,7 @@ def _form(**overrides):
         "ttl_minutes": "60",
         "device_limit": "1",
         "single_use": "on",
+        "browser_redemption_limit": "0",
     }
     values.update(overrides)
     return values
@@ -3591,3 +3593,78 @@ def test_browser_allowance_migration_preserves_legacy_grants(sharing_corpus):
     assert migrated.get_share(grant.id).browser_redemption_limit == 0
     assert migrated.create_session(grant.id, "first")
     assert migrated.create_session(grant.id, "second") is None
+
+
+def test_redemption_setting_defaults_saves_and_generates(authenticated_client, sharing_corpus):
+    page = authenticated_client.get("/sharing")
+    assert '<label for="maximum-redemptions">Maximum redemptions</label>' in page.text
+    assert 'name="browser_redemption_limit" value="5"' in page.text
+    assert not re.search(r'name="single_use"[^>]*checked', page.text)
+    form = _form(single_use="", auth_mode="qr")
+    form.pop("browser_redemption_limit")
+    saved = authenticated_client.post("/sharing/configurations", data=form)
+    assert saved.status_code == 200
+    store = get_share_store()
+    configuration = store.list_configurations()[0]
+    assert configuration.browser_redemption_limit == 5
+    assert not configuration.single_use
+    assert 'name="browser_redemption_limit" value="5"' in authenticated_client.get(f"/sharing?configuration_id={configuration.id}").text
+    generated = authenticated_client.post("/sharing/generate", data={**form, "browser_redemption_limit": "3"})
+    assert generated.status_code == 200
+    assert store.list_shares()[0].browser_redemption_limit == 3
+    for invalid in ["-1", "1001", "1.5", "abc"]:
+        response = authenticated_client.post("/sharing/generate", data={**form, "browser_redemption_limit": invalid})
+        assert response.status_code == 422
+
+
+@pytest.mark.parametrize("instant", [False, True])
+def test_default_allowance_migrates_existing_shares_and_recipes_once(sharing_corpus, instant):
+    import json
+    from modules.hfl_shares.store import ShareStore
+    store, custom, _ = _browser_limited_grant(sharing_corpus)
+    assert store.set_browser_redemption_limit(custom.id, 7)
+    legacy = store.create_share(
+        configuration_id="", name="Legacy", token_hash="legacy", pin_hash="", auth_mode="pin",
+        allowed_email="", snapshot=custom.snapshot, ttl_seconds=3600, single_use=True, device_limit=2, instant=instant,
+    )
+    recipe = store.save_configuration(_configuration())
+    payload = recipe.to_record()
+    payload.pop("browser_redemption_limit")
+    with store._connect() as db:
+        db.execute("UPDATE configurations SET payload=? WHERE id=?", (json.dumps(payload), recipe.id))
+        db.execute("UPDATE shares SET status='revoked', revoked_at='kept' WHERE id=?", (legacy.id,))
+        db.execute("DELETE FROM share_migrations WHERE name='default-browser-redemptions-v1'")
+    upgraded = ShareStore(store.path)
+    grant = upgraded.get_share(legacy.id)
+    assert grant.browser_redemption_limit == 5
+    assert not grant.single_use
+    assert grant.status == 'revoked' and grant.revoked_at == 'kept'
+    assert grant.expires_at == legacy.expires_at and grant.snapshot == legacy.snapshot
+    assert upgraded.get_share(custom.id).browser_redemption_limit == 7
+    assert upgraded.get_configuration(recipe.id).browser_redemption_limit == 5
+    assert not upgraded.get_configuration(recipe.id).single_use
+    with upgraded._connect() as db:
+        db.execute("UPDATE shares SET browser_redemption_limit=0 WHERE id=?", (legacy.id,))
+    assert ShareStore(store.path).get_share(legacy.id).browser_redemption_limit == 0
+
+
+def test_manual_approval_uses_browser_allowance(authenticated_client, sharing_corpus):
+    from fastapi.testclient import TestClient
+    from main import app
+    store = get_share_store()
+    generated = authenticated_client.post("/sharing/generate", data=_form(
+        auth_mode="manual", single_use="", browser_redemption_limit="1"))
+    token = _generated_token(generated.text)
+    grant = store.list_shares()[0]
+    with TestClient(app) as guest:
+        guest.get(f"/share/access/{token}")
+        response = guest.post(f"/share/access/{token}/redeem", follow_redirects=False)
+        assert response.status_code == 303
+        with store._connect() as db:
+            db.execute("UPDATE access_requests SET status='approved' WHERE share_id=?", (grant.id,))
+        assert guest.get("/share/pending", follow_redirects=False).status_code == 303
+        guest.post("/share/session/logout", follow_redirects=False)
+        guest.post(f"/share/access/{token}/redeem", follow_redirects=False)
+        with store._connect() as db:
+            db.execute("UPDATE access_requests SET status='approved' WHERE share_id=?", (grant.id,))
+        assert guest.get("/share/pending", follow_redirects=False).status_code == 403

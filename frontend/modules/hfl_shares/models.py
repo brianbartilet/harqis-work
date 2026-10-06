@@ -47,7 +47,8 @@ class ShareConfiguration:
     ttl_seconds: int = 3600
     no_expiry: bool = False
     device_limit: int = 1
-    single_use: bool = True
+    single_use: bool = False
+    browser_redemption_limit: int = 5
     created_at: str = ""
     updated_at: str = ""
     date_field: str = "entry"
@@ -110,6 +111,8 @@ class ShareConfiguration:
                 raise ValueError("Share dates must use YYYY-MM-DD format.") from exc
         if not self.no_expiry and not 300 <= int(self.ttl_seconds) <= 31_536_000:
             raise ValueError("Duration must be between five minutes and 365 days.")
+        if type(self.browser_redemption_limit) is not int or not 0 <= self.browser_redemption_limit <= 1000:
+            raise ValueError("Maximum redemptions must be between zero and 1000.")
         if not 1 <= int(self.device_limit) <= 20:
             raise ValueError("Session limit must be between one and twenty.")
 
