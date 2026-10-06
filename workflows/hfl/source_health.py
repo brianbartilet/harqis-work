@@ -47,6 +47,7 @@ class SourcePolicy:
     upstream_probe: str = ""
     depends_on: tuple[str, ...] = ()
     related_tasks: tuple[str, ...] = ()
+    hermes_job_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -185,6 +186,7 @@ def load_source_registry(path: Path = DEFAULT_POLICY_PATH) -> tuple[dict[str, An
             upstream_probe=str(item.get("upstream_probe", "")),
             depends_on=tuple(str(value) for value in item.get("depends_on", [])),
             related_tasks=tuple(str(value) for value in item.get("related_tasks", [])),
+            hermes_job_id=str(item.get("hermes_job_id", "")),
         ))
     return dict(raw.get("policy", {})), policies
 
@@ -272,6 +274,42 @@ def _latest(items: Iterable[EntryEvidence]) -> EntryEvidence:
     return EntryEvidence()
 
 
+def load_hermes_scheduler_evidence(
+    job_ids: Iterable[str], *, path: Optional[Path] = None,
+) -> dict[str, dict[str, Any]]:
+    """Read exact registered jobs, never mutate scheduler state or infer pauses."""
+    job_ids = set(job_ids)
+    if not job_ids:
+        return {}
+    path = path or Path(os.environ.get("HERMES_HOME", "~/.hermes")).expanduser() / "cron" / "jobs.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        jobs = payload.get("jobs") if isinstance(payload, dict) else payload
+        if not isinstance(jobs, list) or any(not isinstance(job, dict) for job in jobs):
+            raise ValueError("invalid jobs list")
+    except (OSError, UnicodeError, ValueError) as exc:
+        return {job_id: {"available": False, "job_id": job_id,
+                         "error": f"scheduler read failed: {type(exc).__name__}"}
+                for job_id in job_ids}
+    evidence = {}
+    for job_id in job_ids:
+        matches = [job for job in jobs if job.get("id") == job_id]
+        if len(matches) != 1:
+            evidence[job_id] = {"available": False, "job_id": job_id,
+                                "error": "registered job missing or ambiguous"}
+            continue
+        job = matches[0]
+        schedule = job.get("schedule")
+        evidence[job_id] = {
+            "available": True, "job_id": job_id,
+            **{key: job.get(key) for key in (
+                "enabled", "state", "paused_at", "last_run_at", "last_status",
+            )},
+            "schedule": schedule.get("expr") if isinstance(schedule, dict) else schedule,
+        }
+    return evidence
+
+
 def evaluate_source(
     policy: SourcePolicy,
     *,
@@ -280,6 +318,7 @@ def evaluate_source(
     elasticsearch: Mapping[str, EntryEvidence],
     tasks: Mapping[str, TaskEvidence],
     upstream: Optional[UpstreamEvidence] = None,
+    scheduler: Optional[Mapping[str, Any]] = None,
     corpus_es_skew_minutes: int = 10,
 ) -> SourceHealth:
     result = SourceHealth(
@@ -298,6 +337,25 @@ def evaluate_source(
         result.status = "healthy"
         result.reasons.append("current health run is the heartbeat")
         return result
+
+    paused = False
+    if policy.monitor_mode == "hermes" and policy.hermes_job_id:
+        scheduler = scheduler or {"available": False, "error": "scheduler evidence not found"}
+        result.evidence["scheduler"] = dict(scheduler)
+        verified = scheduler.get("available") is True and scheduler.get("job_id") == policy.hermes_job_id
+        paused = verified and scheduler.get("enabled") is False and scheduler.get("state") == "paused"
+        if not verified:
+            result.status = "degraded"
+            result.reasons.append("Hermes scheduler evidence is unavailable")
+        elif paused:
+            result.status = "unmonitored"
+            result.reasons.append("Hermes job is explicitly paused; freshness SLA suspended")
+        elif scheduler.get("enabled") is not True:
+            result.status = "degraded"
+            result.reasons.append("Hermes job is not enabled and has no verified pause")
+        if verified and scheduler.get("last_status") == "error":
+            result.status = "failed"
+            result.reasons.append("latest observed Hermes execution failed")
 
     heartbeat = tasks.get(policy.task, TaskEvidence(available=False, error="heartbeat not found"))
     task_age = _age_hours(now, heartbeat.when)
@@ -327,13 +385,13 @@ def evaluate_source(
             }
             for task in policy.related_tasks
         }
-    if not heartbeat.available:
-        result.status = "degraded"
+    if not heartbeat.available and not paused:
+        result.status = "degraded" if result.status != "failed" else result.status
         result.reasons.append("task heartbeat evidence is unavailable")
     elif recent_failure:
         result.status = "failed"
         result.reasons.append("latest observed task execution failed")
-    elif policy.task_max_age_hours is not None and (
+    elif not paused and policy.task_max_age_hours is not None and (
         task_age is None or task_age > policy.task_max_age_hours
     ):
         result.status = "failed"
@@ -409,7 +467,7 @@ def evaluate_source(
             result.status = "failed"
             result.reasons.append(f"capture spool contains {upstream.pending} pending event(s)")
 
-    if policy.entry_max_age_hours is not None and (
+    if not paused and policy.entry_max_age_hours is not None and (
         entry_age is None or entry_age > policy.entry_max_age_hours
     ):
         upstream_active = bool(
@@ -670,6 +728,10 @@ def scan_activity_corpus_sources(
         for task in (policy.task, *policy.related_tasks)
         if task
     )
+    schedulers = load_hermes_scheduler_evidence(
+        policy.hermes_job_id for policy in monitored
+        if policy.monitor_mode == "hermes" and policy.hermes_job_id
+    )
     upstream: dict[str, UpstreamEvidence] = {}
     for policy in policies:
         if policy.upstream_probe == "agent-sessions":
@@ -687,6 +749,7 @@ def scan_activity_corpus_sources(
             elasticsearch=elasticsearch,
             tasks=tasks,
             upstream=upstream.get(policy.key),
+            scheduler=schedulers.get(policy.hermes_job_id),
             corpus_es_skew_minutes=int(settings.get("corpus_es_skew_minutes", 10)),
         )
         for policy in policies
