@@ -20,6 +20,8 @@ from modules.hfl_shares.store import ShareStore
 
 GUEST_COOKIE = "hfl_share_session"
 REQUEST_COOKIE = "hfl_share_request"
+BROWSER_COOKIE = "hfl_share_browser"
+_BROWSER_TTL = 365 * 24 * 3600
 _PUBLIC_TOKEN = re.compile(r"[A-Za-z0-9_-]{43}")
 
 
@@ -131,6 +133,30 @@ def clear_guest_cookie(response: Response) -> None:
     response.delete_cookie(GUEST_COOKIE, path="/share")
 
 
+def browser_identity(request: Request) -> str:
+    """A persistent browser identifier, independent of an expiring guest session."""
+    try:
+        value = _serializer("hfl-share-browser").loads(
+            request.cookies.get(BROWSER_COOKIE, ""), max_age=_BROWSER_TTL
+        )
+        return value if isinstance(value, str) and valid_public_token(value) else ""
+    except (BadSignature, SignatureExpired, TypeError):
+        return ""
+
+
+def ensure_browser_cookie(request: Request, response: Response) -> None:
+    value = browser_identity(request) or new_public_token()
+    response.set_cookie(
+        BROWSER_COOKIE,
+        _serializer("hfl-share-browser").dumps(value),
+        max_age=_BROWSER_TTL,
+        httponly=True,
+        secure=get_settings().behind_proxy,
+        samesite="strict",
+        path="/share",
+    )
+
+
 def current_grant(request: Request, store: ShareStore) -> ShareGrant | None:
     session = current_session(request, store)
     return session[0] if session else None
@@ -202,9 +228,11 @@ class IssuedSession:
     max_age: int
 
 
-def issue_session(store: ShareStore, share_id: str) -> IssuedSession | None:
+def issue_session(
+    store: ShareStore, share_id: str, *, browser_hash: str = ""
+) -> IssuedSession | None:
     secret = secrets.token_urlsafe(32)
-    created = store.create_session(share_id, opaque_hash(secret))
+    created = store.create_session(share_id, opaque_hash(secret), browser_hash=browser_hash)
     if not created:
         return None
     session_id, expires_at = created

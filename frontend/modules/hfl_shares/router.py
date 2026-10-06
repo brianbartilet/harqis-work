@@ -59,11 +59,13 @@ from modules.hfl_shares.scope import (
 )
 from modules.hfl_shares.security import (
     REQUEST_COOKIE,
+    browser_identity,
     clear_guest_cookie,
     current_grant,
     current_session,
     decrypt_share_link,
     encrypt_share_link,
+    ensure_browser_cookie,
     hash_pin,
     issue_session,
     make_csrf_token,
@@ -1387,11 +1389,14 @@ async def share_access(request: Request, token: str):
     grant = get_share_store().get_share_by_token_hash(opaque_hash(token))
     if not grant or not grant.available:
         return _unavailable(request)
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         request,
         "modules/hfl_shares/access.html",
         _access_context(request, grant, token),
     )
+    if grant.browser_redemption_limit:
+        ensure_browser_cookie(request, response)
+    return response
 
 
 @guest_router.post("/access/{token}/redeem")
@@ -1468,8 +1473,28 @@ async def redeem_share(request: Request, token: str):
     elif grant.auth_mode != "qr":
         return _unavailable(request)
 
-    issued = issue_session(store, grant.id)
+    browser_hash = ""
+    if grant.browser_redemption_limit:
+        identity = browser_identity(request)
+        if not identity:
+            response = templates.TemplateResponse(
+                request,
+                "modules/hfl_shares/access.html",
+                _access_context(request, grant, token, error="Enable cookies, then try opening the share again."),
+                status_code=400,
+            )
+            ensure_browser_cookie(request, response)
+            return response
+        browser_hash = opaque_hash(identity)
+    issued = issue_session(store, grant.id, browser_hash=browser_hash)
     if not issued:
+        if grant.browser_redemption_limit and store.browser_redemption_count(grant.id, browser_hash) >= grant.browser_redemption_limit:
+            return templates.TemplateResponse(
+                request,
+                "modules/hfl_shares/access.html",
+                _access_context(request, grant, token, error=f"This browser has used all {grant.browser_redemption_limit} redemptions for this share."),
+                status_code=403,
+            )
         if (
             not grant.single_use
             and store.active_session_count(grant.id) >= grant.device_limit

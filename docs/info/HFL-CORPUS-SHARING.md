@@ -1,5 +1,22 @@
 # Activity Corpus Sharing
 
+Existing anonymous QR grants can be given a per-browser redemption allowance
+with `ShareStore.set_browser_redemption_limit(share_id, limit)`. This replaces
+the grant's single-use restriction without changing its URL, snapshot, expiry,
+or concurrent-session cap. It is an operational setting, not a saved-recipe field.
+Existing grants default to no browser allowance and retain their prior behavior.
+
+For enabled grants, a signed, HttpOnly browser cookie identifies the browser;
+`browser_redemptions` stores counts by grant and hashed browser identifier.
+Each successful new session increments the count in the same SQLite transaction
+that enforces the limit. Failed attempts and active-session resumes do not count,
+and logging out or expiring a session does not reset the allowance. Counts begin
+when the setting is enabled; earlier anonymous sessions cannot be attributed.
+The cookie lasts one year and is renewed on the access page. Clearing cookies,
+using another browser, or letting the cookie expire starts a separate allowance;
+this is not a verified per-person limit. An exhausted allowance blocks new
+sessions without invalidating a session already in use.
+
 Activity Corpus Sharing creates temporary, read-only guest portals without
 joining a guest device to the HARQIS VPN or exposing the HARQIS topology. A QR
 code is only a convenient encoding of a high-entropy capability link. It does

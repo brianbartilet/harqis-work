@@ -262,6 +262,7 @@ class ShareGrant:
     redeemed_at: str = ""
     revoked_at: str = ""
     pin_failures: int = 0
+    browser_redemption_limit: int = 0
 
     @property
     def expired(self) -> bool:
@@ -298,6 +299,7 @@ class ShareGrantSummary:
     redeemed_at: str = ""
     revoked_at: str = ""
     pin_failures: int = 0
+    browser_redemption_limit: int = 0
 
     @property
     def expired(self) -> bool:

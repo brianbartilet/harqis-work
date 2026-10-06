@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS shares (
     status TEXT NOT NULL,
     single_use INTEGER NOT NULL,
     device_limit INTEGER NOT NULL,
+    browser_redemption_limit INTEGER NOT NULL DEFAULT 0,
     no_expiry INTEGER NOT NULL DEFAULT 0,
     instant INTEGER NOT NULL DEFAULT 0,
     live_updates INTEGER NOT NULL DEFAULT 0,
@@ -57,6 +58,12 @@ CREATE TABLE IF NOT EXISTS shares (
 CREATE TABLE IF NOT EXISTS share_handoffs (
     share_id TEXT PRIMARY KEY REFERENCES shares(id) ON DELETE CASCADE,
     encrypted_link TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS browser_redemptions (
+    share_id TEXT NOT NULL REFERENCES shares(id) ON DELETE CASCADE,
+    browser_hash TEXT NOT NULL,
+    count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(share_id, browser_hash)
 );
 CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
@@ -131,6 +138,11 @@ class ShareStore:
                 connection.execute(
                     "ALTER TABLE shares "
                     "ADD COLUMN no_expiry INTEGER NOT NULL DEFAULT 0"
+                )
+            if "browser_redemption_limit" not in share_columns:
+                connection.execute(
+                    "ALTER TABLE shares ADD COLUMN browser_redemption_limit "
+                    "INTEGER NOT NULL DEFAULT 0"
                 )
             if "instant" not in share_columns:
                 connection.execute(
@@ -273,6 +285,7 @@ class ShareStore:
             status=row["status"],
             single_use=bool(row["single_use"]),
             device_limit=int(row["device_limit"]),
+            browser_redemption_limit=int(row["browser_redemption_limit"]),
             no_expiry=bool(row["no_expiry"]),
             instant=bool(row["instant"]),
             live_updates=bool(row["live_updates"]),
@@ -299,6 +312,7 @@ class ShareStore:
             status=row["status"],
             single_use=bool(row["single_use"]),
             device_limit=int(row["device_limit"]),
+            browser_redemption_limit=int(row["browser_redemption_limit"]),
             entry_count=int(row["snapshot_entry_count"]),
             no_expiry=bool(row["no_expiry"]),
             instant=bool(row["instant"]),
@@ -466,7 +480,7 @@ class ShareStore:
             "id, configuration_id, name, auth_mode, allowed_email, "
             "created_at, expires_at, status, single_use, device_limit, "
             "snapshot_entry_count, no_expiry, instant, live_updates, "
-            "redeemed_at, revoked_at, pin_failures"
+            "redeemed_at, revoked_at, pin_failures, browser_redemption_limit"
         )
         with self._connect() as connection:
             rows = connection.execute(
@@ -551,8 +565,28 @@ class ShareStore:
                 "DELETE FROM pin_failure_events WHERE share_id=?", (share_id,)
             )
 
+    def set_browser_redemption_limit(self, share_id: str, limit: int) -> bool:
+        """Enable a per-browser allowance on an existing anonymous QR grant."""
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            raise ValueError("Browser redemption limit must be a positive integer.")
+        with self._lock, self._connect() as connection:
+            result = connection.execute(
+                "UPDATE shares SET browser_redemption_limit=?, single_use=0 "
+                "WHERE id=? AND auth_mode='qr' AND status='active'",
+                (limit, share_id),
+            )
+        return result.rowcount == 1
+
+    def browser_redemption_count(self, share_id: str, browser_hash: str) -> int:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT count FROM browser_redemptions WHERE share_id=? AND browser_hash=?",
+                (share_id, browser_hash),
+            ).fetchone()
+        return int(row["count"]) if row else 0
+
     def create_session(
-        self, share_id: str, secret_hash: str
+        self, share_id: str, secret_hash: str, *, browser_hash: str = ""
     ) -> tuple[str, str] | None:
         now = utc_now()
         with self._lock, self._connect() as connection:
@@ -565,6 +599,15 @@ class ShareStore:
             grant = self._grant(row)
             if not grant.available:
                 return None
+            if grant.browser_redemption_limit:
+                if not browser_hash:
+                    return None
+                usage = connection.execute(
+                    "SELECT count FROM browser_redemptions WHERE share_id=? AND browser_hash=?",
+                    (share_id, browser_hash),
+                ).fetchone()
+                if usage and usage["count"] >= grant.browser_redemption_limit:
+                    return None
             connection.execute(
                 "DELETE FROM sessions WHERE share_id=? AND expires_at<=?",
                 (share_id, now.isoformat()),
@@ -604,6 +647,12 @@ class ShareStore:
                 """,
                 (now.isoformat(), share_id),
             )
+            if grant.browser_redemption_limit:
+                connection.execute(
+                    "INSERT INTO browser_redemptions(share_id,browser_hash,count) VALUES (?,?,1) "
+                    "ON CONFLICT(share_id,browser_hash) DO UPDATE SET count=count+1",
+                    (share_id, browser_hash),
+                )
         return session_id, expires_at
 
     def active_session_count(self, share_id: str) -> int:

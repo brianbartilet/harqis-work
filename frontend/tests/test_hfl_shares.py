@@ -3491,3 +3491,103 @@ def test_legacy_share_has_no_recoverable_link(authenticated_client, sharing_corp
         connection.execute("DELETE FROM share_handoffs WHERE share_id=?", (grant.id,))
     assert 'disabled title="QR + link unavailable. Generate a new share to retain its QR and link."' in authenticated_client.get("/sharing").text
     assert authenticated_client.get(f"/sharing/shares/{grant.id}/handoff").status_code == 404
+
+
+def _browser_limited_grant(sharing_corpus, *, device_limit=1):
+    from modules.hfl_shares.security import new_public_token, opaque_hash
+    token = new_public_token()
+    store = get_share_store()
+    grant = store.create_share(
+        configuration_id="", name="Browser allowance", token_hash=opaque_hash(token),
+        pin_hash="", auth_mode="qr", allowed_email="",
+        snapshot=build_snapshot(_configuration(), (sharing_corpus,)),
+        ttl_seconds=3600, single_use=True, device_limit=device_limit,
+    )
+    assert store.set_browser_redemption_limit(grant.id, 5)
+    return store, grant, token
+
+
+def test_browser_allowance_survives_logout_and_preserves_active_session(
+    authenticated_client, sharing_corpus
+):
+    from fastapi.testclient import TestClient
+    from main import app
+    from modules.hfl_shares.security import BROWSER_COOKIE
+    store, original, token = _browser_limited_grant(sharing_corpus)
+    url = f"/share/access/{token}"
+    with TestClient(app) as guest:
+        landing = guest.get(url)
+        assert "5 redemptions per browser" in landing.text
+        assert BROWSER_COOKIE in guest.cookies
+        for count in range(1, 6):
+            assert guest.post(url + "/redeem", follow_redirects=False).status_code == 303
+            # Resuming a session is free, including after the fifth redemption.
+            assert guest.post(url + "/redeem", follow_redirects=False).status_code == 303
+            with store._connect() as db:
+                assert db.execute("SELECT count FROM browser_redemptions WHERE share_id=?", (original.id,)).fetchone()[0] == count
+            assert guest.get("/share/session").status_code == 200
+            guest.post("/share/session/logout", follow_redirects=False)
+            assert BROWSER_COOKIE in guest.cookies
+        denied = guest.post(url + "/redeem", follow_redirects=False)
+        assert denied.status_code == 403
+        assert "used all 5 redemptions" in denied.text
+    with TestClient(app) as another:
+        another.get(url)
+        assert another.post(url + "/redeem", follow_redirects=False).status_code == 303
+    current = store.get_share(original.id)
+    assert current.expires_at == original.expires_at
+    assert current.snapshot == original.snapshot
+    assert current.device_limit == original.device_limit
+    assert not current.single_use
+    assert store.list_share_summaries(limit=10)[0].browser_redemption_limit == 5
+
+
+def test_browser_allowance_cookie_required_and_capacity_failures_do_not_count(
+    authenticated_client, sharing_corpus
+):
+    from fastapi.testclient import TestClient
+    from main import app
+    from modules.hfl_shares.security import BROWSER_COOKIE
+    store, grant, token = _browser_limited_grant(sharing_corpus)
+    url = f"/share/access/{token}"
+    with TestClient(app) as guest, TestClient(app) as other:
+        # Direct POST establishes an identity before permitting any redemption.
+        assert guest.post(url + "/redeem", follow_redirects=False).status_code == 400
+        assert BROWSER_COOKIE in guest.cookies
+        assert guest.post(url + "/redeem", follow_redirects=False).status_code == 303
+        other.get(url)
+        assert other.post(url + "/redeem", follow_redirects=False).status_code == 429
+        with store._connect() as db:
+            assert db.execute("SELECT SUM(count) FROM browser_redemptions WHERE share_id=?", (grant.id,)).fetchone()[0] == 1
+        guest.post("/share/session/logout", follow_redirects=False)
+        assert other.post(url + "/redeem", follow_redirects=False).status_code == 303
+    assert store.create_session(grant.id, "no-browser") is None
+
+
+def test_browser_allowance_atomic_across_store_instances(sharing_corpus):
+    from concurrent.futures import ThreadPoolExecutor
+    from modules.hfl_shares.store import ShareStore
+    store, grant, _ = _browser_limited_grant(sharing_corpus, device_limit=20)
+    stores = [ShareStore(store.path) for _ in range(12)]
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        issued = list(pool.map(lambda pair: pair[1].create_session(grant.id, str(pair[0]), browser_hash="same-browser"), enumerate(stores)))
+    assert sum(item is not None for item in issued) == 5
+    assert ShareStore(store.path).browser_redemption_count(grant.id, "same-browser") == 5
+    # Even after every session expires, the count remains.
+    with store._connect() as db:
+        db.execute("UPDATE sessions SET expires_at=? WHERE share_id=?", ("2000-01-01T00:00:00+00:00", grant.id))
+    assert store.create_session(grant.id, "sixth", browser_hash="same-browser") is None
+    assert store.create_session(grant.id, "other", browser_hash="other-browser") is not None
+
+
+def test_browser_allowance_migration_preserves_legacy_grants(sharing_corpus):
+    from modules.hfl_shares.store import ShareStore
+    store, grant, _ = _browser_limited_grant(sharing_corpus)
+    with store._connect() as db:
+        db.execute("DROP TABLE browser_redemptions")
+        db.execute("ALTER TABLE shares DROP COLUMN browser_redemption_limit")
+        db.execute("UPDATE shares SET single_use=1 WHERE id=?", (grant.id,))
+    migrated = ShareStore(store.path)
+    assert migrated.get_share(grant.id).browser_redemption_limit == 0
+    assert migrated.create_session(grant.id, "first")
+    assert migrated.create_session(grant.id, "second") is None

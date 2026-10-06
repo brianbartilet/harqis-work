@@ -19,6 +19,7 @@
   </div>
   <p class="generated-share-description text-xs text-slate-500">{{ share.entry_count }} entries · {{ "live recipe" if share.live_updates else "fixed snapshot" }} · {% if share.no_expiry %}no expiry{% else %}expires {{ row.expires_at_display }}{% endif %}</p>
   <div class="share-status-row"><span class="status-pill status-{{ row.status }}">{{ row.status }}</span></div>
+  {% if share.browser_redemption_limit %}<p class="text-xs text-slate-500">{{ share.browser_redemption_limit }} redemptions per browser</p>{% endif %}
 </div>
 {% else %}<p class="mt-2 text-xs text-slate-500">No shares generated yet.</p>{% endfor %}
 </div>
