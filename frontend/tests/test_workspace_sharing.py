@@ -223,6 +223,7 @@ def test_large_entries_preview_is_paged_and_retains_reference_exclusions(editor_
 @pytest.mark.parametrize('width', [1440, 390])
 def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_corpus, width, tmp_path):
     from playwright.sync_api import expect
+    context['actions'][0]['body'] = '## Next steps\n\n- **Review** the plan\n- Confirm scope'
     page, client = editor_page
     page.set_viewport_size({'width':width, 'height':1000})
     page.goto('https://editing.test/sharing')
@@ -236,12 +237,18 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     page.locator('[name="activity_sections"][value="actions"]').check()
     expect(page.locator('[data-share-object="action:a"]')).to_be_visible(timeout=15000)
     card = page.locator('.share-object-card').filter(has=page.locator('[data-share-object="action:a"]'))
-    expect(card).to_contain_text('Next steps')
+    expect(card.locator('.markdown-body h2')).to_have_text('Next steps')
+    expect(card.locator('.markdown-body li')).to_have_count(2)
     page.locator('.share-tabs').scroll_into_view_if_needed()
     page.screenshot(path=str(tmp_path / 'sharing-actions.png'))
+    page.locator('[name="activity_sections"][value="ideas"]').check()
+    expect(page.locator('[data-share-object="idea:i"]')).to_be_visible()
     card.get_by_role('button', name='Connections', exact=True).click()
     expect(page.locator('.share-connections-dialog canvas')).to_be_visible()
     expect(page.locator('.share-connections-dialog')).to_contain_text('Approved action')
+    expect(page.locator('.share-connections-dialog .share-graph-inspector h2')).to_have_text('Next steps')
+    expect(page.locator('.share-connections-dialog').get_by_role('button', name='Add to a board')).to_have_count(0)
+    page.screenshot(path=str(tmp_path / 'sharing-connections.png'))
     page.get_by_role('button', name='Close connections').click()
     page.locator('[data-share-object="action:a"]').uncheck()
     expect(page.get_by_role('button', name='Restore Approved action')).to_be_visible()
@@ -260,7 +267,13 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     expect(board_graph.locator('.share-graph-selection')).to_contain_text('Thought')
     expect(board_graph.locator('.share-graph-selection')).to_contain_text('Plan')
     page.locator('.share-tabs').scroll_into_view_if_needed()
-    page.screenshot(path=str(tmp_path / 'sharing-boards.png'))
+    board_graph.screenshot(path=str(tmp_path / 'sharing-boards.png'))
+    page.get_by_role('tab', name='Entries', exact=True).click()
+    entry = page.locator('.share-entry-card').first
+    entry.locator('summary').click()
+    expect(entry.locator('.share-entry-content.markdown-body')).to_be_visible()
+    expect(page.get_by_text('Scroll for more entries', exact=True)).to_have_count(0)
+    entry.screenshot(path=str(tmp_path / 'sharing-entry.png'))
     page.get_by_role('tab', name='Filters', exact=True).click()
     expect(page.locator('[data-source-selector]')).to_be_visible()
     page.get_by_role('tab', name='Recipe', exact=True).click()
@@ -277,3 +290,13 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     expect(page.locator('.shared-activity-public canvas').first).to_be_visible()
     assert not page.locator('.shared-activity-public input').count()
     page.screenshot(path=str(tmp_path / 'workspace-share.png'), full_page=True)
+
+
+def test_shared_graph_markdown_sanitizes_untrusted_content():
+    from modules.hfl_shares.router import _graph_view
+    graph = {'nodes': [{'id':'idea:i','body':'## Notes\n\n<script>alert(1)</script>\n\n[bad](javascript:alert(1))'}], 'edges': []}
+    rendered = _graph_view(graph)
+    assert '<h2' in rendered['nodes'][0]['body_html']
+    assert '<script' not in rendered['nodes'][0]['body_html']
+    assert 'href="javascript:' not in rendered['nodes'][0]['body_html']
+    assert 'body_html' not in graph['nodes'][0]

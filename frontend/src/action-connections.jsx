@@ -1,6 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import ForceGraph2D from 'react-force-graph-2d';
+import {GraphIcon} from './graph-icons.jsx';
 import {placeLabels} from './graph-labels.mjs';
 
 const colors = {actions:'#fb8ca6', ideas:'#f9ca74', drafts:'#c4b5fd', boards:'#93c5fd',
@@ -72,9 +73,9 @@ function Preview({item}) {
           setSelected(data.nodes[(index + (event.key === 'ArrowRight' ? 1 : data.nodes.length - 1)) % data.nodes.length]);
         }}>
         <div className="connections-tools" role="group" aria-label="Graph controls">
-          <button onClick={() => graph.current?.zoom(graph.current.zoom() * 1.3, 150)} aria-label="Zoom in">+</button>
-          <button onClick={() => graph.current?.zoom(graph.current.zoom() / 1.3, 150)} aria-label="Zoom out">−</button>
-          <button onClick={fit}>Fit</button>
+          <button onClick={() => graph.current?.zoom(graph.current.zoom() * 1.3, 150)} aria-label="Zoom in" title="Zoom in"><GraphIcon name="plus"/></button>
+          <button onClick={() => graph.current?.zoom(graph.current.zoom() / 1.3, 150)} aria-label="Zoom out" title="Zoom out"><GraphIcon name="minus"/></button>
+          <button onClick={fit} aria-label="Fit" title="Fit graph"><GraphIcon name="fit"/></button>
         </div>
         <ForceGraph2D ref={graph} width={size.width} height={size.height} graphData={data} maxZoom={2.5}
           backgroundColor="#0b1728" nodeId="id" nodeLabel={node => tooltip(`${node.label} · ${kindName(node.kind)}${node.boards.length ? ' · ' + node.boards.map(b => b.name).join(', ') : ''}`)}

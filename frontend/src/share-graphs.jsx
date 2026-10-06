@@ -1,6 +1,8 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import ForceGraph2D from 'react-force-graph-2d';
+import {placeLabels} from './graph-labels.mjs';
+import {GraphIcon} from './graph-icons.jsx';
 import {presetLayout, timelineFitPoints} from './graph-presets.mjs';
 
 // Same type palette and sizing conventions as the Activity Graph.
@@ -9,18 +11,19 @@ const kindName = kind => ({daily:'Date', entries:'Entry', people:'Person', compa
 const identity = value => typeof value === 'object' ? value.id : value;
 
 function SharedGraph({data, layout = 'timeline', rootId}) {
-  const host = useRef(null), graph = useRef(null);
-  const [width, setWidth] = useState(600), [selected, setSelected] = useState(null);
+  const host = useRef(null), graph = useRef(null), fitted = useRef(false);
+  const [width, setWidth] = useState(600), [selected, setSelected] = useState(data.nodes.find(n=>n.id===rootId)||null);
   const [directoryOpen, setDirectoryOpen] = useState(false), [query, setQuery] = useState('');
   const model = useMemo(() => {
     const degree = new Map(data.nodes.map(n => [n.id, 0]));
     data.edges.forEach(e => [e.source,e.target].forEach(id => degree.set(id,(degree.get(id)||0)+1)));
     const nodes = data.nodes.map(n => ({...n, visibleDegree:degree.get(n.id)||0,
-      radius:layout === 'board' ? 8+3*(data.node_sizes?.[n.id]||3) : n.kind==='entries' ? 5 : 6+4*Math.log2(1+(degree.get(n.id)||0))}));
+      radius:layout === 'board' ? 7+1.5*(data.node_sizes?.[n.id]||3) : layout==='connections' ? Math.min(22,10+4*Math.log2(1+(degree.get(n.id)||0))) : n.kind==='entries' ? 5 : Math.min(16,6+2*Math.log2(1+(degree.get(n.id)||0)))}));
     const positions = presetLayout(nodes, data.edges, layout === 'timeline' ? 'timeline' : 'mindmap', 0, rootId).positions;
     nodes.forEach(n => {
       const p = layout === 'board' && data.positions?.[n.id] || positions.get(n.id) || {x:0,y:0};
       n.x=n.fx=Number.isFinite(p.x)?p.x:0; n.y=n.fy=Number.isFinite(p.y)?p.y:0;
+      if(layout==='connections'){delete n.fx;delete n.fy;}
     });
     return {nodes, links:data.edges.map(e=>({...e}))};
   }, [data, layout, rootId]);
@@ -31,7 +34,7 @@ function SharedGraph({data, layout = 'timeline', rootId}) {
       const a=points[0], b=points[1];
       graph.current.centerAt((a.x+b.x)/2,(a.y+b.y)/2,0);
       graph.current.zoom(Math.min((width-80)/(b.x-a.x),380/(b.y-a.y)),0);
-    } else graph.current.zoomToFit(0,65);
+    } else graph.current.zoomToFit(250,90);
   };
   useEffect(() => {
     const observer = new ResizeObserver(([entry])=> {if(entry.contentRect.width>0)setWidth(entry.contentRect.width);});
@@ -41,11 +44,12 @@ function SharedGraph({data, layout = 'timeline', rootId}) {
   const peers = selected ? model.links.filter(e=>[identity(e.source),identity(e.target)].includes(selected.id)) : [];
   const matches = directoryOpen ? model.nodes.filter(n=>(n.label+' '+kindName(n.kind)).toLowerCase().includes(query.toLowerCase())) : [];
   return <>
+    <div className={'share-graph-workspace'+(selected?' has-selection':'')}><div className="share-graph-viewport">
     <div className="share-graph-toolbar" role="group" aria-label="Graph controls">
       <span>{layout==='timeline'?'Timeline':layout==='board'?'Board map':'Connections'} · Read-only</span>
-      <div><button type="button" title="Zoom in" aria-label="Zoom in" onClick={()=>graph.current?.zoom(graph.current.zoom()*1.3,150)}>+</button>
-      <button type="button" title="Zoom out" aria-label="Zoom out" onClick={()=>graph.current?.zoom(graph.current.zoom()/1.3,150)}>−</button>
-      <button type="button" title="Reset view" aria-label="Reset view" onClick={fit}>⛶</button></div>
+      <div><button type="button" title="Zoom in" aria-label="Zoom in" onClick={()=>graph.current?.zoom(graph.current.zoom()*1.3,150)}><GraphIcon name="plus"/></button>
+      <button type="button" title="Zoom out" aria-label="Zoom out" onClick={()=>graph.current?.zoom(graph.current.zoom()/1.3,150)}><GraphIcon name="minus"/></button>
+      <button type="button" title="Reset view" aria-label="Reset view" onClick={fit}><GraphIcon name="fit"/></button></div>
     </div>
     <div ref={host} className="share-graph-stage" tabIndex={0} aria-label="Read-only shared activity graph" onKeyDown={event=>{
       if(!['ArrowRight','ArrowLeft'].includes(event.key)||!model.nodes.length)return;
@@ -53,27 +57,59 @@ function SharedGraph({data, layout = 'timeline', rootId}) {
       setSelected(model.nodes[(i+(event.key==='ArrowRight'?1:model.nodes.length-1)+model.nodes.length)%model.nodes.length]);
     }}>
     {model.nodes.length ? <ForceGraph2D ref={graph} width={width} height={440} graphData={model}
-      backgroundColor="#0b1728" enableNodeDrag={false} cooldownTicks={0} nodeLabel={()=>''}
+      backgroundColor="#0b1728" enableNodeDrag={true} cooldownTicks={layout==='connections'?100:0} maxZoom={4}
+      onEngineStop={()=>{if(!fitted.current){fitted.current=true;fit();}}}
+      nodeLabel={node=>{const tip=document.createElement('span');tip.textContent=node.label;return tip;}}
+      onNodeDragEnd={node=>{node.fx=node.x;node.fy=node.y;}}
+      onBackgroundClick={()=>setSelected(null)}
+      linkLineDash={edge=>edge.relation?.includes('board')?[4,3]:null}
+      linkCurvature={.12} linkDirectionalArrowLength={3}
       onNodeClick={setSelected} linkColor={()=>'#94a3b855'} linkWidth={.7}
-      nodeCanvasObject={(node,ctx,scale)=>{
-        const ink=palette[node.kind]||'#e9c96c', radius=node.radius/scale;
-        const fill=ctx.createRadialGradient(node.x-radius*.3,node.y-radius*.4,0,node.x,node.y,radius*1.6);
-        fill.addColorStop(0,'#effbff');fill.addColorStop(.3,ink);fill.addColorStop(1,ink+'70');
-        ctx.beginPath();ctx.arc(node.x,node.y,radius,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();
-        if(selected?.id===node.id){ctx.strokeStyle=ink;ctx.lineWidth=2/scale;ctx.stroke();}
-        // Dense graphs reveal labels as the reader zooms; dates and selected nodes stay legible.
-        if(model.nodes.length<40||scale>.7||node.kind==='daily'||selected?.id===node.id){
-          const text=node.label.length>48?node.label.slice(0,45)+'…':node.label;
-          ctx.font=`600 ${12/scale}px system-ui`;ctx.textBaseline='middle';
-          const x=node.x+radius+6/scale,w=ctx.measureText(text).width;
-          ctx.fillStyle='#0b1728e8';ctx.fillRect(x-3/scale,node.y-9/scale,w+6/scale,18/scale);
-          ctx.fillStyle='#e2e8f0';ctx.fillText(text,x,node.y);
-        }
-      }} nodePointerAreaPaint={(node,color,ctx,scale)=>{ctx.fillStyle=color;ctx.beginPath();ctx.arc(node.x,node.y,(node.radius+5)/scale,0,2*Math.PI);ctx.fill();}} /> : <p className="share-scope-note">No approved connections in this scope.</p>}
+          onRenderFramePost={(ctx, scale) => {
+            if (!graph.current) return;
+            const origin = graph.current.screen2GraphCoords(0, 0);
+            const candidates = model.nodes.map(node => ({...node, ...graph.current.graph2ScreenCoords(node.x, node.y),
+              radius: node.radius, degree:node.visibleDegree, preferred:model.nodes.length<40||node.kind==='daily',
+              emphasis:node.id === rootId || node.id === selected?.id}));
+            const obstacles = [{x:width-130,y:0,w:130,h:48}, ...candidates.map(n => ({x:n.x-n.radius,y:n.y-n.radius,w:n.radius*2,h:n.radius*2}))];
+            const labels = placeLabels(candidates, {width, height:440, zoom:scale, obstacles}, (text, font) => {
+              ctx.font = `${font}px system-ui`; return ctx.measureText(text).width;
+            });
+            for (const box of labels) {
+              const x = origin.x + box.x / scale, y = origin.y + box.y / scale;
+              const ink = palette[box.node.kind] || '#9bafff';
+              ctx.fillStyle = box.node.emphasis ? '#142a42f5' : '#0a1728ee'; ctx.beginPath();
+              ctx.roundRect(x, y, box.w / scale, box.h / scale, 5 / scale); ctx.fill();
+              ctx.strokeStyle = ink + (box.node.emphasis ? '90' : '30'); ctx.lineWidth = .6 / scale; ctx.stroke();
+              ctx.font = `500 ${box.font / scale}px system-ui`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+              ctx.fillStyle = box.node.emphasis ? '#ffffff' : '#d9e9fa'; ctx.fillText(box.text, x + 6 / scale, y + 12 / scale);
+            }
+          }}
+          nodeCanvasObject={(node, ctx, globalScale) => {
+            if (!Number.isFinite(node.x) || !Number.isFinite(node.y) || globalScale <= 0) return;
+            const radius = node.radius / globalScale, ink = palette[node.kind] || '#9bafff';
+            const emphasis = node.id === rootId || node.id === selected?.id;
+            ctx.save();
+            const glow=ctx.createRadialGradient(node.x,node.y,0,node.x,node.y,(emphasis?30:18)/globalScale);
+            glow.addColorStop(0,ink+(emphasis?'75':'35'));glow.addColorStop(1,ink+'00');
+            ctx.fillStyle=glow;ctx.beginPath();ctx.arc(node.x,node.y,(emphasis?30:18)/globalScale,0,2*Math.PI);ctx.fill();
+            const fill=ctx.createRadialGradient(node.x-radius*.3,node.y-radius*.4,0,node.x,node.y,radius*1.6);
+            fill.addColorStop(0,'#effbff');fill.addColorStop(.3,ink);fill.addColorStop(1,ink+'70');
+            ctx.beginPath();ctx.arc(node.x,node.y,radius,0,2*Math.PI);ctx.fillStyle=fill;ctx.fill();
+            ctx.strokeStyle=ink;ctx.lineWidth=.8/globalScale;ctx.stroke();
+            if(model.nodes.length<=35&&node.kind!=='entries'){
+              const mark=node.kind==='people'?node.label.slice(0,1):node.kind==='tools'?'⌘':'◇';
+              ctx.font=`600 ${14/globalScale}px system-ui`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#10263c';ctx.fillText(mark,node.x,node.y);ctx.textAlign='left';
+            }
+            if(emphasis){ctx.beginPath();ctx.arc(node.x,node.y,radius+5/globalScale,0,2*Math.PI);ctx.strokeStyle=ink+'aa';ctx.lineWidth=1/globalScale;ctx.stroke();}
+            ctx.restore();
+          }} nodePointerAreaPaint={(node,color,ctx,scale)=>{ctx.fillStyle=color;ctx.beginPath();ctx.arc(node.x,node.y,(node.radius+5)/(graph.current?.zoom()||1),0,2*Math.PI);ctx.fill();}} /> : <p className="share-scope-note">No approved connections in this scope.</p>}
     </div>
+    </div>
+    {selected && <aside className="share-graph-inspector share-graph-selection"><span className="share-kind-pill" data-kind={selected.kind}>{kindName(selected.kind)}</span><h3>{selected.label}</h3><div className="markdown-body" dangerouslySetInnerHTML={{__html:selected.body_html||''}}/><h4>Connections</h4><ul>{peers.slice(0,100).map((e,i)=>{const other=model.nodes.find(n=>n.id===(identity(e.source)===selected.id?identity(e.target):identity(e.source)));return <li key={i}><button type="button" onClick={()=>setSelected(other)}>{other?.label}</button><small>{e.relation}</small></li>;})}</ul></aside>}
+    </div>
+    <p className="share-graph-hint">Drag to explore · Scroll to zoom · Select an orb for details. Positions reset when reopened.</p>
     <div className="share-graph-legend">{[...new Set(model.nodes.map(n=>n.kind))].map(kind=><span className="share-kind-pill" data-kind={kind} key={kind}><i style={{background:palette[kind]||'#e9c96c'}}/>{kindName(kind)}</span>)}</div>
-    {selected && <section className="share-graph-selection" aria-live="polite"><span className="share-kind-pill" data-kind={selected.kind}>{kindName(selected.kind)}</span><h4>{selected.label}</h4>{selected.body&&<p>{selected.body}</p>}
-      <ul>{peers.slice(0,100).map((e,i)=><li key={i}>{e.relation} · {model.nodes.find(n=>n.id===(identity(e.source)===selected.id?identity(e.target):identity(e.source)))?.label}</li>)}</ul>{peers.length>100&&<p>Showing 100 of {peers.length} connections. Explore the graph for more.</p>}</section>}
     <details className="share-graph-directory" onToggle={event=>setDirectoryOpen(event.currentTarget.open)}>
       <summary>Objects and connections · {model.nodes.length} objects · {model.links.length} connections</summary>
       {directoryOpen && <><input type="search" className="control" aria-label="Find a shared graph object" placeholder="Find an object or type…" value={query} onChange={e=>setQuery(e.target.value)}/>
@@ -101,8 +137,8 @@ document.addEventListener('click',event=>{
   const data={nodes:raw.nodes.filter(n=>ids.has(n.id)),edges:raw.edges.filter(e=>ids.has(e.source)&&ids.has(e.target))};
   const dialog=document.createElement('dialog');dialog.className='share-connections-dialog';dialog.setAttribute('aria-label','Approved object connections');
   const close=document.createElement('button');close.type='button';close.className='btn btn-soft';close.textContent='Close connections';close.onclick=()=>dialog.close();
-  const title=document.createElement('h3');title.textContent=data.nodes.find(n=>n.id===id)?.label||'Connections';
-  const host=document.createElement('div');dialog.append(close,title,host);document.body.append(dialog);dialog.showModal();
+  const title=document.createElement('h3');title.textContent='Connections · '+(data.nodes.find(n=>n.id===id)?.label||'Shared object');
+  const host=document.createElement('div');const header=document.createElement('header');header.className='share-dialog-header';header.append(title,close);dialog.append(header,host);document.body.append(dialog);dialog.showModal();
   const root=createRoot(host);root.render(<SharedGraph data={data} layout="connections" rootId={id}/>);
   dialog.addEventListener('close',()=>{root.unmount();dialog.remove();button.focus();},{once:true});
 });

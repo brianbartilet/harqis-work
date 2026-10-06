@@ -673,7 +673,7 @@
           old.remove();
           if (direction > 0) scroller.scrollTop -= height;
         }
-        status.textContent = direction > 0 && number < Number(scroller.dataset.pageCount) ? 'Scroll for more entries' : '';
+        status.textContent = '';
         window.refreshShareActivity?.();
       } catch(error) {
         if (error.name !== 'AbortError' && scroller.isConnected) {

@@ -427,8 +427,7 @@ The owner editor is named **Share Activity**, under Express. It contains:
   Use custom filters instead control appears only for inherited workspace scope and removes its rules/membership.
 - **Entries:** full entry previews, entry exclusions, references and Include secrets.
   The editor loads batches of 50 on scroll and keeps at most 150 cards mounted.
-  Scrolling back reloads earlier batches with exclusions intact. The floating loading
-  status replaces pagination buttons; loading does not narrow the generated snapshot.
+  Scrolling back reloads earlier batches with exclusions intact. Continuous scrolling replaces pagination buttons; loading does not narrow the generated snapshot.
   Bulk reference selection affects loaded controls only.
 - **Actions and Ideas:** active-object selection, optional completed/dismissed items,
   Kanban-style descriptions/checklists and a per-card Connections dialog limited to
@@ -538,7 +537,12 @@ the inherited-workspace reset control. Resetting inherited rules can broaden sco
 
 Board cards retain approved saved positions and node sizes, with the Activity Graph
 type palette, gradient orbs, icon zoom controls, and a typed object directory. Draft
-thought details appear on node selection rather than a duplicate list below the map.
+thought details appear in a side inspector on node selection rather than a duplicate list below the map.
+Shared graphs use Kanban collision-aware labels, centered SVG controls, and temporary node dragging.
+Dragging never persists board positions or changes the approved snapshot. Connections dialogs
+select the originating card and show sanitized Markdown in the adjacent inspector.
+Entry details and action/idea descriptions use the same sanitized Markdown renderer as Corpus.
+The owner-only agent test stays with Entries; Recipe does not show it.
 The read-only graph renderer uses the same `graph-presets.mjs` timeline layout as
 Activity Graph, initially framing the newest week. All graph input comes from the
 approved share snapshot; connections never fetch the owner's live graph endpoints.

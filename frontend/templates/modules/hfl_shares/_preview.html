@@ -45,7 +45,7 @@
       </div>
       {% endif %}
       <p class="mt-2 text-xs text-slate-400">{{ entry.what_happened }}</p>
-      {% if not hide_preview_agent %}<details><summary>Full entry</summary><p style="white-space:pre-wrap">{{ entry.text }}</p></details>{% endif %}
+      {% if not hide_preview_agent %}<details><summary>Full entry</summary><div class="share-entry-content markdown-body">{{ entry|share_entry }}</div></details>{% endif %}
       {% if entry.references %}
       <div class="mt-2">
         {% for reference in entry.references %}
@@ -56,7 +56,7 @@
     </article>
     {% endfor %}
     </div>
-    <div data-entry-load-after class="share-scroll-state" role="status">{% if page_count > 1 %}Scroll for more entries{% endif %}</div>
+    <div data-entry-load-after class="share-scroll-state" role="status"></div>
     {% if hide_preview_agent and preview.entries|length > 250 %}<p class="mt-3 text-xs text-amber-300">Preview list shows the first 250 entries. The generated share will retain the complete matching snapshot within the size limit.</p>{% endif %}
   </div>
 

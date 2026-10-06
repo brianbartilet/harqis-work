@@ -112,7 +112,8 @@
 .action-connections-dialog h2 { min-width:0; overflow-wrap:anywhere; font-size:1rem; }
 .action-connections-dialog .agenda-dialog-header button { flex-shrink:0; }
 .connections-tools { position:absolute; z-index:2; top:.6rem; right:.6rem; display:flex; gap:.3rem; padding:.25rem; border:1px solid #334155; border-radius:.6rem; background:#0b1728e8; }
-.connections-tools button { padding:.3rem .6rem; }
+.connections-tools button { width:2rem; height:2rem; padding:0; display:flex; align-items:center; justify-content:center; }
+.connections-tools button svg { width:18px; height:18px; display:block; }
 .connections-layout { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(220px,1fr); }
 .connections-canvas { position:relative; min-width:0; height:360px; overflow:hidden; }
 .connections-details { min-width:0; height:360px; overflow:auto; padding:1rem; border-left:1px solid #243448; font-size:.8rem; overflow-wrap:anywhere; }

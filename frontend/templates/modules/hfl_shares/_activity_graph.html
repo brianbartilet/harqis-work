@@ -1,5 +1,5 @@
 <div class="shared-graph" data-shared-graph data-graph-layout="{{ graph_layout|default('board' if graph.get('positions') else 'timeline') }}">
-<script type="application/json" data-graph-data>{{ graph|tojson }}</script>
+<script type="application/json" data-graph-data>{{ graph|share_graph|tojson }}</script>
 <div data-graph-canvas></div>
 
 </div>

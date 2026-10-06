@@ -1672,6 +1672,19 @@ def _entry_html(entry):
     return render_markdown(format_hfl_markdown(public_text))
 
 
+def _graph_view(graph):
+    """Render only approved snapshot text with the shared Markdown sanitizer."""
+    return {**graph, "nodes": [
+        {**node, "body_html": str(render_markdown(node.get("body") or node.get("description") or ""))}
+        for node in graph.get("nodes", [])
+    ]}
+
+
+templates.env.filters["share_markdown"] = render_markdown
+templates.env.filters["share_entry"] = _entry_html
+templates.env.filters["share_graph"] = _graph_view
+
+
 def _reference_views(entry, *, base_url: str) -> dict[str, dict[str, str]]:
     views: dict[str, dict[str, str]] = {}
     for reference in entry.references:

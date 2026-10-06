@@ -7,15 +7,15 @@
 <article class="share-object-card" data-kind="{{ kind }}">
 <div class="share-card-meta"><span class="share-kind-pill" data-kind="{{ kind }}">{{ 'Action' if kind == 'actions' else 'Idea' }}</span>{% if obj.get('status') %}<span class="pill">{{ obj.status }}</span>{% endif %}{% if obj.get('created_at') %}<time>{{ obj.created_at[:10] }}</time>{% endif %}</div>
 <label class="share-card-title"><input type="checkbox" checked {% if hide_preview_agent %}disabled{% endif %} data-share-object="{{ obj.id }}"><span>{{ obj.title }}</span></label>
-{% if obj.get('body', obj.get('description', '')) %}<p class="share-card-body">{{ obj.get('body', obj.get('description', '')) }}</p>{% endif %}
+{% if obj.get('body', obj.get('description', '')) %}<div class="share-card-body markdown-body">{{ obj.get('body', obj.get('description', ''))|share_markdown }}</div>{% endif %}
 {% if obj.get('due_date') %}<p class="share-scope-note">Due {{ obj.due_date }}</p>{% endif %}
 {% for checklist in obj.get('checklists', []) %}<div class="share-checklist"><h4>{{ checklist.title }}</h4>{% for item in checklist['items'] %}<p><span aria-label="{{ 'Done' if item.done else 'Not done' }}">{{ '☑' if item.done else '☐' }}</span> {{ item.text }}</p>{% endfor %}</div>{% endfor %}
-{% if obj.get('notes') %}<details><summary>Notes</summary><p class="share-card-body">{{ obj.notes }}</p></details>{% endif %}
+{% if obj.get('notes') %}<details><summary>Notes</summary><div class="share-card-body markdown-body">{{ obj.notes|share_markdown }}</div></details>{% endif %}
 <button type="button" class="btn btn-soft share-connections-button" data-share-connections="{{ obj.id }}">Connections</button>
 </article>{% else %}<p class="share-scope-note">No eligible {{ kind }} selected.</p>{% endfor %}
 </section>{% endfor %}
 </div>
-<script type="application/json" data-share-connections-data>{{ preview.activity.connections|tojson }}</script>
+<script type="application/json" data-share-connections-data>{{ preview.activity.connections|share_graph|tojson }}</script>
 </div>
 <div data-preview-tab="boards" class="share-board-list">
 {% for board in preview.activity.get('boards', []) %}

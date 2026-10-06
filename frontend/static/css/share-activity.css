@@ -11,7 +11,7 @@
 .shared-activity-public{padding:1rem;border:1px solid #334155;border-radius:.7rem;margin-bottom:1rem}.shared-activity-public summary{cursor:pointer;padding:.5rem 0}
 
 .share-tabs button{cursor:pointer;transition:background .15s,color .15s,box-shadow .15s}
-.share-tabs button:hover{background:#334155;color:#fff;box-shadow:inset 0 -2px #38bdf8}
+.share-tabs button:hover{background:#334155;color:#fff}
 .share-tabs button:focus-visible{outline:2px solid #38bdf8;outline-offset:3px}
 [data-preview-shell][hidden],[data-test-agent][hidden],[data-workspace-reset][hidden]{display:none!important}
 [data-share-panel] label.check{font-weight:650;margin-bottom:.6rem;line-height:1.5}
@@ -51,3 +51,27 @@
 .share-graph-directory li>button{border:0;background:transparent;text-align:left;font:inherit;color:#e2e8f0;padding:0;margin:0;cursor:pointer;overflow-wrap:anywhere;min-width:0}.share-graph-directory .control{width:100%;padding:.6rem;border:1px solid #334155;border-radius:.5rem;background:#0f172a;color:#e2e8f0}
 
 .share-object-card button,.share-tabs button,.share-include-options label,.share-card-title{font-family:inherit}
+
+/* Match the Corpus reading surface and Kanban's graph/detail split. */
+.share-entry-card summary{font-size:.78rem;padding:.35rem 0;color:#cbd5e1}
+.share-entry-content{border-top:1px solid #26374d;margin-top:.65rem;padding:1rem 0;font-size:.875rem;line-height:1.8}
+.share-entry-content blockquote{margin:1rem 0;padding:1rem;border:1px solid #1e3048;border-radius:.75rem;background:#0e1a2d}
+.share-card-body.markdown-body{white-space:normal}.share-card-body.markdown-body p{margin:.65rem 0}
+.share-card-body.markdown-body :is(h1,h2,h3,h4){font-size:.95rem;font-weight:700;margin:1rem 0 .5rem}
+.share-card-body.markdown-body ul,.share-graph-inspector ul{padding-left:1.25rem;list-style:disc}
+.share-scroll-state{position:static;background:none;padding:.4rem;font-size:.75rem}
+.share-scroll-state[data-entry-load-before]{background:none;padding:.4rem}
+.share-graph-workspace{display:grid;grid-template-columns:minmax(0,1fr);border:1px solid #26374d;border-radius:.7rem;overflow:hidden}
+.share-graph-workspace.has-selection{grid-template-columns:minmax(0,1.65fr) minmax(220px,1fr)}
+.share-graph-viewport{min-width:0;position:relative}.share-graph-toolbar{position:absolute;top:.7rem;right:.7rem;z-index:2;padding:0}.share-graph-toolbar>span{display:none}
+.share-graph-toolbar>div{background:#0b1424df;border:1px solid #334155;border-radius:.7rem;padding:.2rem}
+.share-graph-toolbar button{padding:0;margin:0;border:1px solid #334155;border-radius:.5rem;display:flex;align-items:center;justify-content:center;line-height:1}
+.shared-graph .share-graph-toolbar svg{width:18px;height:18px;cursor:inherit}
+.share-graph-stage{border-radius:0;outline:none!important;cursor:grab}.share-graph-stage:active{cursor:grabbing}.share-graph-stage:focus-visible{outline:2px solid #38bdf8!important;outline-offset:-2px}
+.share-graph-inspector{min-width:0;border-left:1px solid #26374d;padding:1rem;max-height:440px;overflow:auto;background:#0b1424;font-size:.85rem;line-height:1.7}
+.share-graph-inspector h3{font-size:1rem;font-weight:700;margin:.75rem 0}.share-graph-inspector h4{font-weight:650;margin:1rem 0 .5rem}
+.share-graph-inspector small{display:block;color:#94a3b8}.share-graph-inspector li{margin:.6rem 0}.share-graph-inspector li button{border:0;padding:0;margin:0;background:none;text-align:left;color:#a5d8ff;font:inherit;cursor:pointer}
+.share-graph-hint{font-size:.72rem;color:#94a3b8;padding:.4rem .3rem;margin:0!important}
+.share-dialog-header{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:0 0 1rem}.share-dialog-header h3{font-size:1rem;font-weight:700;margin:0}.share-dialog-header button{flex-shrink:0}
+.share-connections-dialog{width:min(64rem,96vw);background:#0b1424}
+@media(max-width:700px){.share-graph-workspace.has-selection{grid-template-columns:minmax(0,1fr)}.share-graph-inspector{border-left:0;border-top:1px solid #26374d;max-height:260px}}
