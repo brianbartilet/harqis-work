@@ -81,8 +81,10 @@
   .card-title-row { display:flex; align-items:center; justify-content:space-between; gap:.65rem; }
   .card-title-row > .wrap { min-width:0; }
   .owner-sidebar .card-actions { flex:0 0 auto; flex-wrap:nowrap; gap:.35rem; padding:0; margin:0; }
-  .owner-sidebar .card-actions .btn { width:2.25rem; height:2.25rem; min-height:2.25rem; padding:0; flex:0 0 auto; }
-  .owner-sidebar .card-actions svg { width:1.05rem; height:1.05rem; }
+  .owner-sidebar .card-actions .btn { width:1.875rem; height:1.875rem; min-height:1.875rem; padding:0; border:1px solid transparent; border-radius:.45rem; flex:0 0 auto; background:#1e293b; color:#cbd5e1; }
+  .owner-sidebar .card-actions .btn:hover:not(:disabled) { background:#334155; color:#f1f5f9; }
+  .owner-sidebar .card-actions .btn:focus-visible { outline:2px solid #94a3b8; outline-offset:2px; }
+  .owner-sidebar .card-actions svg { width:.875rem; height:.875rem; }
   .owner-sidebar .card-actions form { width:auto; }
   .share-status-row { padding-top:.85rem; margin-top:auto; }
   .generated-shares-content > .owner-pagination { align-self:start; }

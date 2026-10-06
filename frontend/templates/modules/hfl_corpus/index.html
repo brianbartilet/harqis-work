@@ -12,14 +12,10 @@
     <div class="corpus-page-header page-header">
       <p class="page-header-eyebrow">Everything everywhere, eventually indexed</p>
       <h1 class="page-header-title">Activity Corpus</h1>
+      <p class="page-header-description">Search and browse captured moments, source documents, tags, and references.</p>
     </div>
     <div data-corpus-header-actions class="corpus-header-actions">
     <div class="corpus-navigation-actions">
-    <details class="corpus-create-menu"><summary class="corpus-header-link">Create<svg class="tools-caret" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div>
-      <button type="button" data-create-entry-open class="corpus-tool-item" aria-haspopup="dialog">Entry</button>
-      <button type="button" data-create-action-open class="corpus-tool-item" aria-haspopup="dialog" aria-controls="followup-editor">Action</button>
-      <button type="button" class="corpus-tool-item" onclick="window.dispatchEvent(new CustomEvent('hfl:create-idea'))">Idea</button>
-    </div></details>
     {% if secrets_configured %}
     <button type="button" data-secrets-toggle data-secrets-on="{{ 'true' if show_secrets else 'false' }}" data-secrets-authorized="{{ 'true' if secrets_authorized else 'false' }}"
             role="switch" aria-checked="{{ 'true' if show_secrets else 'false' }}"
@@ -32,13 +28,11 @@
     {% else %}
     <button type="button" data-secrets-setup aria-haspopup="dialog" class="corpus-secrets-control inline-flex shrink-0 items-center rounded-lg bg-slate-900 text-sm font-semibold text-slate-300 ring-1 ring-slate-700">Secrets</button>
     {% endif %}
-    </div>
-    <div class="corpus-workspace-controls">
-    {% if corpus_entities_enabled %}
-    {% include "modules/hfl_corpus/partials/followups_board.html" %}
-    {% endif %}
-    {% include "modules/hfl_corpus/partials/workspace_indicator.html" %}
-    {% include "modules/hfl_corpus/partials/workspace_views.html" %}
+    <details class="corpus-create-menu"><summary class="corpus-header-link">Create<svg class="tools-caret" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary><div>
+      <button type="button" data-create-entry-open class="corpus-tool-item" aria-haspopup="dialog">Entry</button>
+      <button type="button" data-create-action-open class="corpus-tool-item" aria-haspopup="dialog" aria-controls="followup-editor">Action</button>
+      <button type="button" class="corpus-tool-item" onclick="window.dispatchEvent(new CustomEvent('hfl:create-idea'))">Idea</button>
+    </div></details>
     </div>
     </div>
   </div>
@@ -57,7 +51,8 @@
   </div>
   {% endif %}
 
-  {% with activity_hide_workspace_indicator=true %}{% include 'modules/hfl_corpus/partials/activity_heatmap.html' %}{% endwith %}
+  {% if corpus_entities_enabled %}{% include "modules/hfl_corpus/partials/followups_board.html" %}{% endif %}
+  {% with activity_show_workspace_controls=true %}{% include 'modules/hfl_corpus/partials/activity_heatmap.html' %}{% endwith %}
 
   <form id="corpus-search-form" method="get" action="/hfl-corpus" data-index-search-panel
         class="sticky top-0 z-20 shrink-0 rounded-2xl border border-blue-800/70 bg-slate-900/95 p-4 shadow-xl shadow-black/30 backdrop-blur">
