@@ -614,12 +614,16 @@
 
   let previewTimer = 0;
   let previewController = null;
+  let previewEntryPage = 1;
   const syncDisabledReferences = () => {
     const references = form.querySelectorAll('input[name="enabled_reference_ids"]');
     // Preserve a saved recipe's exclusions until its first automatic preview
     // has rendered the corresponding reference controls.
     if (!references.length) return;
-    form.querySelectorAll('[data-disabled-reference]').forEach(input => input.remove());
+    const visibleIds = new Set(Array.from(references, input => input.value));
+    form.querySelectorAll('[data-disabled-reference]').forEach(input => {
+      if (visibleIds.has(input.value)) input.remove();
+    });
     references.forEach(reference => {
       if (reference.checked) return;
       const hidden = document.createElement('input');
@@ -639,9 +643,11 @@
     previewContent.setAttribute('aria-busy', 'true');
     syncDisabledReferences();
     try {
+      const body = new FormData(form);
+      body.set('preview_entry_page', String(previewEntryPage));
       const response = await fetch('/sharing/preview?fragment=true', {
         method: 'POST',
-        body: new FormData(form),
+        body,
         headers: {'Accept': 'text/html'},
         signal: controller.signal,
       });
@@ -737,6 +743,12 @@
     toggle.checked = selected === references.length;
     toggle.indeterminate = selected > 0 && selected < references.length;
     syncDisabledReferences();
+  });
+  previewContent?.addEventListener('click', event => {
+    const button = event.target.closest('[data-entry-page]');
+    if (!button || button.disabled) return;
+    previewEntryPage = Number(button.dataset.entryPage);
+    refreshPreview();
   });
   clearTags?.addEventListener('click', () => {
     tagCloud.querySelectorAll('input[name="tags"]:checked').forEach(input => {

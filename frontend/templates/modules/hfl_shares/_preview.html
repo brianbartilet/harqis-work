@@ -4,6 +4,10 @@
 <section class="rounded-xl border border-slate-700 bg-slate-950 p-4" data-preview-ready>
   <input type="hidden" name="reference_selection_initialized" value="1">
   <div data-preview-tab="entries">
+  {% set page_size = 50 %}
+  {% set page_count = [1, ((preview.entries|length + page_size - 1) // page_size)]|max %}
+  {% set entry_page = [[preview_entry_page|default(1)|int, 1]|max, page_count]|min %}
+  {% set visible_entries = preview.entries[:250] if hide_preview_agent else preview.entries[(entry_page - 1) * page_size:entry_page * page_size] %}
   <div class="stat-grid">
     <div class="stat"><strong>{{ preview.entries|length }}</strong><span>Entries</span></div>
     <div class="stat"><strong>{{ preview.source_counts|length }}</strong><span>Sources</span></div>
@@ -13,7 +17,7 @@
   <p class="mt-3 text-xs text-slate-500">Date range: {{ preview.earliest or "unknown" }} → {{ preview.latest or "unknown" }}</p>
   {% for warning in preview.warnings %}<p class="message mt-3 mb-0">{{ warning }}</p>{% endfor %}
   {% set reference_state = namespace(total=0, enabled=0) %}
-  {% for entry in (preview.entries[:250] if hide_preview_agent else preview.entries) %}
+  {% for entry in visible_entries %}
     {% for reference in entry.references %}
       {% set reference_state.total = reference_state.total + 1 %}
       {% if reference.enabled %}{% set reference_state.enabled = reference_state.enabled + 1 %}{% endif %}
@@ -22,11 +26,11 @@
   {% if reference_state.total %}
   <label class="check mt-4 rounded-lg border border-blue-900/70 bg-blue-950/25 px-3 py-2">
     <input type="checkbox" data-toggle-all-references {% if reference_state.enabled == reference_state.total %}checked{% endif %}>
-    <span><strong class="text-blue-100">Select all references</strong><span class="ml-2 text-xs text-slate-500">Toggle every link in this preview.</span></span>
+    <span><strong class="text-blue-100">Select all references on this page</strong><span class="ml-2 text-xs text-slate-500">Selections on other pages are retained.</span></span>
   </label>
   {% endif %}
   <div class="mt-4 max-h-96 overflow-y-auto pr-2">
-    {% for entry in (preview.entries[:250] if hide_preview_agent else preview.entries) %}
+    {% for entry in visible_entries %}
     <div class="item">
       <div class="preview-entry-heading">
         {% if preview.activity %}<input type="checkbox" checked {% if hide_preview_agent %}disabled{% endif %} data-share-object="entry:{{ entry.id }}" aria-label="Include {{ entry.moment or entry.header }}">{% endif %}
@@ -51,6 +55,14 @@
     {% endfor %}
     {% if hide_preview_agent and preview.entries|length > 250 %}<p class="mt-3 text-xs text-amber-300">Preview list shows the first 250 entries. The generated share will retain the complete matching snapshot within the size limit.</p>{% endif %}
   </div>
+  {% if not hide_preview_agent and page_count > 1 %}
+  <nav class="flex items-center gap-3 mt-3" aria-label="Entry preview pages">
+    <button type="button" class="btn btn-soft" data-entry-page="{{ entry_page - 1 }}" {% if entry_page == 1 %}disabled{% endif %}>Previous entries</button>
+    <span>Page {{ entry_page }} of {{ page_count }} · {{ preview.entries|length }} matching entries</span>
+    <button type="button" class="btn btn-soft" data-entry-page="{{ entry_page + 1 }}" {% if entry_page == page_count %}disabled{% endif %}>Next entries</button>
+  </nav>
+  <p class="share-scope-note">Showing up to 50 entries at a time. Generated shares include all matching entries, except your exclusions.</p>
+  {% endif %}
   </div>
   {% include "modules/hfl_shares/_activity_preview.html" %}
   {% if preview.activity_entries %}<div data-preview-tab="entries"><h3>Object references</h3>{% for entry in preview.activity_entries %}{% for reference in entry.references %}<label class="check"><input type="checkbox" name="enabled_reference_ids" value="{{ reference.id }}" {% if reference.enabled %}checked{% endif %}>{{ entry.moment }} — {{ reference.label }}</label>{% endfor %}{% endfor %}</div>{% endif %}

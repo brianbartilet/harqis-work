@@ -173,6 +173,38 @@ def test_legacy_database_adds_columns_before_owner_index(tmp_path):
     assert store.list_shares() == []
 
 
+def test_large_entries_preview_is_paged_and_retains_reference_exclusions(editor_page, sharing_corpus, monkeypatch):
+    from playwright.sync_api import expect
+    from modules.hfl_shares import router
+    base = build_snapshot(recipe(references_enabled=True, activity={'sections':['entries']}), (sharing_corpus,))
+    entries = tuple(replace(base.entries[0], id=f'entry-{i}', moment=f'Preview entry {i}',
+                            text='Full entry body ' * 1000,
+                            references=(replace(base.entries[0].references[0], id=f'reference-{i}'),))
+                    for i in range(125))
+    def snapshot(request, configuration, disabled_reference_ids, **kwargs):
+        return replace(base, entries=tuple(replace(entry, references=tuple(
+            replace(ref, enabled=ref.id not in disabled_reference_ids) for ref in entry.references
+        )) for entry in entries))
+    monkeypatch.setattr(router, '_build_preview_snapshot', snapshot)
+    page, _ = editor_page
+    page.goto('https://editing.test/sharing')
+    page.get_by_role('tab', name='Entries', exact=True).click()
+    expect(page.get_by_text('Page 1 of 3', exact=False)).to_be_visible()
+    expect(page.locator('[name="enabled_reference_ids"]')).to_have_count(50)
+    page.locator('[value="reference-0"][name="enabled_reference_ids"]').uncheck()
+    page.get_by_role('button', name='Next entries').click()
+    expect(page.get_by_text('Page 2 of 3', exact=False)).to_be_visible()
+    page.locator('[value="reference-50"][name="enabled_reference_ids"]').uncheck()
+    page.get_by_role('button', name='Previous entries').click()
+    expect(page.get_by_text('Page 1 of 3', exact=False)).to_be_visible()
+    expect(page.locator('[value="reference-0"][name="enabled_reference_ids"]')).not_to_be_checked()
+    page.get_by_role('button', name='Next entries').click()
+    expect(page.locator('[value="reference-50"][name="enabled_reference_ids"]')).not_to_be_checked()
+    page.get_by_role('button', name='Next entries').click()
+    expect(page.get_by_text('Page 3 of 3', exact=False)).to_be_visible()
+    expect(page.locator('[name="enabled_reference_ids"]')).to_have_count(25)
+
+
 @pytest.mark.parametrize('width', [1440, 390])
 def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_corpus, width, tmp_path):
     from playwright.sync_api import expect

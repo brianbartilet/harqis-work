@@ -78,6 +78,21 @@ def test_every_frontend_route_has_a_reviewed_contract():
     assert result['ok'], result['errors']
 
 
+@pytest.mark.parametrize('path,status,tools,expected', [
+    ('/api/hfl/timeline/ideas/share-context', 'covered', ['raw_context'], 'Internal sharing input must remain protocol-only'),
+    ('/api/hfl/timeline/ideas/share-context/attachments/{kind}/{source_id}/{attachment_id}', 'protocol', ['raw_attachment'], 'Internal sharing input must remain protocol-only'),
+    ('/api/hfl/timeline/ideas/share-context/new', 'protocol', [], 'Canonical HFL endpoint needs a dedicated tool'),
+])
+def test_internal_sharing_exception_is_exact_and_cannot_expose_tools(tmp_path, monkeypatch, path, status, tools, expected):
+    from tools import frontend_coverage
+    monkeypatch.setattr(frontend_coverage, 'inventory', lambda root: {('GET', path): {}})
+    (tmp_path / 'frontend').mkdir()
+    (tmp_path / 'frontend/mcp_coverage.json').write_text(json.dumps({'endpoints': [
+        dict(method='GET', path=path, status=status, tools=tools, reason='Regression fixture'),
+    ]}), encoding='utf-8')
+    assert any(expected in error for error in check(tmp_path)['errors'])
+
+
 def test_reuse_routes_preserve_authenticated_canonical_proxy():
     from modules.hfl_corpus.intent_reuse import router
     from modules.hfl_corpus.timeline import TimelineRoute

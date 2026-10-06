@@ -14,6 +14,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / 'frontend/mcp_coverage.json'
 METHODS = {'get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'websocket', 'api_route'}
+# These raw inputs are consumed only by the sharing service, which enforces
+# owner PIN authorization and publication scope before exposing any content.
+INTERNAL_SHARING_ROUTES = {
+    ('GET', '/api/hfl/timeline/ideas/share-context'),
+    ('GET', '/api/hfl/timeline/ideas/share-context/attachments/{kind}/{source_id}/{attachment_id}'),
+}
 
 
 def inventory(root: Path = ROOT) -> dict[tuple[str, str], dict]:
@@ -109,7 +115,10 @@ def check(root: Path = ROOT) -> dict:
         for tool in row.get('tools', []):
             if tool not in tools:
                 errors.append(f'Missing MCP tool {tool} for {key}')
-        if key[1].startswith('/api/hfl/') and status != 'covered':
+        if key in INTERNAL_SHARING_ROUTES:
+            if status != 'protocol' or row.get('tools'):
+                errors.append(f'Internal sharing input must remain protocol-only without MCP tools: {key}')
+        elif key[1].startswith('/api/hfl/') and status != 'covered':
             errors.append(f'Canonical HFL endpoint needs a dedicated tool: {key}')
     return {'ok': not errors, 'endpoints': len(actual), 'coverage': dict(Counter(r['status'] for r in entries)), 'errors': errors}
 

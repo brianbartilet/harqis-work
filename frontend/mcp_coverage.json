@@ -2968,6 +2968,41 @@
         "get_hfl_corpus_board_context"
       ],
       "reason": "Read active boards and permitted member objects through the canonical board-context API."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/share-context",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Internal sharing-service input requiring bearer authentication; publication scope and owner PIN authorization are enforced by the sharing service. Raw input must not be exposed through general MCP tools."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/share-context/attachments/{kind}/{source_id}/{attachment_id}",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Internal sharing-service input requiring bearer authentication; publication scope and owner PIN authorization are enforced by the sharing service. Raw input must not be exposed through general MCP tools."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/share-context",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Browser-mounted counterpart of internal sharing-service input; explicitly returns 403 even for authenticated owners. No machine tool."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/share-context/attachments/{kind}/{source_id}/{attachment_id}",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Browser-mounted counterpart of internal sharing-service input; explicitly returns 403 even for authenticated owners. No machine tool."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/shares/{share_id}/delete",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session and CSRF-protected share deletion; a dedicated machine-facing authorization and deletion contract is deferred."
     }
   ]
 }
