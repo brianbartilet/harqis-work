@@ -14,9 +14,9 @@
 <section id="share-panel-{{ key }}" role="tabpanel" aria-labelledby="share-tab-{{ key }}" data-share-panel="{{ key }}" {% if key != 'recipe' %}hidden{% endif %}>
 {% if key == 'recipe' %}
 <div data-recipe-fields></div>
-<fieldset class="field"><legend>Live content policies</legend><p class="share-scope-note">Used when Freeze is off. Unchecked sections refresh approved objects only; checked sections also admit newly matching objects. Exclusions always apply.</p>
+<fieldset class="field automatic-inclusion"><legend>Automatically include</legend><p class="share-scope-note">When Freeze is off, checked sections also include newly matching objects. Unchecked sections refresh approved objects only. Exclusions always apply.</p>
 {% for section, label in [('entries','Entries'),('actions','Actions'),('ideas','Ideas'),('boards','Boards and their members')] %}
-<label class="check"><input type="checkbox" name="automatic_sections" value="{{ section }}" {% if section in activity.get('automatic', ['entries'] if not activity else []) %}checked{% endif %}>Automatically include matching {{ label|lower }}</label>
+<label class="check"><input type="checkbox" name="automatic_sections" value="{{ section }}" {% if section in activity.get('automatic', ['entries'] if not activity else []) %}checked{% endif %}><span>{{ label }}</span></label>
 {% endfor %}</fieldset>
 {% elif key == 'filters' %}
 <p class="share-scope-note">Entry filters apply to corpus entries and inherited objects. Explicitly workspace-linked actions and ideas remain eligible independently of entry source/date filters. Boards use workspace membership; goals follow selected boards.</p>
