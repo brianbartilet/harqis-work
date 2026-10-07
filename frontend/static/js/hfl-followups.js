@@ -150,7 +150,7 @@
   }
   async function refresh(force=false) {
     if(!dialog.open || disposed || moving || dragging || pointerHeld || savingCards || (pending&&!force))return;
-    const ticket=++sequence;pending=true;context();status.textContent='Refreshing follow-ups…';lanes.setAttribute('aria-busy','true');
+    const ticket=++sequence;pending=true;context();if(force||!rendered)status.textContent='Refreshing follow-ups…';lanes.setAttribute('aria-busy','true');
     try{
       const params=all.checked?new URLSearchParams():new URLSearchParams(location.search);
       params.set('include_closed','true');params.set('recent_dismissed','true');
@@ -164,7 +164,9 @@
       }while(rows.length<total);
       if(dragging||moving||pointerHeld||savingCards)return;
       if(ideasOpen){const ideaParams=new URLSearchParams(params);ideaParams.delete('offset');ideaParams.set('dismissed','0');ideaRows=(await window.HflIdeas.api('/reuse/board-ideas?'+ideaParams)).items;if(ticket!==sequence)return;}
-      render(rows);error.hidden=true;status.textContent=rows.length+' action'+(rows.length===1?'':'s')+' · Updates every 5 seconds';
+      render(rows);error.hidden=true;
+      const count=rows.length+' action'+(rows.length===1?'':'s');
+      if(status.textContent!==count)status.textContent=count;
     }catch(e){if(ticket===sequence){error.textContent=e.message;error.hidden=false;status.textContent='Could not refresh. Displayed actions may be out of date. Use Refresh to retry.';}}
     finally{if(ticket===sequence){pending=false;lanes.removeAttribute('aria-busy');}}
   }

@@ -358,7 +358,7 @@ def test_board_drag_and_checklist_refresh_keep_connections(ideas, authenticated_
             page.wait_for_timeout(80)
             page.mouse.move(target_x,target_y,steps=15); page.wait_for_timeout(350); page.mouse.up()
         playwright.expect(lane.locator('[data-followup-id]').first).to_have_attribute('data-followup-id',other['id'])
-        playwright.expect(board.locator('[data-board-status]')).to_contain_text('Updates every 5 seconds')
+        playwright.expect(board.locator('[data-board-status]')).to_have_text('2 actions')
         positions=ideas.followups.board_order()
         assert positions[other['id']]<positions[action['id']]
         assert not errors
