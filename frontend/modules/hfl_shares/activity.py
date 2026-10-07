@@ -320,8 +320,10 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
                  for e in data.get('links', []) if e['source'] in nodes and e['target'] in nodes)
     edges = list({(e['source'], e['target'], e['relation']): e for e in edges if e['source'] in nodes and e['target'] in nodes}.values())
     graph = {'nodes': list(nodes.values()), 'edges': edges}
+    graph_view = controls.graph_view.model_dump()
+    graph_view['positions'] = {key: value for key, value in graph_view['positions'].items() if key in nodes}
     payload = {**objects, 'boards': boards, 'goals': list(goals.values()), 'connections': graph,
-               'graph': {**graph, 'view': controls.graph_view.model_dump()} if 'graph' in controls.sections else {'nodes': [], 'edges': []}}
+               'graph': {**graph, 'view': graph_view} if 'graph' in controls.sections else {'nodes': [], 'edges': []}}
     evidence = []
     disabled = set(configuration.disabled_reference_ids if disabled_reference_ids is None else disabled_reference_ids)
     enabled = None if enabled_reference_ids is None else set(enabled_reference_ids)

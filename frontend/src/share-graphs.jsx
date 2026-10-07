@@ -11,17 +11,25 @@ const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools
 const kindName = kind => ({daily:'Date', entries:'Entry', people:'Person', companies:'Company', ideas:'Idea', actions:'Action', thoughts:'Thought', boards:'Board', goals:'Goal', lists:'List', sources:'Source', tools:'Tool', topics:'Topic'}[kind] || kind);
 const legendLabel = kind => ({daily:'dates', companies:'organizations', drafts:'thoughts', thoughts:'list thoughts'}[kind] || kind.replaceAll('_', ' ')).toLowerCase();
 const identity = value => typeof value === 'object' ? value.id : value;
+const SelectCaret = () => <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg>;
 
 function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onViewChange}) {
-  const host = useRef(null), graph = useRef(null), fitted = useRef(false);
+  const host = useRef(null), graph = useRef(null), cameraReady = useRef(false), dragging = useRef(false);
+  const connectionFitted = useRef(false);
   const [width, setWidth] = useState(600), [selected, setSelected] = useState(data.nodes.find(n=>n.id===rootId)||null);
   const [view, setView] = useState(() => ({preset:'timeline', animation:'off', hidden_kinds:[], ...initialView}));
+  const viewRef = useRef(view);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  const motion = useRef({time:0, last:0});
+  const motion = useRef({time:initialView.animation_time || 0, last:0});
   const kinds = useMemo(() => [...new Set(data.nodes.map(n=>n.kind))], [data]);
   const changeView = patch => {
-    const next = {...view, ...patch};
-    setView(next); onViewChange?.(next);
+    const next = {...captureView(), ...patch};
+    if (patch.hidden_kinds) cameraReady.current=false;
+    if (patch.preset && patch.preset !== view.preset) {
+      next.positions={}; next.viewport=null; next.animation_time=0;
+      motion.current.time=0; cameraReady.current=false;
+    }
+    viewRef.current=next; setView(next); onViewChange?.(next);
   };
   useEffect(() => {
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -37,36 +45,72 @@ function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onVie
     const timeline = layout === 'timeline' && view.preset === 'timeline' ? shareTimeline(nodes, data.edges) : null;
     const positions = timeline?.positions || presetLayout(nodes, data.edges, layout === 'timeline' ? view.preset : 'mindmap', 0, rootId).positions;
     nodes.forEach(n => {
-      const p = layout === 'board' && data.positions?.[n.id] || positions.get(n.id) || {x:0,y:0};
+      const saved = layout === 'timeline' && viewRef.current.positions?.[n.id];
+      const target = positions.get(n.id) || {x:0,y:0};
+      const p = saved || layout === 'board' && data.positions?.[n.id] || target;
       n.x=n.fx=Number.isFinite(p.x)?p.x:0; n.y=n.fy=Number.isFinite(p.y)?p.y:0;
-      n.origin={x:n.x,y:n.y,anchor:p.anchor};
+      n.origin={x:n.x,y:n.y,anchor:target.anchor}; n.manual=!!saved?.manual;
       if(layout==='connections'){delete n.fx;delete n.fy;}
     });
     const visible = nodes.filter(n=>!view.hidden_kinds.includes(n.kind)), ids = new Set(visible.map(n=>n.id));
-    return {nodes:visible, links:data.edges.filter(e=>ids.has(identity(e.source))&&ids.has(identity(e.target))).map(e=>({...e})), timeline};
+    return {nodes:visible, allNodes:nodes, links:data.edges.filter(e=>ids.has(identity(e.source))&&ids.has(identity(e.target))).map(e=>({...e})), timeline};
   }, [data, layout, rootId, view.preset, view.hidden_kinds]);
   useEffect(() => {setSelected(current=>current ? model.nodes.find(n=>n.id===current.id)||null : null);}, [model]);
   useEffect(() => {
     if (layout === 'timeline') model.nodes.forEach(n=>{n.x=n.fx=n.origin.x;n.y=n.fy=n.origin.y;});
   }, [view.animation, reducedMotion, model, layout]);
+  const captureView = () => ({...viewRef.current,
+    positions:Object.fromEntries(model.allNodes.map(n=>[n.id,{x:n.origin.x,y:n.origin.y,manual:n.manual}])),
+    animation_time:motion.current.time,
+  });
+  const persist = () => {const next=captureView();viewRef.current=next;onViewChange?.(next);return next;};
+  const recordCamera = () => {
+    if(!cameraReady.current||!graph.current||!host.current?.getClientRects().length)return;
+    const center=graph.current.centerAt();
+    viewRef.current={...viewRef.current,viewport:{x:center.x,y:center.y,zoom:graph.current.zoom()}};
+  };
+  // FormData is also used for preview refreshes. Capture immediately so save and
+  // generate cannot miss a recent pan, zoom, drag, or animation frame.
+  useEffect(() => {
+    const form=host.current?.closest('form');
+    if(!form||!onViewChange)return;
+    const save=event=>{event.formData.set('graph_view',JSON.stringify(persist()));};
+    form.addEventListener('formdata',save);
+    return ()=>form.removeEventListener('formdata',save);
+  }, [model, onViewChange]);
   const fit = () => {
     if (!graph.current || !model.nodes.length) return;
-    const bounds = model.timeline && timelineBounds(model.nodes, model.timeline.fitIds);
+    cameraReady.current=false;
+    const bounds = (model.timeline && timelineBounds(model.nodes, model.timeline.fitIds)) || timelineBounds(model.nodes,new Set(model.nodes.map(n=>n.id)));
     if (bounds) {
       graph.current.centerAt((bounds.left+bounds.right)/2,(bounds.top+bounds.bottom)/2,0);
       graph.current.zoom(Math.max(.01, Math.min(1, (width-48)/(bounds.right-bounds.left),340/(bounds.bottom-bounds.top))),0);
-    } else graph.current.zoomToFit(250,90);
+    }
+    cameraReady.current=true;recordCamera();persist();
   };
   useEffect(() => {
-    const observer = new ResizeObserver(([entry])=> {if(entry.contentRect.width>0)setWidth(entry.contentRect.width);});
+    // D3 centers against integer clientWidth; use the same width for rendering
+    // so fractional CSS pixels do not shift the saved camera on every reload.
+    const observer = new ResizeObserver(([entry])=> {if(entry.contentRect.width>0)setWidth(Math.floor(entry.contentRect.width));});
     observer.observe(host.current); return ()=>observer.disconnect();
   }, []);
-  useEffect(() => {const timer=setTimeout(fit,100);return ()=>clearTimeout(timer);}, [width,model]);
+  useEffect(() => {
+    cameraReady.current=false;
+    const timer=setTimeout(()=>{
+      if(!graph.current)return;
+      const viewport=viewRef.current.viewport;
+      if(viewport){
+        graph.current.zoom(viewport.zoom,0);graph.current.centerAt(viewport.x,viewport.y,0);
+        cameraReady.current=true;recordCamera();persist();
+      } else fit();
+    },100);
+    return ()=>clearTimeout(timer);
+  }, [width,model]);
   const peers = selected ? model.links.filter(e=>[identity(e.source),identity(e.target)].includes(selected.id)) : [];
   return <>
     {layout==='timeline' && <div className="share-graph-options">
-      <label>Preset <select aria-label="Graph preset" value={view.preset} onChange={e=>changeView({preset:e.target.value})}>{Object.entries(PRESETS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
-      <label>Animation <select aria-label="Graph animation" value={view.animation} onChange={e=>changeView({animation:e.target.value})}>{['off','breathing','ripple','drift'].map(mode=><option key={mode} value={mode}>{mode[0].toUpperCase()+mode.slice(1)}</option>)}</select></label>
+      <label>Preset <span className="share-graph-select"><select aria-label="Graph preset" value={view.preset} onChange={e=>changeView({preset:e.target.value})}>{Object.entries(PRESETS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select><SelectCaret/></span></label>
+      <label>Animation <span className="share-graph-select"><select aria-label="Graph animation" value={view.animation} onChange={e=>changeView({animation:e.target.value})}>{['off','breathing','ripple','drift'].map(mode=><option key={mode} value={mode}>{mode[0].toUpperCase()+mode.slice(1)}</option>)}</select><SelectCaret/></span></label>
       {reducedMotion && view.animation!=='off' && <span>Animation paused by your reduced-motion preference.</span>}
     </div>}
     <div className={'share-graph-workspace'+(selected?' has-selection':'')}><div className="share-graph-viewport">
@@ -85,17 +129,19 @@ function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onVie
       autoPauseRedraw={layout!=='timeline'||view.animation==='off'||reducedMotion||!!selected}
       onRenderFramePre={()=>{
         const now=performance.now(), clock=motion.current, delta=Math.min(100,now-(clock.last||now));clock.last=now;
-        if(layout!=='timeline'||view.animation==='off'||reducedMotion||selected||document.hidden||!host.current?.getClientRects().length)return;
+        if(layout!=='timeline'||view.animation==='off'||reducedMotion||selected||dragging.current||document.hidden||!host.current?.getClientRects().length)return;
         clock.time+=delta;
         model.nodes.forEach(n=>{
-          const offset=motionOffset(view.animation,n.origin,clock.time,phaseFor(n.id),view.preset==='timeline'&&n.origin.anchor);
+          const offset=motionOffset(view.animation,n.origin,clock.time,phaseFor(n.id),n.manual||view.preset==='timeline'&&n.origin.anchor);
           n.x=n.fx=n.origin.x+offset.x;n.y=n.fy=n.origin.y+offset.y;
         });
       }}
-      backgroundColor="#0b1728" enableNodeDrag={layout!=='timeline'} cooldownTicks={layout==='connections'?100:0} minZoom={.01} maxZoom={4}
-      onEngineStop={()=>{if(!fitted.current){fitted.current=true;fit();}}}
+      backgroundColor="#0b1728" enableNodeDrag={true} cooldownTicks={layout==='connections'?100:0} minZoom={.01} maxZoom={4}
+      onEngineStop={()=>{if(layout==='connections'&&!connectionFitted.current){connectionFitted.current=true;fit();}}}
+      onZoom={recordCamera} onZoomEnd={()=>{recordCamera();if(cameraReady.current)persist();}}
       nodeLabel={node=>{const tip=document.createElement('span');tip.textContent=node.label;return tip;}}
-      onNodeDragEnd={node=>{node.fx=node.x;node.fy=node.y;}}
+      onNodeDrag={()=>{dragging.current=true;}}
+      onNodeDragEnd={node=>{dragging.current=false;node.fx=node.x;node.fy=node.y;node.origin={...node.origin,x:node.x,y:node.y};node.manual=true;persist();}}
       onBackgroundClick={()=>setSelected(null)}
       linkLineDash={edge=>edge.relation?.includes('board')?[4,3]:null}
       linkCurvature={.12} linkDirectionalArrowLength={3}

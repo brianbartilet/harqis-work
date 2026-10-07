@@ -6,7 +6,7 @@
 <input type="hidden" name="graph_view" value="{{ activity.get('graph_view', {})|tojson|forceescape }}">
 <div data-object-exclusions>{% for identity in activity.get('excluded_ids', []) %}<input type="hidden" name="excluded_object_ids" value="{{ identity }}">{% endfor %}</div>
 <nav class="share-tabs" role="tablist" aria-label="Share recipe sections">
-  {% for key, label in [('recipe','Details and filtering'),('entries','Entries'),('actions','Actions and ideas'),('boards','Boards'),('graph','Graph'),('agent','Agent')] %}
+  {% for key, label in [('recipe','Details and Filtering'),('entries','Entries'),('actions','Actions and Ideas'),('boards','Boards'),('graph','Graph'),('agent','Agent')] %}
   <button type="button" role="tab" id="share-tab-{{ key }}" aria-controls="share-panel-{{ key }}" aria-selected="{{ 'true' if loop.first else 'false' }}" data-share-tab="{{ key }}">{{ label }}</button>
   {% endfor %}
 </nav>

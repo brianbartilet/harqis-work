@@ -42,11 +42,11 @@
         const groups = new Map();
         excluded.forEach(input=>{
           const kind = input.value.split(':')[0];
-          const group = kind === 'entry' ? 'Entries' : ['action','idea'].includes(kind) ? 'Actions and ideas' : ['board','goal'].includes(kind) ? 'Boards' : 'Graph';
+          const group = kind === 'entry' ? 'Entries' : ['action','idea'].includes(kind) ? 'Actions and Ideas' : ['board','goal'].includes(kind) ? 'Boards' : 'Graph';
           if (!groups.has(group)) groups.set(group, []);
           groups.get(group).push(input);
         });
-        for (const group of ['Entries','Actions and ideas','Boards','Graph']) {
+        for (const group of ['Entries','Actions and Ideas','Boards','Graph']) {
           if (!groups.has(group)) continue;
           const section=document.createElement('section'), title=document.createElement('h3');
           title.textContent=group; section.append(title);

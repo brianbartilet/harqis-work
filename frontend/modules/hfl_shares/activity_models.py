@@ -5,11 +5,28 @@ import json
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class GraphPoint(BaseModel):
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+    x: float
+    y: float
+
+
+class GraphPosition(GraphPoint):
+    manual: bool = False
+
+
+class GraphViewport(GraphPoint):
+    zoom: float = Field(ge=.01, le=4)
+
+
 class GraphView(BaseModel):
     model_config = ConfigDict(extra='forbid')
     preset: Literal['timeline', 'sources', 'people', 'tools', 'companies', 'mindmap'] = 'timeline'
     animation: Literal['off', 'breathing', 'ripple', 'drift'] = 'off'
     hidden_kinds: list[str] = Field(default_factory=list, max_length=100)
+    positions: dict[str, GraphPosition] = Field(default_factory=dict, max_length=20000)
+    viewport: GraphViewport | None = None
+    animation_time: float = Field(default=0, ge=0, allow_inf_nan=False)
 
 
 class ActivitySelection(BaseModel):

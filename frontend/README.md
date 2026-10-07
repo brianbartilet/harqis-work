@@ -954,7 +954,7 @@ responsive navigation, corpus filtering, and reference downloads.
 
 #### Workspace context sharing
 
-Express > **Share Activity** now has Details and filtering, Entries, Actions and ideas,
+Express > **Share Activity** now has Details and Filtering, Entries, Actions and Ideas,
 Boards, and Graph tabs. Generate share recipe from Corpus, Graph, or Kanban
 preselects eligible workspace context in an unsaved draft. Saved recipes and
 generated-share lists retain their existing controls.
@@ -982,8 +982,10 @@ are projected from the same approved snapshot, and public routes expose no edits
 
 Automatic inclusion defaults on for all four object types in new recipes. Freeze
 disables these controls while preserving their selections. The shared activity
-graph reuses Activity Graph layouts and motion modes; presets, animation and type
-visibility are saved with the recipe and carried into its snapshot. Type filters
+graph reuses Activity Graph layouts and motion modes; presets, animation, type
+visibility, zoom, pan and node positions are saved with the recipe and carried
+into its snapshot. Dragged nodes retain their positions during animation;
+choosing another preset creates a fresh arrangement. Type filters
 only change the graph view. All types start visible, and node details remain
 available by selecting an orb without an additional object directory.
 
@@ -992,7 +994,7 @@ for canonical API requirements and local acceptance checks.
 
 Sharing review uses bounded entry scroll loading (50 per batch, 150 mounted),
 Kanban-style action/idea cards with per-item Connections, and read-only board/timeline
-canvas graphs from approved snapshot data. Details and filtering combines recipe details and filters, with filters immediately
+canvas graphs from approved snapshot data. Details and Filtering combines recipe details and filters, with filters immediately
 after Description, and hides the preview region;
 workspace-reset controls only appear for inherited scope. Graph assets are rebuilt
 by `npm run build:knowledge-graph`, including `share-graphs.jsx`.

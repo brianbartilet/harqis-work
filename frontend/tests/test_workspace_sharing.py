@@ -227,7 +227,7 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     page, client = editor_page
     page.set_viewport_size({'width':width, 'height':1000})
     page.goto('https://editing.test/sharing')
-    expect(page.get_by_role('tab', name='Details and filtering', exact=True)).to_have_attribute('aria-selected', 'true')
+    expect(page.get_by_role('tab', name='Details and Filtering', exact=True)).to_have_attribute('aria-selected', 'true')
     expect(page.get_by_role('tab', name='Recipe', exact=True)).to_have_count(0)
     expect(page.get_by_role('tab', name='Filters', exact=True)).to_have_count(0)
     expect(page.locator('[data-share-secrets-status]')).to_have_count(0)
@@ -238,7 +238,7 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     assert page.locator('[data-share-tab="entries"]').evaluate('(el)=>getComputedStyle(el).cursor') == 'pointer'
     assert page.locator('[data-recipe-fields]').evaluate('(el)=>{const access=[...el.querySelectorAll("details")].find(e=>e.textContent.includes("Access, expiry"));return !!(access.compareDocumentPosition(el.querySelector("[name=freeze_snapshot]")) & Node.DOCUMENT_POSITION_FOLLOWING)}')
 
-    page.get_by_role('tab', name='Actions and ideas').click()
+    page.get_by_role('tab', name='Actions and Ideas').click()
     page.locator('[name="activity_sections"][value="actions"]').check()
     expect(page.locator('[data-share-object="action:a"]')).to_be_visible(timeout=15000)
     card = page.locator('.share-object-card').filter(has=page.locator('[data-share-object="action:a"]'))
@@ -276,13 +276,13 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     expect(entry.locator('.share-entry-content.markdown-body')).to_be_visible()
     expect(page.get_by_text('Scroll for more entries', exact=True)).to_have_count(0)
     entry.screenshot(path=str(tmp_path / 'sharing-entry.png'))
-    page.get_by_role('tab', name='Details and filtering', exact=True).click()
+    page.get_by_role('tab', name='Details and Filtering', exact=True).click()
     expect(page.locator('[data-source-selector]')).to_be_visible()
     page.get_by_role('tab', name='Agent', exact=True).click()
     expect(page.locator('.share-agent-test')).to_be_visible()
     expect(page.locator('[data-test-question]')).to_be_visible()
     expect(page.locator('[data-test-agent]')).to_be_visible()
-    page.get_by_role('tab', name='Details and filtering', exact=True).click()
+    page.get_by_role('tab', name='Details and Filtering', exact=True).click()
     page.locator('#name').fill('Workspace demo')
     page.locator('#recipient').fill('Reviewer')
     page.locator('#auth-mode').select_option('qr')
@@ -308,6 +308,26 @@ def test_shared_graph_markdown_sanitizes_untrusted_content():
     assert 'body_html' not in graph['nodes'][0]
 
 
+def test_graph_context_does_not_publish_excluded_node_positions(context, sharing_corpus):
+    snapshot = build_snapshot(recipe(activity={
+        'excluded_ids':['action:a'],
+        'graph_view':{'positions':{'action:a':{'x':10,'y':20}, 'idea:i':{'x':30,'y':40}}},
+    }), (sharing_corpus,))
+    assert snapshot.activity['graph']['view']['positions'] == {'idea:i':{'x':30,'y':40,'manual':False}}
+
+
+@pytest.mark.parametrize('value', [
+    {'viewport':{'x':0,'y':0,'zoom':0}},
+    {'viewport':{'x':float('inf'),'y':0,'zoom':1}},
+    {'positions':{'node':{'x':float('nan'),'y':0}}},
+    {'animation_time':float('inf')},
+])
+def test_graph_context_rejects_invalid_coordinates(value):
+    from modules.hfl_shares.activity_models import GraphView
+    with pytest.raises(ValueError):
+        GraphView.model_validate(value)
+
+
 @pytest.mark.parametrize('width', [1440, 390])
 def test_recipe_defaults_exclusions_and_graph_preferences(editor_page, context, sharing_corpus, width, tmp_path):
     import json
@@ -330,14 +350,14 @@ def test_recipe_defaults_exclusions_and_graph_preferences(editor_page, context, 
     freeze.check()
     assert page.locator('form[data-social-form]').evaluate('(f)=>new FormData(f).getAll("automatic_sections")') == ['entries','actions','boards']
 
-    page.get_by_role('tab', name='Details and filtering', exact=True).click()
+    page.get_by_role('tab', name='Details and Filtering', exact=True).click()
     page.locator('summary').filter(has_text='Tags, dates, and topic').click()
     expect(page.locator('#topic-help')).to_be_visible()
     expect(page.locator('#context-prompt-help')).to_be_visible()
     expect(page.locator('[data-field-help]')).to_have_count(0)
     panel = page.locator('[data-excluded-panel]')
     expect(panel).not_to_be_visible()
-    page.get_by_role('tab', name='Actions and ideas', exact=True).click()
+    page.get_by_role('tab', name='Actions and Ideas', exact=True).click()
     expect(page.get_by_label('Include actions', exact=True)).to_be_checked()
     expect(page.get_by_label('Include ideas', exact=True)).to_be_checked()
     expect(page.get_by_label('Include completed', exact=True)).not_to_be_checked()
@@ -345,7 +365,7 @@ def test_recipe_defaults_exclusions_and_graph_preferences(editor_page, context, 
     page.locator('[data-share-object="action:a"]').uncheck()
     expect(panel).to_be_visible()
     expect(panel).to_have_attribute('open', '')
-    expect(panel.get_by_role('heading', name='Actions and ideas')).to_be_visible()
+    expect(panel.get_by_role('heading', name='Actions and Ideas')).to_be_visible()
     expect(panel.locator('.excluded-item > span')).to_have_text('Approved action')
     expect(panel.get_by_role('button', name='Restore Approved action')).to_have_text('Restore')
     assert panel.evaluate('(el)=>!!el.closest("aside") && !el.closest("form")')
@@ -369,17 +389,54 @@ def test_recipe_defaults_exclusions_and_graph_preferences(editor_page, context, 
     graph.get_by_role('button', name='actions', exact=True).click()
     expect(graph.get_by_role('button', name='actions', exact=True)).to_have_attribute('aria-pressed','false')
     expected = {'preset':'sources','animation':'drift','hidden_kinds':['actions']}
-    assert json.loads(page.locator('[name="graph_view"]').input_value()) == expected
-    page.get_by_role('tab', name='Details and filtering', exact=True).click()
+    current_view = json.loads(page.locator('[name="graph_view"]').input_value())
+    assert {key:current_view[key] for key in expected} == expected
+    graph.get_by_label('Graph animation', exact=True).select_option('off')
+    expect(page.locator('[data-preview-status]')).not_to_be_visible()
+    graph.locator('canvas').scroll_into_view_if_needed()
+    page.wait_for_function('JSON.parse(document.querySelector("[name=graph_view]").value).viewport !== null')
+    page.wait_for_timeout(200)
+    before_zoom = json.loads(page.locator('[name="graph_view"]').input_value())['viewport']['zoom']
+    graph.get_by_role('button', name='Zoom in', exact=True).click()
+    page.wait_for_function('(zoom)=>JSON.parse(document.querySelector("[name=graph_view]").value).viewport.zoom > zoom', arg=before_zoom)
+    page.wait_for_timeout(200)
+    canvas = graph.locator('canvas')
+    canvas.scroll_into_view_if_needed()
+    box = canvas.bounding_box()
+    before_pan = json.loads(page.locator('[name="graph_view"]').input_value())['viewport']
+    page.mouse.move(box['x']+20, box['y']+box['height']-25)
+    page.mouse.down()
+    page.mouse.move(box['x']+65, box['y']+box['height']-55, steps=8)
+    page.mouse.up()
+    page.wait_for_function('(x)=>Math.abs(JSON.parse(document.querySelector("[name=graph_view]").value).viewport.x-x)>1', arg=before_pan['x'])
+    # ForceGraph refreshes its pointer hit-test canvas at an 800ms interval.
+    page.wait_for_timeout(900)
+    context_before_drag = json.loads(page.locator('[name="graph_view"]').input_value())
+    position = context_before_drag['positions']['sources:notes']
+    viewport = context_before_drag['viewport']
+    x = box['x'] + box['width']/2 + (position['x']-viewport['x'])*viewport['zoom']
+    y = box['y'] + box['height']/2 + (position['y']-viewport['y'])*viewport['zoom']
+    page.mouse.move(x,y)
+    page.wait_for_timeout(100)
+    page.mouse.down()
+    page.mouse.move(x+25,y+30,steps=8)
+    page.mouse.up()
+    page.wait_for_function('JSON.parse(document.querySelector("[name=graph_view]").value).positions["sources:notes"].manual === true', timeout=3000)
+    graph.get_by_label('Graph animation', exact=True).select_option('drift')
+    captured = json.loads(page.locator('[name="graph_view"]').input_value())
+    page.get_by_role('tab', name='Details and Filtering', exact=True).click()
     page.locator('#name').fill('Graph preferences')
     page.locator('#recipient').fill('Reviewer')
     page.get_by_role('button', name='Save recipe', exact=True).click()
     expect(page.locator('[name="configuration_id"]')).not_to_have_value('')
     saved = get_share_store().list_configurations()[0]
-    assert saved.activity['graph_view'] == expected
+    saved_view = saved.activity['graph_view']
+    assert {key:saved_view[key] for key in expected} == expected
+    assert saved_view['positions'] == captured['positions']
+    assert saved_view['viewport'] == captured['viewport']
     assert saved.activity['automatic'] == ['entries','actions','boards']
     snapshot = build_snapshot(saved, (sharing_corpus,))
-    assert snapshot.activity['graph']['view'] == expected
+    assert snapshot.activity['graph']['view'] == saved_view
     assert any(n['kind']=='actions' for n in snapshot.activity['graph']['nodes'])
     page.get_by_role('tab', name='Graph', exact=True).click()
     expect(graph.get_by_label('Graph preset', exact=True)).to_have_value('sources')
@@ -389,4 +446,7 @@ def test_recipe_defaults_exclusions_and_graph_preferences(editor_page, context, 
     graph.locator('[data-shared-graph]').scroll_into_view_if_needed()
     # Allow the graph's initial 250ms camera fit to finish before visual QA.
     page.wait_for_timeout(500)
+    restored = json.loads(page.locator('[name="graph_view"]').input_value())
+    assert restored['positions'] == saved_view['positions']
+    assert restored['viewport'] == pytest.approx(saved_view['viewport'])
     graph.locator('[data-shared-graph]').screenshot(path=str(tmp_path / f'sharing-graph-settings-{width}.png'))
