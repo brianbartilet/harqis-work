@@ -227,6 +227,11 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     page, client = editor_page
     page.set_viewport_size({'width':width, 'height':1000})
     page.goto('https://editing.test/sharing')
+    # This scenario intentionally shares historical fixture entries.
+    filters = page.locator('summary').filter(has_text='Tags, dates, and topic')
+    filters.click()
+    page.locator('#share-from-days').select_option('0')
+    filters.click()
     expect(page.get_by_role('tab', name='Details and Filtering', exact=True)).to_have_attribute('aria-selected', 'true')
     expect(page.get_by_role('tab', name='Recipe', exact=True)).to_have_count(0)
     expect(page.get_by_role('tab', name='Filters', exact=True)).to_have_count(0)
@@ -340,6 +345,11 @@ def test_recipe_defaults_exclusions_and_graph_preferences(editor_page, context, 
     page, client = editor_page
     page.set_viewport_size({'width':width, 'height':1000})
     page.goto('https://editing.test/sharing')
+    # This scenario intentionally shares historical fixture entries.
+    filters = page.locator('summary').filter(has_text='Tags, dates, and topic')
+    filters.click()
+    page.locator('#share-from-days').select_option('0')
+    filters.click()
     automatic = page.locator('[name="automatic_sections"]')
     assert automatic.evaluate_all('(items)=>items.length===5 && items.every(i=>i.checked && i.disabled)')
     assert page.locator('[name="activity_sections"]').evaluate_all('(items)=>items.length===6 && items.every(i=>i.checked)')

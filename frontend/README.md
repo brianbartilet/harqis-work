@@ -959,6 +959,14 @@ Boards, Plans, Graph, and Agent tabs. Generate share recipe from Corpus, Graph, 
 preselects eligible workspace context in an unsaved draft. Saved recipes and
 generated-share lists retain their existing controls.
 
+New standalone recipes default to the last 30 days. **From days** offers None,
+15, 30, or 90 days and fills Entry date plus the inclusive date range in the
+owner's timezone. Saved presets roll forward for live shares; frozen snapshots
+retain their resolved dates. Editing either date or the date type switches to a
+custom range. None clears the range. Existing recipes and workspace handoffs keep
+their filters. Oversized previews offer a last-15-days shortcut; large explicitly
+workspace-linked objects may still need individual exclusions.
+
 Entry filters preserve combined-view rules. Filters can edit those rules or
 explicitly replace inherited workspace scope. Explicit workspace assignments
 retain standalone actions/ideas even without matching entries. Defaults exclude

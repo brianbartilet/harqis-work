@@ -324,6 +324,15 @@
               <p id="topic-help" class="field-help">Entries must contain every word in this phrase.</p>
               <textarea class="control" id="topic" name="topic" rows="3" data-preview-filter>{{ cfg.topic if cfg else '' }}</textarea>
             </div>
+            {% set from_days = cfg.from_days if cfg else 30 %}
+            <div class="field"><label for="share-from-days">From days</label>
+              <select class="control" id="share-from-days" name="from_days" data-preview-filter data-date-presets='{{ date_presets|tojson|forceescape }}'>
+                {% for value, label in [(0, 'None'), (15, '15'), (30, '30'), (90, '90')] %}
+                <option value="{{ value }}" {% if from_days == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+              <p class="field-help">Last X days, including today, by Entry date. Live shares roll forward each day. None clears the range; editing dates switches to a custom range. Applies to entries and inherited objects; workspace-linked objects keep their own scope.</p>
+            </div>
             <div class="field"><label for="share-date-field">Date type</label>
               <select class="control" id="share-date-field" name="date_field" data-preview-filter>
                 {% for value, label in [('entry', 'Entry date'), ('created', 'Created'), ('updated', 'Updated')] %}
@@ -332,8 +341,8 @@
               </select>
             </div>
             <div class="two">
-              <div class="field"><label for="date-from">From date</label><input class="control [color-scheme:dark]" id="date-from" type="date" name="date_from" value="{{ cfg.date_from if cfg else '' }}" data-preview-filter onclick="if (this.showPicker) this.showPicker()"></div>
-              <div class="field"><label for="date-to">To date</label><input class="control [color-scheme:dark]" id="date-to" type="date" name="date_to" value="{{ cfg.date_to if cfg else '' }}" data-preview-filter onclick="if (this.showPicker) this.showPicker()"></div>
+              <div class="field"><label for="date-from">From date</label><input class="control [color-scheme:dark]" id="date-from" type="date" name="date_from" value="{{ cfg.date_from if cfg else date_presets['30'].date_from }}" data-preview-filter onclick="if (this.showPicker) this.showPicker()"></div>
+              <div class="field"><label for="date-to">To date</label><input class="control [color-scheme:dark]" id="date-to" type="date" name="date_to" value="{{ cfg.date_to if cfg else date_presets['30'].date_to }}" data-preview-filter onclick="if (this.showPicker) this.showPicker()"></div>
             </div>
             <div class="field mb-0">
               <div class="field-heading"><label for="context-prompt">Background for HARQIS</label>
@@ -822,6 +831,27 @@
       input.checked = false;
     });
     updateClearTags();
+    schedulePreview();
+  });
+  const fromDays = form.querySelector('[name="from_days"]');
+  const dateField = form.querySelector('[name="date_field"]');
+  const dateFrom = form.querySelector('[name="date_from"]');
+  const dateTo = form.querySelector('[name="date_to"]');
+  const applyDatePreset = () => {
+    const range = JSON.parse(fromDays.dataset.datePresets)[fromDays.value];
+    if (range) dateField.value = 'entry';
+    dateFrom.value = range?.date_from || '';
+    dateTo.value = range?.date_to || '';
+  };
+  fromDays?.addEventListener('change', applyDatePreset);
+  [dateField, dateFrom, dateTo].forEach(input => input?.addEventListener('change', () => {
+    if (fromDays) fromDays.value = '0';
+  }));
+  previewContent?.addEventListener('click', event => {
+    const button = event.target.closest('[data-share-date-recovery]');
+    if (!button || !fromDays) return;
+    fromDays.value = button.dataset.shareDateRecovery;
+    applyDatePreset();
     schedulePreview();
   });
   form.querySelectorAll('[data-preview-filter]').forEach(input => {

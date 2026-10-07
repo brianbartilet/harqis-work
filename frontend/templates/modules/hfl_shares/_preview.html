@@ -1,5 +1,10 @@
 {% if preview_error %}
-<div class="message error mb-0" data-preview-error>{{ preview_error }}</div>
+<div class="message error mb-0" data-preview-error>{{ preview_error }}
+{% if 'snapshot size limit' in preview_error and not hide_preview_agent %}
+<p>Try fewer days, or narrow your sources and selected objects.</p>
+<button type="button" class="btn btn-soft" data-share-date-recovery="15">Use last 15 days</button>
+{% endif %}
+</div>
 {% elif preview %}
 <section class="rounded-xl border border-slate-700 bg-slate-950 p-4" data-preview-ready>
   <input type="hidden" name="reference_selection_initialized" value="1">

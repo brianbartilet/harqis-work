@@ -53,9 +53,12 @@ class ShareConfiguration:
     updated_at: str = ""
     date_field: str = "entry"
     corpus_scope: str = ""
+    from_days: int = 0
     activity: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if type(self.from_days) is not int or self.from_days not in {0, 15, 30, 90}:
+            raise ValueError("From days must be None, 15, 30, or 90.")
         if self.activity:
             from modules.hfl_shares.activity_models import ActivitySelection
             ActivitySelection.model_validate(self.activity)

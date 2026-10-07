@@ -339,6 +339,7 @@ def _configuration_from_form(
         tags=parse_csv(
             ",".join(str(item) for item in form.getlist("tags"))
         ),
+        from_days=int(str(form.get("from_days") or "0")),
         date_field=str(form.get("date_field") or "entry"),
         corpus_scope=str(form.get("corpus_scope") or ""),
         date_from=str(form.get("date_from") or "").strip(),
@@ -525,10 +526,14 @@ def _owner_context_sync(
         limit=_OWNER_SHARE_PAGE_SIZE,
         offset=(share_page - 1) * _OWNER_SHARE_PAGE_SIZE,
     )
+    from modules.hfl_shares.date_filters import date_presets, resolve_date_preset
+    if configuration:
+        configuration = resolve_date_preset(configuration)
     return page_context(
         request,
         user,
         "sharing",
+        date_presets=date_presets(),
         configurations=tuple(
             {
                 "configuration": item,

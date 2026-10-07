@@ -150,6 +150,8 @@ def build_snapshot(
     allow_secrets: bool = False,
     secret_tags: tuple[str, ...] = (),
 ) -> ScopeSnapshot:
+    from modules.hfl_shares.date_filters import resolve_date_preset
+    configuration = resolve_date_preset(configuration)
     all_documents = documents
     from modules.hfl_shares.activity_models import selection
     controls = selection(configuration)
@@ -306,6 +308,7 @@ def build_snapshot(
         filters={
             "tags": list(configuration.tags),
             "date_field": configuration.date_field,
+            "from_days": configuration.from_days,
             "corpus_scope": configuration.corpus_scope,
             "date_from": configuration.date_from,
             "date_to": configuration.date_to,
