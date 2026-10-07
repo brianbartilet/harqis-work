@@ -76,3 +76,11 @@
 .share-dialog-header{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:0 0 1rem}.share-dialog-header h3{font-size:1rem;font-weight:700;margin:0}.share-dialog-header button{flex-shrink:0}
 .share-connections-dialog{width:min(64rem,96vw);background:#0b1424}
 @media(max-width:700px){.share-graph-workspace.has-selection{grid-template-columns:minmax(0,1fr)}.share-graph-inspector{border-left:0;border-top:1px solid #26374d;max-height:260px}}
+.automatic-inclusion .check:has(input:disabled){opacity:.5;cursor:not-allowed}
+.excluded-items-panel[hidden]{display:none}
+.excluded-items-panel section{margin-top:1rem}.excluded-items-panel h3{font-size:.8rem;color:#94a3b8;font-weight:600;margin-bottom:.5rem}
+.excluded-item{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.6rem 0;border-top:1px solid #26374d;font-size:.85rem}
+.excluded-item>span{min-width:0;overflow-wrap:anywhere}.excluded-item button{flex-shrink:0}
+.share-graph-options{display:flex;flex-wrap:wrap;gap:.8rem;margin:.25rem .25rem .75rem;font-size:.8rem}.share-graph-options label{display:flex;align-items:center;gap:.5rem}
+.share-graph-options select{background:#0b1728;color:#e2e8f0;border:1px solid #475569;border-radius:.4rem;padding:.35rem}
+.share-graph-legend button[aria-pressed=false]{opacity:.4}.share-graph-legend button{cursor:pointer}.share-graph-legend button:focus-visible{outline:2px solid #38bdf8;outline-offset:2px}

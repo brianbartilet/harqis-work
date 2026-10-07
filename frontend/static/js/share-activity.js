@@ -8,7 +8,7 @@
   const selectTab = key => {
     active = key;
     const shell = form?.querySelector('[data-preview-shell]');
-    if (shell) shell.hidden = key === 'filters' || key === 'recipe';
+    if (shell) shell.hidden = key === 'recipe';
     const test = form?.querySelector('[data-test-agent]');
     if (test) test.hidden = key !== 'agent';
     form?.querySelectorAll('[data-share-tab]').forEach(b => {
@@ -24,22 +24,62 @@
   window.refreshShareActivity = () => {
     if (form) {
       const excluded = [...form.querySelectorAll('[name="excluded_object_ids"]')];
-      const summary = form.querySelector('[data-excluded-summary]');
+      const panel = document.querySelector('[data-excluded-panel]');
+      const summary = panel?.querySelector('[data-excluded-summary]');
+      form.querySelectorAll('[data-share-object]').forEach(input=>{
+        const title = input.parentElement.querySelector('strong, span');
+        labels.set(input.dataset.shareObject, (title?.textContent || input.parentElement.textContent).trim());
+      });
       summary?.replaceChildren();
-      if (excluded.length && summary) {
-        const title=document.createElement('p');title.textContent='Excluded objects (remain excluded during live refresh):';summary.append(title);
-        excluded.forEach(input=>{const b=document.createElement('button');b.type='button';b.className='btn btn-soft';b.textContent='Restore '+(labels.get(input.value)||input.value);b.onclick=()=>{input.remove();form.dispatchEvent(new Event('activitychange'));};summary.append(b);});
+      if (panel) {
+        const previous = new Set(JSON.parse(panel.dataset.excludedIds || '[]'));
+        if (excluded.some(input => !previous.has(input.value))) panel.open = true;
+        panel.hidden = !excluded.length;
+        panel.dataset.excludedIds = JSON.stringify(excluded.map(input=>input.value));
+        panel.querySelector('[data-excluded-count]').textContent = `${excluded.length} total`;
       }
-      form.querySelectorAll('[data-share-object]').forEach(input=>labels.set(input.dataset.shareObject,input.parentElement.textContent.trim()));
+      if (excluded.length && summary) {
+        const groups = new Map();
+        excluded.forEach(input=>{
+          const kind = input.value.split(':')[0];
+          const group = kind === 'entry' ? 'Entries' : ['action','idea'].includes(kind) ? 'Actions and ideas' : ['board','goal'].includes(kind) ? 'Boards' : 'Graph';
+          if (!groups.has(group)) groups.set(group, []);
+          groups.get(group).push(input);
+        });
+        for (const group of ['Entries','Actions and ideas','Boards','Graph']) {
+          if (!groups.has(group)) continue;
+          const section=document.createElement('section'), title=document.createElement('h3');
+          title.textContent=group; section.append(title);
+          groups.get(group).forEach(input=>{
+            const row=document.createElement('div'), name=document.createElement('span'), button=document.createElement('button');
+            row.className='excluded-item'; name.textContent=labels.get(input.value)||input.value;
+            button.type='button';button.className='btn btn-soft';button.textContent='Restore';button.setAttribute('aria-label','Restore '+name.textContent);
+            button.onclick=()=>{input.remove();form.dispatchEvent(new Event('activitychange'));window.refreshShareActivity();};
+            row.append(name,button);section.append(row);
+          });
+          summary.append(section);
+        }
+      }
       if (savedLabels) savedLabels.value=JSON.stringify(Object.fromEntries(excluded.map(input=>[input.value,labels.get(input.value)||'Excluded object'])));
       form.querySelectorAll('[data-outside-board]').forEach(input=>{input.checked=[...form.querySelectorAll('[name="outside_board_ids"]')].some(v=>v.value===input.dataset.outsideBoard);});
-      const secrets=form.querySelector('[data-include-secrets]');
-      form.querySelector('[data-share-secrets-status]').textContent=(secrets?.checked?'Secrets included across all sections':'Secrets excluded')+' · All recipient content is read-only.';
       selectTab(active);
     }
     renderGraphs();
   };
   if (form) {
+    const freeze = form.querySelector('input[type="checkbox"][name="freeze_snapshot"]');
+    const automatic = [...form.querySelectorAll('input[type="checkbox"][name="automatic_sections"]')];
+    const updateAutomaticState = () => {
+      automatic.forEach(input => { input.disabled = !!freeze?.checked; });
+    };
+    freeze?.addEventListener('change', updateAutomaticState);
+    updateAutomaticState();
+    // Disabled inputs are omitted from submission; retain the saved choices while frozen.
+    form.addEventListener('formdata', event => {
+      automatic.filter(input => input.disabled && input.checked).forEach(input => {
+        event.formData.append(input.name, input.value);
+      });
+    });
     form.querySelectorAll('[data-field-help]').forEach(button => {
       const help = document.getElementById(button.getAttribute('aria-controls'));
       let pinned = false;
@@ -66,6 +106,7 @@
     ['[data-source-selector]','#topic','#context-prompt'].forEach(sel=>{
       const el=form.querySelector(sel);if(el)filters.append(el.closest('details.expand-panel')||el.closest('.field'));
     });
+    form.querySelector('#description').closest('.field').after(form.querySelector('[data-filter-section]'));
     const scope=form.querySelector('[name="corpus_scope"]');
     if(scope){
       filters.prepend(scope);
@@ -101,7 +142,10 @@
     form.addEventListener('change',e=>{
       const input=e.target;
       if(input.matches('[data-share-object]')){
-        const hidden=document.createElement('input');hidden.type='hidden';hidden.name='excluded_object_ids';hidden.value=input.dataset.shareObject;form.querySelector('[data-object-exclusions]').append(hidden);form.dispatchEvent(new Event('activitychange'));
+        const box=form.querySelector('[data-object-exclusions]');
+        [...box.children].filter(v=>v.value===input.dataset.shareObject).forEach(v=>v.remove());
+        if(!input.checked){const hidden=document.createElement('input');hidden.type='hidden';hidden.name='excluded_object_ids';hidden.value=input.dataset.shareObject;box.append(hidden);}
+        form.dispatchEvent(new Event('activitychange'));
       }
       if(input.matches('[data-outside-board]')){
         const box=form.querySelector('[data-outside-board-values]');[...box.children].filter(v=>v.value===input.dataset.outsideBoard).forEach(v=>v.remove());

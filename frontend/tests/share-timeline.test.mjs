@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {shareTimeline, timelineBounds} from '../src/share-timeline.mjs';
+import {presetLayout} from '../src/graph-presets.mjs';
 
 const nodes = [
   {id:'daily:2026-01-01', kind:'daily', label:'2026-01-01'},
@@ -28,13 +29,12 @@ test('latest entry, date and direct entities define the fit, not a calendar wind
   }
 });
 
-test('date columns are ordered and equally spaced despite calendar gaps', () => {
+test('timeline mirrors Activity Graph date spacing and scattered child positions', () => {
   const {positions} = shareTimeline(nodes, edges);
   assert.equal(positions.get('daily:2026-01-01').y, 0);
   assert.equal(positions.get('daily:2026-10-07').y, 0);
-  assert.equal(positions.get('daily:2026-10-07').x - positions.get('daily:2026-01-01').x, 280);
-  assert.ok(positions.get('latest').y < 0);
-  assert.ok(positions.get('person').y > 0);
+  assert.ok(positions.get('daily:2026-10-07').x > positions.get('daily:2026-01-01').x);
+  assert.deepEqual(positions, presetLayout(nodes, edges, 'timeline').positions);
   assert.equal(positions.size, nodes.length);
   assert.equal(new Set([...positions.values()].map(p => `${p.x},${p.y}`)).size, nodes.length);
 });

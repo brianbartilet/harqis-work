@@ -954,7 +954,7 @@ responsive navigation, corpus filtering, and reference downloads.
 
 #### Workspace context sharing
 
-Express > **Share Activity** now has Recipe, Filters, Entries, Actions and Ideas,
+Express > **Share Activity** now has Details and filtering, Entries, Actions and ideas,
 Boards, and Graph tabs. Generate share recipe from Corpus, Graph, or Kanban
 preselects eligible workspace context in an unsaved draft. Saved recipes and
 generated-share lists retain their existing controls.
@@ -967,6 +967,12 @@ require per-board opt-in; mapped goals never recursively include other boards.
 Excluded objects remain excluded during live refresh. Source objects are never
 modified by sharing.
 
+New recipes include entries, actions, ideas, boards and the activity graph by
+default. Excluded items appear in an initially expanded sidebar accordion grouped
+by tab, with a Restore button per item. The accordion hides when empty. Topic and
+agent-background helper text stays visible, and the initial agent question uses
+the profile nickname (with the profile display-name fallback).
+
 Frozen shares capture all content together. Live recipes independently choose
 approved-object updates or automatic matching for entries, actions, ideas, and
 boards. New references stay disabled after generation. Secrets remain excluded
@@ -974,11 +980,19 @@ unless the owner enables Include secrets and unlocks the Activity Corpus PIN.
 That switch applies across all object types. Public graphs and assistant citations
 are projected from the same approved snapshot, and public routes expose no edits.
 
+Automatic inclusion defaults on for all four object types in new recipes. Freeze
+disables these controls while preserving their selections. The shared activity
+graph reuses Activity Graph layouts and motion modes; presets, animation and type
+visibility are saved with the recipe and carried into its snapshot. Type filters
+only change the graph view. All types start visible, and node details remain
+available by selecting an orb without an additional object directory.
+
 See [sharing operations and compatibility](../docs/info/HFL-CORPUS-SHARING.md#workspace-context-sharing)
 for canonical API requirements and local acceptance checks.
 
 Sharing review uses bounded entry scroll loading (50 per batch, 150 mounted),
 Kanban-style action/idea cards with per-item Connections, and read-only board/timeline
-canvas graphs from approved snapshot data. Recipe/Filters hide the preview region;
+canvas graphs from approved snapshot data. Details and filtering combines recipe details and filters, with filters immediately
+after Description, and hides the preview region;
 workspace-reset controls only appear for inherited scope. Graph assets are rebuilt
 by `npm run build:knowledge-graph`, including `share-graphs.jsx`.

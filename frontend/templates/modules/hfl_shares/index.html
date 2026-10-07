@@ -152,6 +152,7 @@
     .recipe-editor { order:2; }
     .approval-panel { order:3; }
     .generated-shares-panel { order:4; }
+    .excluded-items-panel { order:5; }
   }
   @media(max-width:600px) {
     .two,.stat-grid { grid-template-columns:minmax(0,1fr); }
@@ -319,9 +320,8 @@
             </div>
             <div class="field">
               <div class="field-heading"><label for="topic">Topic phrase filter</label>
-                <button type="button" class="help-icon" data-field-help aria-label="Help with topic phrase filter" aria-expanded="false" aria-controls="topic-help">?</button>
               </div>
-              <p id="topic-help" class="field-help" hidden>Entries must contain every word in this phrase.</p>
+              <p id="topic-help" class="field-help">Entries must contain every word in this phrase.</p>
               <textarea class="control" id="topic" name="topic" rows="3" data-preview-filter>{{ cfg.topic if cfg else '' }}</textarea>
             </div>
             <div class="field"><label for="share-date-field">Date type</label>
@@ -337,9 +337,8 @@
             </div>
             <div class="field mb-0">
               <div class="field-heading"><label for="context-prompt">Background for HARQIS</label>
-                <button type="button" class="help-icon" data-field-help aria-label="Help with background for HARQIS" aria-expanded="false" aria-controls="context-prompt-help">?</button>
               </div>
-              <p id="context-prompt-help" class="field-help" hidden>Optional background guidance for the agent. It cannot override share-scoped privacy and safety rules.</p>
+              <p id="context-prompt-help" class="field-help">Optional background guidance for the agent. It cannot override share-scoped privacy and safety rules.</p>
               <textarea class="control" id="context-prompt" name="context_prompt" rows="4" maxlength="4000" data-preview-filter>{{ cfg.context_prompt if cfg else '' }}</textarea>
             </div>
           </div>
@@ -433,6 +432,17 @@
         {% set configuration_id = cfg.id if cfg else '' %}
         {% include "modules/hfl_shares/partials/generated_shares.html" %}
         </div>
+      </details>
+      <details class="panel owner-list-panel excluded-items-panel" data-excluded-panel open hidden>
+        <summary>
+          <span>
+            <span class="block text-base font-semibold text-white">Excluded items</span>
+            <span class="mt-1 block text-xs font-normal text-slate-500" data-excluded-count></span>
+            <span class="mt-1 block text-xs font-normal text-slate-400">Restore items to this recipe.</span>
+          </span>
+          <span class="owner-list-arrow-shell" aria-hidden="true"><svg class="owner-list-arrow h-4 w-4 transition" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg></span>
+        </summary>
+        <div data-excluded-summary aria-live="polite"></div>
       </details>
     </aside>
   </div>

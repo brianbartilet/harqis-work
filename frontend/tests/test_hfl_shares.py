@@ -253,7 +253,7 @@ def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
     assert "<title>Share Activity · HARQIS</title>" in response.text
     assert ">Share Activity</h1>" in response.text
     assert "Review workspace context, then generate frozen or live read-only shares." in response.text
-    assert response.text.count('class="owner-list-arrow-shell"') == 2
+    assert response.text.count('class="owner-list-arrow-shell"') == 3
     assert ">New recipe</h2>" in response.text
     assert "Verification mode" in response.text
     assert 'id="recipient" name="recipient" required maxlength="20"' in response.text

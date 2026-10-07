@@ -568,7 +568,7 @@ def _owner_context_sync(
         corpus_scope_clauses=json.loads(configuration.corpus_scope).get("any", []) if configuration and configuration.corpus_scope else [],
         preview=preview,
         preview_answer=preview_answer,
-        preview_question=preview_question,
+        preview_question=preview_question or f"What is {_profile().display_name} currently working on?",
         suggested_prompts=_suggested_prompts(preview) if preview else (),
         error=error or corpus_error,
         success=success,
@@ -731,7 +731,7 @@ async def _preview_response(
         question = (
             _validated_question(form.get("question"))
             if with_agent
-            else str(form.get("question") or "").strip()
+            else str(form.get("question") or "").strip() or f"What is {_profile().display_name} currently working on?"
         )
         configuration = _configuration_from_form(
             form,

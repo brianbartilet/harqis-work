@@ -5,6 +5,13 @@ import json
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class GraphView(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    preset: Literal['timeline', 'sources', 'people', 'tools', 'companies', 'mindmap'] = 'timeline'
+    animation: Literal['off', 'breathing', 'ripple', 'drift'] = 'off'
+    hidden_kinds: list[str] = Field(default_factory=list, max_length=100)
+
+
 class ActivitySelection(BaseModel):
     model_config = ConfigDict(extra='forbid')
     version: Literal[1] = 1
@@ -17,6 +24,7 @@ class ActivitySelection(BaseModel):
     outside_board_ids: list[str] = Field(default_factory=list, max_length=1000)
     automatic: list[Literal['entries', 'actions', 'ideas', 'boards']] = Field(default_factory=list)
     approved_ids: dict[str, list[str]] | None = None
+    graph_view: GraphView = Field(default_factory=GraphView)
 
 
 def selection(configuration):
@@ -35,6 +43,7 @@ def from_form(form):
         include_dismissed=form.get('include_dismissed') == 'on',
         outside_board_ids=form.getlist('outside_board_ids'),
         automatic=form.getlist('automatic_sections'),
+        graph_view=json.loads(str(form.get('graph_view') or '{}')),
     ).model_dump()
 
 

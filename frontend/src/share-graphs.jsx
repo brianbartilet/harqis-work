@@ -3,32 +3,52 @@ import {createRoot} from 'react-dom/client';
 import ForceGraph2D from 'react-force-graph-2d';
 import {placeLabels} from './graph-labels.mjs';
 import {GraphIcon} from './graph-icons.jsx';
-import {presetLayout} from './graph-presets.mjs';
+import {PRESETS, presetLayout, motionOffset, phaseFor} from './graph-presets.mjs';
 import {shareTimeline, timelineBounds} from './share-timeline.mjs';
 
 // Same type palette and sizing conventions as the Activity Graph.
 const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3', ideas:'#f9ca74', actions:'#fb8ca6', goals:'#a7f3d0', drafts:'#c4b5fd', lists:'#5eead4', thoughts:'#c4b5fd', boards:'#93c5fd', sources:'#e9c96c'};
 const kindName = kind => ({daily:'Date', entries:'Entry', people:'Person', companies:'Company', ideas:'Idea', actions:'Action', thoughts:'Thought', boards:'Board', goals:'Goal', lists:'List', sources:'Source', tools:'Tool', topics:'Topic'}[kind] || kind);
+const legendLabel = kind => ({daily:'dates', companies:'organizations', drafts:'thoughts', thoughts:'list thoughts'}[kind] || kind.replaceAll('_', ' ')).toLowerCase();
 const identity = value => typeof value === 'object' ? value.id : value;
 
-function SharedGraph({data, layout = 'timeline', rootId}) {
+function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onViewChange}) {
   const host = useRef(null), graph = useRef(null), fitted = useRef(false);
   const [width, setWidth] = useState(600), [selected, setSelected] = useState(data.nodes.find(n=>n.id===rootId)||null);
-  const [directoryOpen, setDirectoryOpen] = useState(false), [query, setQuery] = useState('');
+  const [view, setView] = useState(() => ({preset:'timeline', animation:'off', hidden_kinds:[], ...initialView}));
+  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const motion = useRef({time:0, last:0});
+  const kinds = useMemo(() => [...new Set(data.nodes.map(n=>n.kind))], [data]);
+  const changeView = patch => {
+    const next = {...view, ...patch};
+    setView(next); onViewChange?.(next);
+  };
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReducedMotion(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
   const model = useMemo(() => {
     const degree = new Map(data.nodes.map(n => [n.id, 0]));
     data.edges.forEach(e => [e.source,e.target].forEach(id => degree.set(id,(degree.get(id)||0)+1)));
     const nodes = data.nodes.map(n => ({...n, visibleDegree:degree.get(n.id)||0,
       radius:layout === 'board' ? 7+1.5*(data.node_sizes?.[n.id]||3) : layout==='connections' ? Math.min(22,10+4*Math.log2(1+(degree.get(n.id)||0))) : n.kind==='entries' ? 5 : Math.min(16,6+2*Math.log2(1+(degree.get(n.id)||0)))}));
-    const timeline = layout === 'timeline' ? shareTimeline(nodes, data.edges) : null;
-    const positions = timeline?.positions || presetLayout(nodes, data.edges, layout === 'timeline' ? 'timeline' : 'mindmap', 0, rootId).positions;
+    const timeline = layout === 'timeline' && view.preset === 'timeline' ? shareTimeline(nodes, data.edges) : null;
+    const positions = timeline?.positions || presetLayout(nodes, data.edges, layout === 'timeline' ? view.preset : 'mindmap', 0, rootId).positions;
     nodes.forEach(n => {
       const p = layout === 'board' && data.positions?.[n.id] || positions.get(n.id) || {x:0,y:0};
       n.x=n.fx=Number.isFinite(p.x)?p.x:0; n.y=n.fy=Number.isFinite(p.y)?p.y:0;
+      n.origin={x:n.x,y:n.y,anchor:p.anchor};
       if(layout==='connections'){delete n.fx;delete n.fy;}
     });
-    return {nodes, links:data.edges.map(e=>({...e})), timeline};
-  }, [data, layout, rootId]);
+    const visible = nodes.filter(n=>!view.hidden_kinds.includes(n.kind)), ids = new Set(visible.map(n=>n.id));
+    return {nodes:visible, links:data.edges.filter(e=>ids.has(identity(e.source))&&ids.has(identity(e.target))).map(e=>({...e})), timeline};
+  }, [data, layout, rootId, view.preset, view.hidden_kinds]);
+  useEffect(() => {setSelected(current=>current ? model.nodes.find(n=>n.id===current.id)||null : null);}, [model]);
+  useEffect(() => {
+    if (layout === 'timeline') model.nodes.forEach(n=>{n.x=n.fx=n.origin.x;n.y=n.fy=n.origin.y;});
+  }, [view.animation, reducedMotion, model, layout]);
   const fit = () => {
     if (!graph.current || !model.nodes.length) return;
     const bounds = model.timeline && timelineBounds(model.nodes, model.timeline.fitIds);
@@ -43,8 +63,12 @@ function SharedGraph({data, layout = 'timeline', rootId}) {
   }, []);
   useEffect(() => {const timer=setTimeout(fit,100);return ()=>clearTimeout(timer);}, [width,model]);
   const peers = selected ? model.links.filter(e=>[identity(e.source),identity(e.target)].includes(selected.id)) : [];
-  const matches = directoryOpen ? model.nodes.filter(n=>(n.label+' '+kindName(n.kind)).toLowerCase().includes(query.toLowerCase())) : [];
   return <>
+    {layout==='timeline' && <div className="share-graph-options">
+      <label>Preset <select aria-label="Graph preset" value={view.preset} onChange={e=>changeView({preset:e.target.value})}>{Object.entries(PRESETS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
+      <label>Animation <select aria-label="Graph animation" value={view.animation} onChange={e=>changeView({animation:e.target.value})}>{['off','breathing','ripple','drift'].map(mode=><option key={mode} value={mode}>{mode[0].toUpperCase()+mode.slice(1)}</option>)}</select></label>
+      {reducedMotion && view.animation!=='off' && <span>Animation paused by your reduced-motion preference.</span>}
+    </div>}
     <div className={'share-graph-workspace'+(selected?' has-selection':'')}><div className="share-graph-viewport">
     <div className="share-graph-toolbar" role="group" aria-label="Graph controls">
       <span>{layout==='timeline'?'Timeline':layout==='board'?'Board map':'Connections'} · Read-only</span>
@@ -58,6 +82,16 @@ function SharedGraph({data, layout = 'timeline', rootId}) {
       setSelected(model.nodes[(i+(event.key==='ArrowRight'?1:model.nodes.length-1)+model.nodes.length)%model.nodes.length]);
     }}>
     {model.nodes.length ? <ForceGraph2D ref={graph} width={width} height={440} graphData={model}
+      autoPauseRedraw={layout!=='timeline'||view.animation==='off'||reducedMotion||!!selected}
+      onRenderFramePre={()=>{
+        const now=performance.now(), clock=motion.current, delta=Math.min(100,now-(clock.last||now));clock.last=now;
+        if(layout!=='timeline'||view.animation==='off'||reducedMotion||selected||document.hidden||!host.current?.getClientRects().length)return;
+        clock.time+=delta;
+        model.nodes.forEach(n=>{
+          const offset=motionOffset(view.animation,n.origin,clock.time,phaseFor(n.id),view.preset==='timeline'&&n.origin.anchor);
+          n.x=n.fx=n.origin.x+offset.x;n.y=n.fy=n.origin.y+offset.y;
+        });
+      }}
       backgroundColor="#0b1728" enableNodeDrag={layout!=='timeline'} cooldownTicks={layout==='connections'?100:0} minZoom={.01} maxZoom={4}
       onEngineStop={()=>{if(!fitted.current){fitted.current=true;fit();}}}
       nodeLabel={node=>{const tip=document.createElement('span');tip.textContent=node.label;return tip;}}
@@ -104,20 +138,13 @@ function SharedGraph({data, layout = 'timeline', rootId}) {
             }
             if(emphasis){ctx.beginPath();ctx.arc(node.x,node.y,radius+5/globalScale,0,2*Math.PI);ctx.strokeStyle=ink+'aa';ctx.lineWidth=1/globalScale;ctx.stroke();}
             ctx.restore();
-          }} nodePointerAreaPaint={(node,color,ctx,scale)=>{ctx.fillStyle=color;ctx.beginPath();ctx.arc(node.x,node.y,(node.radius+5)/(graph.current?.zoom()||1),0,2*Math.PI);ctx.fill();}} /> : <p className="share-scope-note">No approved connections in this scope.</p>}
+          }} nodePointerAreaPaint={(node,color,ctx,scale)=>{ctx.fillStyle=color;ctx.beginPath();ctx.arc(node.x,node.y,(node.radius+5)/(graph.current?.zoom()||1),0,2*Math.PI);ctx.fill();}} /> : <p className="share-scope-note">{data.nodes.length ? 'No visible objects. Enable an entity type below to show it.' : 'No approved connections in this scope.'}</p>}
     </div>
     </div>
     {selected && <aside className="share-graph-inspector share-graph-selection"><span className="share-kind-pill" data-kind={selected.kind}>{kindName(selected.kind)}</span><h3>{selected.label}</h3><div className="markdown-body" dangerouslySetInnerHTML={{__html:selected.body_html||''}}/><h4>Connections</h4><ul>{peers.slice(0,100).map((e,i)=>{const other=model.nodes.find(n=>n.id===(identity(e.source)===selected.id?identity(e.target):identity(e.source)));return <li key={i}><button type="button" onClick={()=>setSelected(other)}>{other?.label}</button><small>{e.relation}</small></li>;})}</ul></aside>}
     </div>
-    <p className="share-graph-hint">{model.timeline && `${model.timeline.hasEntry ? 'Latest entry and its connections' : 'Latest available date'} · Oldest to newest, left to right · Entries above, entities below. `}Drag to explore · Scroll to zoom · Select an orb for details. Positions reset when reopened.</p>
-    <div className="share-graph-legend">{[...new Set(model.nodes.map(n=>n.kind))].map(kind=><span className="share-kind-pill" data-kind={kind} key={kind}><i style={{background:palette[kind]||'#e9c96c'}}/>{kindName(kind)}</span>)}</div>
-    <details className="share-graph-directory" onToggle={event=>setDirectoryOpen(event.currentTarget.open)}>
-      <summary>Objects and connections · {model.nodes.length} objects · {model.links.length} connections</summary>
-      {directoryOpen && <><input type="search" className="control" aria-label="Find a shared graph object" placeholder="Find an object or type…" value={query} onChange={e=>setQuery(e.target.value)}/>
-      <ul>{matches.slice(0,100).map(n=><li key={n.id}><span className="share-kind-pill" data-kind={n.kind}>{kindName(n.kind)}</span><button type="button" onClick={()=>{setSelected(n);graph.current?.centerAt(n.x,n.y,150);graph.current?.zoom(1,150);}}>{n.label}</button></li>)}</ul>
-      {matches.length>100&&<p className="share-scope-note">Showing 100 of {matches.length} objects. Search to narrow the list.</p>}
-      {!matches.length&&<p className="share-scope-note">No matching objects.</p>}</>}
-    </details>
+    <p className="share-graph-hint">{model.timeline && `${model.timeline.hasEntry ? 'Latest entry and its connections' : 'Latest available date'} · Oldest to newest, left to right. `}Drag to explore · Scroll to zoom · Select an orb for details. Toggle types below to filter the view.</p>
+    <div className="share-graph-legend" role="group" aria-label="Graph entity types">{kinds.map(kind=><button type="button" className="share-kind-pill" data-kind={kind} key={kind} aria-pressed={!view.hidden_kinds.includes(kind)} onClick={()=>changeView({hidden_kinds:view.hidden_kinds.includes(kind)?view.hidden_kinds.filter(k=>k!==kind):[...view.hidden_kinds,kind]})}><i style={{background:palette[kind]||'#e9c96c'}}/>{legendLabel(kind)}</button>)}</div>
   </>;
 }
 const roots = new Map();
@@ -127,7 +154,10 @@ window.renderShareGraphs = () => {
     const host=container.querySelector('[data-graph-canvas]');
     if(!host||roots.has(host)||!container.getClientRects().length)return;
     const data=JSON.parse(container.querySelector('[data-graph-data]').textContent);
-    const root=createRoot(host);roots.set(host,root);root.render(<SharedGraph data={data} layout={container.dataset.graphLayout}/>);
+    const settings=container.dataset.graphLayout==='timeline' ? container.closest('form')?.querySelector('[name="graph_view"]') : null;
+    const initialView=settings ? JSON.parse(settings.value) : data.view || {};
+    const onViewChange=settings ? view=>{settings.value=JSON.stringify(view);} : undefined;
+    const root=createRoot(host);roots.set(host,root);root.render(<SharedGraph data={data} layout={container.dataset.graphLayout} initialView={initialView} onViewChange={onViewChange}/>);
   });
 };
 document.addEventListener('toggle',()=>window.renderShareGraphs(),true);

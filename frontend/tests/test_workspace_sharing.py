@@ -227,13 +227,18 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     page, client = editor_page
     page.set_viewport_size({'width':width, 'height':1000})
     page.goto('https://editing.test/sharing')
-    expect(page.get_by_role('tab', name='Recipe', exact=True)).to_have_attribute('aria-selected', 'true')
-    expect(page.locator('[data-preview-shell]')).to_be_visible()
-    expect(page.locator('[data-test-agent]')).to_be_visible()
+    expect(page.get_by_role('tab', name='Details and filtering', exact=True)).to_have_attribute('aria-selected', 'true')
+    expect(page.get_by_role('tab', name='Recipe', exact=True)).to_have_count(0)
+    expect(page.get_by_role('tab', name='Filters', exact=True)).to_have_count(0)
+    expect(page.locator('[data-share-secrets-status]')).to_have_count(0)
+    assert page.locator('#description').evaluate('(el)=>el.closest(".field").nextElementSibling.matches("[data-filter-section]")')
+    expect(page.locator('[data-source-selector]')).to_be_visible()
+    expect(page.locator('[data-preview-shell]')).not_to_be_visible()
+    expect(page.locator('[data-test-agent]')).not_to_be_visible()
     assert page.locator('[data-share-tab="entries"]').evaluate('(el)=>getComputedStyle(el).cursor') == 'pointer'
     assert page.locator('[data-recipe-fields]').evaluate('(el)=>{const access=[...el.querySelectorAll("details")].find(e=>e.textContent.includes("Access, expiry"));return !!(access.compareDocumentPosition(el.querySelector("[name=freeze_snapshot]")) & Node.DOCUMENT_POSITION_FOLLOWING)}')
 
-    page.get_by_role('tab', name='Actions and Ideas').click()
+    page.get_by_role('tab', name='Actions and ideas').click()
     page.locator('[name="activity_sections"][value="actions"]').check()
     expect(page.locator('[data-share-object="action:a"]')).to_be_visible(timeout=15000)
     card = page.locator('.share-object-card').filter(has=page.locator('[data-share-object="action:a"]'))
@@ -260,12 +265,7 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     page.locator('[data-outside-board="b"]').check()
     expect(page.locator('[data-preview-tab="boards"] canvas')).to_be_visible()
     board_graph = page.locator('[data-preview-tab="boards"] [data-shared-graph]').first
-    board_graph.locator('.share-graph-directory summary').click()
-    board_graph.get_by_role('searchbox', name='Find a shared graph object').fill('Thought')
-    expect(board_graph.locator('.share-graph-directory li')).to_have_count(1)
-    board_graph.locator('.share-graph-directory li button').click()
-    expect(board_graph.locator('.share-graph-selection')).to_contain_text('Thought')
-    expect(board_graph.locator('.share-graph-selection')).to_contain_text('Plan')
+    expect(board_graph.locator('.share-graph-directory')).to_have_count(0)
     page.locator('.share-tabs').scroll_into_view_if_needed()
     board_graph.screenshot(path=str(tmp_path / 'sharing-boards.png'))
     page.get_by_role('tab', name='Entries', exact=True).click()
@@ -276,12 +276,13 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     expect(entry.locator('.share-entry-content.markdown-body')).to_be_visible()
     expect(page.get_by_text('Scroll for more entries', exact=True)).to_have_count(0)
     entry.screenshot(path=str(tmp_path / 'sharing-entry.png'))
-    page.get_by_role('tab', name='Filters', exact=True).click()
+    page.get_by_role('tab', name='Details and filtering', exact=True).click()
     expect(page.locator('[data-source-selector]')).to_be_visible()
-    page.get_by_role('tab', name='Recipe', exact=True).click()
+    page.get_by_role('tab', name='Agent', exact=True).click()
     expect(page.locator('.share-agent-test')).to_be_visible()
     expect(page.locator('[data-test-question]')).to_be_visible()
     expect(page.locator('[data-test-agent]')).to_be_visible()
+    page.get_by_role('tab', name='Details and filtering', exact=True).click()
     page.locator('#name').fill('Workspace demo')
     page.locator('#recipient').fill('Reviewer')
     page.locator('#auth-mode').select_option('qr')
@@ -305,3 +306,87 @@ def test_shared_graph_markdown_sanitizes_untrusted_content():
     assert '<script' not in rendered['nodes'][0]['body_html']
     assert 'href="javascript:' not in rendered['nodes'][0]['body_html']
     assert 'body_html' not in graph['nodes'][0]
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_recipe_defaults_exclusions_and_graph_preferences(editor_page, context, sharing_corpus, width, tmp_path):
+    import json
+    from playwright.sync_api import expect
+    from modules.profile.models import OwnerProfile
+    from modules.profile.store import get_profile_store
+    from modules.hfl_shares.store import get_share_store
+
+    get_profile_store().save(OwnerProfile(first_name='Someone', nickname='Sami'))
+    page, client = editor_page
+    page.set_viewport_size({'width':width, 'height':1000})
+    page.goto('https://editing.test/sharing')
+    automatic = page.locator('[name="automatic_sections"]')
+    assert automatic.evaluate_all('(items)=>items.length===4 && items.every(i=>i.checked && i.disabled)')
+    assert page.locator('[name="activity_sections"]').evaluate_all('(items)=>items.length===5 && items.every(i=>i.checked)')
+    freeze = page.locator('[type="checkbox"][name="freeze_snapshot"]')
+    freeze.uncheck()
+    assert automatic.evaluate_all('(items)=>items.every(i=>!i.disabled)')
+    page.locator('[name="automatic_sections"][value="ideas"]').uncheck()
+    freeze.check()
+    assert page.locator('form[data-social-form]').evaluate('(f)=>new FormData(f).getAll("automatic_sections")') == ['entries','actions','boards']
+
+    page.get_by_role('tab', name='Details and filtering', exact=True).click()
+    page.locator('summary').filter(has_text='Tags, dates, and topic').click()
+    expect(page.locator('#topic-help')).to_be_visible()
+    expect(page.locator('#context-prompt-help')).to_be_visible()
+    expect(page.locator('[data-field-help]')).to_have_count(0)
+    panel = page.locator('[data-excluded-panel]')
+    expect(panel).not_to_be_visible()
+    page.get_by_role('tab', name='Actions and ideas', exact=True).click()
+    expect(page.get_by_label('Include actions', exact=True)).to_be_checked()
+    expect(page.get_by_label('Include ideas', exact=True)).to_be_checked()
+    expect(page.get_by_label('Include completed', exact=True)).not_to_be_checked()
+    expect(page.get_by_label('Include dismissed', exact=True)).not_to_be_checked()
+    page.locator('[data-share-object="action:a"]').uncheck()
+    expect(panel).to_be_visible()
+    expect(panel).to_have_attribute('open', '')
+    expect(panel.get_by_role('heading', name='Actions and ideas')).to_be_visible()
+    expect(panel.locator('.excluded-item > span')).to_have_text('Approved action')
+    expect(panel.get_by_role('button', name='Restore Approved action')).to_have_text('Restore')
+    assert panel.evaluate('(el)=>!!el.closest("aside") && !el.closest("form")')
+    assert panel.bounding_box()['y'] > page.locator('[data-generated-shares-panel]').bounding_box()['y']
+    panel.screenshot(path=str(tmp_path / f'sharing-excluded-items-{width}.png'))
+    panel.locator('summary').click()
+    page.locator('[data-share-object="idea:i"]').uncheck()
+    expect(panel).to_have_attribute('open', '')
+    panel.get_by_role('button', name='Restore Approved action').click()
+    panel.get_by_role('button', name='Restore Current idea').click()
+    expect(panel).not_to_be_visible()
+
+    page.get_by_role('tab', name='Agent', exact=True).click()
+    expect(page.locator('[data-test-question]')).to_have_value('What is Sami currently working on?')
+    page.get_by_role('tab', name='Graph', exact=True).click()
+    expect(page.locator('[data-preview-tab="graph"] canvas')).to_be_visible()
+    expect(page.locator('.share-graph-directory')).to_have_count(0)
+    graph = page.locator('[data-preview-tab="graph"]')
+    graph.get_by_label('Graph preset', exact=True).select_option('sources')
+    graph.get_by_label('Graph animation', exact=True).select_option('drift')
+    graph.get_by_role('button', name='actions', exact=True).click()
+    expect(graph.get_by_role('button', name='actions', exact=True)).to_have_attribute('aria-pressed','false')
+    expected = {'preset':'sources','animation':'drift','hidden_kinds':['actions']}
+    assert json.loads(page.locator('[name="graph_view"]').input_value()) == expected
+    page.get_by_role('tab', name='Details and filtering', exact=True).click()
+    page.locator('#name').fill('Graph preferences')
+    page.locator('#recipient').fill('Reviewer')
+    page.get_by_role('button', name='Save recipe', exact=True).click()
+    expect(page.locator('[name="configuration_id"]')).not_to_have_value('')
+    saved = get_share_store().list_configurations()[0]
+    assert saved.activity['graph_view'] == expected
+    assert saved.activity['automatic'] == ['entries','actions','boards']
+    snapshot = build_snapshot(saved, (sharing_corpus,))
+    assert snapshot.activity['graph']['view'] == expected
+    assert any(n['kind']=='actions' for n in snapshot.activity['graph']['nodes'])
+    page.get_by_role('tab', name='Graph', exact=True).click()
+    expect(graph.get_by_label('Graph preset', exact=True)).to_have_value('sources')
+    expect(graph.get_by_label('Graph animation', exact=True)).to_have_value('drift')
+    expect(graph.get_by_role('button', name='actions', exact=True)).to_have_attribute('aria-pressed','false')
+    expect(page.locator('[data-preview-status]')).not_to_be_visible()
+    graph.locator('[data-shared-graph]').scroll_into_view_if_needed()
+    # Allow the graph's initial 250ms camera fit to finish before visual QA.
+    page.wait_for_timeout(500)
+    graph.locator('[data-shared-graph]').screenshot(path=str(tmp_path / f'sharing-graph-settings-{width}.png'))
