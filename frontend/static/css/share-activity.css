@@ -87,3 +87,13 @@
 .shared-graph .share-graph-select svg{position:absolute;right:.6rem;width:.85rem;height:.85rem;pointer-events:none;color:#7dd3fc;cursor:inherit;touch-action:auto}
 .share-graph-options select:focus-visible{outline:2px solid #38bdf8;outline-offset:2px}
 .share-graph-legend button[aria-pressed=false]{opacity:.4}.share-graph-legend button{cursor:pointer}.share-graph-legend button:focus-visible{outline:2px solid #38bdf8;outline-offset:2px}
+
+.share-plan-category { border: 1px solid var(--border, #334155); border-radius: 12px; padding: 16px 20px; margin: 14px 0; }
+.share-plan-category h4 { margin: 0 0 16px; font-size: 1rem; }
+.share-plan-timeline { list-style: none; margin: 0 0 0 5px; padding: 0 0 0 22px; border-left: 1px solid #475569; }
+.share-plan-date { position: relative; padding: 0 0 24px; overflow-wrap: anywhere; }
+.share-plan-date:last-child { padding-bottom: 4px; }
+.share-plan-date::before { content: ''; position: absolute; left: -28px; top: 5px; width: 9px; height: 9px; border-radius: 50%; background: var(--plan-color, #38bdf8); border: 1px solid #0f172a; }
+.share-plan-date time { font-size: .8rem; color: #94a3b8; }
+.share-plan-date .share-card-title { margin: 8px 0; }
+.share-plan-notes { margin-top: 12px; font-size: .9rem; }

@@ -98,8 +98,9 @@
         </div>
 
         {% if grant.snapshot.activity %}
-        <details class="shared-activity-public"><summary>Explore shared actions, ideas, boards and graphs</summary>
+        <details class="shared-activity-public"><summary>Explore shared actions, ideas, boards, plans and graphs</summary>
           <p>Read-only context. Browse full object details and citations in the source drawer.</p>
+          {% set plans = grant.snapshot.activity.get("plans", []) %}{% set plans_editable = false %}{% if plans %}{% include "modules/hfl_shares/_plans.html" %}{% endif %}
           {% for board in grant.snapshot.activity.get("boards", []) %}<details><summary>{{ board.title }}</summary><p>{{ board.get("purpose", "") }}</p>{% set graph = board.graph %}{% set graph_layout = 'board' %}{% include "modules/hfl_shares/_activity_graph.html" %}</details>{% endfor %}
           <details><summary>Connections</summary>{% set graph = grant.snapshot.activity.connections %}{% set graph_layout = 'connections' %}{% include "modules/hfl_shares/_activity_graph.html" %}</details>
           {% if grant.snapshot.activity.graph.nodes %}<details><summary>Activity graph</summary>{% set graph = grant.snapshot.activity.graph %}{% set graph_layout = 'timeline' %}{% include "modules/hfl_shares/_activity_graph.html" %}</details>{% endif %}

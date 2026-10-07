@@ -955,7 +955,7 @@ responsive navigation, corpus filtering, and reference downloads.
 #### Workspace context sharing
 
 Express > **Share Activity** now has Details and Filtering, Entries, Actions and Ideas,
-Boards, and Graph tabs. Generate share recipe from Corpus, Graph, or Kanban
+Boards, Plans, Graph, and Agent tabs. Generate share recipe from Corpus, Graph, or Kanban
 preselects eligible workspace context in an unsaved draft. Saved recipes and
 generated-share lists retain their existing controls.
 
@@ -967,7 +967,11 @@ require per-board opt-in; mapped goals never recursively include other boards.
 Excluded objects remain excluded during live refresh. Source objects are never
 modified by sharing.
 
-New recipes include entries, actions, ideas, boards and the activity graph by
+Plans share active pinned date ranges grouped by category, including dates, title,
+instructions as the description, and notes. They inherit category workspace membership
+and support individual exclusions and automatic inclusion in live recipes.
+
+New recipes include entries, actions, ideas, boards, plans and the activity graph by
 default. Excluded items appear in an initially expanded sidebar accordion grouped
 by tab, with a Restore button per item. The accordion hides when empty. Topic and
 agent-background helper text stays visible, and the initial agent question uses

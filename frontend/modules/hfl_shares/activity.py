@@ -15,7 +15,7 @@ def load_context():
     from modules.hfl_corpus.ideas_api import store
     settings = get_settings()
     if not settings.hfl_corpus_api_url:
-        return store().snapshot()
+        return {**store().snapshot(), 'plans': load_plans()}
     try:
         response = httpx.get(settings.hfl_corpus_api_url.rstrip('/') + '/api/hfl/timeline/ideas/share-context',
                             headers={'Authorization': 'Bearer ' + settings.hfl_corpus_api_token}, timeout=45)
@@ -29,6 +29,19 @@ def load_context():
         return data
     except (httpx.HTTPError, ValueError) as exc:
         raise ValueError('Workspace sharing context could not load. The canonical API must support workspace sharing.') from exc
+
+
+def load_plans():
+    """Project active pin categories into shareable dates without agent metadata."""
+    from modules.hfl_corpus.memory_pins import get_memory_pin_store, PIN_COLORS
+    pins = get_memory_pin_store().snapshot()
+    categories = {c['id']: c for c in pins['categories']}
+    return [dict(id=str(pin['id']), title=pin['title'], start_date=pin['start_date'],
+                 end_date=pin['end_date'], description=pin['prompt'], notes=pin['note'],
+                 updated_at=pin['updated_at'], category=categories[pin['category_id']]['name'],
+                 color=categories[pin['category_id']]['color'] if categories[pin['category_id']]['color'] in PIN_COLORS else PIN_COLORS[0],
+                 workspace_ids=categories[pin['category_id']]['workspace_ids'])
+            for pin in pins['ranges'] if pin['category_id'] in categories]
 
 
 def mentions_for_documents(documents):
@@ -95,13 +108,16 @@ def safe_text(value):
 def object_view(item, identity, kind):
     result = {'id': identity, 'kind': kind, 'title': safe_text(item.get('title', item.get('name', '')))}
     for field in ('body', 'description', 'purpose', 'status', 'created_at', 'updated_at', 'due_date', 'start_date',
-                  'expected_outcome', 'success_criteria', 'notes', 'board_date'):
+                  'expected_outcome', 'success_criteria', 'notes', 'board_date', 'end_date', 'category'):
         if isinstance(item.get(field), str):
             result[field] = safe_text(item[field])
     result['checklists'] = [
         {'title': safe_text(c.get('title')), 'items': [{'text': safe_text(i.get('text')), 'done': bool(i.get('done'))}
                                                     for i in c.get('items', [])]}
         for c in item.get('checklists', [])]
+    if kind == 'plans':
+        color = str(item.get('color', ''))
+        result['color'] = color if re.fullmatch(r'#[0-9a-fA-F]{6}', color) else '#38bdf8'
     if kind == 'goals':
         result['milestones'] = [{'title': safe_text(m.get('title')), 'status': safe_text(m.get('status'))}
                                 for m in item.get('milestones', [])]
@@ -114,7 +130,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
     from modules.hfl_corpus.timeline import entry_evidence_id
     from modules.hfl_shares.scope import _entry_key
     controls = selection(configuration)
-    if not set(controls.sections).intersection({'actions', 'ideas', 'boards', 'graph'}):
+    if not set(controls.sections).intersection({'actions', 'ideas', 'boards', 'plans', 'graph'}):
         if 'entries' not in controls.sections:
             return replace(snapshot, entries=(), estimated_chars=0, sources=(), source_counts={}, tag_counts={},
                            available_references=0, enabled_reference_ids=(), earliest='', latest='')
@@ -157,7 +173,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
                                             identity in approved.get(kind, []))
 
     pools, eligible, raw = {}, {}, {}
-    for kind, prefix in [('actions', 'action:'), ('ideas', 'idea:')]:
+    for kind, prefix in [('actions', 'action:'), ('ideas', 'idea:'), ('plans', 'plan:')]:
         pools[kind], eligible[kind] = {}, set()
         for item in data.get(kind, []):
             identity = prefix + item['id']
@@ -172,7 +188,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
                 eligible[kind].add(identity)
 
     objects = {k: [v for i, v in pools[k].items() if i in eligible[k] and chosen(i, k)]
-               if k in controls.sections else [] for k in ('actions', 'ideas')}
+               if k in controls.sections else [] for k in ('actions', 'ideas', 'plans')}
     published_entries = snapshot.entries if 'entries' in controls.sections else ()
     board_entry_ids = set()
     for board in data.get('maps', []) if 'boards' in controls.sections else []:
@@ -201,7 +217,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
     def add_object(obj):
         nodes[obj['id']] = {'id': obj['id'], 'label': obj['title'], 'kind': obj['kind'],
                             'body': obj.get('body', obj.get('description', '')),
-                            'date': obj.get('created_at', '')[:10]}
+                            'date': (obj.get('start_date', '') if obj['kind'] == 'plans' else obj.get('created_at', ''))[:10]}
 
     for rows in objects.values():
         for obj in rows:
@@ -311,7 +327,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
         nodes.update(local_nodes)
         edges.extend(local_edges)
 
-    for obj in [*objects['actions'], *objects['ideas']]:
+    for obj in [*objects['actions'], *objects['ideas'], *objects['plans']]:
         item = raw[obj['id']]
         for ref in [item.get('source'), *item.get('evidence', [])]:
             if isinstance(ref, dict) and 'entry:' + str(ref.get('entry_id')) in nodes:
@@ -327,7 +343,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
     evidence = []
     disabled = set(configuration.disabled_reference_ids if disabled_reference_ids is None else disabled_reference_ids)
     enabled = None if enabled_reference_ids is None else set(enabled_reference_ids)
-    shared_objects = [*objects['actions'], *objects['ideas'], *boards, *goals.values()]
+    shared_objects = [*objects['actions'], *objects['ideas'], *objects['plans'], *boards, *goals.values()]
     attachments = {}
     if configuration.references_enabled:
         from concurrent.futures import ThreadPoolExecutor

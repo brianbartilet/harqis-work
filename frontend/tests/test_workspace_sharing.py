@@ -291,7 +291,7 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     from modules.hfl_shares.store import get_share_store
     grant = get_share_store().list_shares()[0]
     page.goto('https://editing.test/sharing/shares/' + grant.id + '/preview')
-    page.get_by_text('Explore shared actions, ideas, boards and graphs', exact=True).click()
+    page.get_by_text('Explore shared actions, ideas, boards, plans and graphs', exact=True).click()
     page.locator('.shared-activity-public summary').filter(has_text='Workspace board').click()
     expect(page.locator('.shared-activity-public canvas').first).to_be_visible()
     assert not page.locator('.shared-activity-public input').count()
@@ -341,14 +341,14 @@ def test_recipe_defaults_exclusions_and_graph_preferences(editor_page, context, 
     page.set_viewport_size({'width':width, 'height':1000})
     page.goto('https://editing.test/sharing')
     automatic = page.locator('[name="automatic_sections"]')
-    assert automatic.evaluate_all('(items)=>items.length===4 && items.every(i=>i.checked && i.disabled)')
-    assert page.locator('[name="activity_sections"]').evaluate_all('(items)=>items.length===5 && items.every(i=>i.checked)')
+    assert automatic.evaluate_all('(items)=>items.length===5 && items.every(i=>i.checked && i.disabled)')
+    assert page.locator('[name="activity_sections"]').evaluate_all('(items)=>items.length===6 && items.every(i=>i.checked)')
     freeze = page.locator('[type="checkbox"][name="freeze_snapshot"]')
     freeze.uncheck()
     assert automatic.evaluate_all('(items)=>items.every(i=>!i.disabled)')
     page.locator('[name="automatic_sections"][value="ideas"]').uncheck()
     freeze.check()
-    assert page.locator('form[data-social-form]').evaluate('(f)=>new FormData(f).getAll("automatic_sections")') == ['entries','actions','boards']
+    assert page.locator('form[data-social-form]').evaluate('(f)=>new FormData(f).getAll("automatic_sections")') == ['entries','actions','boards','plans']
 
     page.get_by_role('tab', name='Details and Filtering', exact=True).click()
     page.locator('summary').filter(has_text='Tags, dates, and topic').click()
@@ -434,7 +434,7 @@ def test_recipe_defaults_exclusions_and_graph_preferences(editor_page, context, 
     assert {key:saved_view[key] for key in expected} == expected
     assert saved_view['positions'] == captured['positions']
     assert saved_view['viewport'] == captured['viewport']
-    assert saved.activity['automatic'] == ['entries','actions','boards']
+    assert saved.activity['automatic'] == ['entries','actions','boards','plans']
     snapshot = build_snapshot(saved, (sharing_corpus,))
     assert snapshot.activity['graph']['view'] == saved_view
     assert any(n['kind']=='actions' for n in snapshot.activity['graph']['nodes'])
@@ -450,3 +450,73 @@ def test_recipe_defaults_exclusions_and_graph_preferences(editor_page, context, 
     assert restored['positions'] == saved_view['positions']
     assert restored['viewport'] == pytest.approx(saved_view['viewport'])
     graph.locator('[data-shared-graph]').screenshot(path=str(tmp_path / f'sharing-graph-settings-{width}.png'))
+
+
+def test_plans_workspace_exclusions_and_live_refresh(context, sharing_corpus):
+    context['plans'] = [dict(id='1', title='Trip', category='Travel', start_date='2026-10-10',
+                             end_date='2026-10-12', description='Visit friends', notes='Bring gifts',
+                             workspace_ids=['work']),
+                        dict(id='2', title='Private trip', category='Travel', workspace_ids=['other'])]
+    cfg = recipe(live_updates=True, activity={'sections': ['plans']})
+    initial = build_snapshot(cfg, (sharing_corpus,))
+    assert [p['id'] for p in initial.activity['plans']] == ['plan:1']
+    assert not initial.entries
+    assert 'Bring gifts' in initial.activity_entries[0].text
+    assert '2026-10-12' in initial.activity_entries[0].text
+    assert 'Private trip' not in str(initial.to_record())
+    live = live_configuration(cfg, initial)
+    context['plans'].append(dict(id='3', title='New date', category='Events', workspace_ids=['work']))
+    context['plans'][0]['notes'] = 'Updated notes'
+    refreshed = build_snapshot(live, (sharing_corpus,))
+    assert [p['id'] for p in refreshed.activity['plans']] == ['plan:1']
+    assert refreshed.activity['plans'][0]['notes'] == 'Updated notes'
+    automatic = replace(live, activity={**live.activity, 'automatic': ['plans'], 'excluded_ids': ['plan:1']})
+    assert [p['id'] for p in build_snapshot(automatic, (sharing_corpus,)).activity['plans']] == ['plan:3']
+    disabled = replace(cfg, activity={**cfg.activity, 'sections': ['entries']})
+    assert 'Trip' not in str(build_snapshot(disabled, (sharing_corpus,)).to_record())
+
+
+def test_plans_template_dates_and_safe_markdown():
+    from modules.hfl_shares.router import templates
+    rendered = templates.env.get_template('modules/hfl_shares/_plans.html').render(
+        plans=[dict(id='plan:1', title='<script>bad</script>', category='Travel',
+                    start_date='2026-10-10', end_date='2026-10-12',
+                    description='Visit friends', notes='Bring gifts')], plans_editable=True)
+    assert 'data-share-object="plan:1"' in rendered
+    assert '2026-10-12' in rendered and 'Visit friends' in rendered and 'Bring gifts' in rendered
+    assert '<script>bad</script>' not in rendered
+
+
+def test_load_plans_inherits_category_and_omits_agent_fields(monkeypatch):
+    from types import SimpleNamespace
+    from modules.hfl_corpus import memory_pins
+    from modules.hfl_shares.activity import load_plans
+    pin = dict(id=7, category_id=1, title='Visit', start_date='2026-10-01', end_date='2026-10-02',
+               prompt='Description', note='Notes', updated_at='2026-09-01', agent_enabled=True)
+    monkeypatch.setattr(memory_pins, 'get_memory_pin_store', lambda: SimpleNamespace(snapshot=lambda: {
+        'categories': [dict(id=1, name='Travel', color='#3b82f6', workspace_ids=['work'])],
+        'ranges': [pin, {**pin, 'id': 8, 'category_id': 2}]}))
+    plans = load_plans()
+    assert len(plans) == 1
+    assert plans[0]['workspace_ids'] == ['work']
+    assert plans[0]['description'] == 'Description' and plans[0]['notes'] == 'Notes'
+    assert 'agent_enabled' not in plans[0]
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_plans_tab_timeline(editor_page, context, width):
+    from playwright.sync_api import expect
+    context['plans'] = [dict(id='1', title='Visit Manila', category='Travel', start_date='2026-10-10',
+                             end_date='2026-10-12', description='Meet friends', notes='Bring gifts')]
+    page, client = editor_page
+    page.set_viewport_size({'width': width, 'height': 1000})
+    page.goto('https://editing.test/sharing')
+    assert page.locator('[data-share-tab="plans"]').evaluate('(el)=>el.nextElementSibling.dataset.shareTab') == 'graph'
+    page.get_by_role('tab', name='Plans', exact=True).click()
+    panel = page.locator('[data-preview-tab="plans"]')
+    expect(panel.get_by_text('Visit Manila', exact=True)).to_be_visible()
+    expect(panel.get_by_text('Meet friends', exact=True)).to_be_visible()
+    expect(panel.get_by_text('Bring gifts', exact=True)).to_be_visible()
+    expect(panel.locator('time').last).to_have_text('2026-10-12')
+    panel.locator('[data-share-object="plan:1"]').uncheck()
+    expect(panel.get_by_text('No eligible pinned dates selected.')).to_be_visible()

@@ -28,5 +28,6 @@
 </article>{% else %}<p class="share-scope-note">No eligible boards selected.</p>{% endfor %}
 {% for goal in preview.activity.get('goals', []) %}<article class="share-object-card" data-kind="goals"><div class="share-card-meta"><span class="share-kind-pill" data-kind="goals">Linked goal</span></div><label class="share-card-title"><input type="checkbox" checked {% if hide_preview_agent %}disabled{% endif %} data-share-object="{{ goal.id }}"><span>{{ goal.title }}</span></label><p class="share-card-body">{{ goal.get('body', '') }}</p><p>{{ goal.get('success_criteria', '') }}</p></article>{% endfor %}
 </div>
+<div data-preview-tab="plans">{% set plans = preview.activity.get("plans", []) %}{% set plans_editable = not hide_preview_agent %}{% include "modules/hfl_shares/_plans.html" %}</div>
 <div data-preview-tab="graph">{% set graph = preview.activity.graph %}{% set graph_layout = 'timeline' %}{% include 'modules/hfl_shares/_activity_graph.html' %}</div>
 {% endif %}

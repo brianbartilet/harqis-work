@@ -108,6 +108,8 @@ def share_context(request: Request):
         raise HTTPException(403, 'Service access required.')
     timeline.owner(request)
     data = store().snapshot()
+    from modules.hfl_shares.activity import load_plans
+    data['plans'] = load_plans()
     from modules.hfl_corpus.attachments import source_store
     for collection, kind in [('actions', 'actionable'), ('ideas', 'idea')]:
         for item in data.get(collection, []):

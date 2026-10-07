@@ -859,7 +859,7 @@ async def recipe_from_corpus(request: Request, mode: str = 'recipe'):
             sources=sources, tags=tags, date_field=state.date_field,
             date_from=start, date_to=end, context_prompt=provenance,
             references_enabled=True, ttl_seconds=86_400,
-            activity={"version": 1, "sections": ["entries", "actions", "ideas", "boards", "graph"],
+            activity={"version": 1, "sections": ["entries", "actions", "ideas", "boards", "plans", "graph"],
                       "workspace_ids": list(filter(None, str(form.get("views") or form.get("workspace") or "").split(",")))},
             device_limit=min(get_settings().hfl_share_default_device_limit, hfl_share_concurrent_session_cap()),
             disabled_reference_ids=_disabled_references(form),

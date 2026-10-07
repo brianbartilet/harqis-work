@@ -32,14 +32,14 @@ class GraphView(BaseModel):
 class ActivitySelection(BaseModel):
     model_config = ConfigDict(extra='forbid')
     version: Literal[1] = 1
-    sections: list[Literal['entries', 'actions', 'ideas', 'boards', 'graph']] = Field(default_factory=lambda: ['entries'])
+    sections: list[Literal['entries', 'actions', 'ideas', 'boards', 'plans', 'graph']] = Field(default_factory=lambda: ['entries'])
     workspace_ids: list[str] = Field(default_factory=list, max_length=100)
     excluded_ids: list[str] = Field(default_factory=list, max_length=20000)
     excluded_labels: dict[str, str] = Field(default_factory=dict, max_length=20000)
     include_completed: bool = False
     include_dismissed: bool = False
     outside_board_ids: list[str] = Field(default_factory=list, max_length=1000)
-    automatic: list[Literal['entries', 'actions', 'ideas', 'boards']] = Field(default_factory=list)
+    automatic: list[Literal['entries', 'actions', 'ideas', 'boards', 'plans']] = Field(default_factory=list)
     approved_ids: dict[str, list[str]] | None = None
     graph_view: GraphView = Field(default_factory=GraphView)
 
@@ -72,7 +72,7 @@ def live_configuration(configuration, snapshot):
         return configuration
     controls = selection(configuration)
     controls.approved_ids = {'entries': [e.id for e in snapshot.entries]}
-    for kind in ('actions', 'ideas', 'boards'):
+    for kind in ('actions', 'ideas', 'boards', 'plans'):
         controls.approved_ids[kind] = [o['id'] for o in snapshot.activity.get(kind, [])]
     # Also pin board members for approved-only boards.
     controls.approved_ids['members'] = [n['id'] for b in snapshot.activity.get('boards', []) for n in b['graph']['nodes']]

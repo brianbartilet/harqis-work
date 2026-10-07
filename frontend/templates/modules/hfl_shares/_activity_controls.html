@@ -1,16 +1,16 @@
 {% set activity = cfg.activity if cfg and cfg.activity else {} %}
-{% set sections = activity.get('sections', ['entries', 'actions', 'ideas', 'boards', 'graph'] if not cfg or not cfg.id else ['entries']) %}
+{% set sections = activity.get('sections', ['entries', 'actions', 'ideas', 'boards', 'plans', 'graph'] if not cfg or not cfg.id else ['entries']) %}
 <input type="hidden" name="activity_version" value="1">
 <input type="hidden" name="workspace_ids" value="{{ activity.get('workspace_ids', [])|join(',') }}">
 <input type="hidden" name="excluded_object_labels" value="{{ activity.get('excluded_labels', {})|tojson|forceescape }}">
 <input type="hidden" name="graph_view" value="{{ activity.get('graph_view', {})|tojson|forceescape }}">
 <div data-object-exclusions>{% for identity in activity.get('excluded_ids', []) %}<input type="hidden" name="excluded_object_ids" value="{{ identity }}">{% endfor %}</div>
 <nav class="share-tabs" role="tablist" aria-label="Share recipe sections">
-  {% for key, label in [('recipe','Details and Filtering'),('entries','Entries'),('actions','Actions and Ideas'),('boards','Boards'),('graph','Graph'),('agent','Agent')] %}
+  {% for key, label in [('recipe','Details and Filtering'),('entries','Entries'),('actions','Actions and Ideas'),('boards','Boards'),('plans','Plans'),('graph','Graph'),('agent','Agent')] %}
   <button type="button" role="tab" id="share-tab-{{ key }}" aria-controls="share-panel-{{ key }}" aria-selected="{{ 'true' if loop.first else 'false' }}" data-share-tab="{{ key }}">{{ label }}</button>
   {% endfor %}
 </nav>
-{% for key in ['recipe','entries','actions','boards','graph','agent'] %}
+{% for key in ['recipe','entries','actions','boards','plans','graph','agent'] %}
 <section id="share-panel-{{ key }}" role="tabpanel" aria-labelledby="share-tab-{{ key }}" data-share-panel="{{ key }}" {% if key != 'recipe' %}hidden{% endif %}>
 {% if key == 'recipe' %}
 <div data-recipe-fields></div>
@@ -21,8 +21,8 @@
 <p class="share-scope-note">Remove inherited workspace rules and membership. Only the filters you set here will apply, which may include more activity.</p></div>
 </div>
 <fieldset class="field automatic-inclusion"><legend>Automatically include</legend><p class="share-scope-note">When Freeze is off, checked sections also include newly matching objects. Unchecked sections refresh approved objects only. Exclusions always apply.</p>
-{% for section, label in [('entries','Entries'),('actions','Actions'),('ideas','Ideas'),('boards','Boards')] %}
-<label class="check"><input type="checkbox" name="automatic_sections" value="{{ section }}" {% if section in activity.get('automatic', ['entries', 'actions', 'ideas', 'boards'] if not cfg or not cfg.id else (['entries'] if not activity else [])) %}checked{% endif %} {% if not cfg or not cfg.live_updates %}disabled{% endif %}><span>{{ label }}</span></label>
+{% for section, label in [('entries','Entries'),('actions','Actions'),('ideas','Ideas'),('boards','Boards'),('plans','Plans')] %}
+<label class="check"><input type="checkbox" name="automatic_sections" value="{{ section }}" {% if section in activity.get('automatic', ['entries', 'actions', 'ideas', 'boards', 'plans'] if not cfg or not cfg.id else (['entries'] if not activity else [])) %}checked{% endif %} {% if not cfg or not cfg.live_updates %}disabled{% endif %}><span>{{ label }}</span></label>
 {% endfor %}</fieldset>
 {% elif key == 'entries' %}
 <label class="check"><input type="checkbox" name="activity_sections" value="entries" {% if 'entries' in sections %}checked{% endif %} data-activity-control>Include entries</label>
@@ -37,6 +37,9 @@
 <label class="check"><input type="checkbox" name="activity_sections" value="boards" {% if 'boards' in sections %}checked{% endif %} data-activity-control>Include boards and mapped goals</label>
 <p class="share-scope-note">Boards include draft thoughts and eligible members. Outside-workspace members require the per-board option. Goals do not pull in other boards.</p>
 <div data-outside-board-values>{% for identity in activity.get('outside_board_ids', []) %}<input type="hidden" name="outside_board_ids" value="{{ identity }}">{% endfor %}</div>
+{% elif key == 'plans' %}
+<label class="check"><input type="checkbox" name="activity_sections" value="plans" {% if 'plans' in sections %}checked{% endif %} data-activity-control>Include pinned dates</label>
+<p class="share-scope-note">Plans inherit workspace membership from their categories. Shared dates include their title, description, and notes. Exclude individual dates below.</p>
 {% elif key == 'graph' %}
 <label class="check"><input type="checkbox" name="activity_sections" value="graph" {% if 'graph' in sections %}checked{% endif %} data-activity-control>Include activity graph</label>
 <p class="share-scope-note">Only approved shared objects and their derived entities appear. Graphs never add unrelated objects.</p>
