@@ -1,8 +1,9 @@
 <section class="share-plans" aria-label="Pinned date plans">
 <h3>Plans <span class="pill">{{ plans|length }}</span></h3>
+<div class="share-plan-grid">
 {% for category, dates in plans|groupby('category') %}
 <section class="share-plan-category">
-<h4>{{ category }}</h4>
+<h4><span class="share-plan-category-dot" style="--plan-color: {{ dates[0].get('color', '#38bdf8') }}" aria-hidden="true"></span>{{ category }}</h4>
 <ol class="share-plan-timeline">
 {% for obj in dates|sort(attribute='start_date') %}
 <li class="share-plan-date" style="--plan-color: {{ obj.get('color', '#38bdf8') }}">
@@ -17,4 +18,5 @@
 </ol>
 </section>
 {% else %}<p class="share-scope-note">No eligible pinned dates selected.</p>{% endfor %}
+</div>
 </section>
