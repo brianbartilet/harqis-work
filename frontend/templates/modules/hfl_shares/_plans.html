@@ -1,0 +1,20 @@
+<section class="share-plans" aria-label="Pinned date plans">
+<h3>Plans <span class="pill">{{ plans|length }}</span></h3>
+{% for category, dates in plans|groupby('category') %}
+<section class="share-plan-category">
+<h4>{{ category }}</h4>
+<ol class="share-plan-timeline">
+{% for obj in dates|sort(attribute='start_date') %}
+<li class="share-plan-date">
+<article>
+<time datetime="{{ obj.start_date }}">{{ obj.start_date }}</time>{% if obj.end_date != obj.start_date %}<span> – </span><time datetime="{{ obj.end_date }}">{{ obj.end_date }}</time>{% endif %}
+{% if plans_editable %}<label class="share-card-title"><input type="checkbox" checked data-share-object="{{ obj.id }}"><span>{{ obj.title }}</span></label>{% else %}<h5 class="share-card-title">{{ obj.title }}</h5>{% endif %}
+{% if obj.get('description') %}<div class="share-card-body markdown-body">{{ obj.description|share_markdown }}</div>{% endif %}
+{% if obj.get('notes') %}<div class="share-plan-notes"><strong>Notes</strong><div class="markdown-body">{{ obj.notes|share_markdown }}</div></div>{% endif %}
+</article>
+</li>
+{% endfor %}
+</ol>
+</section>
+{% else %}<p class="share-scope-note">No eligible pinned dates selected.</p>{% endfor %}
+</section>
