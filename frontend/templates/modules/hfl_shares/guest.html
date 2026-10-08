@@ -27,7 +27,7 @@
   <aside class="entry-drawer" data-entry-drawer aria-label="Shared moments">
     <header class="drawer-head">
       <div>
-        <p class="eyebrow">Browse the source material</p>
+        <p class="eyebrow" data-sidebar-description>Moments behind the story</p>
         <h2 data-sidebar-title>Activity entries</h2>
       </div>
       <button class="drawer-close" type="button" data-drawer-close aria-label="Close source drawer">×</button>
@@ -85,8 +85,8 @@
         </nav>
       </div>
       <div class="workspace-heading">
-        <h1>{{ grant.name }}</h1>
-        <p class="muted">{{ grant.snapshot.entries|length }} moments ingested and analyzed{% if grant.snapshot.activity_entries %} · {{ grant.snapshot.activity_entries|length }} shared objects{% endif %} · {% if grant.live_updates %}content refreshed {{ content_refreshed_at }} · {% endif %}{% if grant.no_expiry %}no expiry{% else %}available until {{ expires_at_display }}{% endif %}</p>
+        <h1 data-view-title>Ask my agent</h1>
+        <p class="muted" data-view-description>{{ grant.snapshot.entries|length }} moments ingested and analyzed{% if grant.snapshot.activity_entries %} · {{ grant.snapshot.activity_entries|length }} shared objects{% endif %} · {% if grant.live_updates %}content refreshed {{ content_refreshed_at }} · {% endif %}{% if grant.no_expiry %}no expiry{% else %}available until {{ expires_at_display }}{% endif %}</p>
       </div>
       {% if owner_preview %}
       <a class="button button-secondary logout-form" href="/sharing">Close session</a>
@@ -263,6 +263,7 @@
   const isCompact = () => window.matchMedia('(max-width: 900px)').matches;
   const syncDrawer = () => {
     if (!workspace || !drawerState) return;
+    if (!isCompact()) drawerState.checked = false;
     const open = isCompact() ? drawerState.checked : !drawerState.checked;
     workspace.classList.toggle('drawer-open', isCompact() && open);
     workspace.classList.toggle('drawer-collapsed', !isCompact() && !open);
@@ -274,8 +275,35 @@
   let selectedView = 'entries';
   let sidebarView = 'entries';
   const mainViews = new Set(['boards', 'graph']);
+  const viewTitle = document.querySelector('[data-view-title]');
+  const viewDescription = document.querySelector('[data-view-description]');
+  const chatDescription = viewDescription.textContent;
+  const sidebarDescriptions = {
+    entries: 'Moments behind the story',
+    actions: 'Next steps and new possibilities',
+    plans: 'Dates and milestones ahead',
+  };
   const menuButtons = [...viewMenu.querySelectorAll('[data-share-view]')];
   const closeMenu = () => { viewMenu.hidden = true; menuToggle.setAttribute('aria-expanded', 'false'); };
+  const updateViewHeading = () => {
+    viewTitle.textContent = selectedView === 'boards' ? 'Idea boards' : selectedView === 'graph' ? 'Activity graph' : 'Ask my agent';
+    const board = document.querySelector('[data-share-board-picker]')?.selectedOptions[0]?.textContent;
+    viewDescription.textContent = selectedView === 'boards'
+      ? `${board || 'Shared ideas'} · Explore ideas and their connections. Select a node for details.`
+      : selectedView === 'graph'
+        ? 'Discover connections across shared activity. Select a node to learn more.'
+        : chatDescription;
+    viewDescription.title = viewDescription.textContent;
+  };
+  const setSidebarView = view => {
+    sidebarView = view;
+    document.querySelectorAll('[data-share-sidebar]').forEach(panel => { panel.hidden = panel.dataset.shareSidebar !== view; });
+    const title = menuButtons.find(button => button.dataset.shareView === view)?.textContent || 'Activity entries';
+    document.querySelector('[data-sidebar-title]').textContent = title;
+    document.querySelector('[data-sidebar-description]').textContent = sidebarDescriptions[view] || sidebarDescriptions.entries;
+    document.querySelector('[data-entry-drawer]').setAttribute('aria-label', title);
+    drawerClose.setAttribute('aria-label', isCompact() ? 'Close source drawer' : 'Return to activity entries');
+  };
   const showView = (view, {openDrawer = true} = {}) => {
     if (!menuButtons.some(button => button.dataset.shareView === view)) view = 'entries';
     selectedView = view;
@@ -289,12 +317,9 @@
     form.hidden = main;
     document.querySelector('.chat-workspace').classList.toggle('showing-main-view', main);
     if (!main) {
-      sidebarView = view;
-      document.querySelectorAll('[data-share-sidebar]').forEach(panel => { panel.hidden = panel.dataset.shareSidebar !== view; });
-      const title = menuButtons.find(button => button.dataset.shareView === view)?.textContent || 'Activity entries';
-      document.querySelector('[data-sidebar-title]').textContent = title;
-      document.querySelector('[data-entry-drawer]').setAttribute('aria-label', title);
+      setSidebarView(view);
     }
+    updateViewHeading();
     if (main) drawerState.checked = false;
     else if (openDrawer) drawerState.checked = isCompact();
     syncDrawer(); closeMenu();
@@ -330,6 +355,7 @@
     question.focus({preventScroll:true});
   }));
   document.querySelector('[data-share-board-picker]')?.addEventListener('change', event => {
+    updateViewHeading();
     document.querySelectorAll('[data-share-board]').forEach(panel => {
       window.resetShareGraphs?.(panel);
       panel.hidden = panel.dataset.shareBoard !== event.target.value;
@@ -339,7 +365,11 @@
   drawerClose?.addEventListener('click', event => {
     event.preventDefault();
     event.stopPropagation();
-    drawerState.checked = !isCompact();
+    if (!isCompact()) {
+      setSidebarView('entries');
+      if (!mainViews.has(selectedView)) showView('entries');
+    }
+    drawerState.checked = false;
     syncDrawer();
     menuToggle.focus();
   });
@@ -352,6 +382,7 @@
   let compactLayout = isCompact();
   window.addEventListener('resize', () => {
     if (compactLayout !== isCompact()) {compactLayout=isCompact();drawerState.checked=false;}
+    drawerClose.setAttribute('aria-label', isCompact() ? 'Close source drawer' : 'Return to activity entries');
     syncDrawer();
   });
 
@@ -870,6 +901,8 @@
     if (overlay) overlay.hidden = true;
     document.documentElement.style.overflow = '';
   });
+  setSidebarView('entries');
+  updateViewHeading();
   syncDrawer();
   observeEntryStream();
   scrollToLatest();

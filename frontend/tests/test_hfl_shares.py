@@ -1729,7 +1729,7 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     assert 'aria-label="Choose shared view"' in second.text
     assert 'class="drawer-close" type="button"' in second.text
     assert "event.stopPropagation();" in second.text
-    assert "drawerState.checked = !isCompact();" in second.text
+    assert "if (!isCompact()) drawerState.checked = false;" in second.text
     csp = second.headers["content-security-policy"]
     nonce = re.search(r"script-src 'self' 'nonce-([^']+)'", csp)
     assert nonce
