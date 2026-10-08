@@ -1,5 +1,8 @@
 # Activity Corpus Sharing
 
+For the owner walkthrough, QR handoff, limit examples, and context comparison,
+start with the [Workspace sharing user guide](WORKSPACE-SHARING-GUIDE.md).
+
 The access settings include **Maximum redemptions** beside Concurrent sessions.
 It defaults to **5 per browser**, accepts 0 (unlimited) through 1000, and is saved
 with the recipe and copied into generated grants. Resuming an active session
@@ -59,8 +62,12 @@ frontend. It never substitutes a stale local corpus when the canonical read fail
 
 Editing or deleting a recipe never changes or revokes previously generated
 shares. A live share refreshes from the recipe copy saved with the grant, not
-from later edits to the reusable recipe. To change an active scope, revoke it
-and generate a new share.
+from later edits to the reusable recipe. To republish an active share's content,
+save the recipe edits and explicitly choose **Update from saved recipe**. This
+preserves the QR/link, share name, expiry, access settings, sessions, and existing
+reference permissions while replacing the snapshot and captured live configuration.
+To change access settings or expiry, generate a new share and revoke the old one
+when appropriate. Content refresh does not renew access or reset redemptions.
 
 ## Recipe, snapshot, and vector storage
 

@@ -421,6 +421,9 @@ temporary scope-limited corpus sharing.
 
 > Full setup: [`frontend/README.md`](frontend/README.md)
 
+Sharing a workspace? See the [Workspace sharing user guide](docs/info/WORKSPACE-SHARING-GUIDE.md)
+for QR generation, access limits, expiry, and updating or revoking shared content.
+
 **Features:** Home manifesto · context-aware Second Brain feed and mode overrides · reorderable workflow and app layouts · one-click task triggering · live HTMX status polling · app documentation and controlled pytest runs · recursive HFL browsing, tag cloud, date search, authenticated canonical-host reads, and signed reference downloads · immutable source-scoped guest portals with QR/PIN access and cited Q&A · Flower link
 
 ```sh

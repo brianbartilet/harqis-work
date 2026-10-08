@@ -954,6 +954,9 @@ responsive navigation, corpus filtering, and reference downloads.
 
 #### Workspace context sharing
 
+For step-by-step owner instructions, see the [Workspace sharing user guide](../docs/info/WORKSPACE-SHARING-GUIDE.md)
+(QR generation, browser redemption limits, expiry, refresh, and context names).
+
 Express > **Share Activity** now has Details and Filtering, Entries, Actions and Ideas,
 Boards, Plans, Graph, and Agent tabs. Generate share recipe from Corpus, Graph, or Kanban
 preselects eligible workspace context in an unsaved draft. Saved recipes and
