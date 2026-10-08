@@ -444,6 +444,7 @@ def _generated_shares_context_sync(request: Request, user: str) -> dict[str, Any
                 ),
                 "expires_at_display": _expiry_display(share),
                 "has_link": bool(store.get_share_link(share.id)),
+                "has_recipe": bool(store.get_configuration(share.configuration_id)),
             }
             for share in share_page_items
         ),
@@ -556,6 +557,7 @@ def _owner_context_sync(
                 ),
                 "expires_at_display": _expiry_display(share),
                 "has_link": bool(store.get_share_link(share.id)),
+                "has_recipe": bool(store.get_configuration(share.configuration_id)),
             }
             for share in share_page_items
         ),
@@ -994,6 +996,9 @@ async def generate_share(request: Request):
     existing = store.get_configuration(str(form.get("configuration_id") or ""))
     try:
         configuration = _configuration_from_form(form, existing=existing)
+        share_name = str(form.get("share_name") or configuration.name).strip()
+        if not share_name or len(share_name) > 120:
+            raise ValueError("Share name must contain 1 to 120 characters.")
         snapshot = await asyncio.to_thread(
             _build_preview_snapshot, request, configuration, _disabled_references(form), force=True,
         )
@@ -1014,7 +1019,7 @@ async def generate_share(request: Request):
         qr = qr_data_uri(link)
         grant = store.create_share(
             configuration_id=configuration.id,
-            name=configuration.name,
+            name=share_name,
             token_hash=opaque_hash(public_token),
             encrypted_link=encrypt_share_link(link),
             pin_hash=hash_pin(pin) if pin else "",
@@ -1098,6 +1103,48 @@ async def share_handoff(request: Request, share_id: str):
         "share_recipient": grant.snapshot.recipient,
         "session_duration": _session_duration_summary(),
     })
+
+
+@owner_router.post("/shares/{share_id}/update")
+async def update_share_from_recipe(request: Request, share_id: str):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    form = await request.form()
+    _require_csrf(form, user)
+    store = get_share_store()
+    grant = store.get_share(share_id)
+    if not grant or not grant.available:
+        raise HTTPException(status_code=404, detail="Active share not found.")
+    configuration = store.get_configuration(grant.configuration_id)
+    if not configuration:
+        raise HTTPException(status_code=409, detail="The original saved recipe is no longer available.")
+    try:
+        secret_options = _secret_snapshot_options(request, configuration)
+        def rebuild():
+            snapshot = build_snapshot(
+                configuration,
+                _sharing_documents(configuration.sources if not configuration.activity else (ALL_SOURCES,),
+                                   force=True, include_secrets=configuration.include_secrets),
+                enabled_reference_ids=grant.snapshot.enabled_reference_ids,
+                disabled_reference_ids=configuration.disabled_reference_ids,
+                **secret_options,
+            )
+            return _stable_live_citations(snapshot, grant.snapshot)
+        snapshot = await asyncio.to_thread(rebuild)
+        if not snapshot.all_entries:
+            raise ValueError("The saved recipe has no eligible content. The share was not changed.")
+        if snapshot.estimated_chars > get_settings().hfl_share_max_snapshot_chars:
+            raise ValueError("The saved recipe is too large to share. Narrow its sources or filters.")
+        if not await asyncio.to_thread(store.replace_share_content, grant, snapshot, configuration):
+            raise HTTPException(status_code=409, detail="The share changed during the update. Please retry.")
+    except (TypeError, ValueError) as exc:
+        return templates.TemplateResponse(request, "modules/hfl_shares/index.html",
+            await _owner_context(request, user, configuration=configuration, error=str(exc)), status_code=422)
+    record_share_audit(event="updated_from_recipe", share_id=share_id)
+    return templates.TemplateResponse(request, "modules/hfl_shares/index.html",
+        await _owner_context(request, user, configuration=configuration,
+            success="Share updated from the saved recipe. Its QR, link, expiry and access settings are unchanged."))
 
 
 @owner_router.post("/shares/{share_id}/revoke")

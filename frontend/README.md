@@ -968,8 +968,13 @@ chat. Canvases resize to the available panel height; the board picker shares the
 heading row, and board citations open node details directly. Switching views retains conversation and
 draft text. Mobile source views use a full-height drawer. Close session exits preview or
 ends the guest session. Graph exploration is temporary: reopening a view restores
-the recipe's published layout settings. Recipient activity graphs use Drift
-animation without an animation selector and respect reduced-motion preferences.
+the recipe's published layout and animation settings. Recipient activity graphs
+hide the animation selector, fall back to Drift when unspecified, and respect
+reduced-motion preferences. Use Update from saved recipe on an active generated
+share to republish its linked recipe without replacing its QR/link. Save recipe
+edits first; existing access settings and reference permissions are preserved.
+Generating a share prompts for a separate recipient-visible share name, initially
+filled with the recipe name. Republishing from the recipe preserves this name.
 
 Entries are required when creating or saving a recipe. Legacy publications keep
 their approved content, including older entries-excluded snapshots; applying the

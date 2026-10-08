@@ -292,9 +292,13 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     page.locator('#recipient').fill('Reviewer')
     page.locator('#auth-mode').select_option('qr')
     page.get_by_role('button', name='Generate snapshot and QR', exact=True).click()
-    expect(page.locator('body')).to_contain_text('Workspace demo', timeout=15000)
+    expect(page.locator('[data-share-name-input]')).to_have_value('Workspace demo')
+    page.locator('[data-share-name-input]').fill('For the reviewer')
+    page.get_by_role('button', name='Generate share', exact=True).click()
+    expect(page.locator('body')).to_contain_text('For the reviewer', timeout=15000)
     from modules.hfl_shares.store import get_share_store
     grant = get_share_store().list_shares()[0]
+    assert grant.name == 'For the reviewer'
     page.goto('https://editing.test/sharing/shares/' + grant.id + '/preview')
     page.get_by_role('button', name='Choose shared view').click()
     page.locator('[data-share-view=boards]').click()

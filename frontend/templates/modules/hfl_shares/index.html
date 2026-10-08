@@ -373,6 +373,14 @@
                   data-progress-next="Generating secure access and QR code…">Generate snapshot and QR</button>
         </div>
       </form>
+      <dialog data-share-name-dialog aria-labelledby="share-name-title" style="margin:auto;width:min(28rem,calc(100vw - 2rem));border:1px solid #334155;border-radius:1rem;background:#0f172a;color:#e2e8f0;padding:1.25rem">
+        <form data-share-name-form>
+          <h2 id="share-name-title" class="text-lg font-semibold">Name this share</h2>
+          <p class="mt-2 text-sm text-slate-400">Use a name that helps you remember who it is for. Recipients will also see this name.</p>
+          <label class="field mt-4">Share name<input name="share_name" data-share-name-input required maxlength="120" autocomplete="off"></label>
+          <div class="actions mt-4"><button class="btn btn-soft" type="button" data-share-name-cancel>Cancel</button><button class="btn btn-main" type="submit">Generate share</button></div>
+        </form>
+      </dialog>
     </section>
 
     <aside class="owner-sidebar space-y-5">
@@ -930,8 +938,34 @@
     document.documentElement.style.overflow = 'hidden';
     instantDialogCard?.focus({preventScroll:true});
   };
+  const shareNameDialog = document.querySelector('[data-share-name-dialog]');
+  const shareNameInput = document.querySelector('[data-share-name-input]');
+  let namedSubmitter = null;
+  let shareNameConfirmed = false;
+  document.querySelector('[data-share-name-cancel]').addEventListener('click', () => shareNameDialog.close());
+  document.querySelector('[data-share-name-form]').addEventListener('submit', event => {
+    event.preventDefault();
+    if (!shareNameInput.value.trim()) {shareNameInput.setCustomValidity('Enter a share name.');shareNameInput.reportValidity();return;}
+    let input = form.querySelector('[name="share_name"]');
+    if (!input) {input=document.createElement('input');input.type='hidden';input.name='share_name';form.append(input);}
+    input.value = shareNameInput.value.trim();
+    shareNameConfirmed = true;
+    shareNameDialog.close();
+    form.requestSubmit(namedSubmitter);
+  });
+  shareNameInput.addEventListener('input', () => shareNameInput.setCustomValidity(''));
   form.addEventListener('submit', event => {
     const submitter = event.submitter;
+    if (submitter?.getAttribute('formaction') === '/sharing/generate' && !shareNameConfirmed) {
+      event.preventDefault();
+      namedSubmitter = submitter;
+      shareNameInput.value = form.querySelector('[name="name"]')?.value || '';
+      shareNameInput.setCustomValidity('');
+      shareNameDialog.showModal();
+      shareNameInput.focus();shareNameInput.select();
+      return;
+    }
+    shareNameConfirmed = false;
     syncDisabledReferences();
     if (!submitter?.dataset.progressMessage || !progressOverlay) return;
     window.clearTimeout(previewTimer);

@@ -26,6 +26,9 @@ def make_share(snapshot, cfg=None):
 
 
 def test_required_entries_on_save_preserves_legacy_refresh(context, sharing_corpus):
+    from modules.hfl_shares.activity_models import GraphView
+    assert GraphView().animation == 'drift'
+    assert GraphView(animation='off').animation == 'off'
     assert from_form(FormData([('activity_version', '1'), ('activity_sections', 'ideas')]))['sections'] == ['entries', 'ideas']
     cfg = recipe(activity={'sections': ['ideas']})
     saved = get_share_store().save_configuration(cfg)
@@ -76,6 +79,31 @@ def test_agent_context_includes_only_approved_relationships(context, sharing_cor
     text = _context(snapshot, entries=(evidence,))
     assert 'Approved action — related-to — Current idea' in text
     assert 'Secret-backed action' not in text
+
+
+def test_owner_updates_share_from_latest_saved_recipe(authenticated_client, context, sharing_corpus):
+    from modules.hfl_shares.security import make_csrf_token
+    store = get_share_store()
+    cfg = store.save_configuration(recipe(activity={'sections': ['entries', 'actions']}))
+    grant = make_share(build_snapshot(cfg, (sharing_corpus,)), cfg)
+    original_link = store.get_share_link(grant.id)
+    cfg = store.save_configuration(replace(cfg, activity={'sections': ['entries', 'ideas', 'graph'],
+                                                        'graph_view': {'preset': 'sources', 'animation': 'ripple'}}))
+    url = f'/sharing/shares/{grant.id}/update'
+    assert authenticated_client.post(url, data={}).status_code == 403
+    response = authenticated_client.post(url, data={'csrf': make_csrf_token('frontend-test-user')})
+    assert response.status_code == 200
+    assert 'Share updated from the saved recipe' in response.text
+    updated = store.get_share(grant.id)
+    assert updated.snapshot.activity['sections'] == ['entries', 'ideas', 'graph']
+    assert updated.snapshot.activity['graph']['view']['animation'] == 'ripple'
+    assert not updated.snapshot.activity['actions']
+    assert store.get_share_link(grant.id) == original_link
+    assert updated.expires_at == grant.expires_at
+    assert updated.auth_mode == grant.auth_mode
+    assert updated.name == grant.name
+    store.revoke_share(grant.id)
+    assert authenticated_client.post(url, data={'csrf': make_csrf_token('frontend-test-user')}).status_code == 404
 
 
 @pytest.mark.parametrize('width', [1440, 390])

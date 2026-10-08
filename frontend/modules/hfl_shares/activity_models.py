@@ -22,7 +22,7 @@ class GraphViewport(GraphPoint):
 class GraphView(BaseModel):
     model_config = ConfigDict(extra='forbid')
     preset: Literal['timeline', 'sources', 'people', 'tools', 'companies', 'mindmap'] = 'timeline'
-    animation: Literal['off', 'breathing', 'ripple', 'drift'] = 'off'
+    animation: Literal['off', 'breathing', 'ripple', 'drift'] = 'drift'
     hidden_kinds: list[str] = Field(default_factory=list, max_length=100)
     positions: dict[str, GraphPosition] = Field(default_factory=dict, max_length=20000)
     viewport: GraphViewport | None = None

@@ -20,8 +20,7 @@ function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onVie
   const descriptionOverlay = useRef(null);
   const [width, setWidth] = useState(600), [selected, setSelected] = useState(data.nodes.find(n=>n.id===rootId)||null);
   const [height, setHeight] = useState(440);
-  const [view, setView] = useState(() => ({preset:'timeline', animation:'off', hidden_kinds:[], ...initialView,
-    ...(controlsHost ? {animation:'drift'} : {})}));
+  const [view, setView] = useState(() => ({preset:'timeline', animation:'drift', hidden_kinds:[], ...initialView}));
   const viewRef = useRef(view);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const motion = useRef({time:initialView.animation_time || 0, last:0});
