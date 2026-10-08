@@ -3003,6 +3003,27 @@
       "status": "deferred",
       "tools": [],
       "reason": "Owner-session and CSRF-protected share deletion; a dedicated machine-facing authorization and deletion contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/share/assets/{asset_path:path}",
+      "status": "ui",
+      "tools": [],
+      "reason": "Allowlisted public CSS, JavaScript and icon assets for the guest page; browser presentation only."
+    },
+    {
+      "method": "GET",
+      "path": "/sharing/shares/{share_id}/preview/csrf",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner-authenticated browser CSRF token refresh for preview chat; no machine-facing operation."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/shares/{share_id}/update",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session and CSRF-protected refresh from a saved recipe; dedicated machine-facing sharing service/auth contract is deferred."
     }
   ]
 }

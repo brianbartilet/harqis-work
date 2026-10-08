@@ -594,3 +594,27 @@ def test_review_ready_and_available_status_labels_preserve_api_values(editor_pag
     editor=page.get_by_role('dialog',name='Edit idea',exact=True)
     expect(editor.locator('[name=status] option:checked')).to_have_text('Available')
     expect(editor.locator('[name=status]')).to_have_value('suggested')
+
+
+@pytest.mark.parametrize('width', [1280, 390])
+def test_ideas_drawer_keeps_reading_position_after_dismiss(editor_page, ideas, width):
+    from playwright.sync_api import expect
+    page, _ = editor_page
+    for index in range(18):
+        ideas.save_idea(payload(title=f'Reading idea {index}'), 'owner')
+    page.set_viewport_size({'width': width, 'height': 800})
+    page.goto('https://editing.test/hfl-corpus/actions')
+    page.get_by_role('button', name='Show ideas', exact=True).click()
+    drawer = page.locator('#board-ideas-drawer')
+    expect(drawer.locator('[data-idea-id]')).to_have_count(18)
+    card = drawer.locator('[data-idea-id]').nth(8)
+    card.evaluate('(el) => el.parentElement.scrollTop += el.getBoundingClientRect().top - el.parentElement.getBoundingClientRect().top - 20')
+    dismissed_id = card.get_attribute('data-idea-id')
+    following = drawer.locator('[data-idea-id]').nth(9)
+    following_id = following.get_attribute('data-idea-id')
+    offset = following.bounding_box()['y']
+    card.get_by_role('button', name='Dismiss', exact=True).click()
+    expect(drawer.locator(f'[data-idea-id="{dismissed_id}"]')).to_have_count(0)
+    expect(drawer.locator('[data-idea-id]')).to_have_count(17)
+    assert drawer.evaluate('(el) => el.scrollTop') > 0
+    assert abs(drawer.locator(f'[data-idea-id="{following_id}"]').bounding_box()['y'] - offset) < 3

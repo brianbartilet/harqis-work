@@ -45,6 +45,13 @@
     if(signature===rendered)return;
     const expanded=new Set([...lanes.querySelectorAll('details[open]')].map(el=>el.closest('[data-followup-id]').dataset.followupId+':'+el.querySelector('summary').textContent));
     const scroll=new Map([...lanes.children].map(el=>[el.dataset.status,el.scrollTop]));
+    const previousDrawer=dialog.querySelector('.ideas-drawer');
+    const ideaScroll=previousDrawer?.scrollTop||0;
+    const drawerTop=previousDrawer?.getBoundingClientRect().top||0;
+    const oldIdeaCards=new Map([...(previousDrawer?.querySelectorAll('[data-idea-id]')||[])].map(card=>[card.dataset.ideaId,card]));
+    const ideaAnchors=[...oldIdeaCards.values()]
+      .filter(card=>card.getBoundingClientRect().top>=drawerTop)
+      .map(card=>({id:card.dataset.ideaId,offset:card.getBoundingClientRect().top-drawerTop}));
     const focused=document.activeElement;
     const focusId=focused?.closest('[data-followup-id]')?.dataset.followupId, focusText=focused?.textContent;
     const oldItems=items, oldCards=new Map([...lanes.querySelectorAll('[data-followup-id]')].map(el=>[el.dataset.followupId,el]));
@@ -98,7 +105,10 @@
       section.append(header);
       const newestIdeas=[...ideaRows].sort((a,b)=>(Date.parse(b.created_at)||0)-(Date.parse(a.created_at)||0));
       for(const item of newestIdeas){
+        const oldCard=oldIdeaCards.get(item.id), itemSignature=JSON.stringify(item);
+        if(oldCard?.ideaSignature===itemSignature){section.append(oldCard);continue;}
         const card=node('article',null,'agenda-card idea-board-card');card.dataset.ideaId=item.id;
+        card.ideaSignature=itemSignature;
         const grip=node('button','⠿','action-drag-handle');grip.type='button';grip.setAttribute('aria-label','Drag idea '+item.title);
         const clone=node('button','⧉','action-clone-handle');clone.type='button';clone.setAttribute('aria-label','Clone '+item.title);clone.onclick=()=>window.HflIdeas.cloneObject('idea',item.id);
         const meta=node('div',null,'agenda-card-meta');
@@ -138,6 +148,12 @@
       backdrop.onclick=()=>closeIdeasDrawer();
       const close=node('button','×','ideas-drawer-close');close.type='button';close.setAttribute('aria-label','Close ideas drawer');close.onclick=()=>closeIdeasDrawer();header.append(close);
       overlay.append(backdrop,section);dialog.append(overlay);
+      section.scrollTop=ideaScroll;
+      if(ideaScroll>0){
+        const cards=new Map([...section.querySelectorAll('[data-idea-id]')].map(card=>[card.dataset.ideaId,card]));
+        const anchor=ideaAnchors.find(item=>cards.has(item.id));
+        if(anchor)section.scrollTop+=cards.get(anchor.id).getBoundingClientRect().top-section.getBoundingClientRect().top-anchor.offset;
+      }
       sorters.push(new Sortable(section,{group:{name:'hfl-actions',pull:true,put:false},draggable:'.agenda-card',handle:'.action-drag-handle',forceFallback:true,animation:150,
         onStart:()=>{dragging='idea';backdrop.style.pointerEvents='none';},onEnd:event=>{backdrop.style.pointerEvents='';dragging=null;pointerHeld=false;if(event.to!==event.from){event.from.append(event.item);window.HflIdeas.convert(event.item.dataset.ideaId);}}}));
     }
