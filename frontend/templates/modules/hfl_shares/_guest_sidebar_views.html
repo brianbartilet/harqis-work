@@ -1,0 +1,42 @@
+<section class="share-sidebar-view" data-share-sidebar="actions" hidden aria-label="Actions and ideas">
+  {% for kind in ['actions', 'ideas'] %}
+  {% if shared_objects[kind] %}
+  <section class="share-guest-group" data-kind="{{ kind }}">
+    <h3>{{ kind|title }} <span class="chip">{{ shared_objects[kind]|length }}</span></h3>
+    {% for obj in shared_objects[kind] %}
+    {% set item = activity_items.get(obj.id) %}
+    {% if item %}{% set entry = item.entry %}
+    <article class="share-object-card" data-kind="{{ kind }}" id="evidence-{{ entry.citation[1:] }}">
+      <div class="share-card-meta"><span class="share-kind-pill" data-kind="{{ kind }}">{{ 'Action' if kind == 'actions' else 'Idea' }}</span>{% if obj.get('status') %}<span>{{ obj.status }}</span>{% endif %}</div>
+      <h4 class="share-card-title">{{ obj.title }}</h4>
+      {% if obj.get('body') or obj.get('description') %}<div class="share-card-body markdown-body">{{ (obj.get('body') or obj.get('description'))|share_markdown }}</div>{% endif %}
+      {% if obj.get('due_date') %}<p class="share-scope-note">Due <time>{{ obj.due_date }}</time></p>{% endif %}
+      {% if obj.get('expected_outcome') %}<p class="share-scope-note">{{ obj.expected_outcome }}</p>{% endif %}
+      {% for checklist in obj.get('checklists', []) %}<div class="share-checklist"><h5>{{ checklist.title }}</h5>{% for item in checklist['items'] %}<p><span aria-label="{{ 'Done' if item.done else 'Not done' }}">{{ '☑' if item.done else '☐' }}</span> {{ item.text }}</p>{% endfor %}</div>{% endfor %}
+      {% if obj.get('notes') %}<details><summary>Notes</summary><div class="share-card-body markdown-body">{{ obj.notes|share_markdown }}</div></details>{% endif %}
+      {% include 'modules/hfl_shares/_guest_references.html' %}
+    </article>
+    {% endif %}
+    {% endfor %}
+  </section>
+  {% endif %}
+  {% endfor %}
+</section>
+<section class="share-sidebar-view" data-share-sidebar="plans" hidden aria-label="Plans">
+  {% for category, dates in shared_plan_groups %}
+  <section class="share-plan-category share-guest-group" style="--plan-color: {{ dates[0].get('color', '#38bdf8') }}">
+    <h3>{{ category }}</h3>
+    <ol class="share-plan-timeline">
+    {% for obj in dates %}{% set evidence = activity_evidence.get(obj.id) %}
+    <li class="share-plan-date" style="--plan-color: {{ obj.get('color', '#38bdf8') }}">
+      <article {% if evidence %}id="evidence-{{ evidence.citation[1:] }}"{% endif %}>
+        <time datetime="{{ obj.start_date }}">{{ obj.start_date }}</time>
+        {% if obj.get('end_date') and obj.end_date != obj.start_date %} – <time datetime="{{ obj.end_date }}">{{ obj.end_date }}</time>{% endif %}
+        <h4 class="share-card-title">{{ obj.title }}</h4>
+      </article>
+    </li>
+    {% endfor %}
+    </ol>
+  </section>
+  {% endfor %}
+</section>

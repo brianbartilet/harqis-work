@@ -1,0 +1,33 @@
+  {% set enabled_refs = entry.references|selectattr('enabled')|list %}
+  {% if enabled_refs %}
+  <div class="entry-references">
+    <strong>Explore further</strong>
+    <div class="reference-links">
+      {% for reference in enabled_refs %}
+      {% set view = item.reference_views.get(reference.id) %}
+      {% if view and view.kind %}
+      <button class="reference-preview reference-preview-{{ view.kind }}" type="button"
+              data-reference-preview
+              data-preview-kind="{{ view.kind }}"
+              data-preview-label="{{ reference.label }}"
+              data-preview-url="{{ view.preview_url }}"
+              data-media-url="{{ view.media_url }}"
+              data-download-url="{{ view.download_url }}">
+        {% if view.thumbnail_url %}
+        <span class="reference-thumbnail">
+          <span class="reference-thumbnail-fallback" aria-hidden="true">{{ "▶" if view.kind == "video" else "▧" }}</span>
+          <img src="{{ view.thumbnail_url }}" loading="lazy" decoding="async" alt="">
+          {% if view.kind == "video" %}<span class="reference-play" aria-hidden="true">▶</span>{% endif %}
+        </span>
+        {% endif %}
+        <span class="reference-preview-label">{{ reference.label }}</span>
+        <span class="reference-preview-action">{{ "Play video" if view.kind == "video" else "Open viewer" }}</span>
+      </button>
+      {% else %}
+      <a href="{{ view.download_url if view else '/share/session/references/' ~ reference.id }}"
+         target="_blank" rel="noopener noreferrer">{{ reference.label }}</a>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}

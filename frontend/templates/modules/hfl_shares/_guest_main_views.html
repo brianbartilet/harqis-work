@@ -1,0 +1,24 @@
+<section class="share-main-view" data-share-main="boards" hidden aria-label="Idea boards" tabindex="-1">
+  <header class="share-view-head"><h2>Idea boards</h2>
+  {% if shared_objects.boards %}<div class="share-board-picker">
+  <label for="share-board-picker">Board</label>
+  <span class="share-board-select"><select id="share-board-picker" data-share-board-picker>
+    {% for board in shared_objects.boards %}<option value="{{ loop.index0 }}">{{ board.title }}</option>{% endfor %}
+  </select><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg></span>
+  </div>{% endif %}
+  <button type="button" class="button-secondary" data-return-chat>Back to chat</button></header>
+  {% if shared_objects.boards %}
+  {% for board in shared_objects.boards %}
+  <section data-share-board="{{ loop.index0 }}" {% if not loop.first %}hidden{% endif %}>
+    {% if board.get('purpose') %}<p class="share-board-purpose" title="{{ board.purpose }}">{{ board.purpose }}</p>{% endif %}
+    {% set graph = board.graph %}{% set graph_layout = 'board' %}{% include 'modules/hfl_shares/_activity_graph.html' %}
+  </section>
+  {% endfor %}
+  {% endif %}
+</section>
+<section class="share-main-view" data-share-main="graph" hidden aria-label="Activity graph" tabindex="-1">
+  <header class="share-view-head"><h2>Activity graph</h2><button type="button" class="button-secondary" data-return-chat>Back to chat</button></header>
+  {% if ('graph', 'Activity graph') in share_menu %}
+  {% set graph = grant.snapshot.activity.graph %}{% set graph_layout = 'timeline' %}{% include 'modules/hfl_shares/_activity_graph.html' %}
+  {% endif %}
+</section>
