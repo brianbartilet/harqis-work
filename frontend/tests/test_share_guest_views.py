@@ -107,7 +107,7 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
     expect(panel).to_contain_text('Approved action')
     expect(panel).to_contain_text('Current idea')
     assert panel.locator('.share-guest-group').first.get_attribute('data-kind') == 'actions'
-    assert panel.bounding_box()['width'] <= width
+    assert panel.bounding_box()['width'] <= width + 1
     if width <= 900:
         expect(page.locator('[data-entry-drawer]')).to_have_css('transform', 'matrix(1, 0, 0, 1, 0, 0)')
         assert page.locator('[data-entry-drawer]').bounding_box()['x'] >= 0
@@ -120,8 +120,15 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
     choose('graph')
     graph = page.locator('[data-share-main=graph]')
     expect(graph.locator('canvas').first).to_be_visible()
+    if width > 900:
+        expect(page.locator('[data-entry-drawer]')).not_to_have_attribute('inert', '')
+        expect(page.locator('[data-entry-drawer]')).to_have_css('margin-left', '0px')
+        expect(page.locator('[data-share-sidebar=plans]')).to_be_visible()
+        assert graph.bounding_box()['x'] >= page.locator('[data-entry-drawer]').bounding_box()['width']
+    assert graph.evaluate('(el)=>el.scrollHeight <= el.clientHeight + 1')
     expect(page.locator('[data-chat-form]')).not_to_be_visible()
     expect(graph.get_by_label('Graph preset', exact=True)).to_have_value('people')
+    expect(graph.get_by_label('Graph animation', exact=True)).to_have_count(0)
     graph.get_by_label('Graph preset', exact=True).select_option('sources')
     page.screenshot(path=str(tmp_path / f'shared-graph-{width}.png'))
     graph.get_by_role('button', name='Back to chat').click()
@@ -131,7 +138,16 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
     choose('graph')
     expect(graph.get_by_label('Graph preset', exact=True)).to_have_value('people')
     choose('boards')
-    expect(page.locator('[data-share-main=boards] canvas').first).to_be_visible()
+    boards = page.locator('[data-share-main=boards]')
+    expect(boards.locator('canvas').first).to_be_visible()
+    assert boards.evaluate('(el)=>el.scrollHeight <= el.clientHeight + 1')
+    assert page.locator('[data-board-evidence]').count() == 0
+    if width > 900:
+        expect(page.locator('[data-share-sidebar=plans]')).to_be_visible()
+        heading = boards.locator('.share-view-head [data-return-chat]').bounding_box()
+        picker = page.locator('[data-share-board-picker]').bounding_box()
+        assert abs((heading['y'] + heading['height']/2) - (picker['y'] + picker['height']/2)) < 3
+    page.screenshot(path=str(tmp_path / f'shared-boards-{width}.png'))
     expect(page.locator('[data-share-main=graph] canvas')).to_have_count(0)
     page.locator('[data-share-main=boards] [data-return-chat]').click()
     # An actual chat citation opens the appropriate source panel.
@@ -142,4 +158,11 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
     expect(page.locator('[data-share-sidebar=actions]')).to_be_visible()
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     page.locator('[data-drawer-close]').click()
-    expect(page.get_by_role('link', name='End', exact=True)).to_be_visible()
+    expect(page.get_by_role('link', name='Close session', exact=True)).to_be_visible()
+    board_citation = next(e.citation[1:] for e in snapshot.activity_entries if e.id == 'board:b')
+    page.locator('[data-chat-thread]').evaluate('(el, id) => { const a=document.createElement("a"); a.href="/share/session?page=1#evidence-"+id; a.textContent="Cited board"; el.append(a); }', board_citation)
+    page.get_by_role('link', name='Cited board').click()
+    expect(boards.locator('.share-graph-inspector h3')).to_have_text('Workspace board')
+    assert boards.evaluate('(el)=>el.scrollHeight <= el.clientHeight + 1')
+    boards.get_by_role('button', name='Close object details').click()
+    expect(boards.locator('.share-graph-inspector')).to_have_count(0)

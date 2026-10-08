@@ -51,11 +51,27 @@ def _context(
     ranked_entries = (
         entries if entries is not None else _retrieval_entries(snapshot, query)
     )
+    # Relations come from the approved projection, including legacy snapshots.
+    # Attach them to their source evidence so the agent can cite the object.
+    graph = snapshot.activity.get('connections', {})
+    labels = {node['id']: node.get('label', '') for node in graph.get('nodes', [])}
+    relations = {}
+    for edge in graph.get('edges', []):
+        source, target = edge.get('source'), edge.get('target')
+        if source not in labels or target not in labels:
+            continue
+        line = f"{labels[source]} — {edge.get('relation', 'related to')} — {labels[target]}"
+        for identity in (source, target):
+            relations.setdefault(identity, []).append(line)
     for entry in ranked_entries:
+        related = relations.get(entry.id, relations.get('entry:' + entry.id, []))
+        evidence_text = entry.text
+        if related:
+            evidence_text += '\n\nShared relationships:\n' + '\n'.join(related[:12])
         chunk = (
             f'<entry citation="[{html.escape(entry.citation, quote=True)}]" '
             f'source="{html.escape(entry.source, quote=True)}">\n'
-            f"{html.escape(entry.text)}\n"
+            f"{html.escape(evidence_text)}\n"
             "</entry>"
         )
         if used + len(chunk) > limit:

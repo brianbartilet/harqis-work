@@ -1,6 +1,6 @@
 {% extends "share_base.html" %}
 {% block title %}{{ grant.name }} · HARQIS{% endblock %}
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ static_asset('css/share-activity.css') }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ static_asset('css/share-activity.css') }}"><link rel="stylesheet" href="{{ static_asset('css/share-guest.css') }}">{% endblock %}
 {% block header_actions %}
 <button class="header-action" type="button" data-contact-open>Contact</button>
 <button class="header-action" type="button" data-manifesto-open
@@ -28,10 +28,11 @@
     <header class="drawer-head">
       <div>
         <p class="eyebrow">Browse the source material</p>
-        <h2>Moments worth exploring</h2>
+        <h2 data-sidebar-title>Activity entries</h2>
       </div>
-      <button class="drawer-close" type="button" data-drawer-close aria-label="Close moments drawer">×</button>
+      <button class="drawer-close" type="button" data-drawer-close aria-label="Close source drawer">×</button>
     </header>
+    <section class="share-sidebar-view share-entries-view" data-share-sidebar="entries">
     <form class="drawer-search" method="get" action="{% if owner_preview %}/sharing/shares/{{ grant.id }}/preview{% else %}/share/session{% endif %}" data-live-search>
       <label for="search">Search these moments</label>
       <div class="drawer-search-row">
@@ -70,42 +71,41 @@
     <div class="entry-list" data-entry-list>
       {% include "modules/hfl_shares/_guest_entries.html" %}
     </div>
+    </section>
+    {% include "modules/hfl_shares/_guest_sidebar_views.html" %}
   </aside>
-  <label class="drawer-backdrop" for="shared-moments-drawer" data-drawer-backdrop aria-label="Close moments drawer"></label>
+  <label class="drawer-backdrop" for="shared-moments-drawer" data-drawer-backdrop aria-label="Close source drawer"></label>
 
   <section class="chat-workspace">
     <header class="workspace-header">
-      <label class="drawer-toggle" for="shared-moments-drawer" role="button" tabindex="0" data-drawer-toggle aria-label="Show shared moments" aria-controls="shared-moments-drawer" aria-expanded="true"><span class="drawer-toggle-icon" aria-hidden="true">☰</span><span class="drawer-toggle-label">Show moments</span></label>
+      <div class="share-menu-control">
+        <button class="drawer-toggle" type="button" data-view-menu-toggle aria-label="Choose shared view" aria-controls="share-view-menu" aria-expanded="false"><span aria-hidden="true">☰</span></button>
+        <nav id="share-view-menu" class="share-view-menu" aria-label="Shared views" hidden>
+          {% for key, label in share_menu %}<button type="button" data-share-view="{{ key }}" aria-current="{{ 'page' if key == 'entries' else 'false' }}">{{ label }}</button>{% endfor %}
+        </nav>
+      </div>
       <div class="workspace-heading">
         <h1>{{ grant.name }}</h1>
         <p class="muted">{{ grant.snapshot.entries|length }} moments ingested and analyzed{% if grant.snapshot.activity_entries %} · {{ grant.snapshot.activity_entries|length }} shared objects{% endif %} · {% if grant.live_updates %}content refreshed {{ content_refreshed_at }} · {% endif %}{% if grant.no_expiry %}no expiry{% else %}available until {{ expires_at_display }}{% endif %}</p>
       </div>
       {% if owner_preview %}
-      <a class="button button-secondary logout-form" href="/sharing">Close preview</a>
+      <a class="button button-secondary logout-form" href="/sharing">Close session</a>
       {% else %}
       <form class="logout-form" method="post" action="/share/session/logout" data-close-session><button class="button-secondary">Close session</button></form>
       {% endif %}
     </header>
 
+    {% include "modules/hfl_shares/_guest_main_views.html" %}
     <div class="chat-scroll" data-chat-scroll>
       <div class="chat-content">
         <div class="chat-intro">
           <p class="eyebrow">A little context, chosen for you</p>
           <h2>Hello, {{ recipient }}! 👋</h2>
           <p class="muted">You’re exploring {{ owner_name }}’s shared context.{% if owner_profile.bio %} {{ owner_profile.bio }}{% endif %}</p>
-          <p class="muted">Ask about the work, the detours, the places, or the ideas connecting them. Every answer stays grounded in the moments {{ owner_name }} chose to share, with evidence you can explore.</p>
+          <p class="muted">Ask about the work, the detours, the places, or the ideas connecting them. Every answer stays grounded in the context {{ owner_name }} chose to share, with evidence you can explore.</p>
           <p class="audit-note">To keep this experience trustworthy, questions and answers are recorded in the sharing audit.</p>
         </div>
 
-        {% if grant.snapshot.activity %}
-        <details class="shared-activity-public"><summary>Explore shared actions, ideas, boards, plans and graphs</summary>
-          <p>Read-only context. Browse full object details and citations in the source drawer.</p>
-          {% set plans = grant.snapshot.activity.get("plans", []) %}{% set plans_editable = false %}{% if plans %}{% include "modules/hfl_shares/_plans.html" %}{% endif %}
-          {% for board in grant.snapshot.activity.get("boards", []) %}<details><summary>{{ board.title }}</summary><p>{{ board.get("purpose", "") }}</p>{% set graph = board.graph %}{% set graph_layout = 'board' %}{% include "modules/hfl_shares/_activity_graph.html" %}</details>{% endfor %}
-          <details><summary>Connections</summary>{% set graph = grant.snapshot.activity.connections %}{% set graph_layout = 'connections' %}{% include "modules/hfl_shares/_activity_graph.html" %}</details>
-          {% if grant.snapshot.activity.graph.nodes %}<details><summary>Activity graph</summary>{% set graph = grant.snapshot.activity.graph %}{% set graph_layout = 'timeline' %}{% include "modules/hfl_shares/_activity_graph.html" %}</details>{% endif %}
-        </details>
-        {% endif %}
         {% if suggested_prompts %}
         <div class="suggestions" aria-label="Suggested questions">
           {% for prompt in suggested_prompts %}<button class="suggestion" type="button" data-suggestion>{{ prompt }}</button>{% endfor %}
@@ -229,7 +229,10 @@
 (() => {
   const workspace = document.querySelector('[data-workspace]');
   const drawerState = document.querySelector('[data-drawer-state]');
-  const drawerToggle = document.querySelector('[data-drawer-toggle]');
+  const menuToggle = document.querySelector('[data-view-menu-toggle]');
+  const viewMenu = document.querySelector('#share-view-menu');
+  const evidenceDestinations = {{ evidence_destinations|tojson }};
+  const boardEvidenceTargets = {{ board_evidence_targets|tojson }};
   const drawerClose = document.querySelector('[data-drawer-close]');
   const closeSessionForm = document.querySelector('[data-close-session]');
   const overlay = document.querySelector('[data-wait-overlay]');
@@ -263,20 +266,82 @@
     const open = isCompact() ? drawerState.checked : !drawerState.checked;
     workspace.classList.toggle('drawer-open', isCompact() && open);
     workspace.classList.toggle('drawer-collapsed', !isCompact() && !open);
-    drawerToggle?.setAttribute('aria-expanded', String(open));
+    document.querySelector('[data-entry-drawer]')?.setAttribute('inert', '');
+    if (open) document.querySelector('[data-entry-drawer]')?.removeAttribute('inert');
+    document.querySelector('.chat-workspace').inert = isCompact() && open;
   };
   drawerState?.addEventListener('change', syncDrawer);
-  drawerToggle?.addEventListener('keydown', event => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
+  let selectedView = 'entries';
+  let sidebarView = 'entries';
+  const mainViews = new Set(['boards', 'graph']);
+  const menuButtons = [...viewMenu.querySelectorAll('[data-share-view]')];
+  const closeMenu = () => { viewMenu.hidden = true; menuToggle.setAttribute('aria-expanded', 'false'); };
+  const showView = (view, {openDrawer = true} = {}) => {
+    if (!menuButtons.some(button => button.dataset.shareView === view)) view = 'entries';
+    selectedView = view;
+    const main = mainViews.has(view);
+    menuButtons.forEach(button => button.setAttribute('aria-current', button.dataset.shareView === view ? 'page' : 'false'));
+    document.querySelectorAll('[data-share-main]').forEach(panel => {
+      window.resetShareGraphs?.(panel);
+      panel.hidden = panel.dataset.shareMain !== view;
+    });
+    scroller.hidden = main;
+    form.hidden = main;
+    document.querySelector('.chat-workspace').classList.toggle('showing-main-view', main);
+    if (!main) {
+      sidebarView = view;
+      document.querySelectorAll('[data-share-sidebar]').forEach(panel => { panel.hidden = panel.dataset.shareSidebar !== view; });
+      const title = menuButtons.find(button => button.dataset.shareView === view)?.textContent || 'Activity entries';
+      document.querySelector('[data-sidebar-title]').textContent = title;
+      document.querySelector('[data-entry-drawer]').setAttribute('aria-label', title);
+    }
+    if (main) drawerState.checked = false;
+    else if (openDrawer) drawerState.checked = isCompact();
+    syncDrawer(); closeMenu();
+    window.requestAnimationFrame(() => {
+      window.renderShareGraphs?.();
+      if (main) document.querySelector(`[data-share-main="${view}"]`)?.focus({preventScroll:true});
+      else if (isCompact() && openDrawer) drawerClose.focus({preventScroll:true});
+    });
+  };
+  menuToggle.addEventListener('click', () => {
+    document.querySelector('.preview-toast')?.remove();
+    viewMenu.hidden = !viewMenu.hidden;
+    menuToggle.setAttribute('aria-expanded', String(!viewMenu.hidden));
+    if (!viewMenu.hidden) viewMenu.querySelector('[aria-current="page"]')?.focus();
+  });
+  menuButtons.forEach(button => button.addEventListener('click', () => {showView(button.dataset.shareView);menuToggle.focus();}));
+  viewMenu.addEventListener('keydown', event => {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
     event.preventDefault();
-    drawerState.checked = !drawerState.checked;
-    syncDrawer();
+    const current = menuButtons.indexOf(document.activeElement);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? menuButtons.length - 1 : (current + (event.key === 'ArrowDown' ? 1 : -1) + menuButtons.length) % menuButtons.length;
+    menuButtons[next].focus();
+  });
+  document.addEventListener('click', event => {if (!event.target.closest('.share-menu-control')) closeMenu();});
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    if (!viewMenu.hidden) {closeMenu();menuToggle.focus();}
+    else if (isCompact() && drawerState.checked) {drawerState.checked=false;syncDrawer();menuToggle.focus();}
+  });
+  document.querySelectorAll('[data-return-chat]').forEach(button => button.addEventListener('click', () => {
+    showView(sidebarView, {openDrawer:!isCompact()});
+    if (isCompact()) {drawerState.checked=false;syncDrawer();}
+    question.focus({preventScroll:true});
+  }));
+  document.querySelector('[data-share-board-picker]')?.addEventListener('change', event => {
+    document.querySelectorAll('[data-share-board]').forEach(panel => {
+      window.resetShareGraphs?.(panel);
+      panel.hidden = panel.dataset.shareBoard !== event.target.value;
+    });
+    window.renderShareGraphs?.();
   });
   drawerClose?.addEventListener('click', event => {
     event.preventDefault();
     event.stopPropagation();
     drawerState.checked = !isCompact();
     syncDrawer();
+    menuToggle.focus();
   });
   closeSessionForm?.addEventListener('submit', event => {
     const confirmed = window.confirm(
@@ -284,7 +349,11 @@
     );
     if (!confirmed) event.preventDefault();
   });
-  window.addEventListener('resize', syncDrawer);
+  let compactLayout = isCompact();
+  window.addEventListener('resize', () => {
+    if (compactLayout !== isCompact()) {compactLayout=isCompact();drawerState.checked=false;}
+    syncDrawer();
+  });
 
   manifestoOpen?.addEventListener('click', async () => {
     if (!manifestoDialog || !manifestoBody) return;
@@ -570,9 +639,22 @@
     const evidenceUrl = new URL(link.href, window.location.origin);
     const evidenceId = evidenceUrl.hash.slice(1);
     if (!evidenceId.startsWith('evidence-')) return;
+    const destination = evidenceDestinations[evidenceId.slice('evidence-'.length)] || 'entries';
+    showView(destination);
+    if (destination === 'boards') {
+      const target = boardEvidenceTargets[evidenceId.slice('evidence-'.length)];
+      if (target) {
+        const picker = document.querySelector('[data-share-board-picker]');
+        picker.value = String(target.board);
+        picker.dispatchEvent(new Event('change'));
+        const panel = document.querySelector(`[data-share-board="${target.board}"]`);
+        window.selectShareGraphNode?.(panel, target.node);
+      }
+      return;
+    }
     openEvidenceDrawer();
     let evidence = document.getElementById(evidenceId);
-    if (!evidence && entryList && liveSearchForm) {
+    if (!evidence && destination === 'entries' && entryList && liveSearchForm) {
       entryObserver?.disconnect();
       entryLoading = true;
       entryList.innerHTML =
@@ -598,8 +680,8 @@
         entryLoading = false;
       }
     }
-    if (!evidence) return;
-    entryList.querySelectorAll('.is-cited-evidence').forEach(
+    if (!evidence) {appendError('The cited evidence is no longer available.');return;}
+    document.querySelectorAll('.is-cited-evidence').forEach(
       item => item.classList.remove('is-cited-evidence')
     );
     evidence.classList.add('is-cited-evidence');
@@ -791,6 +873,7 @@
   syncDrawer();
   observeEntryStream();
   scrollToLatest();
+  if (window.location.hash.startsWith('#evidence-')) revealEvidence({href:window.location.href});
 })();
 </script>
 {% endblock %}

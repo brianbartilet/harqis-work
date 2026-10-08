@@ -959,6 +959,25 @@ Boards, Plans, Graph, and Agent tabs. Generate share recipe from Corpus, Graph, 
 preselects eligible workspace context in an unsaved draft. Saved recipes and
 generated-share lists retain their existing controls.
 
+Recipients start with chat and an Activity entries sidebar. The hamburger menu
+offers Actions and ideas, Plans, Idea boards, and Activity graph only when enabled
+and populated in the published snapshot. Actions precede ideas; plans group by
+category and sort by descending end date (start date fallback). Boards and graphs
+occupy the main area alongside the last selected desktop sidebar, with Back to
+chat. Canvases resize to the available panel height; the board picker shares the
+heading row, and board citations open node details directly. Switching views retains conversation and
+draft text. Mobile source views use a full-height drawer. Close session exits preview or
+ends the guest session. Graph exploration is temporary: reopening a view restores
+the recipe's published layout settings. Recipient activity graphs use Drift
+animation without an animation selector and respect reduced-motion preferences.
+
+Entries are required when creating or saving a recipe. Legacy publications keep
+their approved content, including older entries-excluded snapshots; applying the
+new interface does not rebuild them. Explicit in-place publication can replace a
+share's snapshot and captured live configuration while preserving its URL/QR,
+expiry, access policy, and sessions. Such an update must use the owner-approved
+recipe and preserve existing citation identities and reference permissions.
+
 New standalone recipes default to the last 30 days. **From days** offers None,
 15, 30, or 90 days and fills Entry date plus the inclusive date range in the
 owner's timezone. Saved presets roll forward for live shares; frozen snapshots

@@ -7,6 +7,7 @@ import sqlite3
 import struct
 import threading
 import uuid
+from dataclasses import replace
 from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -351,6 +352,11 @@ class ShareStore:
     def save_configuration(
         self, configuration: ShareConfiguration
     ) -> ShareConfiguration:
+        if configuration.activity:
+            configuration = replace(configuration, activity={
+                **configuration.activity,
+                'sections': list(dict.fromkeys(['entries', *configuration.activity.get('sections', ['entries'])])),
+            })
         now = utc_now().isoformat()
         saved = configuration.saved(
             configuration_id=configuration.id or str(uuid.uuid4()),
@@ -489,6 +495,31 @@ class ShareStore:
                 ),
             )
         return result.rowcount > 0
+
+    def replace_share_content(self, grant: ShareGrant, snapshot: ScopeSnapshot,
+                              configuration: ShareConfiguration) -> bool:
+        """Explicit owner publication, including frozen shares; preserve identity.
+
+        Compare the old snapshot inside the write transaction so a concurrent
+        live refresh cannot be silently overwritten. Authentication fields,
+        expiry, sessions, handoffs and freeze/live policy are never rewritten.
+        """
+        from modules.hfl_shares.activity_models import live_configuration
+        config = live_configuration(replace(configuration, live_updates=grant.live_updates), snapshot)
+        with self._lock, self._connect() as connection:
+            connection.execute('BEGIN IMMEDIATE')
+            row = connection.execute('SELECT * FROM shares WHERE id=?', (grant.id,)).fetchone()
+            if not row:
+                return False
+            current = self._grant(row)
+            if not current.available or current.snapshot != grant.snapshot or current.live_configuration != grant.live_configuration:
+                return False
+            connection.execute(
+                'UPDATE shares SET snapshot=?, snapshot_entry_count=?, live_configuration=? WHERE id=?',
+                (json.dumps(snapshot.to_record(), ensure_ascii=False), len(snapshot.entries),
+                 json.dumps(config.to_record(), ensure_ascii=False) if config else '', grant.id),
+            )
+        return True
 
     def count_shares(self, *, include_instant: bool = False) -> int:
         with self._connect() as connection:

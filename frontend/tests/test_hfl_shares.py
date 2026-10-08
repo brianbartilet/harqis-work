@@ -1723,10 +1723,10 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     assert "target.innerHTML = renderedHtml;" in second.text
     assert "item.node.data = item.content.slice(0, visibleLength)" in second.text
     assert "data-entry-drawer" in second.text
-    assert "data-drawer-toggle" in second.text
+    assert "data-view-menu-toggle" in second.text
     assert 'id="shared-moments-drawer" type="checkbox"' in second.text
     assert 'for="shared-moments-drawer"' in second.text
-    assert '<span class="drawer-toggle-label">Show moments</span>' in second.text
+    assert 'aria-label="Choose shared view"' in second.text
     assert 'class="drawer-close" type="button"' in second.text
     assert "event.stopPropagation();" in second.text
     assert "drawerState.checked = !isCompact();" in second.text
@@ -1908,7 +1908,7 @@ def test_guest_entries_use_literal_search_ten_item_pages_and_readable_dates(
         first_page.text,
     )
     assert "[S1]" not in first_page.text
-    assert "Moments worth exploring" in first_page.text
+    assert "Activity entries" in first_page.text
     assert "data-wait-overlay" in first_page.text
     assert "<strong>Moment:</strong>" in first_page.text
     assert '<span class="chip chip-source">notes</span>' in first_page.text
@@ -2177,7 +2177,7 @@ def test_owner_can_preview_active_share_without_guest_verification(
     assert 'data-live-search-input' in preview.text
     assert "window.setTimeout(() => liveSearchForm.requestSubmit(), 450)" in preview.text
     assert ">Search</button>" not in preview.text
-    assert "Close preview" in preview.text
+    assert ">Close session</a>" in preview.text
 
     reply = authenticated_client.post(
         f"/sharing/shares/{grant.id}/preview/chat",

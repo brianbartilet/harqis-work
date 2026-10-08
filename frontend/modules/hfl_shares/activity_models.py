@@ -52,7 +52,7 @@ def from_form(form):
     if form.get('activity_version') != '1':
         return {}
     return ActivitySelection(
-        sections=form.getlist('activity_sections'),
+        sections=list(dict.fromkeys(['entries', *form.getlist('activity_sections')])),
         workspace_ids=[v for v in str(form.get('workspace_ids') or '').split(',') if v],
         excluded_ids=form.getlist('excluded_object_ids'),
         excluded_labels=json.loads(str(form.get('excluded_object_labels') or '{}')),

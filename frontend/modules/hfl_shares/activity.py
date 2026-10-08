@@ -134,7 +134,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
         if 'entries' not in controls.sections:
             return replace(snapshot, entries=(), estimated_chars=0, sources=(), source_counts={}, tag_counts={},
                            available_references=0, enabled_reference_ids=(), earliest='', latest='')
-        return replace(snapshot, activity={'actions': [], 'ideas': [], 'boards': [], 'goals': [],
+        return replace(snapshot, activity={'sections': list(controls.sections), 'actions': [], 'ideas': [], 'boards': [], 'goals': [],
                                           'connections': {'nodes': [], 'edges': []}, 'graph': {'nodes': [], 'edges': []}})
     data = load_context() if context is None else context
     if configuration.include_secrets and not data.get('_secrets_supported', True):
@@ -338,7 +338,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
     graph = {'nodes': list(nodes.values()), 'edges': edges}
     graph_view = controls.graph_view.model_dump()
     graph_view['positions'] = {key: value for key, value in graph_view['positions'].items() if key in nodes}
-    payload = {**objects, 'boards': boards, 'goals': list(goals.values()), 'connections': graph,
+    payload = {**objects, 'sections': list(controls.sections), 'boards': boards, 'goals': list(goals.values()), 'connections': graph,
                'graph': {**graph, 'view': graph_view} if 'graph' in controls.sections else {'nodes': [], 'edges': []}}
     evidence = []
     disabled = set(configuration.disabled_reference_ids if disabled_reference_ids is None else disabled_reference_ids)

@@ -19,23 +19,54 @@ body .preview-toast{top:148px}
 .share-guest-group[data-kind=ideas] .entry{border-left-color:#f9ca74}
 .share-guest-group .entry-content{font-size:.8rem;line-height:1.7}
 .share-guest-group .entry-header h3{font-size:.9rem}
-.share-main-view{grid-row:2 / 4;min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;padding:20px}
-.share-view-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}
-.share-view-head h2{margin:0;font-size:1.1rem}
+.share-main-view{grid-row:2 / 4;display:flex;flex-direction:column;gap:10px;min-height:0;min-width:0;overflow:hidden;padding:14px;outline:none}
+.share-view-head{display:flex;flex-wrap:wrap;align-items:center;gap:12px;flex:none;margin:0}
+.share-view-head h2{flex:1;margin:0;font-size:1.05rem}
 .share-view-head button{padding:10px 12px;white-space:nowrap;font-size:.8rem}
-.share-main-view select{max-width:100%;margin-bottom:12px}
+.share-main-view select{max-width:100%;margin:0}
 .share-main-view label{font-size:.8rem;color:#94a3b8}
-.share-board-evidence{margin-top:20px}
-.share-board-evidence>summary{cursor:pointer;padding:12px 0;color:#cbd5e1}
-.share-board-evidence .entry{padding:15px;border-bottom:1px solid #334155}
+.share-board-picker{display:flex;align-items:center;gap:8px;min-width:0;flex:0 1 300px}
+.share-board-picker label{margin:0;flex:none}
+.share-board-head .share-board-picker{margin-right:auto}
+.share-board-select{display:flex;position:relative;min-width:0;flex:1}
+.share-board-select select{appearance:none;width:100%;min-height:38px;padding:8px 32px 8px 12px;border:1px solid #475569;border-radius:8px;background:#172033;color:#e2e8f0;font:inherit;font-size:.82rem;cursor:pointer;text-overflow:ellipsis}
+.share-board-select svg{position:absolute;right:11px;top:50%;transform:translateY(-50%);width:14px;height:14px;fill:none;stroke:#7dd3fc;stroke-width:2;pointer-events:none}
+.share-main-view [data-share-board]{display:flex;flex:1;flex-direction:column;min-height:0;gap:8px}
+.share-graph-viewport .share-board-purpose{position:absolute;top:10px;left:10px;z-index:2;max-width:calc(100% - 160px);margin:0;padding:7px 9px;border-radius:6px;background:#0b1728d9;color:#cbd5e1;font-size:.78rem;line-height:1.5;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;pointer-events:none}
+.share-main-view .shared-graph{display:flex;flex:1;flex-direction:column;min-height:0;margin:0;padding:8px}
+.share-main-view [data-graph-canvas]{display:flex;flex:1;flex-direction:column;min-height:0}
+.share-main-view .share-graph-workspace{flex:1;min-height:120px;position:relative}
+.share-main-view .share-graph-viewport{min-height:0;height:100%;overflow:hidden}
+.share-main-view .share-graph-toolbar{top:8px;right:8px}
+.share-main-view .share-graph-toolbar>div{gap:3px;padding:3px;border-radius:8px}
+.share-main-view .share-graph-toolbar button{width:28px;height:28px;border-radius:6px}
+.share-main-view .share-graph-toolbar svg{width:14px;height:14px}
+.share-main-view .share-graph-stage{height:100%;min-height:0}
+.share-main-view .share-graph-inspector{position:relative;min-height:0;max-height:100%;overflow:auto;padding:12px}
+.shared-graph .share-inspector-close{float:right;position:relative;z-index:1;margin:0 0 6px 8px;width:30px;height:30px;padding:0;color:#cbd5e1;background:#1e293b;cursor:pointer}
+.share-main-view .share-graph-hint{flex:none;font-size:.7rem;line-height:1.4;margin:5px 2px}
+.share-main-view .share-graph-legend{flex:none;margin:2px 0;gap:4px;max-height:66px;overflow:auto}
+.share-main-view .share-graph-options{flex:none;align-items:center;gap:12px;margin:0 0 8px}
+.share-main-view .share-graph-options label{display:inline-flex;align-items:center;gap:7px;margin:0;line-height:1.2}
+.share-main-view .share-graph-options select{margin:0}
+.share-graph-header-controls{flex:1 1 170px;min-width:0}
+.share-main-view .share-graph-header-controls .share-graph-options{margin:0}
+.share-graph-header-controls .share-graph-select svg{position:absolute;right:.6rem;width:.85rem;height:.85rem;pointer-events:none;color:#7dd3fc}
+.share-graph-head>[data-return-chat]{margin-left:auto}
+@media(max-width:700px){
+  .share-view-head{gap:8px}
+  .share-board-head .share-board-picker{flex:1 1 150px}
+  .share-main-view .share-graph-workspace.has-selection{grid-template-columns:minmax(0,1fr)}
+  .share-main-view .share-graph-inspector{position:absolute;inset:auto 0 0;max-height:55%;z-index:3;border-top:1px solid #475569}
+}
+@media(max-height:540px){.share-main-view{overflow:auto}.share-main-view .shared-graph{min-height:260px}}
 .share-workspace .is-cited-evidence{outline:2px solid #38bdf8;outline-offset:-2px;border-radius:8px}
 .share-main-view :is(button,select):focus-visible,.share-sidebar-view :is(button,a):focus-visible{outline:2px solid #38bdf8;outline-offset:2px}
 @media(max-width:900px){
   body .preview-toast{top:140px}
   .share-main-view{padding:14px}
-  .share-view-head{align-items:flex-start}
   .share-workspace .drawer-close{width:44px;height:44px;flex-basis:44px}
-  .share-main-view .share-graph-toolbar button{width:44px;height:44px}
+  .share-main-view .share-graph-toolbar button{width:32px;height:32px}
   .share-main-view .shared-graph{padding:4px}
   .share-workspace .workspace-header{gap:9px}
   .share-sidebar-view{scrollbar-gutter:stable}

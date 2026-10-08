@@ -296,10 +296,10 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     from modules.hfl_shares.store import get_share_store
     grant = get_share_store().list_shares()[0]
     page.goto('https://editing.test/sharing/shares/' + grant.id + '/preview')
-    page.get_by_text('Explore shared actions, ideas, boards, plans and graphs', exact=True).click()
-    page.locator('.shared-activity-public summary').filter(has_text='Workspace board').click()
-    expect(page.locator('.shared-activity-public canvas').first).to_be_visible()
-    assert not page.locator('.shared-activity-public input').count()
+    page.get_by_role('button', name='Choose shared view').click()
+    page.locator('[data-share-view=boards]').click()
+    expect(page.locator('[data-share-main=boards] canvas').first).to_be_visible()
+    assert not page.locator('[data-share-main=boards] input').count()
     page.screenshot(path=str(tmp_path / 'workspace-share.png'), full_page=True)
 
 
@@ -352,7 +352,10 @@ def test_recipe_defaults_exclusions_and_graph_preferences(editor_page, context, 
     filters.click()
     automatic = page.locator('[name="automatic_sections"]')
     assert automatic.evaluate_all('(items)=>items.length===5 && items.every(i=>i.checked && i.disabled)')
-    assert page.locator('[name="activity_sections"]').evaluate_all('(items)=>items.length===6 && items.every(i=>i.checked)')
+    assert page.locator('[name="activity_sections"][type=checkbox]').evaluate_all('(items)=>items.length===5 && items.every(i=>i.checked)')
+    expect(page.get_by_label('Include entries', exact=True)).to_be_checked()
+    expect(page.get_by_label('Include entries', exact=True)).to_be_disabled()
+    assert page.locator('form[data-social-form]').evaluate('(f)=>new FormData(f).getAll("activity_sections").includes("entries")')
     freeze = page.locator('[type="checkbox"][name="freeze_snapshot"]')
     freeze.uncheck()
     assert automatic.evaluate_all('(items)=>items.every(i=>!i.disabled)')
@@ -486,14 +489,15 @@ def test_plans_workspace_exclusions_and_live_refresh(context, sharing_corpus):
     assert 'Trip' not in str(build_snapshot(disabled, (sharing_corpus,)).to_record())
 
 
-def test_plans_template_dates_and_safe_markdown():
+def test_plans_template_dates_and_safe_titles():
     from modules.hfl_shares.router import templates
     rendered = templates.env.get_template('modules/hfl_shares/_plans.html').render(
         plans=[dict(id='plan:1', title='<script>bad</script>', category='Travel',
                     start_date='2026-10-10', end_date='2026-10-12',
                     description='Visit friends', notes='Bring gifts')], plans_editable=True)
     assert 'data-share-object="plan:1"' in rendered
-    assert '2026-10-12' in rendered and 'Visit friends' in rendered and 'Bring gifts' in rendered
+    assert '2026-10-12' in rendered
+    assert 'Visit friends' not in rendered and 'Bring gifts' not in rendered
     assert '<script>bad</script>' not in rendered
 
 
@@ -525,8 +529,8 @@ def test_plans_tab_timeline(editor_page, context, width):
     page.get_by_role('tab', name='Plans', exact=True).click()
     panel = page.locator('[data-preview-tab="plans"]')
     expect(panel.get_by_text('Visit Manila', exact=True)).to_be_visible()
-    expect(panel.get_by_text('Meet friends', exact=True)).to_be_visible()
-    expect(panel.get_by_text('Bring gifts', exact=True)).to_be_visible()
+    expect(panel.get_by_text('Meet friends', exact=True)).to_have_count(0)
+    expect(panel.get_by_text('Bring gifts', exact=True)).to_have_count(0)
     expect(panel.locator('time').last).to_have_text('2026-10-12')
     panel.locator('[data-share-object="plan:1"]').uncheck()
     expect(panel.get_by_text('No eligible pinned dates selected.')).to_be_visible()

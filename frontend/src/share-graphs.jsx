@@ -1,5 +1,6 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
+import {createPortal} from 'react-dom';
 import ForceGraph2D from 'react-force-graph-2d';
 import {placeLabels} from './graph-labels.mjs';
 import {GraphIcon} from './graph-icons.jsx';
@@ -13,11 +14,14 @@ const legendLabel = kind => ({daily:'dates', companies:'organizations', drafts:'
 const identity = value => typeof value === 'object' ? value.id : value;
 const SelectCaret = () => <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg>;
 
-function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onViewChange}) {
+function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onViewChange, fillHeight = false, controlsHost, description = ''}) {
   const host = useRef(null), graph = useRef(null), cameraReady = useRef(false), dragging = useRef(false);
   const connectionFitted = useRef(false);
+  const descriptionOverlay = useRef(null);
   const [width, setWidth] = useState(600), [selected, setSelected] = useState(data.nodes.find(n=>n.id===rootId)||null);
-  const [view, setView] = useState(() => ({preset:'timeline', animation:'off', hidden_kinds:[], ...initialView}));
+  const [height, setHeight] = useState(440);
+  const [view, setView] = useState(() => ({preset:'timeline', animation:'off', hidden_kinds:[], ...initialView,
+    ...(controlsHost ? {animation:'drift'} : {})}));
   const viewRef = useRef(view);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const motion = useRef({time:initialView.animation_time || 0, last:0});
@@ -57,6 +61,16 @@ function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onVie
   }, [data, layout, rootId, view.preset, view.hidden_kinds]);
   useEffect(() => {setSelected(current=>current ? model.nodes.find(n=>n.id===current.id)||null : null);}, [model]);
   useEffect(() => {
+    const container=host.current?.closest('[data-shared-graph]');
+    if(!container)return;
+    const reveal=()=>{
+      const node=model.nodes.find(n=>n.id===container.dataset.selectNode);
+      if(node){setSelected(node);delete container.dataset.selectNode;}
+    };
+    reveal();container.addEventListener('share-select-node',reveal);
+    return ()=>container.removeEventListener('share-select-node',reveal);
+  }, [model]);
+  useEffect(() => {
     if (layout === 'timeline') model.nodes.forEach(n=>{n.x=n.fx=n.origin.x;n.y=n.fy=n.origin.y;});
   }, [view.animation, reducedMotion, model, layout]);
   const captureView = () => ({...viewRef.current,
@@ -84,16 +98,19 @@ function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onVie
     const bounds = (model.timeline && timelineBounds(model.nodes, model.timeline.fitIds)) || timelineBounds(model.nodes,new Set(model.nodes.map(n=>n.id)));
     if (bounds) {
       graph.current.centerAt((bounds.left+bounds.right)/2,(bounds.top+bounds.bottom)/2,0);
-      graph.current.zoom(Math.max(.01, Math.min(1, (width-48)/(bounds.right-bounds.left),340/(bounds.bottom-bounds.top))),0);
+      graph.current.zoom(Math.max(.01, Math.min(1, (width-48)/(bounds.right-bounds.left),(height-100)/(bounds.bottom-bounds.top))),0);
     }
     cameraReady.current=true;recordCamera();persist();
   };
   useEffect(() => {
     // D3 centers against integer clientWidth; use the same width for rendering
     // so fractional CSS pixels do not shift the saved camera on every reload.
-    const observer = new ResizeObserver(([entry])=> {if(entry.contentRect.width>0)setWidth(Math.floor(entry.contentRect.width));});
+    const observer = new ResizeObserver(([entry])=> {
+      if(entry.contentRect.width>0)setWidth(Math.floor(entry.contentRect.width));
+      if(fillHeight && entry.contentRect.height>0)setHeight(Math.max(120,Math.floor(entry.contentRect.height)));
+    });
     observer.observe(host.current); return ()=>observer.disconnect();
-  }, []);
+  }, [fillHeight]);
   useEffect(() => {
     cameraReady.current=false;
     const timer=setTimeout(()=>{
@@ -105,15 +122,17 @@ function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onVie
       } else fit();
     },100);
     return ()=>clearTimeout(timer);
-  }, [width,model]);
+  }, [width,height,model]);
   const peers = selected ? model.links.filter(e=>[identity(e.source),identity(e.target)].includes(selected.id)) : [];
-  return <>
-    {layout==='timeline' && <div className="share-graph-options">
+  const controls = layout==='timeline' ? <div className="share-graph-options">
       <label>Preset <span className="share-graph-select"><select aria-label="Graph preset" value={view.preset} onChange={e=>changeView({preset:e.target.value})}>{Object.entries(PRESETS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select><SelectCaret/></span></label>
-      <label>Animation <span className="share-graph-select"><select aria-label="Graph animation" value={view.animation} onChange={e=>changeView({animation:e.target.value})}>{['off','breathing','ripple','drift'].map(mode=><option key={mode} value={mode}>{mode[0].toUpperCase()+mode.slice(1)}</option>)}</select><SelectCaret/></span></label>
+      {!controlsHost && <label>Animation <span className="share-graph-select"><select aria-label="Graph animation" value={view.animation} onChange={e=>changeView({animation:e.target.value})}>{['off','breathing','ripple','drift'].map(mode=><option key={mode} value={mode}>{mode[0].toUpperCase()+mode.slice(1)}</option>)}</select><SelectCaret/></span></label>}
       {reducedMotion && view.animation!=='off' && <span>Animation paused by your reduced-motion preference.</span>}
-    </div>}
+    </div> : null;
+  return <>
+    {controlsHost ? createPortal(controls, controlsHost) : controls}
     <div className={'share-graph-workspace'+(selected?' has-selection':'')}><div className="share-graph-viewport">
+    {description && <p ref={descriptionOverlay} className="share-board-purpose" title={description}>{description}</p>}
     <div className="share-graph-toolbar" role="group" aria-label="Graph controls">
       <span>{layout==='timeline'?'Timeline':layout==='board'?'Board map':'Connections'} · Read-only</span>
       <div><button type="button" title="Zoom in" aria-label="Zoom in" onClick={()=>graph.current?.zoom(graph.current.zoom()*1.3,150)}><GraphIcon name="plus"/></button>
@@ -125,7 +144,7 @@ function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onVie
       event.preventDefault();const i=model.nodes.findIndex(n=>n.id===selected?.id);
       setSelected(model.nodes[(i+(event.key==='ArrowRight'?1:model.nodes.length-1)+model.nodes.length)%model.nodes.length]);
     }}>
-    {model.nodes.length ? <ForceGraph2D ref={graph} width={width} height={440} graphData={model}
+    {model.nodes.length ? <ForceGraph2D ref={graph} width={width} height={height} graphData={model}
       autoPauseRedraw={layout!=='timeline'||view.animation==='off'||reducedMotion||!!selected}
       onRenderFramePre={()=>{
         const now=performance.now(), clock=motion.current, delta=Math.min(100,now-(clock.last||now));clock.last=now;
@@ -153,7 +172,8 @@ function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onVie
               radius: node.radius, degree:node.kind==='daily'?Number.MAX_SAFE_INTEGER:node.visibleDegree, preferred:model.nodes.length<40||node.kind!=='entries',
               emphasis:node.id === rootId || node.id === selected?.id || node.id === model.timeline?.focusId}));
             const obstacles = [{x:width-130,y:0,w:130,h:48}, ...candidates.map(n => ({x:n.x-n.radius,y:n.y-n.radius,w:n.radius*2,h:n.radius*2}))];
-            const labels = placeLabels(candidates, {width, height:440, zoom:scale, obstacles}, (text, font) => {
+            if(descriptionOverlay.current)obstacles.push({x:10,y:10,w:descriptionOverlay.current.offsetWidth,h:descriptionOverlay.current.offsetHeight});
+            const labels = placeLabels(candidates, {width, height, zoom:scale, obstacles}, (text, font) => {
               ctx.font = `${font}px system-ui`; return ctx.measureText(text).width;
             });
             for (const box of labels) {
@@ -187,13 +207,21 @@ function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onVie
           }} nodePointerAreaPaint={(node,color,ctx,scale)=>{ctx.fillStyle=color;ctx.beginPath();ctx.arc(node.x,node.y,(node.radius+5)/(graph.current?.zoom()||1),0,2*Math.PI);ctx.fill();}} /> : <p className="share-scope-note">{data.nodes.length ? 'No visible objects. Enable an entity type below to show it.' : 'No approved connections in this scope.'}</p>}
     </div>
     </div>
-    {selected && <aside className="share-graph-inspector share-graph-selection"><span className="share-kind-pill" data-kind={selected.kind}>{kindName(selected.kind)}</span><h3>{selected.label}</h3><div className="markdown-body" dangerouslySetInnerHTML={{__html:selected.body_html||''}}/><h4>Connections</h4><ul>{peers.slice(0,100).map((e,i)=>{const other=model.nodes.find(n=>n.id===(identity(e.source)===selected.id?identity(e.target):identity(e.source)));return <li key={i}><button type="button" onClick={()=>setSelected(other)}>{other?.label}</button><small>{e.relation}</small></li>;})}</ul></aside>}
+    {selected && <aside className="share-graph-inspector share-graph-selection"><button type="button" className="share-inspector-close" aria-label="Close object details" onClick={()=>setSelected(null)}>×</button><span className="share-kind-pill" data-kind={selected.kind}>{kindName(selected.kind)}</span><h3>{selected.label}</h3><div className="markdown-body" dangerouslySetInnerHTML={{__html:selected.body_html||''}}/><h4>Connections</h4><ul>{peers.slice(0,100).map((e,i)=>{const other=model.nodes.find(n=>n.id===(identity(e.source)===selected.id?identity(e.target):identity(e.source)));return <li key={i}><button type="button" onClick={()=>setSelected(other)}>{other?.label}</button><small>{e.relation}</small></li>;})}</ul></aside>}
     </div>
     <p className="share-graph-hint">{model.timeline && `${model.timeline.hasEntry ? 'Latest entry and its connections' : 'Latest available date'} · Oldest to newest, left to right. `}Drag to explore · Scroll to zoom · Select an orb for details. Toggle types below to filter the view.</p>
     <div className="share-graph-legend" role="group" aria-label="Graph entity types">{kinds.map(kind=><button type="button" className="share-kind-pill" data-kind={kind} key={kind} aria-pressed={!view.hidden_kinds.includes(kind)} onClick={()=>changeView({hidden_kinds:view.hidden_kinds.includes(kind)?view.hidden_kinds.filter(k=>k!==kind):[...view.hidden_kinds,kind]})}><i style={{background:palette[kind]||'#e9c96c'}}/>{legendLabel(kind)}</button>)}</div>
   </>;
 }
 const roots = new Map();
+// Recipient navigation resets exploration to the owner's published view and
+// releases canvases/animation loops while they are hidden.
+window.resetShareGraphs = container => {
+  for (const [host, root] of roots) if (container.contains(host)) {
+    delete host.closest("[data-shared-graph]").dataset.selectNode;
+    root.unmount(); roots.delete(host);
+  }
+};
 window.renderShareGraphs = () => {
   for(const [host,root] of roots)if(!host.isConnected){root.unmount();roots.delete(host);}
   document.querySelectorAll('[data-shared-graph]').forEach(container=>{
@@ -203,8 +231,14 @@ window.renderShareGraphs = () => {
     const settings=container.dataset.graphLayout==='timeline' ? container.closest('form')?.querySelector('[name="graph_view"]') : null;
     const initialView=settings ? JSON.parse(settings.value) : data.view || {};
     const onViewChange=settings ? view=>{settings.value=JSON.stringify(view);} : undefined;
-    const root=createRoot(host);roots.set(host,root);root.render(<SharedGraph data={data} layout={container.dataset.graphLayout} initialView={initialView} onViewChange={onViewChange}/>);
+    const root=createRoot(host);roots.set(host,root);root.render(<SharedGraph data={data} layout={container.dataset.graphLayout} initialView={initialView} onViewChange={onViewChange} fillHeight={!!container.closest("[data-share-main]")} controlsHost={container.closest("[data-share-main]")?.querySelector("[data-share-graph-controls]")} description={container.closest("[data-share-board]")?.querySelector("[data-share-board-description]")?.content.textContent.trim() || ""}/>);
   });
+};
+window.selectShareGraphNode = (panel, nodeId) => {
+  const container=panel?.querySelector('[data-shared-graph]');
+  if(!container)return;
+  container.dataset.selectNode=nodeId;
+  container.dispatchEvent(new Event('share-select-node'));
 };
 document.addEventListener('toggle',()=>window.renderShareGraphs(),true);
 document.addEventListener('click',event=>{

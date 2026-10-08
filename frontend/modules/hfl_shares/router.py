@@ -83,6 +83,7 @@ from modules.hfl_shares.security import (
     verify_pin,
 )
 from modules.hfl_shares.store import get_share_store
+from modules.hfl_shares.guest_views import guest_views
 from modules.hfl_shares.viewer import (
     classify_preview,
     read_preview_text,
@@ -1580,7 +1581,7 @@ def _guest_entries(
     selected_tags = {tag.casefold() for tag in _normalized_guest_tags(tags)}
     matches = tuple(
         entry
-        for entry in grant.snapshot.all_entries
+        for entry in grant.snapshot.entries
         if (
             not needle
             or needle
@@ -1723,11 +1724,14 @@ def _reference_views(entry, *, base_url: str) -> dict[str, dict[str, str]]:
 
 
 def _citation_pages(grant) -> dict[int, int]:
-    return {
+    pages = {
         int(entry.citation[1:]): math.ceil(index / _GUEST_PAGE_SIZE)
         for index, entry in enumerate(_guest_entries(grant, ""), start=1)
         if entry.citation.startswith("S") and entry.citation[1:].isdigit()
     }
+    pages.update({int(entry.citation[1:]): 1 for entry in grant.snapshot.activity_entries
+                  if entry.citation.startswith('S') and entry.citation[1:].isdigit()})
+    return pages
 
 
 def _normalize_answer_markdown(content: str) -> str:
@@ -1808,7 +1812,7 @@ def _guest_context(
 ) -> dict[str, Any]:
     tag_counts: Counter[str] = Counter()
     tag_labels: dict[str, str] = {}
-    for entry in grant.snapshot.all_entries:
+    for entry in grant.snapshot.entries:
         entry_tags: set[str] = set()
         for tag in entry.tags:
             key = tag.casefold()
@@ -1858,7 +1862,14 @@ def _guest_context(
         if owner_preview
         else "/share/session/references"
     )
+    views = guest_views(grant)
+    views['activity_items'] = {
+        entry.id: {'entry': entry, 'html': _entry_html(entry),
+                   'reference_views': _reference_views(entry, base_url=reference_base)}
+        for entry in grant.snapshot.activity_entries
+    }
     return {
+        **views,
         "request": request,
         "grant": grant,
         "entries": tuple(
