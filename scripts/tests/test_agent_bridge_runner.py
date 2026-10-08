@@ -13,6 +13,59 @@ runner = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(runner)
 
 
+def test_hermes_managed_runtime_and_plain_path_wrapper(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    home = tmp_path / '.hermes/hermes-agent'
+    home.mkdir(parents=True)
+    (home / 'cli.py').touch()
+    launcher = home / '.hermes/bin/hermes'
+    launcher.parent.mkdir(parents=True)
+    launcher.touch()
+    interpreter = tmp_path / 'managed-python'
+    interpreter.touch()
+    monkeypatch.delenv('HFL_AGENT_HERMES_ROOT', raising=False)
+    monkeypatch.setattr(Path, 'home', lambda: tmp_path)
+    monkeypatch.setattr(runner.shutil, 'which', lambda _: str(tmp_path / '.local/bin/hermes'))
+    monkeypatch.setattr(runner, 'os', SimpleNamespace(name='posix', environ=os.environ))
+    def resolve(command, **kwargs):
+        assert command == [str(launcher), '--print-runtime-command']
+        return SimpleNamespace(stdout=json.dumps([str(interpreter), '-I', '-c', 'bootstrap']))
+    monkeypatch.setattr(runner.subprocess, 'run', resolve)
+    command, root = runner.hermes_command('print("probe")')
+    assert root == home.resolve()
+    assert command[0] == str(interpreter)
+    assert 'import hermes_bootstrap' in command[-1]
+    assert command[-1].endswith('print("probe")')
+
+
+def test_hermes_legacy_runtime(tmp_path, monkeypatch):
+    (tmp_path / 'cli.py').touch()
+    interpreter = tmp_path / ('venv/Scripts/python.exe' if os.name == 'nt' else 'venv/bin/python')
+    interpreter.parent.mkdir(parents=True)
+    interpreter.touch()
+    monkeypatch.setenv('HFL_AGENT_HERMES_ROOT', str(tmp_path))
+    command, root = runner.hermes_command('print("legacy")')
+    assert command == [str(interpreter), '-c', 'print("legacy")']
+
+
+def test_early_child_exit_preserves_redacted_diagnostics(tmp_path, monkeypatch):
+    from scripts.agents.hfl import action_terminal
+    class Workspace:
+        def __init__(self, *args):
+            self.repo = None
+    monkeypatch.setattr(action_terminal, 'Workspace', Workspace)
+    monkeypatch.setattr(runner, 'spool_root', lambda: tmp_path)
+    monkeypatch.setattr(runner, 'execution_prompt', lambda *args: 'x' * 1000000)
+    monkeypatch.setenv('OPENAI_API_KEY', 'fake-secret-for-test')
+    monkeypatch.setattr(runner, 'hermes_command', lambda: ([sys.executable, '-c',
+        'import sys; print("import failed fake-secret-for-test", file=sys.stderr); sys.exit(1)'], tmp_path))
+    with pytest.raises(RuntimeError, match='local Hermes diagnostics'):
+        runner.run_hermes({'id': 'early-exit', 'snapshot': {}}, lambda: None)
+    diagnostics = (tmp_path / 'hermes-early-exit.log').read_text()
+    assert 'import failed [REDACTED]' in diagnostics
+    assert 'fake-secret-for-test' not in diagnostics
+
+
 def test_parse_result_accepts_cli_session_footer_but_rejects_ambiguous_results():
     result = {'plan': 'Read sources', 'summary': 'A draft', 'evidence': ['pin:1'], 'state': 'succeeded', 'complete': True}
     encoded = json.dumps(result)

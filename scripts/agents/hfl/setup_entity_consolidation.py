@@ -41,9 +41,9 @@ def main():
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args()
     bootstrap()
-    command, root = hermes_command()
+    command, root = hermes_command(PROGRAM)
     spec = json.loads(Path(__file__).with_name('entity_consolidation_schedule.json').read_text(encoding='utf-8'))
-    result = subprocess.run([command[0], '-c', PROGRAM], cwd=root,
+    result = subprocess.run(command, cwd=root,
         input=json.dumps({'spec': spec, 'repo': str(ROOT), 'apply': args.apply}),
         capture_output=True, text=True, encoding='utf-8', timeout=30)
     print(result.stdout.strip())

@@ -92,20 +92,31 @@ def bootstrap():
     os.environ.update(machine_env_vars(load_machine_config(None)))
 
 
-def hermes_command():
+def hermes_command(program=HERMES_PROGRAM):
     executable = shutil.which('hermes')
     root = os.environ.get('HFL_AGENT_HERMES_ROOT', '')
     if not root and executable:
-        root = str(Path(executable).resolve().parents[2])
+        root = next((str(parent) for parent in Path(executable).resolve().parents
+                     if (parent / 'cli.py').is_file()), '')
     if not root and (Path.home() / '.hermes/hermes-agent/cli.py').is_file():
         root = str(Path.home() / '.hermes/hermes-agent')
     if not root:
         raise RuntimeError('Install Hermes or configure HFL_AGENT_HERMES_ROOT.')
     home = Path(root).expanduser().resolve()
     interpreter = home / ('venv/Scripts/python.exe' if os.name == 'nt' else 'venv/bin/python')
+    launcher = home / '.hermes/bin/hermes'
+    if launcher.is_file() and os.name != 'nt':
+        resolved = subprocess.run([str(launcher), '--print-runtime-command'],
+                                  capture_output=True, text=True, encoding='utf-8', timeout=30, check=True)
+        runtime = json.loads(resolved.stdout)
+        if not isinstance(runtime, list) or not runtime or not isinstance(runtime[0], str):
+            raise RuntimeError('Hermes returned an invalid runtime command.')
+        interpreter = Path(runtime[0])
+        program = ('import sys; sys.path.insert(0, ' + repr(str(home)) + '); '
+                   'import hermes_bootstrap\n' + program)
     if not interpreter.is_file() or not (home / 'cli.py').is_file():
         raise RuntimeError('HFL_AGENT_HERMES_ROOT must point to the Hermes source installation with its venv.')
-    return [str(interpreter), '-c', HERMES_PROGRAM], home
+    return [str(interpreter), '-c', program], home
 
 
 def parse_result(output, *, board_planning=False):
@@ -309,8 +320,13 @@ def run_hermes(run, heartbeat, *, timeout=1200):
         process = subprocess.Popen(command, cwd=checkout.path if checkout.repo else workspace, env=environment, stdin=subprocess.PIPE, stdout=output, stderr=output,
                                    text=True, encoding='utf-8', start_new_session=os.name != 'nt', creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         try:
-            process.stdin.write(prompt)
-            process.stdin.close()
+            try:
+                process.stdin.write(prompt)
+                process.stdin.close()
+            except BrokenPipeError:
+                # The child can fail during imports before accepting the prompt.
+                # Still wait and capture stderr through the normal failure path.
+                pass
             while True:
                 try:
                     process.wait(timeout=30)
@@ -495,6 +511,8 @@ def main():
             subprocess.run(command, env=environment, cwd=root, check=True, timeout=120)
             return
         if args.check:
+            command, root = hermes_command('from hermes_cli.config import load_config_readonly\nimport cli')
+            subprocess.run(command, cwd=root, check=True, timeout=60, capture_output=True)
             client.call('queue')
             print('Hermes installation and authenticated bridge are available.')
             return

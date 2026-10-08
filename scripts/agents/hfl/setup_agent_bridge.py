@@ -54,11 +54,11 @@ def main():
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args()
     spec = json.loads(Path(__file__).with_name('agent_bridge_schedule.json').read_text(encoding='utf-8'))
-    command, hermes_root = hermes_command()
+    command, hermes_root = hermes_command(PROGRAM)
     runner = REPO_ROOT / spec['runner']
     command_line = [sys.executable, str(runner), *spec['arguments']]
     wrapper = 'import subprocess\nraise SystemExit(subprocess.call(' + repr(command_line) + ', cwd=' + repr(str(REPO_ROOT)) + '))\n'
-    result = subprocess.run([command[0], '-c', PROGRAM], cwd=hermes_root, input=json.dumps({'spec': spec, 'repo': str(REPO_ROOT), 'wrapper': wrapper, 'apply': args.apply}),
+    result = subprocess.run(command, cwd=hermes_root, input=json.dumps({'spec': spec, 'repo': str(REPO_ROOT), 'wrapper': wrapper, 'apply': args.apply}),
                             text=True, encoding='utf-8', capture_output=True, timeout=30)
     if result.returncode:
         print(result.stderr.strip(), file=sys.stderr)

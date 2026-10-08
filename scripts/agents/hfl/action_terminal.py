@@ -274,7 +274,7 @@ class TerminalWorker:
             'Use the isolated checkout at ' + str(workspace.path) + '. Do not edit the primary checkout. '
             'For another repository, ask the owner to configure that repository before editing it. '
             'Do not merge or push unless explicitly instructed.')
-        program = self.runner.HERMES_PROGRAM.split('main(query=sys.stdin.read()')[0] + NATIVE_HOOK
+        program = command[-1].split('main(query=sys.stdin.read()')[0] + NATIVE_HOOK
         # A script file avoids Windows ConPTY command-line quoting of multiline -c.
         launcher = root / 'native_cli.py'
         launcher.write_text(program, encoding='utf-8')
