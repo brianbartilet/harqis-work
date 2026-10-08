@@ -969,8 +969,10 @@ heading row, and board citations open node details directly. Switching views ret
 draft text. Mobile source views use a full-height drawer. Close session exits preview or
 ends the guest session. Graph exploration is temporary: reopening a view restores
 the recipe's published layout and animation settings. Recipient activity graphs
-hide the animation selector, fall back to Drift when unspecified, and respect
-reduced-motion preferences. Use Update from saved recipe on an active generated
+hide the preset and animation selectors, fall back to Drift when unspecified, and respect
+reduced-motion preferences. Recipe editors retain both selectors. On mobile, recipient
+activity graph and idea board type pills sit in an initially collapsed **Entity orbs** section;
+desktop keeps the pills visible. Use Update from saved recipe on an active generated
 share to republish its linked recipe without replacing its QR/link. Save recipe
 edits first; existing access settings and reference permissions are preserved.
 Generating a share prompts for a separate recipient-visible share name, initially

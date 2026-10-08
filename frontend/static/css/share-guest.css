@@ -53,6 +53,8 @@ body .preview-toast{top:148px}
 .share-main-view .share-graph-header-controls .share-graph-options{margin:0}
 .share-graph-header-controls .share-graph-select svg{position:absolute;right:.6rem;width:.85rem;height:.85rem;pointer-events:none;color:#7dd3fc}
 .share-graph-head>[data-return-chat]{margin-left:auto}
+.share-graph-header-controls:has(.share-graph-options:empty){display:none}
+.shared-graph .share-entity-orbs-toggle{display:none}
 @media(max-width:700px){
   .share-view-head{gap:8px}
   .share-board-head .share-board-picker{flex:1 1 150px}
@@ -63,6 +65,10 @@ body .preview-toast{top:148px}
 .share-workspace .is-cited-evidence{outline:2px solid #38bdf8;outline-offset:-2px;border-radius:8px}
 .share-main-view :is(button,select):focus-visible,.share-sidebar-view :is(button,a):focus-visible{outline:2px solid #38bdf8;outline-offset:2px}
 @media(max-width:900px){
+  .shared-graph .share-entity-orbs-toggle{display:flex;align-items:center;justify-content:space-between;flex:none;min-height:44px;margin:2px 0;padding:8px 10px;background:#1e293b;color:#cbd5e1;cursor:pointer;text-align:left}
+  .shared-graph .share-entity-orbs-toggle svg{width:16px;height:16px;cursor:inherit}
+  .share-entity-orbs-toggle[aria-expanded=true] svg{transform:rotate(180deg)}
+  .share-main-view .share-entity-orbs-collapsed{display:none}
   body .preview-toast{top:140px}
   .share-main-view{padding:14px}
   .share-workspace .drawer-close{width:44px;height:44px;flex-basis:44px}

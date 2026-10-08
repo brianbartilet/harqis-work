@@ -182,9 +182,21 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
         assert graph.bounding_box()['x'] >= page.locator('[data-entry-drawer]').bounding_box()['width']
     assert graph.evaluate('(el)=>el.scrollHeight <= el.clientHeight + 1')
     expect(page.locator('[data-chat-form]')).not_to_be_visible()
-    expect(graph.get_by_label('Graph preset', exact=True)).to_have_value('people')
+    expect(graph.get_by_label('Graph preset', exact=True)).to_have_count(0)
     expect(graph.get_by_label('Graph animation', exact=True)).to_have_count(0)
-    graph.get_by_label('Graph preset', exact=True).select_option('sources')
+    legend = graph.get_by_role('group', name='Graph entity types')
+    orbs = graph.get_by_role('button', name='Entity orbs', exact=True)
+    if width <= 900:
+        expect(orbs).to_have_attribute('aria-expanded', 'false')
+        expect(legend).not_to_be_visible()
+        orbs.click()
+        expect(orbs).to_have_attribute('aria-expanded', 'true')
+    else:
+        expect(orbs).not_to_be_visible()
+    expect(legend).to_be_visible()
+    pill = legend.get_by_role('button').first
+    pill.click()
+    expect(pill).to_have_attribute('aria-pressed', 'false')
     page.screenshot(path=str(tmp_path / f'shared-graph-{width}.png'))
     graph.get_by_role('button', name='Back to chat').click()
     expect(page.locator('[data-view-title]')).to_have_text('Ask my agent')
@@ -192,12 +204,30 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
     if width > 900:
         page.locator('[data-drawer-close]').click()
     choose('graph')
-    expect(graph.get_by_label('Graph preset', exact=True)).to_have_value('people')
+    expect(graph.get_by_label('Graph preset', exact=True)).to_have_count(0)
+    if width <= 900:
+        expect(orbs).to_have_attribute('aria-expanded', 'false')
+        expect(legend).not_to_be_visible()
+        orbs.click()
+    expect(legend.get_by_role('button').first).to_have_attribute('aria-pressed', 'true')
     choose('boards')
     expect(page.locator('[data-view-title]')).to_have_text('Idea boards')
     expect(page.locator('[data-view-description]')).to_contain_text('Workspace board')
     boards = page.locator('[data-share-main=boards]')
     expect(boards.locator('canvas').first).to_be_visible()
+    board_legend = boards.get_by_role('group', name='Graph entity types')
+    board_orbs = boards.get_by_role('button', name='Entity orbs', exact=True)
+    if width <= 900:
+        expect(board_orbs).to_have_attribute('aria-expanded', 'false')
+        expect(board_legend).not_to_be_visible()
+        board_orbs.click()
+        expect(board_orbs).to_have_attribute('aria-expanded', 'true')
+        expect(board_legend).to_be_visible()
+        board_orbs.click()
+        expect(board_legend).not_to_be_visible()
+    else:
+        expect(board_orbs).not_to_be_visible()
+        expect(board_legend).to_be_visible()
     assert boards.evaluate('(el)=>el.scrollHeight <= el.clientHeight + 1')
     assert page.locator('[data-board-evidence]').count() == 0
     if width > 900:

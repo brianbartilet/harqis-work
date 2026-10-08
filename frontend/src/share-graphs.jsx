@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useEffect, useId, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {createPortal} from 'react-dom';
 import ForceGraph2D from 'react-force-graph-2d';
@@ -14,12 +14,14 @@ const legendLabel = kind => ({daily:'dates', companies:'organizations', drafts:'
 const identity = value => typeof value === 'object' ? value.id : value;
 const SelectCaret = () => <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg>;
 
-function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onViewChange, fillHeight = false, controlsHost, description = ''}) {
+function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onViewChange, fillHeight = false, controlsHost, collapseEntitiesOnMobile = false, description = ''}) {
   const host = useRef(null), graph = useRef(null), cameraReady = useRef(false), dragging = useRef(false);
   const connectionFitted = useRef(false);
   const descriptionOverlay = useRef(null);
   const [width, setWidth] = useState(600), [selected, setSelected] = useState(data.nodes.find(n=>n.id===rootId)||null);
   const [height, setHeight] = useState(440);
+  const [entityOrbsExpanded, setEntityOrbsExpanded] = useState(false);
+  const entityOrbsId = useId();
   const [view, setView] = useState(() => ({preset:'timeline', animation:'drift', hidden_kinds:[], ...initialView}));
   const viewRef = useRef(view);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -124,7 +126,7 @@ function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onVie
   }, [width,height,model]);
   const peers = selected ? model.links.filter(e=>[identity(e.source),identity(e.target)].includes(selected.id)) : [];
   const controls = layout==='timeline' ? <div className="share-graph-options">
-      <label>Preset <span className="share-graph-select"><select aria-label="Graph preset" value={view.preset} onChange={e=>changeView({preset:e.target.value})}>{Object.entries(PRESETS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select><SelectCaret/></span></label>
+      {onViewChange && <label>Preset <span className="share-graph-select"><select aria-label="Graph preset" value={view.preset} onChange={e=>changeView({preset:e.target.value})}>{Object.entries(PRESETS).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select><SelectCaret/></span></label>}
       {!controlsHost && <label>Animation <span className="share-graph-select"><select aria-label="Graph animation" value={view.animation} onChange={e=>changeView({animation:e.target.value})}>{['off','breathing','ripple','drift'].map(mode=><option key={mode} value={mode}>{mode[0].toUpperCase()+mode.slice(1)}</option>)}</select><SelectCaret/></span></label>}
       {reducedMotion && view.animation!=='off' && <span>Animation paused by your reduced-motion preference.</span>}
     </div> : null;
@@ -209,7 +211,8 @@ function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onVie
     {selected && <aside className="share-graph-inspector share-graph-selection"><button type="button" className="share-inspector-close" aria-label="Close object details" onClick={()=>setSelected(null)}>×</button><span className="share-kind-pill" data-kind={selected.kind}>{kindName(selected.kind)}</span><h3>{selected.label}</h3><div className="markdown-body" dangerouslySetInnerHTML={{__html:selected.body_html||''}}/><h4>Connections</h4><ul>{peers.slice(0,100).map((e,i)=>{const other=model.nodes.find(n=>n.id===(identity(e.source)===selected.id?identity(e.target):identity(e.source)));return <li key={i}><button type="button" onClick={()=>setSelected(other)}>{other?.label}</button><small>{e.relation}</small></li>;})}</ul></aside>}
     </div>
     <p className="share-graph-hint">{model.timeline && `${model.timeline.hasEntry ? 'Latest entry and its connections' : 'Latest available date'} · Oldest to newest, left to right. `}Drag to explore · Scroll to zoom · Select an orb for details. Toggle types below to filter the view.</p>
-    <div className="share-graph-legend" role="group" aria-label="Graph entity types">{kinds.map(kind=><button type="button" className="share-kind-pill" data-kind={kind} key={kind} aria-pressed={!view.hidden_kinds.includes(kind)} onClick={()=>changeView({hidden_kinds:view.hidden_kinds.includes(kind)?view.hidden_kinds.filter(k=>k!==kind):[...view.hidden_kinds,kind]})}><i style={{background:palette[kind]||'#e9c96c'}}/>{legendLabel(kind)}</button>)}</div>
+    {collapseEntitiesOnMobile && <button type="button" className="share-entity-orbs-toggle" aria-expanded={entityOrbsExpanded} aria-controls={entityOrbsId} onClick={()=>setEntityOrbsExpanded(expanded=>!expanded)}>Entity orbs <SelectCaret/></button>}
+    <div id={entityOrbsId} className={'share-graph-legend'+(collapseEntitiesOnMobile&&!entityOrbsExpanded?' share-entity-orbs-collapsed':'')} role="group" aria-label="Graph entity types">{kinds.map(kind=><button type="button" className="share-kind-pill" data-kind={kind} key={kind} aria-pressed={!view.hidden_kinds.includes(kind)} onClick={()=>changeView({hidden_kinds:view.hidden_kinds.includes(kind)?view.hidden_kinds.filter(k=>k!==kind):[...view.hidden_kinds,kind]})}><i style={{background:palette[kind]||'#e9c96c'}}/>{legendLabel(kind)}</button>)}</div>
   </>;
 }
 const roots = new Map();
@@ -230,7 +233,7 @@ window.renderShareGraphs = () => {
     const settings=container.dataset.graphLayout==='timeline' ? container.closest('form')?.querySelector('[name="graph_view"]') : null;
     const initialView=settings ? JSON.parse(settings.value) : data.view || {};
     const onViewChange=settings ? view=>{settings.value=JSON.stringify(view);} : undefined;
-    const root=createRoot(host);roots.set(host,root);root.render(<SharedGraph data={data} layout={container.dataset.graphLayout} initialView={initialView} onViewChange={onViewChange} fillHeight={!!container.closest("[data-share-main]")} controlsHost={container.closest("[data-share-main]")?.querySelector("[data-share-graph-controls]")} description={container.closest("[data-share-board]")?.querySelector("[data-share-board-description]")?.content.textContent.trim() || ""}/>);
+    const root=createRoot(host);roots.set(host,root);root.render(<SharedGraph data={data} layout={container.dataset.graphLayout} initialView={initialView} onViewChange={onViewChange} fillHeight={!!container.closest("[data-share-main]")} collapseEntitiesOnMobile={!!container.closest("[data-share-main]")} controlsHost={container.closest("[data-share-main]")?.querySelector("[data-share-graph-controls]")} description={container.closest("[data-share-board]")?.querySelector("[data-share-board-description]")?.content.textContent.trim() || ""}/>);
   });
 };
 window.selectShareGraphNode = (panel, nodeId) => {
