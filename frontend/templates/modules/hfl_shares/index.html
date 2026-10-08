@@ -51,6 +51,15 @@
   .btn-main { background:#2563eb; color:white; }
   .btn-soft { background:#1e293b; color:#cbd5e1; }
   .btn-danger { background:#450a0a; color:#fca5a5; }
+  .share-name-dialog { margin:auto; width:min(28rem,calc(100vw - 2rem)); max-height:calc(100dvh - 2rem); overflow:auto; border:1px solid #334155; border-radius:1rem; background:#0f172a; color:#e2e8f0; padding:1.5rem; box-shadow:0 24px 80px #0008; }
+  .share-name-dialog::backdrop { background:rgba(2,6,23,.75); }
+  .share-name-dialog form { display:grid; gap:1.25rem; }
+  .share-name-dialog h2 { margin:0 0 .5rem; font-size:1.1rem; font-weight:650; }
+  .share-name-dialog p { margin:0; color:#94a3b8; font-size:.85rem; line-height:1.6; }
+  .share-name-dialog .field { margin:0; }
+  .share-name-dialog .control { display:block; min-height:44px; font-size:1rem; }
+  .share-name-dialog .actions { justify-content:flex-end; }
+  .share-name-dialog .btn { min-height:44px; }
   .stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:.55rem; }
   .stat { background:#020617; border:1px solid #1e293b; border-radius:.6rem; padding:.7rem; }
   .stat strong { display:block; color:#f8fafc; font-size:1.05rem; }
@@ -373,12 +382,12 @@
                   data-progress-next="Generating secure access and QR code…">Generate snapshot and QR</button>
         </div>
       </form>
-      <dialog data-share-name-dialog aria-labelledby="share-name-title" style="margin:auto;width:min(28rem,calc(100vw - 2rem));border:1px solid #334155;border-radius:1rem;background:#0f172a;color:#e2e8f0;padding:1.25rem">
+      <dialog class="share-name-dialog" data-share-name-dialog aria-labelledby="share-name-title" aria-describedby="share-name-description">
         <form data-share-name-form>
-          <h2 id="share-name-title" class="text-lg font-semibold">Name this share</h2>
-          <p class="mt-2 text-sm text-slate-400">Use a name that helps you remember who it is for. Recipients will also see this name.</p>
-          <label class="field mt-4">Share name<input name="share_name" data-share-name-input required maxlength="120" autocomplete="off"></label>
-          <div class="actions mt-4"><button class="btn btn-soft" type="button" data-share-name-cancel>Cancel</button><button class="btn btn-main" type="submit">Generate share</button></div>
+          <div><h2 id="share-name-title">Name this share</h2>
+          <p id="share-name-description">Choose a name to remember who it’s for. Recipients will also see this name.</p></div>
+          <div class="field"><label for="generated-share-name">Share name</label><input class="control" id="generated-share-name" name="share_name" data-share-name-input required maxlength="120" autocomplete="off" placeholder="e.g. Work portfolio for Alex"></div>
+          <div class="actions"><button class="btn btn-soft" type="button" data-share-name-cancel>Cancel</button><button class="btn btn-main" type="submit">Generate share</button></div>
         </form>
       </dialog>
     </section>
@@ -434,7 +443,7 @@
       </section>
       {% endif %}
 
-      <details class="panel generated-shares-panel owner-list-panel" data-generated-shares-panel{% if share_page > 1 %} open{% endif %}>
+      <details class="panel generated-shares-panel owner-list-panel" data-generated-shares-panel>
         <summary>
           <span>
             <span class="block text-base font-semibold text-white">Generated shares</span>
@@ -528,6 +537,20 @@
   const successToast = document.querySelector('[data-success-toast]');
   const generatedSharesPanel = document.querySelector('[data-generated-shares-panel]');
   const generatedSharesContent = document.querySelector('[data-generated-shares-content]');
+  // Carry expansion through one control-triggered navigation, not future visits.
+  const generatedSharesRestoreKey = 'sharing:restore-generated-shares';
+  try {
+    if (sessionStorage.getItem(generatedSharesRestoreKey) === 'open' && generatedSharesPanel) {
+      generatedSharesPanel.open = true;
+    }
+    sessionStorage.removeItem(generatedSharesRestoreKey);
+  } catch (_) { /* Storage may be unavailable in private browsing. */ }
+  const keepGeneratedSharesOpen = () => {
+    try { sessionStorage.setItem(generatedSharesRestoreKey, 'open'); } catch (_) {}
+  };
+  generatedSharesContent?.addEventListener('submit', event => {
+    if (!event.defaultPrevented && generatedSharesPanel.open) keepGeneratedSharesOpen();
+  });
   const instantDialog = document.querySelector('[data-instant-dialog]');
   const instantDialogCard = instantDialog?.querySelector('[data-instant-dialog-card]');
   const instantTitle = instantDialog?.querySelector('[data-instant-title]');
@@ -554,6 +577,7 @@
       generatedSharesContent.innerHTML = await response.text();
       window.history.replaceState({}, '', pageUrl);
     } catch (error) {
+      keepGeneratedSharesOpen();
       window.location.assign(link.href);
     } finally {
       generatedSharesContent.removeAttribute('aria-busy');

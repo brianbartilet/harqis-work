@@ -12,10 +12,12 @@
       {% else %}
       <button class="btn btn-soft" type="button" disabled title="{% if not share.available %}QR + link unavailable for {{ row.status }} shares.{% else %}QR + link unavailable. Generate a new share to retain its QR and link.{% endif %}" aria-label="QR + link for {{ share.name }}">{{ action_icon('qr') }}</button>
       {% endif %}
-      {% if share.available %}
-      {% if row.has_recipe %}
+      {% if share.available and row.has_recipe %}
       <form method="post" action="/sharing/shares/{{ share.id }}/update" onsubmit="return confirm('Update this share from its latest saved recipe? Recipients will see the updated content. The QR/link and access settings stay the same. Save recipe edits first.')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-soft" title="Update from saved recipe" aria-label="Update {{ share.name }} from saved recipe">{{ action_icon('update') }}</button></form>
+      {% else %}
+      <button class="btn btn-soft" type="button" disabled title="{% if not share.available %}Update unavailable for {{ row.status }} shares.{% else %}Update unavailable: the saved recipe no longer exists.{% endif %}" aria-label="Update {{ share.name }} from saved recipe">{{ action_icon('update') }}</button>
       {% endif %}
+      {% if share.available %}
       <form method="post" action="/sharing/shares/{{ share.id }}/revoke"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-danger" title="Revoke now" aria-label="Revoke {{ share.name }}">{{ action_icon('revoke') }}</button></form>
       {% else %}
       <form method="post" action="/sharing/shares/{{ share.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-danger" type="submit" title="Delete" aria-label="Delete {{ share.name }}">{{ action_icon('delete') }}</button></form>
