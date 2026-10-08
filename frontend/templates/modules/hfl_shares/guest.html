@@ -1,6 +1,6 @@
 {% extends "share_base.html" %}
 {% block title %}{{ grant.name }} · HARQIS{% endblock %}
-{% block head %}{{ super() }}<link rel="stylesheet" href="{{ static_asset('css/share-activity.css') }}"><link rel="stylesheet" href="{{ static_asset('css/share-guest.css') }}">{% endblock %}
+{% block head %}{{ super() }}<link rel="stylesheet" href="{{ share_asset('css/share-activity.css') }}"><link rel="stylesheet" href="{{ share_asset('css/share-guest.css') }}">{% endblock %}
 {% block header_actions %}
 <button class="header-action" type="button" data-contact-open>Contact</button>
 <button class="header-action" type="button" data-manifesto-open
@@ -10,8 +10,8 @@
 {% endblock %}
 {% block main_class %} share-main{% endblock %}
 {% block content %}
-<script src="{{ static_asset('js/share-graphs.js') }}" defer></script>
-<script src="{{ static_asset('js/share-activity.js') }}" defer></script>
+<script src="{{ share_asset('js/share-graphs.js') }}" defer></script>
+<script src="{{ share_asset('js/share-activity.js') }}" defer></script>
 {% if owner_preview %}
 <div class="preview-toast" role="status" aria-live="polite">
   <div>

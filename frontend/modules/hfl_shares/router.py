@@ -91,7 +91,7 @@ from modules.hfl_shares.viewer import (
 )
 from services.markdown import render_markdown
 from services.safe_paths import allowed_reference_roots, is_within_roots
-from web import page_context, require_user, templates
+from web import SHARE_ASSETS, STATIC_ROOT, page_context, require_user, templates
 
 
 owner_router = APIRouter(prefix="/sharing")
@@ -100,6 +100,16 @@ _OWNER_RECIPE_PAGE_SIZE = 5
 _OWNER_SHARE_PAGE_SIZE = 5
 _OWNER_SHARE_FORM_MAX_FIELDS = 10_000
 _MAX_GUEST_SEARCH_CHARS = 500
+
+
+@guest_router.get('/assets/{asset_path:path}', include_in_schema=False)
+async def public_share_asset(asset_path: str):
+    if asset_path not in SHARE_ASSETS:
+        raise HTTPException(status_code=404, detail='Share asset not found.')
+    return FileResponse(STATIC_ROOT / asset_path, headers={
+        'Cache-Control': 'public, max-age=300',
+        'X-Content-Type-Options': 'nosniff',
+    })
 
 
 def _validated_question(value: object) -> str:

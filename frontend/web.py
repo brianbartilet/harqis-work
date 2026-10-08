@@ -44,6 +44,22 @@ def static_asset(relative_path: str) -> str:
 
 templates.env.globals["static_asset"] = static_asset
 
+SHARE_ASSETS = frozenset({
+    'favicon.svg', 'css/share-activity.css', 'css/share-guest.css',
+    'js/share-graphs.js', 'js/share-activity.js',
+    'js/share-graphs.js.LEGAL.txt', 'js/share-graphs.LICENSES.txt',
+})
+
+
+def share_asset(relative_path: str) -> str:
+    """Keep recipient assets inside the publicly routed /share namespace."""
+    if relative_path not in SHARE_ASSETS:
+        raise ValueError('Not a public share asset')
+    return static_asset(relative_path).replace('/static/', '/share/assets/', 1)
+
+
+templates.env.globals['share_asset'] = share_asset
+
 
 def require_user(request: Request) -> tuple[str | None, RedirectResponse | None]:
     user = get_current_user(request)

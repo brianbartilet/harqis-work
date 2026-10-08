@@ -106,6 +106,17 @@ def test_owner_updates_share_from_latest_saved_recipe(authenticated_client, cont
     assert authenticated_client.post(url, data={'csrf': make_csrf_token('frontend-test-user')}).status_code == 404
 
 
+def test_public_share_assets_without_owner_login(authenticated_client):
+    from web import SHARE_ASSETS, share_asset
+    authenticated_client.cookies.clear()
+    for asset in SHARE_ASSETS:
+        response = authenticated_client.get(share_asset(asset), follow_redirects=False)
+        assert response.status_code == 200, asset
+        assert response.headers['x-content-type-options'] == 'nosniff'
+    assert authenticated_client.get('/share/assets/css/app.min.css').status_code == 404
+    assert authenticated_client.get('/share/assets/../config.py').status_code == 404
+
+
 @pytest.mark.parametrize('width', [1440, 390])
 def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus, width, tmp_path):
     from playwright.sync_api import expect
@@ -118,9 +129,18 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
     snapshot = build_snapshot(cfg, (sharing_corpus,))
     grant = make_share(snapshot)
     page, client = editor_page
+    # The public ingress exposes /share/*, but not the owner's /static/*.
+    page.route('**/static/**', lambda route: route.fulfill(status=404, body=''))
     page.set_viewport_size({'width':width, 'height':844})
     page.goto('https://editing.test/sharing/shares/' + grant.id + '/preview')
     page.locator('[data-preview-toast-close]').click()
+    expect(page.locator('#share-view-menu')).not_to_be_visible()
+    page.get_by_role('button', name='Choose shared view').click()
+    expect(page.locator('#share-view-menu')).to_have_css('position', 'absolute')
+    menu = page.locator('#share-view-menu').bounding_box()
+    assert menu['x'] >= 0 and menu['x'] + menu['width'] <= width
+    page.screenshot(path=str(tmp_path / f'shared-menu-{width}.png'))
+    page.get_by_role('button', name='Choose shared view').click()
     expect(page.locator('[data-chat-form]')).to_be_visible()
     expect(page.locator('[data-share-sidebar=entries]')).not_to_have_attribute('hidden', '')
     page.locator('#question').fill('Keep this draft')
