@@ -258,7 +258,8 @@ def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
     assert "Verification mode" in response.text
     assert 'id="recipient" name="recipient" required maxlength="20"' in response.text
     assert "Included activity sources" in response.text
-    assert 'value="__all__" data-all-sources checked' in response.text
+    assert 'data-all-sources' not in response.text
+    assert '<option value="0" selected>None</option>' in response.text
     assert 'name="references_enabled" checked' in response.text
     assert "Concurrent sessions" in response.text
     assert 'max="20" name="device_limit"' in response.text

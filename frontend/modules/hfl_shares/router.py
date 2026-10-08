@@ -246,7 +246,7 @@ def _normalized_sources(form: Any) -> tuple[str, ...]:
             if str(item).strip()
         )
     )
-    if not sources or ALL_SOURCES in sources:
+    if ALL_SOURCES in sources:
         return (ALL_SOURCES,)
     return sources
 
