@@ -846,7 +846,8 @@
     submit.disabled = true;
     submit.textContent = 'Thinking…';
     form.setAttribute('aria-busy', 'true');
-    appendMessage('user', value, 'Just now');
+    thread?.querySelectorAll('.chat-error').forEach(error => error.remove());
+    const pendingMessage = appendMessage('user', value, 'Just now');
     const typing = appendTyping();
     const payload = new FormData(form);
     payload.set('question', value);
@@ -854,6 +855,20 @@
     if (ownerPreview) payload.set('history', JSON.stringify(previewHistory));
     question.value = '';
     try {
+      if (ownerPreview) {
+        const tokenUrl = new URL(form.action);
+        tokenUrl.pathname = tokenUrl.pathname.replace(/\/chat$/, '/csrf');
+        const tokenResponse = await fetch(tokenUrl, {
+          cache: 'no-store',
+          headers: {'Accept': 'application/json'},
+        });
+        const tokenResult = await tokenResponse.json();
+        if (!tokenResponse.ok || !tokenResult.csrf) {
+          throw new Error(tokenResult.detail || 'Could not refresh your session. Please reload the preview.');
+        }
+        form.elements.csrf.value = tokenResult.csrf;
+        payload.set('csrf', tokenResult.csrf);
+      }
       const response = await fetch(form.action, {
         method: 'POST',
         body: payload,
@@ -881,6 +896,7 @@
       }
     } catch (error) {
       typing.remove();
+      pendingMessage.remove();
       appendError(error.message || 'HARQIS could not answer just now.');
       question.value = value;
     } finally {

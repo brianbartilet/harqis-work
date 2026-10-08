@@ -1333,6 +1333,17 @@ async def preview_generated_share_manifesto(
     return _manifesto_fragment(request)
 
 
+@owner_router.get("/shares/{share_id}/preview/csrf")
+async def refresh_preview_csrf(request: Request, share_id: str):
+    user, redirect = require_user(request)
+    headers = {"Cache-Control": "no-store"}
+    if redirect:
+        return JSONResponse({"detail": "Authentication required. Please sign in again."}, status_code=401, headers=headers)
+    if not get_share_store().get_share(share_id):
+        return JSONResponse({"detail": "Share not found."}, status_code=404, headers=headers)
+    return JSONResponse({"csrf": make_csrf_token(user)}, headers=headers)
+
+
 @owner_router.post("/shares/{share_id}/preview/chat")
 async def preview_generated_share_chat(request: Request, share_id: str):
     user, redirect = require_user(request)

@@ -2180,10 +2180,20 @@ def test_owner_can_preview_active_share_without_guest_verification(
     assert ">Search</button>" not in preview.text
     assert ">Close session</a>" in preview.text
 
+    rejected = authenticated_client.post(
+        f"/sharing/shares/{grant.id}/preview/chat",
+        data={"csrf": "stale-token", "question": "What is newest?"},
+    )
+    assert rejected.status_code == 403
+    refreshed = authenticated_client.get(f"/sharing/shares/{grant.id}/preview/csrf")
+    assert refreshed.status_code == 200
+    assert refreshed.headers["cache-control"] == "no-store"
+    assert authenticated_client.get("/sharing/shares/missing/preview/csrf").status_code == 404
+
     reply = authenticated_client.post(
         f"/sharing/shares/{grant.id}/preview/chat",
         data={
-            "csrf": make_csrf_token("frontend-test-user"),
+            "csrf": refreshed.json()["csrf"],
             "question": "What is newest?",
             "history": "[]",
         },
@@ -2201,6 +2211,7 @@ def test_owner_can_preview_active_share_without_guest_verification(
     assert "Booked Kyoto accommodation" in searched.text
 
     with TestClient(app) as anonymous:
+        assert anonymous.get(f"/sharing/shares/{grant.id}/preview/csrf").status_code == 401
         denied = anonymous.get(
             f"/sharing/shares/{grant.id}/preview",
             follow_redirects=False,
