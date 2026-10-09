@@ -190,6 +190,8 @@ class FollowUpStore:
             encoded = json.dumps(item)
             db.execute("INSERT INTO followups VALUES (?, ?, ?, ?, ?, ?)",
                        (item["id"], request_id, 1, item["status"], now, encoded))
+            from workflows.hfl.intent_boards import prepend_action
+            prepend_action(db, item['id'])
             db.execute("INSERT INTO followup_history VALUES (?, ?, ?, ?, ?)",
                        (item["id"], 1, actor, now, encoded))
             if suggestion_id:
@@ -218,9 +220,14 @@ class FollowUpStore:
             if type(raw.get("version")) is not int or raw["version"] != old["version"]:
                 raise FollowUpConflict("This follow-up changed in another window. Reload it before saving.")
             item = self.validate({**old, **{k: v for k, v in raw.items() if k in FIELDS}})
-            from workflows.hfl.intent_boards import sync, memberships
+            from workflows.hfl.intent_boards import sync, memberships, board_ids
+            added_to_board = bool(set(board_ids(raw.get('board_ids', []))) - set(memberships(db, 'action:' + followup_id)))
             item['board_ids'] = (sync(db, 'action:' + followup_id, raw['board_ids']) if 'board_ids' in raw
                                  else memberships(db, 'action:' + followup_id))
+            if added_to_board:
+                from workflows.hfl.intent_boards import prepend_action
+                item['status'] = 'open'
+                prepend_action(db, followup_id)
             item.update(version=old["version"] + 1, updated_at=isoformat())
             item["completed_at"] = (old["completed_at"] or item["updated_at"]) if item["status"] == "done" else ""
             encoded = json.dumps(item)

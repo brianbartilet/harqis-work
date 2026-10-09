@@ -87,6 +87,9 @@
 .markdown-inline-preview.markdown-body > :first-child { margin-top:0; }
 .markdown-inline-preview.markdown-body > :last-child { margin-bottom:0; }
 .checklist-card-cover { border-top:1px solid #334155; padding-top:.6rem; margin-top:.8rem; font-size:.8rem; }
+.checklist-card-cover > p { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+.checklist-card-cover .checklist-cover-toggle { width:28px; height:28px; padding:0; flex-shrink:0; color:#94a3b8; background:transparent; border:0; }
+.checklist-card-cover .checklist-card-row[hidden] { display:none; }
 .checklist-card-cover label { margin:.5rem 0; line-height:1.5; }
 .checklist-card-cover input { flex:0 0 16px; width:16px; accent-color:#3b82f6; }
 .checklist-card-row { display:flex; align-items:flex-start; gap:.25rem; }

@@ -45,9 +45,9 @@ def canonical_snapshot():
     return permitted_snapshot()
 
 
-def permitted_snapshot(entries=None):
+def permitted_snapshot(entries=None, *, include_promoted=False):
     from modules.hfl_corpus.entities import current_entries
-    data = store().snapshot()
+    data = store().snapshot(include_promoted=include_promoted)
     # The same permitted corpus projection gates graph and brainstorming context.
     entries = current_entries() if entries is None else entries
     graph_ids = {(e['path'], key): 'entry:' + e['id'] for e in entries for key in (e['id'], timeline.entry_evidence_id(e['text']))}
@@ -66,7 +66,7 @@ def permitted_snapshot(entries=None):
 
 
 def require_idea(identity):
-    item = next((i for i in permitted_snapshot()['ideas'] if i['id'] == identity), None)
+    item = next((i for i in permitted_snapshot(include_promoted=True)['ideas'] if i['id'] == identity), None)
     if item is None:
         raise HTTPException(404, 'Idea unavailable or protected.')
     return item
@@ -505,6 +505,8 @@ async def convert(request: Request, identity: str):
             linked = db.execute("SELECT 1 FROM idea_links WHERE source=? AND target=? AND relation='develops-into'", ('idea:' + identity, 'action:' + action['id'])).fetchone()
             if not linked:
                 raise HTTPException(409, 'This request was already used for a different action.')
+            from workflows.hfl.intent_boards import memberships
+            action['board_ids'] = memberships(db, 'action:' + action['id'])
             return {'item': action, 'duplicate': True}
         current = canonical.idea(identity)
         if current['version'] != raw.get('idea_version'):
@@ -528,6 +530,12 @@ async def convert(request: Request, identity: str):
             if other.startswith(('entry:', 'entity:', 'daily:')):
                 db.execute('INSERT OR IGNORE INTO idea_links VALUES (?,?,?,?)', (target, other, 'context', isoformat()))
         current.update(status='adopted', version=current['version'] + 1, updated_at=isoformat())
+        if not (checklist_id or item_id):
+            current['promoted_to'] = action['id']
+            from workflows.hfl.intent_boards import replace_idea
+            replace_idea(db, identity, action['id'])
+            from workflows.hfl.intent_boards import memberships
+            action['board_ids'] = memberships(db, target)
         db.execute('INSERT INTO idea_edits VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,payload=excluded.payload', (identity, current['version'], json.dumps(current)))
         db.execute('INSERT INTO idea_history VALUES (?,?,?,?)', (identity, current['version'], str(actor), json.dumps(current)))
         db.execute("UPDATE timeline_suggestions SET status='adopted',followup_id=? WHERE id=?", (action['id'], identity))

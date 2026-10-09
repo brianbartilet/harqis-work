@@ -997,6 +997,7 @@ def test_followups_board_filter_drag_refresh_and_editor(agenda, authenticated_cl
         first = agenda.create(payload(title='First ordered card', checklists=[{'id':'long-list','title':'Checklist','cover':True,
             'items':[{'id':str(index),'text':f'Task {index + 1}','done':False} for index in range(12)]}]),actor='test')[0]
         second = agenda.create(payload(title='Second ordered card'),actor='test')[0]
+        agenda.reorder_board('open', [{'id':first['id'],'version':1}, {'id':second['id'],'version':1}])
         board.locator('[data-board-refresh]').click()
         lane = board.locator('.followups-lane[data-status=open]')
         playwright.expect(lane.locator('[data-followup-id]')).to_have_count(2)
@@ -1071,6 +1072,53 @@ def test_hide_ticked_roundtrip_editor_and_board(agenda, authenticated_client, mo
         playwright.expect(editor.locator('.editor-save-status')).to_have_text('Saved')
         editor.locator('[data-agenda-close]').first.click()
         playwright.expect(card.locator('.checklist-card-cover input')).to_have_count(4)
+        assert not errors
+        browser.close()
+
+
+@pytest.mark.parametrize('width', [390, 1440])
+def test_card_markdown_optional_sections_and_checklist_collapse(agenda, authenticated_client, tmp_path, width):
+    from urllib.parse import urlparse
+    playwright = pytest.importorskip('playwright.sync_api')
+    item = agenda.create(payload(body='## Description heading\n\n**Details**', expected_outcome='### Result\n\n- **Delivered**',
+        prompt='Initial instructions', checklists=[{'id':'cover','title':'Tasks','cover':True,
+        'items':[{'id':'one','text':'Check this','done':False}]}]), actor='test')[0]
+    empty = agenda.create(payload(title='Empty sections', body=' ', expected_outcome=' ', prompt=' '), actor='test')[0]
+    with playwright.sync_playwright() as driver:
+        browser = driver.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page(viewport={'width':width,'height':1000})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        def route(intercept):
+            request = intercept.request
+            url = urlparse(request.url)
+            if url.hostname != 'cards.test':
+                intercept.abort(); return
+            response = authenticated_client.request(request.method, url.path + ('?' + url.query if url.query else ''),
+                content=request.post_data, headers={k:v for k,v in request.headers.items() if k.lower() in {'content-type','x-csrf-token'}})
+            intercept.fulfill(status=response.status_code, body=response.content,
+                              headers={'content-type':response.headers.get('content-type','text/html')})
+        page.route('**/*', route)
+        page.goto('https://cards.test/hfl-corpus/actions')
+        card = page.locator('[data-followup-id="' + item['id'] + '"]')
+        playwright.expect(card).to_be_visible()
+        playwright.expect(card.locator('details > summary')).to_have_text(['Description', 'Expected outcome', 'Initial prompt'])
+        card.get_by_text('Description', exact=True).click()
+        card.get_by_text('Expected outcome', exact=True).click()
+        playwright.expect(card.locator('.markdown-body h2')).to_have_text('Description heading')
+        playwright.expect(card.locator('.markdown-body li strong')).to_have_text('Delivered')
+        playwright.expect(page.locator('[data-followup-id="' + empty['id'] + '"] details')).to_have_count(0)
+        playwright.expect(card.locator('.checklist-card-row')).to_be_visible()
+        card.get_by_role('button', name='Collapse Tasks', exact=True).click()
+        playwright.expect(card.locator('.checklist-card-row')).to_be_hidden()
+        page.reload()
+        playwright.expect(card.get_by_role('button', name='Expand Tasks', exact=True)).to_have_attribute('aria-expanded', 'false')
+        playwright.expect(card.locator('.checklist-card-row')).to_be_hidden()
+        card.get_by_role('button', name='Expand Tasks', exact=True).click()
+        playwright.expect(card.locator('.checklist-card-row')).to_be_visible()
+        card.get_by_text('Description', exact=True).click()
+        card.get_by_text('Expected outcome', exact=True).click()
+        page.screenshot(path=str(tmp_path / f'kanban-card-{width}.png'))
         assert not errors
         browser.close()
 

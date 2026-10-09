@@ -59,11 +59,54 @@ def test_conversion_inherits_boards_and_graph_membership(ideas, authenticated_cl
     action = response.json()['item']
     assert action['board_ids'] == [selected['id']]
     saved = ideas.map(selected['id'])
-    assert set(saved['members']) == {'idea:' + idea['id'], 'action:' + action['id']}
+    assert set(saved['members']) == {'action:' + action['id']}
+    assert ideas.ideas() == []
+    assert ideas.idea(idea['id'])['promoted_to'] == action['id']
     assert saved['edges'] == []
     from modules.hfl_corpus.entities import graph
     assert any(e['source'] == 'board:' + selected['id'] and e['target'] == 'action:' + action['id']
                for e in graph(limit=0)['edges'])
+
+
+@pytest.mark.parametrize('via_board', [False, True])
+def test_added_actions_enter_review_above_manual_order(ideas, via_board):
+    selected = board(ideas)
+    first, second = [ideas.followups.create(payload(title=title), actor='owner')[0] for title in ['First', 'Second']]
+    assert ideas.followups.board_order()[second['id']] < ideas.followups.board_order()[first['id']]
+    ideas.followups.reorder_board('open', [{'id': first['id'], 'version': 1}, {'id': second['id'], 'version': 1}])
+    action = ideas.followups.update(second['id'], {'version': 1, 'status': 'in_progress'}, actor='owner')
+    if via_board:
+        ideas.save_map({'version': selected['version'], 'members': ['action:' + action['id']]}, selected['id'])
+    else:
+        ideas.followups.update(action['id'], {'version': action['version'], 'board_ids': [selected['id']]}, actor='owner')
+    saved = ideas.followups.get(action['id'])
+    assert saved['status'] == 'open'
+    assert saved['board_ids'] == [selected['id']]
+    positions = ideas.followups.board_order()
+    assert positions[second['id']] < positions[first['id']]
+    ideas.followups.update(saved['id'], {'version': saved['version'], 'title': 'Edited'}, actor='owner')
+    assert ideas.followups.board_order() == positions
+
+
+def test_promotion_replaces_inactive_board_layout_and_preserves_history(ideas, authenticated_client):
+    idea = ideas.save_idea(payload(), 'owner')
+    node = 'idea:' + idea['id']
+    selected = ideas.save_map(dict(request_id=str(uuid4()), name='Archived',
+                                   members=[node], root=node, positions={node: {'x': 12, 'y': 45}}))
+    selected = ideas.save_map({'version': selected['version'], 'active': False}, selected['id'])
+    response = authenticated_client.post(BASE + '/objects/' + idea['id'] + '/convert', json=dict(
+        request_id=str(uuid4()), idea_version=idea['version'], item={'title': 'Act'}, attachments=[]))
+    assert response.status_code == 200, response.text
+    action = response.json()['item']
+    saved = ideas.map(selected['id'])
+    target = 'action:' + action['id']
+    assert saved['members'] == [target]
+    assert saved['root'] == target
+    assert saved['positions'] == {target: {'x': 12, 'y': 45}}
+    assert action['board_ids'] == [selected['id']]
+    assert ideas.snapshot()['ideas'] == []
+    assert ideas.idea(idea['id'])['promoted_to'] == action['id']
+    assert any(link['source'] == node and link['target'] == target for link in ideas.links())
 
 
 def test_complete_board_context_excludes_inactive_and_protected_objects(ideas, monkeypatch):

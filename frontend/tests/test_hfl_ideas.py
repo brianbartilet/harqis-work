@@ -104,6 +104,8 @@ def test_checklist_item_conversion_preserves_provenance_and_independent_state(id
     assert client.post(uri + '/convert', json=request).json()['item']['id'] == action['id']
     assert client.post(uri + '/convert', json={**request, 'item_id': 'different'}).status_code == 409
     saved = client.get(uri).json()['item']
+    assert any(item['id'] == idea['id'] for item in ideas.ideas())
+    assert not saved.get('promoted_to')
     assert saved['checklists'][0]['cover'] is True
     assert saved['checklists'][0]['items'][0]['done'] is True
     assert saved['item_actions'] == [{'idea_id': idea['id'], 'checklist_id': 'list', 'item_id': 'task', 'action_id': action['id']}]
@@ -344,7 +346,7 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         assert ideas.ideas() == []
         page.locator('#kg-list button').filter(has_text='Reading room').click()
         page.get_by_role('menuitem', name='Promote to shared Idea', exact=True).click()
-        expect(page.locator('#kg-detail .idea-status-pill')).to_have_text('Suggested')
+        expect(page.locator('#kg-detail .idea-status-pill')).to_have_text('Available')
         page.get_by_role('menuitem', name='Edit idea / checklists', exact=True).click()
         modal.get_by_label('Idea', exact=True).fill('Warm lighting')
         description = '# Lighting\n## Requirements\n- Use **warm** light.\n- Compare bulbs\n    - Check brightness\n\n1. Choose a lamp\n2. Install the bulb'
@@ -377,14 +379,13 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         expect(page.locator('.editor-save-confirmation')).to_contain_text('Action saved.')
         expect(modal).to_have_count(0)
         assert len(ideas.followups.list()) == 1
-        expect(page.locator('#kg-map-count')).to_contain_text('2 nodes')
-        source_id = 'idea:' + ideas.ideas()[0]['id']
+        expect(page.locator('#kg-map-count')).to_contain_text('1 nodes')
+        assert ideas.ideas() == []
+        source_id = 'idea:' + ideas.ideas(include_promoted=True)[0]['id']
         action_id = 'action:' + ideas.followups.list()[0]['id']
         assert any(link['source'] == source_id and link['target'] == action_id and link['relation'] == 'develops-into' for link in ideas.links())
-        page.wait_for_function('''([source, target]) => [...window.HflIdeas.maps.sharedEdges.values()].some(
-            edge => edge.source === source && edge.target === target && edge.relation === 'develops-into'
-        )''', arg=[source_id, action_id])
-        expect(page.locator('#kg-map-count')).to_contain_text('1 links')
+        assert ideas.maps()[0]['members'] == [action_id]
+        expect(page.locator('#kg-map-count')).to_contain_text('0 links')
         hold_graph = True
         page.locator('.board-add-menu').get_by_role('button', name='Add', exact=True).click()
         page.locator('.board-add-menu').get_by_role('button', name='Goal', exact=True).click()
@@ -401,22 +402,20 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         expect(modal.get_by_role('button', name='Retry loading links')).to_be_visible()
         modal.get_by_role('button', name='Save Goal', exact=True).click()
         expect(modal).to_have_count(0)
-        expect(page.locator('#kg-map-count')).to_contain_text('3 nodes')
+        expect(page.locator('#kg-map-count')).to_contain_text('2 nodes')
         page.locator('.board-controls').get_by_role('button', name='Add thought', exact=True).click()
         modal.get_by_label('Thought', exact=True).fill('Try an adjustable lamp')
         modal.get_by_role('button', name='Save thought', exact=True).click()
         expect(modal).to_have_count(0)
-        expect(page.locator('#kg-map-count')).to_contain_text('4 nodes')
+        expect(page.locator('#kg-map-count')).to_contain_text('3 nodes')
         assert page.evaluate('''() => {
             const points=Object.values(window.HflIdeas.maps.getPositions());
             return points.every((a,i)=>points.slice(i+1).every(b=>Math.hypot(a.x-b.x,a.y-b.y)>=85));
         }''')
         expect(page.locator('.idea-map-status')).to_have_text('Saved')
         page.reload()
-        expect(page.locator('#kg-map-count')).to_contain_text('4 nodes')
-        page.wait_for_function('''([source, target]) => [...window.HflIdeas.maps.sharedEdges.values()].some(
-            edge => edge.source === source && edge.target === target && edge.relation === 'develops-into'
-        )''', arg=[source_id, action_id])
+        expect(page.locator('#kg-map-count')).to_contain_text('3 nodes')
+        assert source_id not in ideas.maps()[0]['members']
         if width < 760:
             page.locator('.kg-boards [data-section=boards] > summary').click()
         expect(page.locator('.board-list button[aria-current=true]')).to_have_attribute('aria-label', 'Reading room')
@@ -427,7 +426,7 @@ def test_browser_create_map_idea_checklist_and_conversion(ideas, authenticated_c
         assert page.evaluate('window.HflIdeas.maps.current') is None
         assert not any(n['kind'] == 'drafts' for n in authenticated_client.get('/api/hfl/entities/graph?limit=0').json()['nodes'])
         page.goto('https://ideas.test/hfl-corpus/graph?map=' + ideas.maps()[0]['id'])
-        expect(page.locator('#kg-map-count')).to_contain_text('4 nodes')
+        expect(page.locator('#kg-map-count')).to_contain_text('3 nodes')
         assert not errors, errors
         browser.close()
 

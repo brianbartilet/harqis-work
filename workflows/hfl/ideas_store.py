@@ -45,7 +45,7 @@ class IdeasStore(BoardStoreMixin):
             ''')
             migrate_content(db, 'idea_edits')
 
-    def ideas(self):
+    def ideas(self, *, include_promoted=False):
         with self.followups.connect() as db:
             rows = db.execute('SELECT * FROM timeline_suggestions').fetchall()
             edits = {r['id']: json.loads(r['payload']) for r in db.execute('SELECT * FROM idea_edits')}
@@ -75,10 +75,10 @@ class IdeasStore(BoardStoreMixin):
                 checklist.setdefault('cover', False)
         from workflows.hfl.intent_boards import project
         with self.followups.connect() as db:
-            return project(db, result.values(), 'idea:')
+            return project(db, [i for i in result.values() if include_promoted or not i.get('promoted_to')], 'idea:')
 
     def idea(self, identity):
-        item = next((i for i in self.ideas() if i['id'] == identity), None)
+        item = next((i for i in self.ideas(include_promoted=True) if i['id'] == identity), None)
         if item is None:
             raise KeyError(identity)
         return item
@@ -236,6 +236,19 @@ class IdeasStore(BoardStoreMixin):
                     raise FollowUpConflict('This board creation request was already used.')
                 return existing
             db.execute('INSERT INTO idea_maps VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,payload=excluded.payload', (item['id'], item['version'], json.dumps(item)))
+            from workflows.hfl.intent_boards import prepend_action
+            previous_members = set(previous.get('members', []))
+            for node in item['members']:
+                if node in previous_members:
+                    continue
+                if node.startswith('action:'):
+                    row = db.execute('SELECT payload FROM followups WHERE id=?', (node[7:],)).fetchone()
+                    if row:
+                        action = json.loads(row['payload'])
+                        if action['status'] != 'open':
+                            self.followups.update(action['id'], {'version': action['version'], 'status': 'open'},
+                                                  actor='board-membership', connection=db)
+                        prepend_action(db, action['id'])
             from workflows.hfl.board_memory import record_memory
             old_drafts = {d['id']: d for d in previous.get('drafts', [])}
             for draft in item['drafts']:
@@ -243,12 +256,12 @@ class IdeasStore(BoardStoreMixin):
                               revision=item['version'], timestamp=now, board=item)
         return normalize_board(item)
 
-    def snapshot(self):
+    def snapshot(self, *, include_promoted=False):
         with self.followups.connect() as db:
             topics = [dict(row) for row in db.execute('SELECT * FROM idea_topics')]
             memories = [dict(row) for row in db.execute('SELECT entry_id,object_id,board_id,day FROM board_memories')]
             lists = [json.loads(row['payload']) for row in db.execute('SELECT payload FROM intent_lists')]
-        return {'ideas': self.ideas(), 'actions': self.followups.list() + self.followups.list(closed=True), 'topics': topics, 'links': self.links(), 'maps': self.maps(), 'goals': self.goals(), 'memories': memories, 'lists': lists}
+        return {'ideas': self.ideas(include_promoted=include_promoted), 'actions': self.followups.list() + self.followups.list(closed=True), 'topics': topics, 'links': self.links(), 'maps': self.maps(), 'goals': self.goals(), 'memories': memories, 'lists': lists}
 
 
 def local_day(timestamp):

@@ -2,6 +2,42 @@
 import json
 
 
+def prepend_action(db, identity):
+    """Persist insertion before all existing cards, including manually ordered ones."""
+    position = db.execute('SELECT COALESCE(MIN(position), 0) - 1 FROM followup_board_order').fetchone()[0]
+    db.execute('INSERT OR REPLACE INTO followup_board_order VALUES (?,?)', (identity, position))
+
+
+def replace_idea(db, idea_id, action_id):
+    """Replace a promoted idea on every board without losing local connections."""
+    from workflows.hfl.timeline_store import isoformat
+    source, target = 'idea:' + idea_id, 'action:' + action_id
+    for board in boards(db):
+        if source not in board.get('members', []):
+            continue
+        board['members'] = list(dict.fromkeys(target if node == source else node for node in board['members']))
+        for edge in board.get('edges', []):
+            for key in ('source', 'target'):
+                if edge[key] == source:
+                    edge[key] = target
+        board['edges'] = [edge for edge in board.get('edges', []) if edge['source'] != edge['target']]
+        for key in ('positions', 'node_sizes'):
+            if source in board.get(key, {}):
+                board[key][target] = board[key].pop(source)
+        widths = {}
+        for key, width in board.get('edge_widths', {}).items():
+            parts = json.loads(key)
+            parts[:2] = [target if node == source else node for node in parts[:2]]
+            if parts[0] != parts[1]:
+                widths[json.dumps(parts, separators=(',', ':'))] = width
+        board['edge_widths'] = widths
+        if board.get('root') == source:
+            board['root'] = target
+        board.update(version=board['version'] + 1, updated_at=isoformat())
+        db.execute('UPDATE idea_maps SET version=?,payload=? WHERE id=?',
+                   (board['version'], json.dumps(board), board['id']))
+
+
 def board_ids(value):
     if not isinstance(value, list) or len(value) > 10000 or any(
         not isinstance(identity, str) or not identity or len(identity) > 200 for identity in value

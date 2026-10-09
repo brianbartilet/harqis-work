@@ -124,6 +124,15 @@
     for(const sourceName of item.sources || [])meta.append(node('span',sourceName,'action-source'));
     el.append(meta,node('h3',item.title));
     el.querySelector('h3').append(window.HflCopyIdButton('action',item.id));
+    const contentSection=(label,text,markdown=false)=>{
+      if(!text?.trim())return;
+      const details=node('details'),content=node(markdown?'div':'pre',text,markdown?'markdown-body agenda-card-outcome':'action-prompt');
+      details.append(node('summary',label),content);el.append(details);
+      if(markdown)window.HflChecklistMarkdown?.(content,text);
+    };
+    contentSection('Description',window.HflObjectDescription(item),true);
+    contentSection('Expected outcome',item.expected_outcome,true);
+    contentSection('Initial prompt',item.prompt);
     window.HflChecklistCover?.(el, item, async checklists => {
       window.dispatchEvent(new CustomEvent('hfl:action-saving',{detail:{saving:true}}));
       try { await api('/'+item.id, {method:'PATCH',body:JSON.stringify({version:item.version,checklists})}); await load(); }
@@ -132,8 +141,6 @@
         window.dispatchEvent(new Event('hfl:actions-updated'));
       }
     }, () => openEditor(item), (list, task) => window.HflIdeas.createChecklistAction(item, list.id, task.id));
-    const outcome=node('details');outcome.append(node('summary','Expected outcome'),node('p',item.expected_outcome,'agenda-card-outcome'));el.append(outcome);
-    if(item.prompt){const details=node('details');details.append(node('summary','Initial prompt'),node('pre',item.prompt,'action-prompt'));el.append(details);}
     if(item.notes || item.completion_note){const details=node('details');details.append(node('summary','Notes & outcome'));if(item.notes)details.append(node('p',item.notes));if(item.completion_note)details.append(node('p','Outcome: '+item.completion_note));el.append(details);}
     if(item.source){const evidence=node('div',null,'action-evidence-link');const available=item.evidence_available!==false;const a=node(available?'a':'span','Open HFL evidence ↗');if(available){a.href=evidenceUrl(item.source);a.target='_blank';a.rel='noopener';}else{a.setAttribute('aria-disabled','true');a.title='No linked evidence entry is available';}evidence.append(a);el.append(evidence);}
     const actions=node('div',null,'agenda-card-actions action-controls');

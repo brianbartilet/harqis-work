@@ -164,6 +164,19 @@ window.HflChecklistCover = function(root, item, save, open, createAction) {
   for (const list of (item.checklists || []).filter(list => list.cover)) {
     const section = document.createElement('section'); section.className = 'checklist-card-cover';
     const heading = document.createElement('p'); heading.textContent = `${list.title} · ${list.items.filter(i => i.done).length}/${list.items.length}`; section.append(heading);
+    const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'checklist-cover-toggle';
+    const storageKey = `hfl:checklist-collapsed:${item.id}:${list.id}`;
+    let collapsed = false;
+    try { collapsed = localStorage.getItem(storageKey) === 'true'; } catch (_) {}
+    const paint = () => {
+      toggle.textContent = collapsed ? '▸' : '▾';
+      toggle.setAttribute('aria-expanded', String(!collapsed));
+      toggle.setAttribute('aria-label', `${collapsed ? 'Expand' : 'Collapse'} ${list.title}`);
+      toggle.title = `${collapsed ? 'Expand' : 'Collapse'} checklist`;
+      section.querySelectorAll('.checklist-card-row').forEach(row => row.hidden = collapsed);
+    };
+    toggle.onclick = event => { event.stopPropagation(); collapsed = !collapsed; paint(); try { localStorage.setItem(storageKey, String(collapsed)); } catch (_) {} };
+    heading.append(toggle);
     for (const task of [...list.items].sort((a,b) => Number(a.done) - Number(b.done))) {
       if (item.hide_ticked && task.done) continue;
       const label = document.createElement('label'), check = document.createElement('input'); check.type = 'checkbox'; check.checked = task.done;
@@ -182,6 +195,6 @@ window.HflChecklistCover = function(root, item, save, open, createAction) {
       }
       section.append(row);
     }
-    root.append(section);
+    paint();root.append(section);
   }
 };
