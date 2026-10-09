@@ -165,11 +165,14 @@ window.HflChecklistCover = function(root, item, save, open, createAction) {
     const section = document.createElement('section'); section.className = 'checklist-card-cover';
     const heading = document.createElement('p'); heading.textContent = `${list.title} · ${list.items.filter(i => i.done).length}/${list.items.length}`; section.append(heading);
     const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'checklist-cover-toggle';
+    const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    chevron.setAttribute('viewBox', '0 0 20 20'); chevron.setAttribute('aria-hidden', 'true');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path'); path.setAttribute('d', 'm7 4 6 6-6 6');
+    chevron.append(path); toggle.append(chevron);
     const storageKey = `hfl:checklist-collapsed:${item.id}:${list.id}`;
     let collapsed = false;
     try { collapsed = localStorage.getItem(storageKey) === 'true'; } catch (_) {}
     const paint = () => {
-      toggle.textContent = collapsed ? '▸' : '▾';
       toggle.setAttribute('aria-expanded', String(!collapsed));
       toggle.setAttribute('aria-label', `${collapsed ? 'Expand' : 'Collapse'} ${list.title}`);
       toggle.title = `${collapsed ? 'Expand' : 'Collapse'} checklist`;
