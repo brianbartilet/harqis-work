@@ -1052,7 +1052,8 @@ def test_owner_page_paginates_recipes_and_shares_with_mobile_first_saved_list(
     ) in first.text
     assert 'data-generated-shares-panel open' in second.text
     assert ".saved-recipes-panel { order:1; }" in first.text
-    assert ".recipe-editor { order:2; }" in first.text
+    assert ".generated-shares-panel { order:2; }" in first.text
+    assert ".recipe-editor { order:3; }" in first.text
     assert ".owner-sidebar { display:contents; }" in first.text
     assert ".two,.stat-grid { grid-template-columns:minmax(0,1fr); }" in first.text
     assert first.text.count('formaction="/sharing/generate"') == 1

@@ -425,7 +425,7 @@ Sharing a workspace? See the [Workspace sharing user guide](docs/info/WORKSPACE-
 for QR generation, access limits, expiry, and updating or revoking shared content.
 
 For a personal touch, use [entity templates](docs/info/WORKSPACE-SHARING-GUIDE.md#personalize-a-share-with-one-entity)
-to select one entity, add optional workspace ideas and other context, then review
+to combine selected entities, add optional workspace ideas and other context, then review
 and generate a regular or Instant Share.
 
 **Features:** Home manifesto · context-aware Second Brain feed and mode overrides · reorderable workflow and app layouts · one-click task triggering · live HTMX status polling · app documentation and controlled pytest runs · recursive HFL browsing, tag cloud, date search, authenticated canonical-host reads, and signed reference downloads · immutable source-scoped guest portals with QR/PIN access and cited Q&A · Flower link

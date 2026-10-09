@@ -285,6 +285,8 @@ class ShareStore:
             "tags",
             "selected_entry_ids",
             "disabled_reference_ids",
+            "entity_ids",
+            "entities",
         ):
             payload[field] = tuple(payload.get(field) or [])
         if "context_prompt" not in payload:

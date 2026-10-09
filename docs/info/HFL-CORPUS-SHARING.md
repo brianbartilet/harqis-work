@@ -72,16 +72,18 @@ when appropriate. Content refresh does not renew access or reset redemptions.
 ## Personalized recipes
 
 `ShareConfiguration` adds `entity_id`, `entity_name`, `entity_kind` and
-`entity_template`, with empty/false defaults for legacy records. These remain in
+`entity_template`, plus ordered `entity_ids` and canonical `entities` metadata.
+Legacy single-entity records remain supported with empty defaults for new fields. These remain in
 the existing JSON storage; no new database table is needed. Recipient text accepts
-up to 500 characters. The server resolves the selected entity's current name at
-snapshot construction rather than trusting posted display text.
+up to 500 characters. The server resolves every selected entity at snapshot construction rather than
+trusting posted display text. Recipient is editable and defaults to the first
+selection; old single-entity bindings retain compatibility.
 
 The publication sequence is:
 
-1. Bind exactly one current canonical entity. Unbound templates, unavailable IDs
+1. Bind one or more current canonical entities, deduplicating IDs in selection order. Unbound templates, unavailable IDs
    and failed canonical lookups cannot generate content.
-2. Intersect current entry mentions with source/tag/date/topic/combined-view
+2. Union entry matches across selected entities, deduplicate, then intersect with source/tag/date/topic/combined-view
    filters and existing secret permissions. Co-mentioned entities do not trigger
    another corpus traversal.
 3. Include eligible actions, ideas and plans through matching evidence, direct
@@ -95,7 +97,7 @@ The publication sequence is:
    reasons explain expansion beyond the entity-filtered entries.
 
 Templates are saved unbound and retain object/reference exclusions and scope rules.
-Each share captures its selected entity in snapshot filters. Explicit updates from
+Each share captures its complete entity selection in snapshot filters. Explicit updates from
 the reusable recipe retain that binding. Frozen shares stay unchanged until an
 explicit update; live refresh uses the captured configuration and existing
 per-section approval controls. Lookup failures retain the previous live snapshot
@@ -107,8 +109,8 @@ to People, all sources, one uniquely named Default workspace, frozen content,
 references off, and reusable-template saving off. Missing or ambiguous Default
 requires an explicit workspace/no-context choice. CSRF-protected
 `POST /sharing/share-with/review` validates the selection and returns an unsaved
-configuration plus preview; the client loads it into the regular editor. People
-bindings use the People graph preset. Failed requests preserve both drafts.
+configuration plus preview; the client loads it into the regular editor. All-people
+selections use the People graph preset; mixed types use Timeline. Failed requests preserve both drafts.
 Loaded reusable templates retain their filters and exclusions when rebound.
 
 `POST /sharing/share-with/instant` creates a frozen, single-use, one-device QR
@@ -133,7 +135,7 @@ Source references:
 [owner controls](../../frontend/static/js/share-personalization.js), and
 [personalization regression tests](../../frontend/tests/test_share_personalization.py).
 For owner instructions and examples, see
-[Personalize a share with one entity](WORKSPACE-SHARING-GUIDE.md#personalize-a-share-with-one-entity).
+[Personalize a share with multiple entities](WORKSPACE-SHARING-GUIDE.md#personalize-a-share-with-one-entity).
 
 Privacy limits: mention matching does not establish consent, redact record text,
 or verify recipient identity. Entity extraction may be incomplete. Sharing a board

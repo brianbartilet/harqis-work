@@ -82,7 +82,8 @@ reference sharing subject to the recipe's reference exclusions. It is not added
 to **Generated shares**. Use normal **Generate snapshot and QR** when you need a
 managed share with the access settings you selected and a reopenable handoff.
 
-### Personalize a share with one entity
+<a id="personalize-a-share-with-one-entity"></a>
+### Personalize a share with multiple entities
 
 1. Expand **Share with** above **Saved recipes**. This accordion has its own
    controls and leaves your current recipe untouched until you choose **Review**.
@@ -90,20 +91,25 @@ managed share with the access settings you selected and a reopenable handoff.
    reusable entity template** off, and the workspace named **Default** selected.
    If there is no unique Default workspace, choose a workspace or explicitly
    choose **No workspace context**. References start off and content is frozen.
-3. Search for a person and select a result. Cards show the name, entity-type pill
-   and linked-entry count. Other entity types are also available; one entity is
-   supported per share.
+3. Search and add entity cards. Cards show the name, entity-type pill and entry
+   count. Selections persist across searches and type changes, so people,
+   companies, topics and other types can be combined. Remove individual cards or
+   use **Clear all**. Activity matching **any** selection is included once, with
+   one shared set of filters and workspace selections.
+   **Recipient** starts with the first selected name and stays editable. Adding
+   or removing entities preserves it; Clear all resets it. This is still a share
+   for one individual, who can see the entire combined scope.
 4. Open the **Add workspace context** dropdown to select one or more workspaces.
    Workspace objects and supporting entries can be included even when they do not
-   mention the selected entity.
-5. Choose **Review** to load an unsaved recipe into the normal editor. The entity's
-   canonical name fills **Recipient**. Review Entries, Actions and Ideas, Boards,
-   Plans, Graph and Agent as usual. People selections start with the **People**
-   graph preset. Refine filters, exclude objects and check inclusion reasons.
+   mention any selected entity.
+5. Choose **Review** to load an unsaved recipe into the normal editor. The
+   first selection supplies the initial **Recipient**, which you can edit. Review Entries, Actions and Ideas, Boards,
+   Plans, Graph and Agent as usual. All-people selections start with the **People**
+   graph preset; mixed types use **Timeline**. Refine filters, exclude objects and check inclusion reasons.
 6. To reuse the rules later, enable **Save as a reusable entity template** before
-   Review, refine the recipe, and choose **Save recipe**. Saving clears the person
+   Review, refine the recipe, and choose **Save recipe**. Saving clears all selected entities
    and recipient while keeping filters and exclusions. Load that saved template,
-   open Share with and choose the next entity; its saved rules remain in effect.
+   open Share with and choose the next entities; its saved rules remain in effect.
 7. For an immediate, disposable QR, use **Instant Share** inside the accordion.
    It uses the accordion's selections, independently of subsequent main-editor
    changes. Use **Generate snapshot and QR** in the editor for a managed share
@@ -126,8 +132,8 @@ node does not redact names or attachment contents. Missing extraction can omit
 relevant activity. A merged or removed entity must be selected again; lookup
 failure never falls back to an unrestricted share.
 
-Generated shares keep their selected entity independently of the template.
-**Update from saved recipe** preserves the share's bound entity while applying
+Generated shares keep all their selected entities independently of the template.
+**Update from saved recipe** preserves the share's bound entities while applying
 the saved rules. Live shares use their captured binding and inclusion policies;
 new relationships can change their scope, so keep snapshots frozen when review
 must cover exactly what is published.

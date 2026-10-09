@@ -132,7 +132,7 @@ def test_share_with_browser(editor_page, entities, sharing_corpus, width, tmp_pa
     expect(page.locator('#recipient')).to_have_value('Existing draft')
     panel.locator('[data-personal-review]').click()
     expect(page.locator('#recipient')).to_have_value(entities[0]['label'])
-    expect(page.locator('#recipient')).to_have_attribute('readonly', '')
+    expect(page.locator('#recipient')).to_be_editable()
     expect(page.locator('[data-preview-ready]')).to_be_visible(timeout=15000)
     expect(page.locator('[data-preview-ready]')).to_contain_text('Planned the Japan trip')
     expect(page.locator('[name="graph_view"]')).to_have_value('{"preset":"people"}')
@@ -336,3 +336,106 @@ def test_saved_template_browser_rebind_and_save(editor_page, entities, sharing_c
     assert saved.entity_template and not saved.entity_id
     assert saved.tags == ('absent',)
     assert saved.activity['excluded_ids'] == ['entry:private']
+
+
+def test_multiple_entities_union_deduplicated_filtered_and_excluded(entities, context, sharing_corpus, monkeypatch):
+    second=replace(sharing_corpus.entries[0], anchor='second', text=sharing_corpus.entries[0].text.replace('hfl-share-test','second'))
+    document=replace(sharing_corpus, entries=(*sharing_corpus.entries,second),entry_count=2)
+    monkeypatch.setattr(activity,'mentions_for_documents',lambda docs:[
+        {'id':'hfl-share-test','mentions':entities}, {'id':'second','mentions':[entities[1]]}])
+    context['links'].extend([{'source':'entity:alex','target':'action:a'},
+                             {'source':'entity:acme','target':'action:a'},
+                             {'source':'entity:acme','target':'action:outside'}])
+    cfg=recipe(entity_ids=('entity:alex','entity:acme','entity:alex'), recipient='My recipient')
+    snapshot=build_snapshot(cfg,(document,))
+    assert {e.id for e in snapshot.entries} == {'hfl-share-test','second'}
+    assert len(snapshot.entries)==2
+    assert {a['id'] for a in snapshot.activity['actions']} == {'action:a','action:outside'}
+    assert len(snapshot.activity['actions'])==2
+    assert snapshot.recipient=='My recipient'
+    assert [e['id'] for e in snapshot.filters['entities']]==['entity:alex','entity:acme']
+    assert not build_snapshot(replace(cfg,tags=('absent',)),(document,)).entries
+    excluded=replace(cfg,activity={**cfg.activity,'excluded_ids':['entry:second','action:a']})
+    result=build_snapshot(excluded,(document,))
+    assert [e.id for e in result.entries]==['hfl-share-test']
+    assert 'action:a' not in {a['id'] for a in result.activity['actions']}
+    with pytest.raises(ValueError,match='unavailable or was merged'):
+        build_snapshot(replace(cfg,entity_ids=('entity:alex','missing')),(document,))
+    template=personalization.unbound_template(replace(cfg,entity_template=True))
+    assert not template.entity_ids and not template.entities and not template.entity_id and not template.recipient
+
+
+@pytest.mark.parametrize('width',[390,1440])
+def test_multi_entity_picker_preserves_recipient_and_round_trips(editor_page,entities,sharing_corpus,monkeypatch,width):
+    from playwright.sync_api import expect
+    from modules.hfl_corpus import workspace_views
+    monkeypatch.setattr(workspace_views,'listing',lambda:{'views':[{'id':'work','name':'Default'}]})
+    page,client=editor_page
+    page.set_viewport_size({'width':width,'height':1000})
+    page.goto('https://editing.test/sharing')
+    page.locator('[data-personalization] > summary').click()
+    page.locator('[data-entity-results] button').filter(has_text='Alex').click()
+    expect(page.locator('#share-with-recipient')).to_have_value(entities[0]['label'])
+    page.locator('#share-with-recipient').fill('For my friend')
+    page.locator('#entity-type').select_option('companies')
+    page.locator('[data-entity-results] button').filter(has_text='Acme').click()
+    expect(page.locator('[data-selected-entities] .selected-entity-card')).to_have_count(2)
+    expect(page.locator('#share-with-recipient')).to_have_value('For my friend')
+    page.locator('[data-personal-review]').click()
+    expect(page.locator('#recipient')).to_have_value('For my friend')
+    expect(page.locator('[data-social-form] [name="entity_ids"]')).to_have_count(2)
+    expect(page.locator('[name="graph_view"]')).to_have_value('{"preset":"timeline"}')
+    page.get_by_role('tab',name='Details and Filtering',exact=True).click()
+    page.locator('#recipient').fill('Edited recipient')
+    page.get_by_role('button',name='Save recipe',exact=True).click()
+    expect(page.locator('#recipient')).to_have_value('Edited recipient')
+    cfg=get_share_store().get_configuration(page.locator('[name="configuration_id"]').input_value())
+    assert cfg.entity_ids==('entity:alex','entity:acme')
+    assert cfg.recipient=='Edited recipient'
+    assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
+    # Start a new selection and exercise removal without resetting recipient.
+    page.goto('https://editing.test/sharing')
+    page.locator('[data-personalization] > summary').click()
+    page.locator('[data-entity-results] button').filter(has_text='Alex').click()
+    page.locator('#entity-type').select_option('companies')
+    page.locator('[data-entity-results] button').filter(has_text='Acme').click()
+    page.get_by_role('button',name='Remove '+entities[0]['label'],exact=True).click()
+    expect(page.locator('#share-with-recipient')).to_have_value(entities[0]['label'])
+    expect(page.locator('[data-selected-entities] .selected-entity-card')).to_have_count(1)
+    page.locator('[data-clear-entity]').click()
+    expect(page.locator('#share-with-recipient')).to_have_value('')
+    expect(page.locator('[data-selected-entities] .selected-entity-card')).to_have_count(0)
+
+
+def test_multi_entity_instant_and_template_update_keep_all_bindings(authenticated_client,entities,context,sharing_corpus):
+    from modules.hfl_shares.security import opaque_hash
+    from modules.hfl_shares.activity_models import live_configuration
+    from modules.hfl_shares.store import ShareStore
+    cfg=recipe(entity_ids=('entity:alex','entity:acme'),recipient='Recipient',entity_template=True,
+               live_updates=True,activity={'version':1,'sections':['entries','actions','graph']})
+    initial=build_snapshot(cfg,(sharing_corpus,))
+    live=live_configuration(cfg,initial)
+    assert build_snapshot(live,(sharing_corpus,)).filters['entities']==initial.filters['entities']
+    store=get_share_store()
+    template=store.save_configuration(personalization.unbound_template(cfg))
+    grant=store.create_share(configuration_id=template.id,name='Combined',token_hash=opaque_hash('multi'),
+        pin_hash='',auth_mode='qr',allowed_email='',snapshot=initial,ttl_seconds=3600,single_use=False,device_limit=1,
+        live_configuration=live)
+    restored=ShareStore(store.path).get_share(grant.id)
+    assert tuple(restored.live_configuration.entity_ids)==cfg.entity_ids
+    response=authenticated_client.post('/sharing/shares/'+grant.id+'/update',data={'csrf':make_csrf_token('frontend-test-user')})
+    assert response.status_code==200,response.text
+    updated=store.get_share(grant.id)
+    assert updated.snapshot.filters['entities']==initial.filters['entities']
+    assert updated.snapshot.recipient=='Recipient'
+    assert not store.get_configuration(template.id).entity_ids
+    response=authenticated_client.post('/sharing/share-with/instant',data={
+        'csrf':make_csrf_token('frontend-test-user'),'entity_ids':['entity:alex','entity:acme'],
+        'recipient':'One individual','all_sources':'on','workspace_confirmed':'on'})
+    assert response.status_code==200,response.text
+    with store._connect() as db:
+        row=db.execute('SELECT id FROM shares WHERE instant=1').fetchone()
+    instant=store.get_share(row['id'])
+    assert len(instant.snapshot.filters['entities'])==2
+    assert instant.snapshot.recipient=='One individual'
+    assert instant.single_use and instant.redemption_session_seconds==86400

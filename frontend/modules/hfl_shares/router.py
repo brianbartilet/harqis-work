@@ -111,7 +111,7 @@ async def personalization_options(request: Request, q: str = '', kind: str = '')
                    all(word in row['label'].casefold() for word in q.casefold().split())]
         workspaces = await asyncio.to_thread(listing)
         return JSONResponse({'entities': sorted(matches, key=lambda row: (row['label'].casefold(), row['id']))[:50],
-                             'types': types, 'total': len(matches),
+                             'types': types, 'type_colors': {row['kind']: row.get('color', '#95a7c3') for row in rows}, 'total': len(matches),
                              'workspaces': [{'id': row['id'], 'name': row['name'], 'color': row.get('color', '#3b82f6')} for row in workspaces['views']]},
                             headers={'Cache-Control': 'no-store'})
     except ValueError as exc:
@@ -352,7 +352,7 @@ def _configuration_from_form(
 ) -> ShareConfiguration:
     settings = get_settings()
     recipient = str(form.get("recipient") or "").strip()
-    if not recipient and not preview and not form.get('entity_id') and form.get('entity_template') != 'on':
+    if not recipient and not preview and not form.get('entity_id') and not form.getlist('entity_ids') and form.get('entity_template') != 'on':
         raise ValueError("Recipient is required.")
     device_limit = int(
         str(form.get("device_limit") or settings.hfl_share_default_device_limit)
@@ -367,7 +367,8 @@ def _configuration_from_form(
     return ShareConfiguration(
         id=str(form.get("configuration_id") or ""),
         name=str(form.get("name") or "").strip() or ("Preview" if preview else ""),
-        recipient=recipient or "there",
+        recipient=recipient or ("" if form.getlist("entity_ids") or form.get("entity_id") else "there"),
+        entity_ids=tuple(form.getlist('entity_ids')),
         entity_id=str(form.get('entity_id') or '').strip(),
         entity_name=str(form.get('entity_name') or '').strip(),
         entity_kind=str(form.get('entity_kind') or '').strip(),
@@ -718,7 +719,7 @@ async def save_configuration(request: Request):
     try:
         configuration = _configuration_from_form(form, existing=existing)
         from modules.hfl_shares.personalization import bind, unbound_template
-        if configuration.entity_id:
+        if configuration.entity_id or configuration.entity_ids:
             configuration = await asyncio.to_thread(bind, configuration)
         saved = store.save_configuration(unbound_template(configuration))
     except (TypeError, ValueError) as exc:
@@ -1159,10 +1160,12 @@ async def update_share_from_recipe(request: Request, share_id: str):
     configuration = store.get_configuration(grant.configuration_id)
     if not configuration:
         raise HTTPException(status_code=409, detail="The original saved recipe is no longer available.")
+    bound_entities = grant.snapshot.filters.get('entities') or []
     bound_entity = grant.snapshot.filters.get('entity')
     if bound_entity:
         configuration = replace(configuration, entity_id=bound_entity['id'], entity_name=bound_entity['label'],
-                                entity_kind=bound_entity['kind'], recipient=grant.snapshot.recipient)
+                                entity_kind=bound_entity['kind'], entity_ids=tuple(e['id'] for e in bound_entities),
+                                entities=tuple(bound_entities), recipient=grant.snapshot.recipient)
     try:
         secret_options = _secret_snapshot_options(request, configuration)
         def rebuild():
@@ -1284,7 +1287,7 @@ async def generate_instant_share(request: Request, configuration_id: str = ''):
         saved,
         auth_mode="qr",
         allowed_email="",
-        references_enabled=saved.references_enabled if saved.entity_id or saved.entity_template else True,
+        references_enabled=saved.references_enabled if saved.entity_id or saved.entity_ids or saved.entity_template else True,
         ttl_seconds=86_400,
         no_expiry=False,
         device_limit=1,
@@ -1345,7 +1348,9 @@ async def generate_instant_share(request: Request, configuration_id: str = ''):
 def _share_with_configuration(form):
     from modules.hfl_shares.personalization import bind
     from modules.hfl_corpus.workspace_views import listing
-    identity = str(form.get('entity_id') or '').strip()
+    identities = tuple(dict.fromkeys(form.getlist('entity_ids') or ([str(form.get('entity_id'))] if form.get('entity_id') else [])))
+    identity = identities[0] if identities else ''
+    recipient = str(form.get('recipient') or '').strip()
     if not identity:
         raise ValueError('Choose an entity before sharing.')
     if form.get('workspace_confirmed') != 'on':
@@ -1360,19 +1365,19 @@ def _share_with_configuration(form):
         template = get_share_store().get_configuration(template_id)
         if not template or not template.entity_template:
             raise ValueError('The entity template is unavailable. Reload the page and choose again.')
-        cfg = bind(replace(template, id='', entity_id=identity, entity_name='', entity_kind='',
-            recipient='', sources=sources, entity_template=form.get('entity_template') == 'on',
+        cfg = bind(replace(template, id='', entity_id=identity, entity_ids=identities, entities=(), entity_name='', entity_kind='',
+            recipient=recipient, sources=sources, entity_template=form.get('entity_template') == 'on',
             live_updates=False, references_enabled=False, ttl_seconds=86400, no_expiry=False,
             activity={**template.activity, 'workspace_ids':workspaces}))
         return replace(cfg, activity={**cfg.activity, 'graph_view':{
-            **cfg.activity.get('graph_view', {}), 'preset':'people' if cfg.entity_kind == 'people' else 'timeline'}})
-    cfg = bind(ShareConfiguration(id='', name='Shared activity', recipient='', entity_id=identity,
+            **cfg.activity.get('graph_view', {}), 'preset':'people' if all(e['kind'] == 'people' for e in cfg.entities) else 'timeline'}})
+    cfg = bind(ShareConfiguration(id='', name='Shared activity', recipient=recipient, entity_id=identity, entity_ids=identities,
         sources=sources, entity_template=form.get('entity_template') == 'on', ttl_seconds=86400,
         references_enabled=False, live_updates=False,
         activity={'version':1, 'sections':['entries','actions','ideas','boards','plans','graph'],
                   'workspace_ids':workspaces}))
     return replace(cfg, name=('Activity with ' + cfg.entity_name)[:120],
-                   activity={**cfg.activity, 'graph_view':{'preset':'people' if cfg.entity_kind == 'people' else 'timeline'}})
+                   activity={**cfg.activity, 'graph_view':{'preset':'people' if all(e['kind'] == 'people' for e in cfg.entities) else 'timeline'}})
 
 
 @owner_router.post('/share-with/review')

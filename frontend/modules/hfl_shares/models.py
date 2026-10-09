@@ -59,8 +59,13 @@ class ShareConfiguration:
     entity_name: str = ""
     entity_kind: str = ""
     entity_template: bool = False
+    entity_ids: tuple[str, ...] = ()
+    entities: tuple[dict[str, str], ...] = ()
 
     def __post_init__(self) -> None:
+        if not isinstance(self.entity_ids, (tuple, list)) or any(not isinstance(value, str) or not value.strip() or len(value) > 500 for value in self.entity_ids):
+            raise ValueError('Entity selections must contain valid entity IDs.')
+        object.__setattr__(self, 'entity_ids', tuple(dict.fromkeys(self.entity_ids)))
         if type(self.from_days) is not int or self.from_days not in {0, 15, 30, 90}:
             raise ValueError("From days must be None, 15, 30, or 90.")
         if self.activity:
@@ -79,7 +84,7 @@ class ShareConfiguration:
         # the owner can supply one, but every new form submission validates it.
         if any(len(value) > 500 for value in (self.entity_id, self.entity_name, self.entity_kind)):
             raise ValueError("Entity values must be 500 characters or fewer.")
-        if not self.recipient.strip() and not self.id and not self.entity_template and not self.entity_id:
+        if not self.recipient.strip() and not self.id and not self.entity_template and not self.entity_id and not self.entity_ids:
             raise ValueError("Recipient is required.")
         if len(self.recipient) > 500:
             raise ValueError("Recipient must be 500 characters or fewer.")

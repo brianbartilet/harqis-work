@@ -954,9 +954,9 @@ responsive navigation, corpus filtering, and reference downloads.
 
 #### Workspace context sharing
 
-Personalized recipes support one canonical entity of any available type. The separate
+Personalized recipes combine multiple canonical entities of any available types. The separate
 **Share with** accordion and owner-saved entity templates combine filtered entity activity
-with optional workspace objects. The selected name fills Recipient. The preview
+with optional workspace objects. The first selected name prefills an editable Recipient; overlapping content is deduplicated. The preview
 explains supporting content. The accordion offers Review and a disposable QR with
 a 24-hour redemption window followed by a full 24-hour session. Other
 personalized Instant Share paths respect reference

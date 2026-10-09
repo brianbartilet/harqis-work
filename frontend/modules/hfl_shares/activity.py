@@ -160,9 +160,9 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
     direct_links = set()
     if personalized:
         for link in data.get('links', []):
-            if link.get('source') == configuration.entity_id:
+            if link.get('source') in configuration.entity_ids:
                 direct_links.add(link.get('target'))
-            if link.get('target') == configuration.entity_id:
+            if link.get('target') in configuration.entity_ids:
                 direct_links.add(link.get('source'))
 
     def evidence_match(item):
@@ -207,7 +207,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
 
     if personalized:
         # One explicit relationship hop; co-mentioned entities never seed another corpus scan.
-        seeds = {configuration.entity_id, *('entry:' + i for i in selected_entries if 'entry:' + i not in excluded)}
+        seeds = {*configuration.entity_ids, *('entry:' + i for i in selected_entries if 'entry:' + i not in excluded)}
         seeds.update(identity for identity, item in raw.items() if evidence_match(item))
         for link in data.get('links', []):
             for origin, target in [(link.get('source'), link.get('target')), (link.get('target'), link.get('source'))]:
@@ -263,7 +263,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
         subset = tuple(replace(d, entries=tuple(e for e in d.entries if _entry_key(d, e.anchor, e.text) in board_entry_ids)) for d in documents)
         board_configuration = replace(configuration, activity={}, sources=('__all__',), tags=(), topic='',
                                       corpus_scope='', date_from='', date_to='', from_days=0,
-                                      entity_id='', entity_name='', entity_kind='', entity_template=False)
+                                      entity_id='', entity_name='', entity_kind='', entity_ids=(), entities=(), entity_template=False)
         board_snapshot = build_snapshot(board_configuration, subset, allow_secrets=allow_secrets, secret_tags=secret_tags,
                                         enabled_reference_ids=enabled_reference_ids, disabled_reference_ids=disabled_reference_ids)
         published_entries = tuple({e.id: e for e in [*published_entries, *board_snapshot.entries]}.values())

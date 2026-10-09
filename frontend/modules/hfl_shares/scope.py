@@ -163,10 +163,10 @@ def build_snapshot(
         entity_mentions = tuple(mentions_for_documents(documents))
         activity_context = load_context()
         entity_entries = {row['id'] for row in entity_mentions
-                          if any(m['id'] == configuration.entity_id for m in row.get('mentions', []))}
+                          if any(m['id'] in configuration.entity_ids for m in row.get('mentions', []))}
         for link in activity_context.get('links', []):
             for origin, target in [(link.get('source'), link.get('target', '')), (link.get('target'), link.get('source', ''))]:
-                if origin == configuration.entity_id and target.startswith('entry:'):
+                if origin in configuration.entity_ids and target.startswith('entry:'):
                     entity_entries.add(target[6:])
     from modules.hfl_shares.activity_models import selection
     controls = selection(configuration)
@@ -323,6 +323,7 @@ def build_snapshot(
             else configuration.sources
         ),
         filters={
+            'entities': list(configuration.entities),
             'entity': {'id': configuration.entity_id, 'label': configuration.entity_name,
                        'kind': configuration.entity_kind} if configuration.entity_id else None,
             "tags": list(configuration.tags),

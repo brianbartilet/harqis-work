@@ -110,13 +110,21 @@
   .instant-share-button:hover { background:#1e3a8a; color:#eff6ff; }
   .instant-share-button:focus-visible { outline:2px solid #60a5fa; outline-offset:2px; }
   .recipe-header-actions { display:flex; flex:0 0 auto; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:.55rem; }
+  .selected-entity-cards { display:grid; gap:.5rem; margin:.5rem 0; }
+  .selected-entity-card { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.65rem; border:1px solid #155e75; background:#0b2335; border-radius:.65rem; }
+  .selected-entity-card > span { min-width:0; overflow-wrap:anywhere; }
+  .selected-entity-card .entity-result-kind { display:inline-block; margin-top:.3rem; }
+  .selected-entity-card button { flex:0 0 auto; }
+  .selected-entity-card { background:color-mix(in srgb, var(--entity-color, #95a7c3) 10%, #0f172a); }
+  .share-with-panel .share-recipient-field { margin-top:1rem; }
   .share-with-panel > form { border-top:1px solid #334155; padding-top:1rem; }
   .share-with-panel .entity-result-card { display:flex; flex-direction:column; align-items:flex-start; gap:.6rem; min-width:0; padding:.8rem; border:1px solid #334155; border-radius:.65rem; background:#111d30; color:#e2e8f0; text-align:left; cursor:pointer; transition:background .15s,border-color .15s; }
   .share-with-panel .entity-result-card:hover { background:#172c43; border-color:#38bdf8; }
+  .share-with-panel .selected-entity-card { border-color:color-mix(in srgb, var(--entity-color, #95a7c3) 45%, #334155); border-left:3px solid var(--entity-color, #95a7c3); }
   .entity-result-card:focus-visible { outline:2px solid #38bdf8; outline-offset:2px; }
   .entity-result-name { font-size:.875rem; font-weight:600; line-height:1.4; overflow-wrap:anywhere; }
   .entity-result-meta { display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; margin-top:auto; }
-  .entity-result-kind { border:1px solid #155e75; border-radius:999px; padding:.1rem .45rem; background:#083344; color:#a5f3fc; font-size:.65rem; line-height:1.5; text-transform:capitalize; }
+  .entity-result-kind { border:1px solid color-mix(in srgb, var(--entity-color, #95a7c3) 45%, transparent); border-radius:999px; padding:.1rem .45rem; background:color-mix(in srgb, var(--entity-color, #95a7c3) 12%, #0f172a); color:var(--entity-color, #95a7c3); font-size:.65rem; line-height:1.5; text-transform:capitalize; }
   .entity-result-count { color:#94a3b8; font-size:.7rem; white-space:nowrap; }
   .share-with-panel .share-workspace-field { margin-top:1.25rem; }
   .share-workspace-dot { display:inline-block; flex:0 0 .6rem; width:.6rem; height:.6rem; border-radius:50%; box-shadow:0 0 0 1px rgba(255,255,255,.15); }
@@ -238,11 +246,12 @@
         <input type="hidden" name="configuration_id" value="{{ cfg.id if cfg else '' }}">
         {% if cfg %}{% for reference_id in cfg.disabled_reference_ids %}<input type="hidden" name="disabled_reference_ids" value="{{ reference_id }}" data-disabled-reference>{% endfor %}{% endif %}
         {% include "modules/hfl_shares/_activity_controls.html" %}
+        {% if cfg %}{% for identity in (cfg.entity_ids or ([cfg.entity_id] if cfg.entity_id else [])) %}<input type="hidden" name="entity_ids" value="{{ identity }}">{% endfor %}{% endif %}
         <input type="hidden" name="entity_id" value="{{ cfg.entity_id if cfg else '' }}">
         <input type="hidden" name="entity_name" value="{{ cfg.entity_name if cfg else '' }}">
         <input type="hidden" name="entity_kind" value="{{ cfg.entity_kind if cfg else '' }}">
         {% if cfg and cfg.entity_template %}<input type="hidden" name="entity_template" value="on">{% endif %}
-        {% if cfg and cfg.entity_id %}<p data-bound-entity-note class="field share-scope-note">Personalized for {{ cfg.entity_name }}. Use Share with to choose another entity.</p>{% endif %}
+        {% if cfg and cfg.entity_id %}<p data-bound-entity-note class="field share-scope-note">Activity from {{ cfg.entities|map(attribute='label')|join(', ') if cfg.entities else cfg.entity_name }}. Use Share with to choose entities.</p>{% endif %}
         {% if cfg and cfg.entity_id and '__all__' in cfg.sources %}<input type="hidden" name="sources" value="__all__" data-bound-all-sources>{% endif %}
         <div class="two">
           <div class="field"><label for="name">Name</label><input class="control" id="name" name="name" required value="{{ cfg.name if cfg else '' }}" placeholder="Work context"></div>
@@ -450,7 +459,7 @@
           </div>
           <p class="mt-1 text-xs text-slate-500">{{ "All sources" if all_sources_value in item.sources else item.sources|join(', ') }}</p>
           <p class="mt-1 text-xs text-slate-500">{{ row.expiration_summary }}</p>
-          {% if item.entity_template %}<p class="pill">Entity template · choose an entity to share</p>{% elif item.entity_id %}<p class="pill">For {{ item.entity_name or item.recipient }}</p>{% endif %}
+          {% if item.entity_template %}<p class="pill">Entity template · choose an entity to share</p>{% elif item.entity_id %}<p class="pill">For {{ item.recipient or item.entity_name }}</p>{% endif %}
         </div>
         {% else %}<p class="mt-2 text-xs text-slate-500">No saved recipes yet.</p>{% endfor %}
         {% if recipe_total_pages > 1 %}
@@ -1016,7 +1025,7 @@
       namedSubmitter = submitter;
       shareNameInput.value = form.querySelector('[name="name"]')?.value || '';
       if (form.querySelector('[name="entity_id"]')?.value) {
-        shareNameInput.value = (shareNameInput.value + ' — ' + form.querySelector('[name="entity_name"]').value).slice(0, 120);
+        shareNameInput.value = (shareNameInput.value + ' — ' + form.querySelector('[name="recipient"]').value).slice(0, 120);
       }
       shareNameInput.setCustomValidity('');
       shareNameDialog.showModal();
