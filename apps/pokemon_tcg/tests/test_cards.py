@@ -10,7 +10,8 @@ def given():
     return ApiServicePokemonTcgCards(CONFIG)
 
 
-@pytest.mark.smoke
+# Daily smoke quarantine: repeated vendor timeouts; see scripts/agents/testing/README.md.
+@pytest.mark.integration
 def test_search_cards(given, call):
     when = call(given.search_cards, q='name:charizard', page_size=3)
     assert_that(when, instance_of(list))

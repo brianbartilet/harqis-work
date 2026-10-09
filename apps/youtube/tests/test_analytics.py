@@ -13,7 +13,8 @@ def given():
     return ApiServiceYouTubeAnalytics(CONFIG)
 
 
-@pytest.mark.smoke
+# Daily smoke quarantine: Analytics API disabled (403); see scripts/agents/testing/README.md.
+@pytest.mark.integration
 def test_get_channel_summary(given):
     end_date = date.today() - timedelta(days=2)
     start_date = end_date - timedelta(days=7)
