@@ -233,9 +233,12 @@
             </div>
 
             {% if (selected_tags or text_query or source or scope) and matching_count %}
-            <details class="mt-3 rounded-lg bg-slate-950/70 ring-1 ring-blue-900/70">
-              <summary hx-get="{{ url_for('hfl_matches', relative_path=document.relative_path) }}?q={{ query | urlencode }}&source={{ source | urlencode }}&scope={{ scope | default('') | urlencode }}{% if show_secrets %}&show_secrets=true{% endif %}"
-                       hx-trigger="click once" hx-target="next .matching-entry-results"
+            <details data-document-matches
+                     hx-get="{{ url_for('hfl_matches', relative_path=document.relative_path).path }}?q={{ query | urlencode }}&source={{ source | urlencode }}&scope={{ scope | default('') | urlencode }}{% if show_secrets %}&show_secrets=true{% endif %}"
+                     hx-trigger="toggle" hx-target="find .matching-entry-results" hx-swap="innerHTML"
+                     hx-request='{"timeout":15000}'
+                     class="mt-3 rounded-lg bg-slate-950/70 ring-1 ring-blue-900/70">
+              <summary
                        class="cursor-pointer px-3 py-2 text-xs font-medium text-emerald-300">{{ matching_count }} matching entries</summary>
               <div class="matching-entry-results border-t border-blue-900/70 p-3 text-xs text-slate-500">Loading matching entries…</div>
             </details>
@@ -383,5 +386,6 @@
 })();
 </script>
 <script defer src="{{ static_asset('js/corpus-workspaces.js') }}"></script>
+<script defer src="{{ static_asset('js/corpus-matches.js') }}"></script>
 <script defer src="{{ static_asset('js/view-visualizer.js') }}"></script>
 {% endblock %}

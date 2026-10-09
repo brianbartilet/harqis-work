@@ -2468,7 +2468,8 @@ def test_selected_tag_result_defers_matching_entry_markup_until_expanded(
     assert "25 matching entries" in response.text
     assert 'data-matching-entry=' not in response.text
     assert "hfl-corpus/matches/2026-07-10.md?q=%23debug" in response.text
-    assert 'hx-trigger="click once"' in response.text
+    assert 'data-document-matches' in response.text
+    assert 'hx-trigger="toggle"' in response.text
 
 
 def test_matching_entry_endpoint_returns_at_most_20_rows(
@@ -2741,7 +2742,7 @@ def test_plain_text_search_shows_clickable_matching_entry_previews(
     assert "Solved a difficult issue" in preview.text
     assert "A different memory" not in preview.text
     assert (
-        'href="http://testserver/hfl-corpus/document/2026-07-10.md#hfl-entry-1-first"'
+        'href="/hfl-corpus/document/2026-07-10.md#hfl-entry-1-first"'
         in preview.text
     )
 
