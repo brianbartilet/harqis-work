@@ -954,6 +954,22 @@ responsive navigation, corpus filtering, and reference downloads.
 
 #### Workspace context sharing
 
+Personalized recipes support one canonical entity of any available type. The separate
+**Share with** accordion and owner-saved entity templates combine filtered entity activity
+with optional workspace objects. The selected name fills Recipient. The preview
+explains supporting content. The accordion offers Review and a disposable QR with
+a 24-hour redemption window followed by a full 24-hour session. Other
+personalized Instant Share paths respect reference
+settings. See the [personalized sharing walkthrough](../docs/info/WORKSPACE-SHARING-GUIDE.md#personalize-a-share-with-one-entity)
+and [implementation boundaries](../docs/info/HFL-CORPUS-SHARING.md#personalized-recipes).
+Relevant checks include `frontend/tests/test_share_personalization.py`, including
+desktop/mobile browser coverage, alongside the existing sharing regressions.
+
+For local review, start the frontend with the machine environment loaded as
+described above, bind it to loopback on an unused port, and open `/sharing`.
+Use a separate `HFL_SHARE_STORE_PATH` and local `HFL_SHARE_PUBLIC_URL` when creating
+test grants. A localhost QR works only on the machine running that instance.
+
 For step-by-step owner instructions, see the [Workspace sharing user guide](../docs/info/WORKSPACE-SHARING-GUIDE.md)
 (QR generation, browser redemption limits, expiry, refresh, and context names).
 
@@ -988,7 +1004,7 @@ share's snapshot and captured live configuration while preserving its URL/QR,
 expiry, access policy, and sessions. Such an update must use the owner-approved
 recipe and preserve existing citation identities and reference permissions.
 
-New standalone recipes default to the last 30 days. **From days** offers None,
+New standalone recipes default to no date restriction. **From days** offers None,
 15, 30, or 90 days and fills Entry date plus the inclusive date range in the
 owner's timezone. Saved presets roll forward for live shares; frozen snapshots
 retain their resolved dates. Editing either date or the date type switches to a

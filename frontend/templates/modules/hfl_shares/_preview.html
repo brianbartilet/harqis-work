@@ -7,6 +7,17 @@
 </div>
 {% elif preview %}
 <section class="rounded-xl border border-slate-700 bg-slate-950 p-4" data-preview-ready>
+  {% if preview.filters.get('entity') %}
+  <div class="message" id="personalized-review">
+    <strong>For {{ preview.recipient }}</strong>
+    <p>Entity-linked activity follows your filters. Workspace and linked board content can add supporting entries. Full records may mention other people.</p>
+    {% if preview.activity.get('inclusion_reasons') %}
+    <details><summary>Why content is included</summary>
+      <ul>{% for entry in preview.all_entries %}<li>{{ entry.moment or entry.header }} — {{ preview.activity.inclusion_reasons.get(entry.id if entry.id in preview.activity.inclusion_reasons else 'entry:' ~ entry.id, 'Entity-linked activity') }}</li>{% endfor %}</ul>
+    </details>
+    {% endif %}
+  </div>
+  {% endif %}
   <input type="hidden" name="reference_selection_initialized" value="1">
   <div data-preview-tab="entries">
   {% set page_size = 50 %}

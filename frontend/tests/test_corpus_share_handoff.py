@@ -55,7 +55,7 @@ def test_recipe_handoff_is_unsaved_and_preview_matches(authenticated_client, han
     draft = client.post('/sharing/from-corpus', data={**data, 'disabled_reference_ids':reference})
     assert draft.status_code == 200
     assert 'This was generated from Activity Corpus on' in draft.text
-    assert 'name="recipient" required maxlength="20" value=""' in draft.text
+    assert 'name="recipient" required maxlength="500" value=""' in draft.text
     assert 'value="created" selected' in draft.text
     assert 'name="disabled_reference_ids" value="'+reference+'"' in draft.text
     assert 'ignored words' not in draft.text

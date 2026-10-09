@@ -253,10 +253,10 @@ def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
     assert "<title>Share Activity · HARQIS</title>" in response.text
     assert ">Share Activity</h1>" in response.text
     assert "Review workspace context, then generate frozen or live read-only shares." in response.text
-    assert response.text.count('class="owner-list-arrow-shell"') == 3
+    assert response.text.count('class="owner-list-arrow-shell"') == 4
     assert ">New recipe</h2>" in response.text
     assert "Verification mode" in response.text
-    assert 'id="recipient" name="recipient" required maxlength="20"' in response.text
+    assert 'id="recipient" name="recipient" required maxlength="500"' in response.text
     assert "Included activity sources" in response.text
     assert 'data-all-sources' not in response.text
     assert '<option value="0" selected>None</option>' in response.text
@@ -603,8 +603,8 @@ def test_non_expiring_share_stays_active_until_revoked_with_bounded_session(
 def test_recipient_is_required_limited_and_legacy_snapshots_remain_readable():
     with pytest.raises(ValueError, match="Recipient is required"):
         _configuration(recipient="")
-    with pytest.raises(ValueError, match="20"):
-        _configuration(recipient="x" * 21)
+    with pytest.raises(ValueError, match="500"):
+        _configuration(recipient="x" * 501)
 
     legacy = ScopeSnapshot.from_record(
         {

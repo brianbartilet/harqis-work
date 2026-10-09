@@ -113,35 +113,91 @@ def test_picker_is_owner_only_and_does_not_return_profiles(authenticated_client,
 
 
 @pytest.mark.parametrize('width', [1440, 390])
-def test_personalized_template_browser(editor_page, entities, sharing_corpus, width, tmp_path):
+def test_share_with_browser(editor_page, entities, sharing_corpus, width, tmp_path, monkeypatch):
     from playwright.sync_api import expect
+    from modules.hfl_corpus import workspace_views
+    monkeypatch.setattr(workspace_views, 'listing', lambda: {'views':[{'id':'work','name':'Default'}]})
     page, client = editor_page
     page.set_viewport_size({'width':width, 'height':1000})
     page.goto('https://editing.test/sharing')
+    page.locator('#recipient').fill('Existing draft')
     page.locator('[data-personalization] > summary').click()
-    page.locator('#quick-template').select_option('entity')
-    page.locator('#entity-search').fill('Alex')
-    page.locator('[data-entity-results] button').filter(has_text='Alex').click()
+    panel = page.locator('[data-share-with-form]')
+    expect(panel.locator('[name="entity_template"]')).not_to_be_checked()
+    expect(panel.locator('[name="all_sources"]')).to_be_checked()
+    expect(panel.locator('#entity-type')).to_have_value('people')
+    expect(panel.locator('[name="share_with_workspaces"]')).to_be_checked()
+    panel.locator('#entity-search').fill('Alex')
+    panel.locator('[data-entity-results] button').filter(has_text='Alex').click()
+    expect(page.locator('#recipient')).to_have_value('Existing draft')
+    panel.locator('[data-personal-review]').click()
     expect(page.locator('#recipient')).to_have_value(entities[0]['label'])
     expect(page.locator('#recipient')).to_have_attribute('readonly', '')
-    page.get_by_role('tab', name='Entries', exact=True).click()
     expect(page.locator('[data-preview-ready]')).to_be_visible(timeout=15000)
     expect(page.locator('[data-preview-ready]')).to_contain_text('Planned the Japan trip')
+    expect(page.locator('[name="graph_view"]')).to_have_value('{"preset":"people"}')
+    expect(page.locator('[data-social-form] [name="configuration_id"]')).to_have_value('')
+    assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
     page.screenshot(path=str(tmp_path / f'personalized-{width}.png'))
-    page.locator('[data-personal-instant]').click()
-    page.locator('[data-personal-instant]').click()
+    panel.locator('[data-personal-instant]').click()
     expect(page.locator('[data-instant-dialog]')).to_be_visible()
     expect(page.locator('[data-instant-references]')).to_have_text('Disabled')
+    expect(page.locator('[data-instant-session]')).to_have_text('24 hours from first redemption')
     page.locator('[data-instant-close]').click()
-    page.get_by_role('tab', name='Details and Filtering', exact=True).click()
-    page.get_by_role('button', name='Save recipe', exact=True).click()
-    expect(page.locator('[name="configuration_id"]')).not_to_have_value('')
-    expect(page.locator('[name="entity_id"]')).to_have_value('')
-    expect(page.locator('#recipient')).to_have_value('')
-    page.locator('#entity-search').fill('Acme')
-    page.locator('[data-entity-results] button').filter(has_text='Acme').click()
-    page.get_by_role('tab', name='Entries', exact=True).click()
-    expect(page.locator('[data-preview-ready]')).not_to_contain_text('Planned the Japan trip', timeout=15000)
+    expect(page.locator('#recipient')).to_have_value(entities[0]['label'])
+
+
+def test_share_with_review_validation(authenticated_client, entities, sharing_corpus):
+    csrf = make_csrf_token('frontend-test-user')
+    for fields in ({}, {'entity_id':'entity:alex'}, {'entity_id':'missing','workspace_confirmed':'on'},
+                   {'entity_id':'entity:alex','workspace_confirmed':'on','share_with_workspaces':'missing'}):
+        response = authenticated_client.post('/sharing/share-with/review', data={'csrf':csrf, **fields})
+        assert response.status_code == 422
+    response = authenticated_client.post('/sharing/share-with/review', data={
+        'csrf':csrf, 'entity_id':'entity:alex','workspace_confirmed':'on','all_sources':'on'})
+    assert response.status_code == 200, response.text
+    cfg = response.json()['configuration']
+    assert cfg['recipient'] == entities[0]['label']
+    assert cfg['activity']['graph_view']['preset'] == 'people'
+    assert not cfg['entity_template'] and not cfg['references_enabled'] and not cfg['live_updates']
+
+
+def test_redemption_starts_full_day_and_is_atomic(entities, sharing_corpus, monkeypatch, tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from datetime import datetime, timedelta, timezone
+    from modules.hfl_shares import models, store as stores
+    clock = [datetime(2026, 1, 1, tzinfo=timezone.utc)]
+    monkeypatch.setattr(stores, 'utc_now', lambda:clock[0])
+    monkeypatch.setattr(models, 'utc_now', lambda:clock[0])
+    store = get_share_store()
+    def create(token, special=86400):
+        return store.create_share(configuration_id='',name='Test',token_hash=token,pin_hash='',auth_mode='qr',
+            allowed_email='',snapshot=build_snapshot(recipe(), (sharing_corpus,)),ttl_seconds=86400,
+            single_use=True,device_limit=1,instant=True,redemption_session_seconds=special)
+    grant = create('full-day')
+    unredeemed = create('unredeemed')
+    legacy = create('legacy', 0)
+    clock[0] += timedelta(hours=23, minutes=59)
+    other_store = stores.ShareStore(store.path)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(store.create_session, grant.id, 'one')
+        second = executor.submit(other_store.create_session, grant.id, 'two')
+        sessions = [first.result(), second.result()]
+    assert sum(result is not None for result in sessions) == 1
+    session_id, deadline = next(result for result in sessions if result)
+    secret = 'one' if sessions[0] else 'two'
+    assert datetime.fromisoformat(deadline) == clock[0] + timedelta(days=1)
+    legacy_session = store.create_session(legacy.id, 'legacy-secret')
+    assert legacy_session[1] == legacy.expires_at
+    assert store.get_share(grant.id).redemption_expires_at == grant.expires_at
+    clock[0] += timedelta(hours=7)
+    assert store.validate_session(session_id, secret)
+    assert not store.create_session(unredeemed.id, 'late')
+    assert not store.validate_session(legacy_session[0], 'legacy-secret')
+    assert not store.create_session(grant.id, 'second')
+    assert store.get_share(grant.id).expires_at == deadline
+    clock[0] = datetime.fromisoformat(deadline)
+    assert not store.validate_session(session_id, secret)
 
 
 def test_explicit_entry_links_and_no_recursive_entity_expansion(entities, context, sharing_corpus, monkeypatch):
@@ -186,3 +242,97 @@ def test_update_from_template_retains_frozen_share_entity(authenticated_client, 
     assert updated.snapshot.recipient == entities[0]['label']
     assert store.get_share_by_token_hash(opaque_hash('personal-test')).id == grant.id
     assert not store.get_configuration(template.id).entity_id
+
+
+def test_share_with_instant_flags_and_cookie_survive_seven_hours(authenticated_client, entities, sharing_corpus, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from itsdangerous import TimestampSigner
+    from starlette.requests import Request
+    from modules.hfl_shares import security, store as stores, models
+    clock = [datetime.now(timezone.utc)]
+    monkeypatch.setattr(stores, 'utc_now', lambda:clock[0])
+    monkeypatch.setattr(models, 'utc_now', lambda:clock[0])
+    monkeypatch.setattr(TimestampSigner, 'get_timestamp', lambda self:int(clock[0].timestamp()))
+    result = authenticated_client.post('/sharing/share-with/instant', data={
+        'csrf':make_csrf_token('frontend-test-user'), 'entity_id':'entity:alex',
+        'all_sources':'on', 'workspace_confirmed':'on'})
+    assert result.status_code == 200, result.text
+    store = get_share_store()
+    with store._connect() as conn:
+        row = conn.execute('SELECT id FROM shares').fetchone()
+    grant = store.get_share(row['id'])
+    assert grant.instant and grant.single_use and grant.device_limit == 1
+    assert grant.redemption_session_seconds == 86400
+    assert not grant.live_configuration and result.json()['references_enabled'] is False
+    assert all(not ref.enabled for entry in grant.snapshot.all_entries for ref in entry.references)
+    session_id, expiry = store.create_session(grant.id, security.opaque_hash('secret'))
+    cookie = security.make_session_cookie(session_id, 'secret')
+    request = Request({'type':'http','headers':[(b'cookie',f'{security.GUEST_COOKIE}={cookie}'.encode())]})
+    clock[0] += timedelta(hours=7)
+    assert security.current_session(request, store)[1] == session_id
+    assert store.get_share(grant.id).expires_at == expiry
+    store.revoke_share(grant.id)
+    assert security.current_session(request, store) is None
+
+
+def test_share_with_template_keeps_rules(authenticated_client, entities, sharing_corpus):
+    cfg = get_share_store().save_configuration(personalization.unbound_template(recipe(
+        entity_template=True, tags=('absent',), activity={'version':1,'sections':['entries','graph'],
+        'excluded_ids':['entry:private']})))
+    result = authenticated_client.post('/sharing/share-with/review', data={
+        'csrf':make_csrf_token('frontend-test-user'), 'entity_id':'entity:alex','template_id':cfg.id,
+        'all_sources':'on','workspace_confirmed':'on'})
+    assert result.status_code == 200, result.text
+    result = result.json()['configuration']
+    assert result['tags'] == ['absent']
+    assert result['activity']['excluded_ids'] == ['entry:private']
+    assert not get_share_store().get_configuration(cfg.id).entity_id
+
+
+@pytest.mark.parametrize('workspaces', [[], [{'id':'a','name':'Default'},{'id':'b','name':'default'}]])
+def test_missing_default_requires_choice_and_failure_keeps_draft(editor_page, entities, sharing_corpus, monkeypatch, workspaces):
+    from playwright.sync_api import expect
+    from modules.hfl_corpus import workspace_views
+    monkeypatch.setattr(workspace_views,'listing',lambda:{'views':workspaces})
+    page, client = editor_page
+    page.goto('https://editing.test/sharing')
+    page.locator('#recipient').fill('Keep draft')
+    page.locator('[data-personalization] > summary').click()
+    page.locator('[data-entity-results] button').filter(has_text='Alex').click()
+    page.locator('[data-personal-review]').click()
+    expect(page.locator('[data-share-with-error]')).to_contain_text('Choose a workspace')
+    expect(page.locator('#recipient')).to_have_value('Keep draft')
+    page.locator('[data-workspace-selector] > summary').click()
+    page.locator('[data-no-workspace]').click()
+    # The entity disappearing between selection and review must fail closed.
+    monkeypatch.setattr(personalization, 'entity_catalog', lambda:[])
+    page.locator('[data-personal-review]').click()
+    expect(page.locator('[data-share-with-error]')).to_contain_text('unavailable or was merged')
+    expect(page.locator('#recipient')).to_have_value('Keep draft')
+    expect(page.locator('[data-share-with-form] [name="entity_id"]')).to_have_value('entity:alex')
+
+
+def test_saved_template_browser_rebind_and_save(editor_page, entities, sharing_corpus, monkeypatch):
+    from playwright.sync_api import expect
+    from modules.hfl_corpus import workspace_views
+    monkeypatch.setattr(workspace_views,'listing',lambda:{'views':[{'id':'work','name':'Default'}]})
+    store=get_share_store()
+    cfg=store.save_configuration(personalization.unbound_template(recipe(entity_template=True,
+        tags=('absent',), activity={'version':1,'sections':['entries','graph'],
+        'workspace_ids':['work'],'excluded_ids':['entry:private']})))
+    page, client=editor_page
+    page.goto('https://editing.test/sharing?configuration_id='+cfg.id)
+    page.locator('[data-personalization] > summary').click()
+    page.locator('[data-entity-results] button').filter(has_text='Alex').click()
+    page.locator('[data-share-with-form] [name="entity_template"]').check()
+    page.locator('[data-personal-review]').click()
+    expect(page.locator('#recipient')).to_have_value(entities[0]['label'])
+    expect(page.locator('[name="excluded_object_ids"]')).to_have_value('entry:private')
+    page.get_by_role('tab',name='Details and Filtering',exact=True).click()
+    page.get_by_role('button',name='Save recipe',exact=True).click()
+    expect(page.locator('#recipient')).to_have_value('')
+    saved_id=page.locator('[data-social-form] [name="configuration_id"]').input_value()
+    saved=store.get_configuration(saved_id)
+    assert saved.entity_template and not saved.entity_id
+    assert saved.tags == ('absent',)
+    assert saved.activity['excluded_ids'] == ['entry:private']

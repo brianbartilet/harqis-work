@@ -95,6 +95,29 @@ from web import SHARE_ASSETS, STATIC_ROOT, page_context, require_user, templates
 
 
 owner_router = APIRouter(prefix="/sharing")
+
+
+@owner_router.get('/personalization-options')
+async def personalization_options(request: Request, q: str = '', kind: str = ''):
+    user, redirect = require_user(request)
+    if redirect:
+        return JSONResponse({'detail': 'Authentication required.'}, status_code=401)
+    from modules.hfl_shares.personalization import entity_catalog
+    from modules.hfl_corpus.workspace_views import listing
+    try:
+        rows = await asyncio.to_thread(entity_catalog)
+        types = sorted({row['kind'] for row in rows})
+        matches = [row for row in rows if (not kind or row['kind'] == kind) and
+                   all(word in row['label'].casefold() for word in q.casefold().split())]
+        workspaces = await asyncio.to_thread(listing)
+        return JSONResponse({'entities': sorted(matches, key=lambda row: (row['label'].casefold(), row['id']))[:50],
+                             'types': types, 'total': len(matches),
+                             'workspaces': [{'id': row['id'], 'name': row['name'], 'color': row.get('color', '#3b82f6')} for row in workspaces['views']]},
+                            headers={'Cache-Control': 'no-store'})
+    except ValueError as exc:
+        return JSONResponse({'detail': str(exc)}, status_code=422, headers={'Cache-Control': 'no-store'})
+
+
 guest_router = APIRouter(prefix="/share")
 _OWNER_RECIPE_PAGE_SIZE = 5
 _OWNER_SHARE_PAGE_SIZE = 5
@@ -329,7 +352,7 @@ def _configuration_from_form(
 ) -> ShareConfiguration:
     settings = get_settings()
     recipient = str(form.get("recipient") or "").strip()
-    if not recipient and not preview:
+    if not recipient and not preview and not form.get('entity_id') and form.get('entity_template') != 'on':
         raise ValueError("Recipient is required.")
     device_limit = int(
         str(form.get("device_limit") or settings.hfl_share_default_device_limit)
@@ -345,6 +368,10 @@ def _configuration_from_form(
         id=str(form.get("configuration_id") or ""),
         name=str(form.get("name") or "").strip() or ("Preview" if preview else ""),
         recipient=recipient or "there",
+        entity_id=str(form.get('entity_id') or '').strip(),
+        entity_name=str(form.get('entity_name') or '').strip(),
+        entity_kind=str(form.get('entity_kind') or '').strip(),
+        entity_template=form.get('entity_template') == 'on',
         description=str(form.get("description") or "").strip(),
         sources=_normalized_sources(form),
         tags=parse_csv(
@@ -690,7 +717,10 @@ async def save_configuration(request: Request):
     notice = "updated" if existing else "saved"
     try:
         configuration = _configuration_from_form(form, existing=existing)
-        saved = store.save_configuration(configuration)
+        from modules.hfl_shares.personalization import bind, unbound_template
+        if configuration.entity_id:
+            configuration = await asyncio.to_thread(bind, configuration)
+        saved = store.save_configuration(unbound_template(configuration))
     except (TypeError, ValueError) as exc:
         return templates.TemplateResponse(
             request,
@@ -1129,6 +1159,10 @@ async def update_share_from_recipe(request: Request, share_id: str):
     configuration = store.get_configuration(grant.configuration_id)
     if not configuration:
         raise HTTPException(status_code=409, detail="The original saved recipe is no longer available.")
+    bound_entity = grant.snapshot.filters.get('entity')
+    if bound_entity:
+        configuration = replace(configuration, entity_id=bound_entity['id'], entity_name=bound_entity['label'],
+                                entity_kind=bound_entity['kind'], recipient=grant.snapshot.recipient)
     try:
         secret_options = _secret_snapshot_options(request, configuration)
         def rebuild():
@@ -1222,18 +1256,25 @@ async def preview_generated_share(
     return response
 
 
+@owner_router.post('/instant')
+@owner_router.post('/share-with/instant')
 @owner_router.post("/configurations/{configuration_id}/instant")
-async def generate_instant_share(request: Request, configuration_id: str):
+async def generate_instant_share(request: Request, configuration_id: str = ''):
     user, redirect = require_user(request)
     if redirect:
         return JSONResponse(
             {"detail": "Authentication required."},
             status_code=401,
         )
-    form = await request.form()
+    form = await request.form(max_fields=_OWNER_SHARE_FORM_MAX_FIELDS)
     _require_csrf(form, user)
     store = get_share_store()
-    saved = store.get_configuration(configuration_id)
+    share_with = request.url.path == '/sharing/share-with/instant'
+    try:
+        saved = (await asyncio.to_thread(_share_with_configuration, form) if share_with else
+                 store.get_configuration(configuration_id) if configuration_id else _configuration_from_form(form))
+    except (ValueError, TypeError) as exc:
+        return JSONResponse({'detail': str(exc)}, status_code=422)
     if not saved:
         return JSONResponse(
             {"detail": "The saved recipe no longer exists."},
@@ -1243,7 +1284,7 @@ async def generate_instant_share(request: Request, configuration_id: str):
         saved,
         auth_mode="qr",
         allowed_email="",
-        references_enabled=True,
+        references_enabled=saved.references_enabled if saved.entity_id or saved.entity_template else True,
         ttl_seconds=86_400,
         no_expiry=False,
         device_limit=1,
@@ -1265,7 +1306,7 @@ async def generate_instant_share(request: Request, configuration_id: str):
         link = f"{base}/share/access/{public_token}"
         grant = store.create_share(
             configuration_id=configuration.id,
-            name=configuration.name,
+            name=(configuration.name + ' — ' + snapshot.recipient)[:120] if configuration.entity_id else configuration.name,
             token_hash=opaque_hash(public_token),
             pin_hash="",
             auth_mode="qr",
@@ -1279,6 +1320,7 @@ async def generate_instant_share(request: Request, configuration_id: str):
             single_use=True,
             device_limit=1,
             instant=True,
+            redemption_session_seconds=86400 if share_with else 0,
         )
         record_share_audit(event="created", share_id=grant.id)
     except (TypeError, ValueError) as exc:
@@ -1290,12 +1332,67 @@ async def generate_instant_share(request: Request, configuration_id: str):
             "expires": "1 day",
             "devices": 1,
             "single_use": True,
-            "references_enabled": True,
+            "references_enabled": configuration.references_enabled,
+            "session_duration": '24 hours from first redemption' if share_with else _session_duration_summary(),
+            "redemption_window": '24 hours from creation' if share_with else '',
         }
     )
     response.headers["Cache-Control"] = "no-store"
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
+
+
+def _share_with_configuration(form):
+    from modules.hfl_shares.personalization import bind
+    from modules.hfl_corpus.workspace_views import listing
+    identity = str(form.get('entity_id') or '').strip()
+    if not identity:
+        raise ValueError('Choose an entity before sharing.')
+    if form.get('workspace_confirmed') != 'on':
+        raise ValueError('Choose a workspace or explicitly choose no workspace context.')
+    workspaces = list(dict.fromkeys(form.getlist('share_with_workspaces')))
+    available = {row['id'] for row in listing()['views']}
+    if set(workspaces) - available:
+        raise ValueError('A selected workspace is unavailable. Refresh and choose again.')
+    sources = (ALL_SOURCES,) if form.get('all_sources') == 'on' else tuple(form.getlist('sources'))
+    template_id = str(form.get('template_id') or '')
+    if template_id:
+        template = get_share_store().get_configuration(template_id)
+        if not template or not template.entity_template:
+            raise ValueError('The entity template is unavailable. Reload the page and choose again.')
+        cfg = bind(replace(template, id='', entity_id=identity, entity_name='', entity_kind='',
+            recipient='', sources=sources, entity_template=form.get('entity_template') == 'on',
+            live_updates=False, references_enabled=False, ttl_seconds=86400, no_expiry=False,
+            activity={**template.activity, 'workspace_ids':workspaces}))
+        return replace(cfg, activity={**cfg.activity, 'graph_view':{
+            **cfg.activity.get('graph_view', {}), 'preset':'people' if cfg.entity_kind == 'people' else 'timeline'}})
+    cfg = bind(ShareConfiguration(id='', name='Shared activity', recipient='', entity_id=identity,
+        sources=sources, entity_template=form.get('entity_template') == 'on', ttl_seconds=86400,
+        references_enabled=False, live_updates=False,
+        activity={'version':1, 'sections':['entries','actions','ideas','boards','plans','graph'],
+                  'workspace_ids':workspaces}))
+    return replace(cfg, name=('Activity with ' + cfg.entity_name)[:120],
+                   activity={**cfg.activity, 'graph_view':{'preset':'people' if cfg.entity_kind == 'people' else 'timeline'}})
+
+
+@owner_router.post('/share-with/review')
+async def review_share_with(request: Request):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    form = await request.form(max_fields=_OWNER_SHARE_FORM_MAX_FIELDS)
+    _require_csrf(form, user)
+    try:
+        configuration = await asyncio.to_thread(_share_with_configuration, form)
+        preview = await asyncio.to_thread(_build_preview_snapshot, request, configuration, ())
+        markup = templates.env.get_template('modules/hfl_shares/_preview.html').render(
+            request=request, preview=preview, preview_error='', preview_answer='',
+            preview_question='', suggested_prompts=_suggested_prompts(preview))
+        return JSONResponse({'configuration':configuration.to_record(), 'preview':markup},
+                            headers={'Cache-Control':'no-store'})
+    except (ValueError, TypeError) as exc:
+        # Fetch submission keeps the accordion and main draft intact on failure.
+        return JSONResponse({'detail': str(exc)}, status_code=422)
 
 
 def _manifesto_fragment(request: Request) -> HTMLResponse:
@@ -1436,7 +1533,7 @@ def _access_context(
         "error": error,
         "expires_at_display": _expiry_display(grant),
         "share_recipient": grant.snapshot.recipient,
-        "session_duration": _session_duration_summary(),
+        "session_duration": _session_duration_summary(grant),
     }
 
 
@@ -1731,8 +1828,8 @@ def _duration_summary(seconds: int) -> str:
     return f"expires after {days} days"
 
 
-def _session_duration_summary() -> str:
-    seconds = hfl_share_session_ttl()
+def _session_duration_summary(grant: ShareGrant | None = None) -> str:
+    seconds = (grant.redemption_session_seconds if grant else 0) or hfl_share_session_ttl()
     summary = _duration_summary(seconds)
     return summary.removeprefix("expires in ").removeprefix("expires after ")
 

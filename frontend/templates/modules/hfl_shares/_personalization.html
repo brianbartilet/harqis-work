@@ -1,25 +1,48 @@
-<details class="expand-panel mb-4" data-personalization {% if cfg and (cfg.entity_id or cfg.entity_template) %}open{% endif %}>
-  <summary>Personalize for an entity</summary>
-  <div class="p-4">
-    <div class="field"><label for="quick-template">Quick template</label>
-      <select class="control" id="quick-template"><option value="">Keep current recipe</option><option value="entity">Entity activity</option><option value="workspace">Entity activity + workspace context</option></select>
+<details class="panel owner-list-panel share-with-panel" data-personalization>
+  <summary>
+    <span><span class="block text-base font-semibold text-white">Share with</span>
+      <span class="mt-1 block text-xs font-normal text-slate-400">Personalize a recipe or one-time QR for someone.</span></span>
+    <span class="owner-list-arrow-shell" aria-hidden="true"><svg class="owner-list-arrow h-4 w-4 transition" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg></span>
+  </summary>
+  <form data-share-with-form class="mt-4">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="entity_id" value="">
+    <input type="hidden" name="workspace_confirmed" value="">
+    {% if cfg and cfg.entity_template %}
+    <input type="hidden" name="template_id" value="{{ cfg.id }}">
+    <script type="application/json" data-personal-template>{{ cfg.to_record()|tojson }}</script>
+    <p class="share-scope-note">Using saved template: {{ cfg.name }}. Its filters and exclusions remain in effect.</p>
+    {% endif %}
+    <label class="check"><input type="checkbox" name="entity_template">Save as a reusable entity template</label>
+    <label class="check"><input type="checkbox" name="all_sources" checked>All sources for this entity</label>
+    <div data-share-with-sources hidden><p class="share-scope-note">Choose sources:</p>
+      {% for source in available_sources %}<label class="check"><input type="checkbox" name="sources" value="{{ source }}">{{ source }}</label>{% endfor %}
     </div>
-    <label class="check"><input type="checkbox" name="entity_template" {% if cfg and cfg.entity_template %}checked{% endif %}>Save as a reusable entity template</label>
-    <label class="check"><input type="checkbox" data-entity-all-sources {% if cfg and (cfg.entity_id or cfg.entity_template) and '__all__' in cfg.sources %}checked{% endif %}>All sources for this entity</label>
-    <p class="share-scope-note">Templates keep these rules and exclusions and ask for one entity each time. Saving a template clears its recipient.</p>
-    <input type="hidden" name="entity_id" value="{{ cfg.entity_id if cfg else '' }}">
-    <input type="hidden" name="entity_name" value="{{ cfg.entity_name if cfg else '' }}">
-    <input type="hidden" name="entity_kind" value="{{ cfg.entity_kind if cfg else '' }}">
-    <div class="two">
-      <div class="field"><label for="entity-type">Entity type</label><select id="entity-type" class="control"><option value="">All types</option></select></div>
-      <div class="field"><label for="entity-search">Find an entity</label><input type="search" class="control" id="entity-search" autocomplete="off" placeholder="Search a name"></div>
-    </div>
+    <p class="share-scope-note">Select one entity, then review the recipe or create a one-time QR. References are off and content is frozen.</p>
+    <div class="field"><label for="entity-type">Entity type</label><select id="entity-type" class="control"><option value="people">People</option></select></div>
+    <div class="field"><label for="entity-search">Find an entity</label><input type="search" class="control" id="entity-search" autocomplete="off" placeholder="Search a name"></div>
     <p data-entity-status role="status" class="share-scope-note"></p>
     <div data-entity-results class="selector-options" aria-label="Matching entities"></div>
-    <p data-entity-selected>{{ cfg.entity_name if cfg else '' }}</p>
+    <p data-entity-selected class="share-scope-note">Choose one entity to personalize this share.</p>
     <button class="btn btn-soft" type="button" data-clear-entity>Clear entity</button>
-    <fieldset class="field"><legend>Add workspace context (optional)</legend><div data-personal-workspaces></div></fieldset>
-    <p class="share-scope-note">Entity activity follows the recipe filters. Selected workspaces add their enabled objects and supporting entries even when they do not mention this entity. Review other people's mentions and attachments before sharing.</p>
-    <a class="text-sky-300" href="/sharing#personalized-review" data-personal-review>Review included content in the Entries, Actions, Boards, Plans and Graph tabs.</a>
-  </div>
+    <div class="field share-workspace-field">
+      <label id="share-workspaces-label">Add workspace context</label>
+      <details class="selector share-workspace-selector" data-workspace-selector>
+        <summary aria-labelledby="share-workspaces-label share-workspaces-summary">
+          <span id="share-workspaces-summary" data-workspace-summary>Choose workspaces</span>
+          <svg class="selector-arrow h-5 w-5 shrink-0 text-blue-400 transition" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
+        </summary>
+        <div class="selector-menu">
+          <p class="share-scope-note">Select one or more workspaces.</p>
+          <div data-personal-workspaces></div>
+          <button class="btn btn-soft" type="button" data-no-workspace>No workspace context</button>
+        </div>
+      </details>
+    </div>
+    <p class="share-scope-note">Workspace objects and their supporting entries can be included even when they do not mention this entity.</p>
+    <p class="share-scope-note">Instant QR: redeem within 24 hours; one successful redemption starts a full 24-hour session.</p>
+    <p class="message error" role="alert" data-share-with-error hidden></p>
+    <div class="actions"><button class="btn btn-main" type="submit" data-personal-review>Review</button>
+      <button class="btn instant-share-button" type="button" data-personal-instant>Instant Share</button></div>
+  </form>
 </details>

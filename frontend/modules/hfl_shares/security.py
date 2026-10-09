@@ -171,7 +171,9 @@ def current_session(
     try:
         payload = _serializer("hfl-share-guest-session").loads(
             token,
-            max_age=hfl_share_session_ttl(),
+            # Database session expiry remains authoritative for every grant,
+            # including legacy sessions with the shorter configured duration.
+            max_age=max(hfl_share_session_ttl(), 86400),
         )
         session_id = str(payload.get("session_id") or "")
         secret = str(payload.get("secret") or "")

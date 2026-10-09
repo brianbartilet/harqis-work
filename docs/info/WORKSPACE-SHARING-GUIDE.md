@@ -14,14 +14,15 @@ For implementation and administration, see [Activity Corpus Sharing](HFL-CORPUS-
    with eligible context preselected. Alternatively open **Express > Share
    Activity** (`/sharing`) to build a recipe yourself.
 2. Give the recipe a name and recipient label. Review **Details and Filtering**,
-   including sources, tags and dates. New standalone recipes start with the last
-   30 days; a workspace handoff retains its filters. A name is not a permission
+   including sources, tags and dates. New standalone recipes start without a date
+   restriction and require source selection; a workspace handoff retains its filters. A name is not a permission
    boundary: inspect the selected content, not just the label.
 3. Review **Entries**, **Actions and Ideas**, **Boards**, **Plans**, **Graph**, and
    **Agent**. New recipes include the content types by default; entries are
    required. Exclude anything the audience should not see. Workspace-linked
    objects can remain included independently of entry date filters. Board
-   members outside the workspace require per-board opt-in. Completed actions
+   members outside the workspace require per-board opt-in for ordinary recipes;
+   personalized recipes include eligible members of linked boards. Completed actions
    and dismissed ideas are excluded by default.
 4. Expand **Access, expiry, and reference controls**. Choose the access mode
    (QR, PIN, email OTP, or manual approval), expiry, concurrent-session cap and
@@ -80,6 +81,59 @@ expiry, one concurrent session and only the first successful session. It enables
 reference sharing subject to the recipe's reference exclusions. It is not added
 to **Generated shares**. Use normal **Generate snapshot and QR** when you need a
 managed share with the access settings you selected and a reopenable handoff.
+
+### Personalize a share with one entity
+
+1. Expand **Share with** above **Saved recipes**. This accordion has its own
+   controls and leaves your current recipe untouched until you choose **Review**.
+2. Defaults are **People**, **All sources for this entity** on, **Save as a
+   reusable entity template** off, and the workspace named **Default** selected.
+   If there is no unique Default workspace, choose a workspace or explicitly
+   choose **No workspace context**. References start off and content is frozen.
+3. Search for a person and select a result. Cards show the name, entity-type pill
+   and linked-entry count. Other entity types are also available; one entity is
+   supported per share.
+4. Open the **Add workspace context** dropdown to select one or more workspaces.
+   Workspace objects and supporting entries can be included even when they do not
+   mention the selected entity.
+5. Choose **Review** to load an unsaved recipe into the normal editor. The entity's
+   canonical name fills **Recipient**. Review Entries, Actions and Ideas, Boards,
+   Plans, Graph and Agent as usual. People selections start with the **People**
+   graph preset. Refine filters, exclude objects and check inclusion reasons.
+6. To reuse the rules later, enable **Save as a reusable entity template** before
+   Review, refine the recipe, and choose **Save recipe**. Saving clears the person
+   and recipient while keeping filters and exclusions. Load that saved template,
+   open Share with and choose the next entity; its saved rules remain in effect.
+7. For an immediate, disposable QR, use **Instant Share** inside the accordion.
+   It uses the accordion's selections, independently of subsequent main-editor
+   changes. Use **Generate snapshot and QR** in the editor for a managed share
+   that includes your detailed edits.
+
+The accordion's Instant QR can be redeemed once within **24 hours of creation**.
+The first successful redemption starts a **full 24-hour session** on that browser,
+including when the QR is scanned near its redemption deadline. Revisiting resumes
+that session without extending it. A second browser cannot redeem it; revocation
+or session expiry ends access. For example, a QR created Monday at 10:00 and
+redeemed Tuesday at 09:00 gives access until Wednesday at 09:00. An unredeemed QR
+expires Tuesday at 10:00. Other Instant Share paths retain their existing timing.
+Instant shares are not listed under Generated shares and cannot be reopened there.
+
+Errors appear in the accordion and preserve its choices and the main draft.
+
+Selecting Alex does not authenticate Alex. QR possession still grants access in
+QR mode. Full records remain intact and can mention other people; hiding a graph
+node does not redact names or attachment contents. Missing extraction can omit
+relevant activity. A merged or removed entity must be selected again; lookup
+failure never falls back to an unrestricted share.
+
+Generated shares keep their selected entity independently of the template.
+**Update from saved recipe** preserves the share's bound entity while applying
+the saved rules. Live shares use their captured binding and inclusion policies;
+new relationships can change their scope, so keep snapshots frozen when review
+must cover exactly what is published.
+
+See [personalization implementation and boundaries](HFL-CORPUS-SHARING.md#personalized-recipes)
+for the exact relationship rules and validation coverage.
 
 ## Expiry, refresh and deletion
 

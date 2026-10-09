@@ -72,8 +72,9 @@ def test_preset_controls_and_error_recovery(editor_page, context, sharing_corpus
     page.goto('https://editing.test/sharing')
     page.locator('summary').filter(has_text='Tags, dates, and topic').click()
     preset = page.locator('#share-from-days')
-    expect(preset).to_have_value('30')
-    expect(page.locator('#date-from')).to_have_value('2026-06-11')
+    expect(preset).to_have_value('0')
+    expect(page.locator('#date-from')).to_have_value('')
+    page.locator('[data-specific-source]').evaluate_all("els => els.forEach(el => {el.checked = true; el.dispatchEvent(new Event('change', {bubbles:true}));})")
     for days in (15, 90, 30):
         preset.select_option(str(days))
         expect(page.locator('#date-from')).to_have_value(date_presets(date(2026, 7, 10))[str(days)]['date_from'])

@@ -151,8 +151,23 @@ def build_snapshot(
     secret_tags: tuple[str, ...] = (),
 ) -> ScopeSnapshot:
     from modules.hfl_shares.date_filters import resolve_date_preset
+    from modules.hfl_shares.personalization import bind
+    configuration = bind(configuration)
     configuration = resolve_date_preset(configuration)
     all_documents = documents
+    entity_entries = None
+    entity_mentions = None
+    activity_context = None
+    if configuration.entity_id:
+        from modules.hfl_shares.activity import mentions_for_documents, load_context
+        entity_mentions = tuple(mentions_for_documents(documents))
+        activity_context = load_context()
+        entity_entries = {row['id'] for row in entity_mentions
+                          if any(m['id'] == configuration.entity_id for m in row.get('mentions', []))}
+        for link in activity_context.get('links', []):
+            for origin, target in [(link.get('source'), link.get('target', '')), (link.get('target'), link.get('source', ''))]:
+                if origin == configuration.entity_id and target.startswith('entry:'):
+                    entity_entries.add(target[6:])
     from modules.hfl_shares.activity_models import selection
     controls = selection(configuration)
     if configuration.corpus_scope:
@@ -216,6 +231,8 @@ def build_snapshot(
                 continue
             missing_sources.discard(entry.source.casefold())
             entry_id = _entry_key(document, entry.anchor, entry.text)
+            if entity_entries is not None and entry_id not in entity_entries:
+                continue
             if tags and not tags.issubset({tag.casefold() for tag in entry.tags}):
                 continue
             when = _entry_date(entry.header)
@@ -306,6 +323,8 @@ def build_snapshot(
             else configuration.sources
         ),
         filters={
+            'entity': {'id': configuration.entity_id, 'label': configuration.entity_name,
+                       'kind': configuration.entity_kind} if configuration.entity_id else None,
             "tags": list(configuration.tags),
             "date_field": configuration.date_field,
             "from_days": configuration.from_days,
@@ -336,7 +355,7 @@ def build_snapshot(
         from modules.hfl_shares.activity import project
         snapshot = project(configuration, snapshot, all_documents, allow_secrets=allow_secrets, secret_tags=protected_tags,
                            enabled_reference_ids=enabled_reference_ids, disabled_reference_ids=disabled_reference_ids,
-                           matching_ids=matching_ids)
+                           matching_ids=matching_ids, context=activity_context, entity_mentions=entity_mentions)
     return snapshot
 
 

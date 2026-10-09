@@ -125,7 +125,8 @@ def object_view(item, identity, kind):
 
 
 def project(configuration, snapshot, documents, *, allow_secrets=False, secret_tags=(),
-            enabled_reference_ids=None, disabled_reference_ids=None, context=None, matching_ids=None):
+            enabled_reference_ids=None, disabled_reference_ids=None, context=None, matching_ids=None,
+            entity_mentions=None):
     from modules.hfl_corpus.secrets import is_secret_entry
     from modules.hfl_corpus.timeline import entry_evidence_id
     from modules.hfl_shares.scope import _entry_key
@@ -140,6 +141,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
     if configuration.include_secrets and not data.get('_secrets_supported', True):
         raise ValueError('The canonical API needs the workspace-sharing update before secret-backed actions and ideas can be included. Entries-only secret shares remain supported.')
     permitted, matching = set(), set()
+    evidence_entry_ids = {}
     selected_entries = {e.id for e in snapshot.entries} if matching_ids is None else matching_ids
     for document in documents:
         for entry in document.entries:
@@ -148,11 +150,25 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
             identity = _entry_key(document, entry.anchor, entry.text)
             for key in (identity, entry_evidence_id(entry.text)):
                 permitted.add((document.relative_path, key))
-                if identity in selected_entries:
+                evidence_entry_ids[(document.relative_path, key)] = identity
+                if identity in selected_entries and (not configuration.entity_id or 'entry:' + identity not in controls.excluded_ids):
                     matching.add((document.relative_path, key))
     excluded = set(controls.excluded_ids)
     workspaces = set(controls.workspace_ids)
     approved = controls.approved_ids
+    personalized = bool(configuration.entity_id)
+    direct_links = set()
+    if personalized:
+        for link in data.get('links', []):
+            if link.get('source') == configuration.entity_id:
+                direct_links.add(link.get('target'))
+            if link.get('target') == configuration.entity_id:
+                direct_links.add(link.get('source'))
+
+    def evidence_match(item):
+        refs = [r for r in [item.get('source'), *item.get('evidence', [])] if isinstance(r, dict)]
+        return any((r.get('path'), r.get('entry_id')) in matching and
+                   'entry:' + str(r.get('entry_id')) not in excluded for r in refs)
 
     def allowed(item):
         refs = [r for r in [item.get('source'), *item.get('evidence', [])] if isinstance(r, dict) and r.get('entry_id')]
@@ -160,9 +176,11 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
         return (not protected or allow_secrets and configuration.include_secrets) and all(
             (r.get('path'), r['entry_id']) in permitted for r in refs)
 
-    def in_workspace(item):
+    def in_workspace(item, identity=''):
         if workspaces.intersection(item.get('workspace_ids', [])):
             return True
+        if personalized:
+            return identity in direct_links or evidence_match(item)
         refs = [r for r in [item.get('source'), *item.get('evidence', [])] if isinstance(r, dict)]
         if any((r.get('path'), r.get('entry_id')) in matching for r in refs):
             return True
@@ -184,8 +202,28 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
                 continue
             pools[kind][identity] = object_view(item, identity, kind)
             raw[identity] = item
-            if in_workspace(item):
+            if in_workspace(item, identity):
                 eligible[kind].add(identity)
+
+    if personalized:
+        # One explicit relationship hop; co-mentioned entities never seed another corpus scan.
+        seeds = {configuration.entity_id, *('entry:' + i for i in selected_entries if 'entry:' + i not in excluded)}
+        seeds.update(identity for identity, item in raw.items() if evidence_match(item))
+        for link in data.get('links', []):
+            for origin, target in [(link.get('source'), link.get('target')), (link.get('target'), link.get('source'))]:
+                if origin in seeds and target not in excluded:
+                    direct_links.add(target)
+                    for kind in eligible:
+                        if target in pools[kind]:
+                            eligible[kind].add(target)
+
+    def board_eligible(board):
+        if not personalized:
+            return not workspaces or bool(workspaces.intersection(board.get('workspace_ids', [])))
+        return in_workspace(board, 'board:' + board['id']) or any(
+            member not in excluded and (member in {'entry:' + i for i in selected_entries} or
+            any(member in values for values in eligible.values()))
+            for member in board.get('members', []) if member not in board.get('hidden_members', []))
 
     objects = {k: [v for i, v in pools[k].items() if i in eligible[k] and chosen(i, k)]
                if k in controls.sections else [] for k in ('actions', 'ideas', 'plans')}
@@ -193,19 +231,39 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
     board_entry_ids = set()
     for board in data.get('maps', []) if 'boards' in controls.sections else []:
         if (not board.get('active', True) or not allowed(board) or not chosen('board:' + board['id'], 'boards') or
-                workspaces and not workspaces.intersection(board.get('workspace_ids', []))):
+                not board_eligible(board)):
             continue
         for member in board.get('members', []):
             if (not member.startswith('entry:') or member in excluded or member in board.get('hidden_members', []) or
                     approved is not None and 'boards' not in controls.automatic and member not in approved.get('members', [])):
                 continue
-            if member[6:] in selected_entries or board['id'] in controls.outside_board_ids:
+            if member[6:] in selected_entries or board['id'] in controls.outside_board_ids or personalized:
                 board_entry_ids.add(member[6:])
+    if personalized:
+        # Supporting evidence is part of the reviewable publication, not hidden chat context.
+        supporting = [raw[obj['id']] for rows in objects.values() for obj in rows]
+        for board in data.get('maps', []) if 'boards' in controls.sections else []:
+            if not board_eligible(board) or not allowed(board) or not chosen('board:' + board['id'], 'boards') or not board.get('active', True):
+                continue
+            supporting.append(board)
+            supporting.extend(raw[member] for member in board.get('members', [])
+                              if member in raw and member not in excluded and member not in board.get('hidden_members', [])
+                              and (approved is None or 'boards' in controls.automatic or member in approved.get('members', [])))
+            supporting.extend(g for g in data.get('goals', []) if g['id'] == board.get('goal_id')
+                              and allowed(g) and 'goal:' + g['id'] not in excluded
+                              and (approved is None or 'boards' in controls.automatic or 'goal:' + g['id'] in approved.get('members', [])))
+        for item in supporting:
+            for ref in [item.get('source'), *item.get('evidence', [])]:
+                if isinstance(ref, dict) and (ref.get('path'), ref.get('entry_id')) in permitted:
+                    eid = evidence_entry_ids[(ref.get('path'), ref['entry_id'])]
+                    if 'entry:' + eid not in excluded and (approved is None or 'entries' in controls.automatic or eid in approved.get('entries', [])):
+                        board_entry_ids.add(eid)
     if board_entry_ids:
         from modules.hfl_shares.scope import build_snapshot
         subset = tuple(replace(d, entries=tuple(e for e in d.entries if _entry_key(d, e.anchor, e.text) in board_entry_ids)) for d in documents)
         board_configuration = replace(configuration, activity={}, sources=('__all__',), tags=(), topic='',
-                                      corpus_scope='', date_from='', date_to='', from_days=0)
+                                      corpus_scope='', date_from='', date_to='', from_days=0,
+                                      entity_id='', entity_name='', entity_kind='', entity_template=False)
         board_snapshot = build_snapshot(board_configuration, subset, allow_secrets=allow_secrets, secret_tags=secret_tags,
                                         enabled_reference_ids=enabled_reference_ids, disabled_reference_ids=disabled_reference_ids)
         published_entries = tuple({e.id: e for e in [*published_entries, *board_snapshot.entries]}.values())
@@ -225,7 +283,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
     # Derived entity nodes may only come from approved entry evidence. Do not
     # retain owner graph counts, locators, paths, hrefs or unrelated neighbors.
     if published_entries and ('graph' in controls.sections or objects['actions'] or objects['ideas'] or 'boards' in controls.sections):
-        for row in mentions_for_documents(documents):
+        for row in (mentions_for_documents(documents) if entity_mentions is None else entity_mentions):
             origin = 'entry:' + row['id']
             if origin not in entry_nodes:
                 continue
@@ -252,7 +310,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
     for board in data.get('maps', []) if 'boards' in controls.sections else []:
         identity = 'board:' + board['id']
         if (not board.get('active', True) or not allowed(board) or not chosen(identity, 'boards') or
-                workspaces and not workspaces.intersection(board.get('workspace_ids', []))):
+                not board_eligible(board)):
             continue
         view = object_view(board, identity, 'boards')
         raw[identity] = board
@@ -272,7 +330,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
             if approved is not None and 'boards' not in controls.automatic and member not in approved.get('members', []):
                 continue
             for kind in ('actions', 'ideas'):
-                if member in pools[kind] and (member in eligible[kind] or board['id'] in controls.outside_board_ids):
+                if member in pools[kind] and (member in eligible[kind] or board['id'] in controls.outside_board_ids or personalized):
                     obj = pools[kind][member]
                     if not any(o['id'] == member for o in objects[kind]):
                         objects[kind].append(obj)
@@ -286,7 +344,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
                 owner_id = owner_prefix + list_node.get('owner_id', '')
                 # Standalone lists are explicitly board-owned through membership.
                 if (not list_node.get('owner_kind') or owner_id in nodes or
-                        board['id'] in controls.outside_board_ids and owner_id in raw):
+                        (board['id'] in controls.outside_board_ids or personalized) and owner_id in raw):
                     family = [n for n in list_nodes if n['id'] == member or n.get('list_id') == member]
                     for n in family:
                         if n['id'] in excluded or n['id'] in board.get('hidden_members', []):
@@ -332,6 +390,19 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
         for ref in [item.get('source'), *item.get('evidence', [])]:
             if isinstance(ref, dict) and 'entry:' + str(ref.get('entry_id')) in nodes:
                 edges.append({'source': obj['id'], 'target': 'entry:' + ref['entry_id'], 'relation': 'evidence'})
+    if personalized:
+        # Only direct entity neighbors of objects already approved for publication.
+        neighbors = set()
+        for link in data.get('links', []):
+            if link.get('source') in nodes:
+                neighbors.add(link.get('target'))
+            if link.get('target') in nodes:
+                neighbors.add(link.get('source'))
+        if neighbors - nodes.keys() - excluded:
+            from modules.hfl_shares.personalization import entity_catalog
+            for entity in entity_catalog():
+                if entity['id'] in neighbors and entity['id'] not in nodes and entity['id'] not in excluded:
+                    nodes[entity['id']] = {'id':entity['id'], 'label':safe_text(entity['label']), 'kind':entity['kind']}
     edges.extend({'source': e['source'], 'target': e['target'], 'relation': safe_text(e.get('relation'))}
                  for e in data.get('links', []) if e['source'] in nodes and e['target'] in nodes)
     edges = list({(e['source'], e['target'], e['relation']): e for e in edges if e['source'] in nodes and e['target'] in nodes}.values())
@@ -340,6 +411,15 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
     graph_view['positions'] = {key: value for key, value in graph_view['positions'].items() if key in nodes}
     payload = {**objects, 'sections': list(controls.sections), 'boards': boards, 'goals': list(goals.values()), 'connections': graph,
                'graph': {**graph, 'view': graph_view} if 'graph' in controls.sections else {'nodes': [], 'edges': []}}
+    if personalized:
+        reasons = {'entry:' + e.id: 'Entity-linked activity' if e.id in selected_entries else 'Supporting entry'
+                   for e in published_entries}
+        for obj in [*objects['actions'], *objects['ideas'], *objects['plans'], *boards, *goals.values()]:
+            item = raw[obj['id']]
+            reasons[obj['id']] = ('Entity-linked activity' if obj['id'] in direct_links or evidence_match(item)
+                                  else 'Added workspace content' if workspaces.intersection(item.get('workspace_ids', []))
+                                  else 'Linked board content')
+        payload['inclusion_reasons'] = reasons
     evidence = []
     disabled = set(configuration.disabled_reference_ids if disabled_reference_ids is None else disabled_reference_ids)
     enabled = None if enabled_reference_ids is None else set(enabled_reference_ids)

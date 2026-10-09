@@ -136,6 +136,10 @@ class ShareStore:
                 row["name"]
                 for row in connection.execute("PRAGMA table_info(shares)")
             }
+            for column, definition in [('redemption_expires_at', "TEXT NOT NULL DEFAULT ''"),
+                                       ('redemption_session_seconds', 'INTEGER NOT NULL DEFAULT 0')]:
+                if column not in share_columns:
+                    connection.execute(f'ALTER TABLE shares ADD COLUMN {column} {definition}')
             if "no_expiry" not in share_columns:
                 connection.execute(
                     "ALTER TABLE shares "
@@ -324,6 +328,8 @@ class ShareStore:
             redeemed_at=row["redeemed_at"],
             revoked_at=row["revoked_at"],
             pin_failures=int(row["pin_failures"]),
+            redemption_expires_at=row['redemption_expires_at'],
+            redemption_session_seconds=int(row['redemption_session_seconds']),
         )
 
     @staticmethod
@@ -414,7 +420,11 @@ class ShareStore:
         single_use: bool,
         device_limit: int,
         browser_redemption_limit: int = 0,
+        redemption_session_seconds: int = 0,
     ) -> ShareGrant:
+        if redemption_session_seconds not in (0, 86400) or (redemption_session_seconds and
+                (not single_use or not instant or no_expiry or device_limit != 1 or ttl_seconds != 86400)):
+            raise ValueError('A redemption-based session requires a one-day single-use instant share.')
         if type(browser_redemption_limit) is not int or not 0 <= browser_redemption_limit <= 1000:
             raise ValueError("Maximum redemptions must be between zero and 1000.")
         browser_redemption_limit = 0 if single_use else browser_redemption_limit
@@ -440,6 +450,8 @@ class ShareStore:
             instant=instant,
             live_updates=live_configuration is not None,
             live_configuration=live_configuration,
+            redemption_session_seconds=redemption_session_seconds,
+            redemption_expires_at=(now + timedelta(seconds=ttl_seconds)).isoformat() if redemption_session_seconds else '',
         )
         with self._lock, self._connect() as connection:
             connection.execute(
@@ -448,8 +460,9 @@ class ShareStore:
                     id, configuration_id, name, token_hash, pin_hash,
                     auth_mode, allowed_email, snapshot, created_at, expires_at,
                     status, single_use, device_limit, no_expiry, instant,
-                    live_updates, live_configuration, snapshot_entry_count, browser_redemption_limit
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    live_updates, live_configuration, snapshot_entry_count, browser_redemption_limit,
+                    redemption_expires_at, redemption_session_seconds
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     grant.id, configuration_id, name, token_hash, pin_hash,
@@ -466,6 +479,7 @@ class ShareStore:
                     ),
                     len(snapshot.entries),
                     browser_redemption_limit,
+                    grant.redemption_expires_at, grant.redemption_session_seconds,
                 ),
             )
             if encrypted_link:
@@ -662,6 +676,9 @@ class ShareStore:
             grant = self._grant(row)
             if not grant.available:
                 return None
+            if grant.redemption_session_seconds and (
+                    grant.redeemed_at or datetime.fromisoformat(grant.redemption_expires_at) <= now):
+                return None
             if grant.browser_redemption_limit:
                 if not browser_hash:
                     return None
@@ -687,13 +704,17 @@ class ShareStore:
             if grant.single_use and grant.redeemed_at:
                 return None
             session_id = str(uuid.uuid4())
-            session_ttl = hfl_share_session_ttl()
+            session_ttl = grant.redemption_session_seconds or hfl_share_session_ttl()
             session_limit = now + timedelta(seconds=session_ttl)
             expires_at = (
                 session_limit
-                if grant.no_expiry
+                if grant.no_expiry or grant.redemption_session_seconds
                 else min(datetime.fromisoformat(grant.expires_at), session_limit)
             ).isoformat()
+            if grant.redemption_session_seconds:
+                # Same transaction as redemption: preserve the scan deadline and set
+                # the effective grant deadline to the one session's fixed expiry.
+                connection.execute('UPDATE shares SET expires_at=? WHERE id=?', (expires_at, share_id))
             connection.execute(
                 """
                 INSERT INTO sessions(

@@ -110,6 +110,24 @@
   .instant-share-button:hover { background:#1e3a8a; color:#eff6ff; }
   .instant-share-button:focus-visible { outline:2px solid #60a5fa; outline-offset:2px; }
   .recipe-header-actions { display:flex; flex:0 0 auto; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:.55rem; }
+  .share-with-panel > form { border-top:1px solid #334155; padding-top:1rem; }
+  .share-with-panel .entity-result-card { display:flex; flex-direction:column; align-items:flex-start; gap:.6rem; min-width:0; padding:.8rem; border:1px solid #334155; border-radius:.65rem; background:#111d30; color:#e2e8f0; text-align:left; cursor:pointer; transition:background .15s,border-color .15s; }
+  .share-with-panel .entity-result-card:hover { background:#172c43; border-color:#38bdf8; }
+  .entity-result-card:focus-visible { outline:2px solid #38bdf8; outline-offset:2px; }
+  .entity-result-name { font-size:.875rem; font-weight:600; line-height:1.4; overflow-wrap:anywhere; }
+  .entity-result-meta { display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; margin-top:auto; }
+  .entity-result-kind { border:1px solid #155e75; border-radius:999px; padding:.1rem .45rem; background:#083344; color:#a5f3fc; font-size:.65rem; line-height:1.5; text-transform:capitalize; }
+  .entity-result-count { color:#94a3b8; font-size:.7rem; white-space:nowrap; }
+  .share-with-panel .share-workspace-field { margin-top:1.25rem; }
+  .share-workspace-dot { display:inline-block; flex:0 0 .6rem; width:.6rem; height:.6rem; border-radius:50%; box-shadow:0 0 0 1px rgba(255,255,255,.15); }
+  .share-workspace-name { display:inline-flex; align-items:center; gap:.5rem; }
+  .share-workspace-selector [data-workspace-summary] { display:flex; flex-wrap:wrap; gap:.4rem .8rem; }
+  .share-workspace-selector > summary { font-size:.875rem; }
+  .share-workspace-selector [data-workspace-summary] { min-width:0; overflow-wrap:anywhere; }
+  .share-workspace-selector [data-personal-workspaces] { max-height:14rem; overflow-y:auto; }
+  .share-workspace-selector .check { margin:.25rem 0; background:transparent; border-color:transparent; }
+  .share-workspace-selector .check:hover { background:#172c43; }
+  .share-workspace-selector [data-no-workspace] { width:100%; margin-top:.6rem; border:1px solid #334155; }
   .owner-list-panel > summary { display:flex; list-style:none; align-items:center; justify-content:space-between; gap:.75rem; cursor:pointer; }
   .owner-list-panel > summary::-webkit-details-marker { display:none; }
   .owner-list-arrow-shell { display:inline-flex; width:1.75rem; height:1.75rem; flex:0 0 auto; align-items:center; justify-content:center; border:1px solid #334155; border-radius:9999px; background:rgba(15,23,42,.85); color:#67e8f9; transition:border-color .15s ease,background-color .15s ease,color .15s ease; }
@@ -220,9 +238,15 @@
         <input type="hidden" name="configuration_id" value="{{ cfg.id if cfg else '' }}">
         {% if cfg %}{% for reference_id in cfg.disabled_reference_ids %}<input type="hidden" name="disabled_reference_ids" value="{{ reference_id }}" data-disabled-reference>{% endfor %}{% endif %}
         {% include "modules/hfl_shares/_activity_controls.html" %}
+        <input type="hidden" name="entity_id" value="{{ cfg.entity_id if cfg else '' }}">
+        <input type="hidden" name="entity_name" value="{{ cfg.entity_name if cfg else '' }}">
+        <input type="hidden" name="entity_kind" value="{{ cfg.entity_kind if cfg else '' }}">
+        {% if cfg and cfg.entity_template %}<input type="hidden" name="entity_template" value="on">{% endif %}
+        {% if cfg and cfg.entity_id %}<p data-bound-entity-note class="field share-scope-note">Personalized for {{ cfg.entity_name }}. Use Share with to choose another entity.</p>{% endif %}
+        {% if cfg and cfg.entity_id and '__all__' in cfg.sources %}<input type="hidden" name="sources" value="__all__" data-bound-all-sources>{% endif %}
         <div class="two">
           <div class="field"><label for="name">Name</label><input class="control" id="name" name="name" required value="{{ cfg.name if cfg else '' }}" placeholder="Work context"></div>
-          <div class="field"><label for="recipient">Recipient</label><input class="control" id="recipient" name="recipient" required maxlength="20" value="{{ cfg.recipient if cfg and not corpus_draft else '' }}" placeholder="Who is this for?"></div>
+          <div class="field"><label for="recipient">Recipient</label><input class="control" id="recipient" name="recipient" required maxlength="500" value="{{ cfg.recipient if cfg and not corpus_draft else '' }}" placeholder="Who is this for?"></div>
         </div>
         <div class="field"><label for="auth-mode">Verification mode</label>
             <div class="select-wrap">
@@ -397,6 +421,7 @@
     </section>
 
     <aside class="owner-sidebar space-y-5">
+      {% include "modules/hfl_shares/_personalization.html" %}
       <details class="panel saved-recipes-panel owner-list-panel">
         <summary>
           <span>
@@ -414,6 +439,7 @@
             <a class="wrap text-sm font-semibold text-sky-300" href="/sharing?configuration_id={{ item.id }}" data-recipe-load{% if cfg and cfg.id == item.id %} aria-current="true"{% endif %}>{{ item.name }}</a>
             <div class="actions recipe-actions card-actions">
               <button class="btn instant-share-button" type="button" data-instant-share
+                      {% if item.entity_template %}data-personal-recipe="{{ item.id }}"{% endif %}
                       data-instant-url="/sharing/configurations/{{ item.id }}/instant"
                       title="Instant share" aria-label="Instant share {{ item.name }}">{{ action_icon('instant') }}</button>
               <a class="btn btn-soft" href="/sharing?configuration_id={{ item.id }}&duplicate=true" data-recipe-load title="Duplicate" aria-label="Duplicate {{ item.name }}">{{ action_icon('duplicate') }}</a>
@@ -424,6 +450,7 @@
           </div>
           <p class="mt-1 text-xs text-slate-500">{{ "All sources" if all_sources_value in item.sources else item.sources|join(', ') }}</p>
           <p class="mt-1 text-xs text-slate-500">{{ row.expiration_summary }}</p>
+          {% if item.entity_template %}<p class="pill">Entity template · choose an entity to share</p>{% elif item.entity_id %}<p class="pill">For {{ item.entity_name or item.recipient }}</p>{% endif %}
         </div>
         {% else %}<p class="mt-2 text-xs text-slate-500">No saved recipes yet.</p>{% endfor %}
         {% if recipe_total_pages > 1 %}
@@ -447,7 +474,7 @@
       </section>
       {% endif %}
 
-      <details class="panel generated-shares-panel owner-list-panel" data-generated-shares-panel>
+      <details class="panel generated-shares-panel owner-list-panel" data-generated-shares-panel{% if share_page > 1 %} open{% endif %}>
         <summary>
           <span>
             <span class="block text-base font-semibold text-white">Generated shares</span>
@@ -499,11 +526,11 @@
     <img class="instant-qr" data-instant-qr alt="QR code for instant corpus access">
     <div class="instant-overrides" aria-label="Instant share settings">
       <div class="instant-override"><strong class="block text-slate-200">Access</strong>QR possession only</div>
-      <div class="instant-override"><strong class="block text-slate-200">Expires at</strong>1 day</div>
+      <div class="instant-override"><strong class="block text-slate-200" data-instant-expiry-label>Expires after</strong><span data-instant-expiry>1 day</span></div>
       <div class="instant-override"><strong class="block text-slate-200">Number of devices</strong>1</div>
-      <div class="instant-override"><strong class="block text-slate-200">Session length</strong>{{ session_duration }}</div>
+      <div class="instant-override"><strong class="block text-slate-200">Session length</strong><span data-instant-session>{{ session_duration }}</span></div>
       <div class="instant-override"><strong class="block text-slate-200">Single-use redemption</strong>Yes</div>
-      <div class="instant-override"><strong class="block text-slate-200">Selected references</strong>Allowed</div>
+      <div class="instant-override"><strong class="block text-slate-200">Selected references</strong><span data-instant-references>Allowed</span></div>
     </div>
   </section>
 </div>
@@ -784,6 +811,10 @@
   const schedulePreview = () => {
     previewEntryPage = 1;
     window.clearTimeout(previewTimer);
+    previewController?.abort();
+    previewController = null;
+    previewContent?.setAttribute('aria-busy', 'true');
+    if (previewStatus) previewStatus.hidden = false;
     previewTimer = window.setTimeout(refreshPreview, 450);
   };
 
@@ -891,6 +922,12 @@
   };
   noExpiry?.addEventListener('change', syncExpiryControl);
   syncExpiryControl();
+  form.addEventListener('recipeloaded', () => {
+    updateSourceSummary();
+    updateClearTags();
+    syncExpiryControl();
+    updateTestAgentState();
+  });
   sourceSearch?.addEventListener(
     'input',
     () => filterOptions(sourceSearch, '[data-source-option]')
@@ -947,6 +984,10 @@
     if (!instantDialog || !instantQr || !instantTitle) return;
     instantTrigger = trigger;
     instantTitle.textContent = payload.name || 'Instant share';
+    instantDialog.querySelector('[data-instant-session]').textContent = payload.session_duration || {{ session_duration|tojson }};
+    instantDialog.querySelector('[data-instant-expiry-label]').textContent = payload.redemption_window ? 'Redeem within' : 'Expires after';
+    instantDialog.querySelector('[data-instant-expiry]').textContent = payload.redemption_window || payload.expires || '1 day';
+    instantDialog.querySelector('[data-instant-references]').textContent = payload.references_enabled ? 'Allowed' : 'Disabled';
     instantQr.src = payload.qr;
     instantDialog.hidden = false;
     document.documentElement.style.overflow = 'hidden';
@@ -974,6 +1015,9 @@
       event.preventDefault();
       namedSubmitter = submitter;
       shareNameInput.value = form.querySelector('[name="name"]')?.value || '';
+      if (form.querySelector('[name="entity_id"]')?.value) {
+        shareNameInput.value = (shareNameInput.value + ' — ' + form.querySelector('[name="entity_name"]').value).slice(0, 120);
+      }
       shareNameInput.setCustomValidity('');
       shareNameDialog.showModal();
       shareNameInput.focus();shareNameInput.select();
@@ -1023,6 +1067,10 @@
   });
   document.querySelectorAll('[data-instant-share]').forEach(button => {
     button.addEventListener('click', async () => {
+      if (button.dataset.personalRecipe) {
+        window.location.href = '/sharing?configuration_id=' + encodeURIComponent(button.dataset.personalRecipe);
+        return;
+      }
       showProgress(
         'Rendering instant share',
         'Refreshing the recipe snapshot…',
@@ -1047,6 +1095,7 @@
     });
   });
   instantDialog?.querySelector('[data-instant-close]')?.addEventListener('click', closeInstantDialog);
+  window.openPersonalizedShare = openInstantDialog;
   instantDialog?.addEventListener('click', event => {
     if (event.target === instantDialog) closeInstantDialog();
   });
@@ -1079,4 +1128,5 @@
 </script>
 <script src="{{ static_asset('js/share-graphs.js') }}"></script>
 <script src="{{ static_asset('js/share-activity.js') }}"></script>
+<script src="{{ static_asset('js/share-personalization.js') }}"></script>
 {% endblock %}

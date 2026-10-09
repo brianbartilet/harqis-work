@@ -55,6 +55,10 @@ class ShareConfiguration:
     corpus_scope: str = ""
     from_days: int = 0
     activity: dict[str, Any] = field(default_factory=dict)
+    entity_id: str = ""
+    entity_name: str = ""
+    entity_kind: str = ""
+    entity_template: bool = False
 
     def __post_init__(self) -> None:
         if type(self.from_days) is not int or self.from_days not in {0, 15, 30, 90}:
@@ -73,10 +77,12 @@ class ShareConfiguration:
             raise ValueError("Configuration name must be 120 characters or fewer.")
         # Legacy saved recipes have no recipient. They may still be loaded so
         # the owner can supply one, but every new form submission validates it.
-        if not self.recipient.strip() and not self.id:
+        if any(len(value) > 500 for value in (self.entity_id, self.entity_name, self.entity_kind)):
+            raise ValueError("Entity values must be 500 characters or fewer.")
+        if not self.recipient.strip() and not self.id and not self.entity_template and not self.entity_id:
             raise ValueError("Recipient is required.")
-        if len(self.recipient) > 20:
-            raise ValueError("Recipient must be 20 characters or fewer.")
+        if len(self.recipient) > 500:
+            raise ValueError("Recipient must be 500 characters or fewer.")
         if len(self.description) > 1000:
             raise ValueError("Description must be 1000 characters or fewer.")
         if not self.sources:
@@ -284,6 +290,8 @@ class ShareGrant:
     pin_failures: int = 0
     browser_redemption_limit: int = 0
     refresh_error: str = ""
+    redemption_expires_at: str = ""
+    redemption_session_seconds: int = 0
 
     @property
     def expired(self) -> bool:

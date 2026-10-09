@@ -11,6 +11,16 @@ from test_hfl_ideas import ideas
 from test_action_editing import editor_page
 
 
+def select_fixture_sources(page):
+    """Standalone recipes now require explicit source selection."""
+    page.evaluate("""() => {
+      const form = document.querySelector('[data-social-form]');
+      const input = document.createElement('input');
+      input.type = 'hidden'; input.name = 'sources'; input.value = '__all__';
+      form.append(input); form.dispatchEvent(new Event('activitychange'));
+    }""")
+
+
 def recipe(**values):
     activity = dict(version=1, sections=['entries', 'actions', 'ideas', 'boards', 'graph'], workspace_ids=['work'])
     activity.update(values.pop('activity', {}))
@@ -196,6 +206,7 @@ def test_large_entries_preview_is_paged_and_retains_reference_exclusions(editor_
     monkeypatch.setattr(router, '_build_preview_snapshot', snapshot)
     page, _ = editor_page
     page.goto('https://editing.test/sharing')
+    select_fixture_sources(page)
     page.get_by_role('tab', name='Entries', exact=True).click()
     scroller = page.locator('[data-entry-scroll]')
     expect(scroller.locator('[name="enabled_reference_ids"]')).to_have_count(50)
@@ -227,6 +238,7 @@ def test_editor_tabs_selection_and_public_graph(editor_page, context, sharing_co
     page, client = editor_page
     page.set_viewport_size({'width':width, 'height':1000})
     page.goto('https://editing.test/sharing')
+    select_fixture_sources(page)
     # This scenario intentionally shares historical fixture entries.
     filters = page.locator('summary').filter(has_text='Tags, dates, and topic')
     filters.click()
@@ -349,6 +361,7 @@ def test_recipe_defaults_exclusions_and_graph_preferences(editor_page, context, 
     page, client = editor_page
     page.set_viewport_size({'width':width, 'height':1000})
     page.goto('https://editing.test/sharing')
+    select_fixture_sources(page)
     # This scenario intentionally shares historical fixture entries.
     filters = page.locator('summary').filter(has_text='Tags, dates, and topic')
     filters.click()
@@ -529,6 +542,7 @@ def test_plans_tab_timeline(editor_page, context, width):
     page, client = editor_page
     page.set_viewport_size({'width': width, 'height': 1000})
     page.goto('https://editing.test/sharing')
+    select_fixture_sources(page)
     assert page.locator('[data-share-tab="plans"]').evaluate('(el)=>el.nextElementSibling.dataset.shareTab') == 'graph'
     page.get_by_role('tab', name='Plans', exact=True).click()
     panel = page.locator('[data-preview-tab="plans"]')

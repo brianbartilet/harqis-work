@@ -69,6 +69,77 @@ reference permissions while replacing the snapshot and captured live configurati
 To change access settings or expiry, generate a new share and revoke the old one
 when appropriate. Content refresh does not renew access or reset redemptions.
 
+## Personalized recipes
+
+`ShareConfiguration` adds `entity_id`, `entity_name`, `entity_kind` and
+`entity_template`, with empty/false defaults for legacy records. These remain in
+the existing JSON storage; no new database table is needed. Recipient text accepts
+up to 500 characters. The server resolves the selected entity's current name at
+snapshot construction rather than trusting posted display text.
+
+The publication sequence is:
+
+1. Bind exactly one current canonical entity. Unbound templates, unavailable IDs
+   and failed canonical lookups cannot generate content.
+2. Intersect current entry mentions with source/tag/date/topic/combined-view
+   filters and existing secret permissions. Co-mentioned entities do not trigger
+   another corpus traversal.
+3. Include eligible actions, ideas and plans through matching evidence, direct
+   entity links, or one explicit link from qualifying entries/evidence-backed
+   objects. Explicit workspace membership independently adds objects.
+4. Include boards related through their evidence, links, qualifying members or
+   selected workspace. Eligible contained members, drafts, lists and mapped goals
+   follow the board; exclusions, hidden members, secret permissions and live
+   approval policies still apply. Supporting entries appear in the same snapshot.
+5. Derive guest graphs and chat evidence from that publication. Preview inclusion
+   reasons explain expansion beyond the entity-filtered entries.
+
+Templates are saved unbound and retain object/reference exclusions and scope rules.
+Each share captures its selected entity in snapshot filters. Explicit updates from
+the reusable recipe retain that binding. Frozen shares stay unchanged until an
+explicit update; live refresh uses the captured configuration and existing
+per-section approval controls. Lookup failures retain the previous live snapshot
+with the existing refresh warning; they never broaden the scope.
+
+Owner-only `GET /sharing/personalization-options` supplies minimal entity search
+results and workspace names. The separate **Share with** sidebar accordion defaults
+to People, all sources, one uniquely named Default workspace, frozen content,
+references off, and reusable-template saving off. Missing or ambiguous Default
+requires an explicit workspace/no-context choice. CSRF-protected
+`POST /sharing/share-with/review` validates the selection and returns an unsaved
+configuration plus preview; the client loads it into the regular editor. People
+bindings use the People graph preset. Failed requests preserve both drafts.
+Loaded reusable templates retain their filters and exclusions when rebound.
+
+`POST /sharing/share-with/instant` creates a frozen, single-use, one-device QR
+with a 24-hour redemption window and a separate 24-hour session beginning at first
+redemption. The additive SQLite migration stores `redemption_expires_at` and
+`redemption_session_seconds` on grants, defaulting to empty/zero for existing rows.
+The first successful `create_session` updates the grant's effective `expires_at`
+and inserts the session within one immediate transaction. Concurrent redemption
+cannot create two sessions. Resume never renews either deadline; database expiry
+and revocation remain authoritative, including when validating the signed cookie.
+
+`POST /sharing/instant` accepts a reviewed editor form; the legacy saved-recipe
+instant route remains available. Their configured session durations and existing
+one-day grant expiry remain unchanged. Personalized routes preserve reference
+policy; accordion shares force references off. Instant shares remain outside the
+Generated shares list.
+
+Source references:
+[binding and lookup](../../frontend/modules/hfl_shares/personalization.py),
+[entry scope](../../frontend/modules/hfl_shares/scope.py),
+[object projection](../../frontend/modules/hfl_shares/activity.py),
+[owner controls](../../frontend/static/js/share-personalization.js), and
+[personalization regression tests](../../frontend/tests/test_share_personalization.py).
+For owner instructions and examples, see
+[Personalize a share with one entity](WORKSPACE-SHARING-GUIDE.md#personalize-a-share-with-one-entity).
+
+Privacy limits: mention matching does not establish consent, redact record text,
+or verify recipient identity. Entity extraction may be incomplete. Sharing a board
+or workspace intentionally adds content beyond matching entries, including full
+object text and approved attachments; the owner must review that expansion.
+
 ## Recipe, snapshot, and vector storage
 
 The vector rows are not the authoritative store for linked entry information.
