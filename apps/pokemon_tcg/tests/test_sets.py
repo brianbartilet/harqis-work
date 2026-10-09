@@ -10,7 +10,8 @@ def given():
     return ApiServicePokemonTcgSets(CONFIG)
 
 
-@pytest.mark.smoke
+# Daily smoke quarantine: timeouts/unexpected payloads; see scripts/agents/testing/README.md.
+@pytest.mark.integration
 def test_list_sets(given, call):
     when = call(given.list_sets, page_size=5, order_by='-releaseDate')
     assert_that(when, instance_of(list))
