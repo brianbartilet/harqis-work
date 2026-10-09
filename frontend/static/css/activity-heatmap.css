@@ -66,7 +66,7 @@
   .activity-day-menu-action:hover { background:#0f172a; color:#cffafe; }
   .activity-day-menu-action:focus-visible { outline:2px solid #22d3ee; outline-offset:1px; }
   .activity-day-menu-disabled { color:#475569; cursor:not-allowed; }
-  .memory-dialog { max-height:calc(100dvh - 2rem); overflow-y:auto; width:min(31rem,calc(100vw - 1.5rem)); border:1px solid #334155; border-radius:1rem; background:#07101f; color:#e2e8f0; padding:0; box-shadow:0 26px 80px rgba(2,6,23,.82); }
+  .memory-dialog { position:fixed; inset:0; margin:auto; max-height:calc(100dvh - 2rem); overflow-y:auto; width:min(31rem,calc(100vw - 1.5rem)); border:1px solid #334155; border-radius:1rem; background:#07101f; color:#e2e8f0; padding:0; box-shadow:0 26px 80px rgba(2,6,23,.82); }
   .memory-prompt-preview { padding:.75rem; border:1px solid #1e293b; border-radius:.55rem; background:#020617; max-height:16rem; overflow:auto; overflow-wrap:anywhere; font-size:.8rem; }
   .memory-prompt-preview pre { overflow:auto; }
   .memory-instructions-heading { display:flex; align-items:center; gap:.4rem; position:relative; }
