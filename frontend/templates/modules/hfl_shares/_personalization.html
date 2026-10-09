@@ -1,0 +1,25 @@
+<details class="expand-panel mb-4" data-personalization {% if cfg and (cfg.entity_id or cfg.entity_template) %}open{% endif %}>
+  <summary>Personalize for an entity</summary>
+  <div class="p-4">
+    <div class="field"><label for="quick-template">Quick template</label>
+      <select class="control" id="quick-template"><option value="">Keep current recipe</option><option value="entity">Entity activity</option><option value="workspace">Entity activity + workspace context</option></select>
+    </div>
+    <label class="check"><input type="checkbox" name="entity_template" {% if cfg and cfg.entity_template %}checked{% endif %}>Save as a reusable entity template</label>
+    <label class="check"><input type="checkbox" data-entity-all-sources {% if cfg and (cfg.entity_id or cfg.entity_template) and '__all__' in cfg.sources %}checked{% endif %}>All sources for this entity</label>
+    <p class="share-scope-note">Templates keep these rules and exclusions and ask for one entity each time. Saving a template clears its recipient.</p>
+    <input type="hidden" name="entity_id" value="{{ cfg.entity_id if cfg else '' }}">
+    <input type="hidden" name="entity_name" value="{{ cfg.entity_name if cfg else '' }}">
+    <input type="hidden" name="entity_kind" value="{{ cfg.entity_kind if cfg else '' }}">
+    <div class="two">
+      <div class="field"><label for="entity-type">Entity type</label><select id="entity-type" class="control"><option value="">All types</option></select></div>
+      <div class="field"><label for="entity-search">Find an entity</label><input type="search" class="control" id="entity-search" autocomplete="off" placeholder="Search a name"></div>
+    </div>
+    <p data-entity-status role="status" class="share-scope-note"></p>
+    <div data-entity-results class="selector-options" aria-label="Matching entities"></div>
+    <p data-entity-selected>{{ cfg.entity_name if cfg else '' }}</p>
+    <button class="btn btn-soft" type="button" data-clear-entity>Clear entity</button>
+    <fieldset class="field"><legend>Add workspace context (optional)</legend><div data-personal-workspaces></div></fieldset>
+    <p class="share-scope-note">Entity activity follows the recipe filters. Selected workspaces add their enabled objects and supporting entries even when they do not mention this entity. Review other people's mentions and attachments before sharing.</p>
+    <a class="text-sky-300" href="/sharing#personalized-review" data-personal-review>Review included content in the Entries, Actions, Boards, Plans and Graph tabs.</a>
+  </div>
+</details>
