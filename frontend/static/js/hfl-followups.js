@@ -179,7 +179,11 @@
         if(!data.items.length)break;
       }while(rows.length<total);
       if(dragging||moving||pointerHeld||savingCards)return;
-      if(ideasOpen){const ideaParams=new URLSearchParams(params);ideaParams.delete('offset');ideaParams.set('dismissed','0');ideaRows=(await window.HflIdeas.api('/reuse/board-ideas?'+ideaParams)).items;if(ticket!==sequence)return;}
+      if(ideasOpen){
+        const ideaParams=new URLSearchParams(params);ideaParams.delete('offset');ideaParams.set('dismissed','0');
+        ideaRows=(await window.HflIdeas.api('/reuse/board-ideas?'+ideaParams)).items.filter(item=>item.status!=='adopted'&&!item.promoted_to&&!item.followup_id);
+        if(ticket!==sequence)return;
+      }
       render(rows);error.hidden=true;
       const count=rows.length+' action'+(rows.length===1?'':'s');
       if(status.textContent!==count)status.textContent=count;
