@@ -1896,13 +1896,16 @@ def _reference_views(entry, *, base_url: str) -> dict[str, dict[str, str]]:
     return views
 
 
-def _citation_pages(grant) -> dict[int, int]:
+def _citation_pages(grant) -> dict[int, int | None]:
     pages = {
         int(entry.citation[1:]): math.ceil(index / _GUEST_PAGE_SIZE)
         for index, entry in enumerate(_guest_entries(grant, ""), start=1)
         if entry.citation.startswith("S") and entry.citation[1:].isdigit()
     }
-    pages.update({int(entry.citation[1:]): 1 for entry in grant.snapshot.activity_entries + grant.snapshot.persona_entries
+    pages.update({int(entry.citation[1:]): 1 for entry in grant.snapshot.activity_entries
+                  if entry.citation.startswith('S') and entry.citation[1:].isdigit()})
+    # Personal context informs answers without exposing an excerpt browser.
+    pages.update({int(entry.citation[1:]): None for entry in grant.snapshot.persona_entries
                   if entry.citation.startswith('S') and entry.citation[1:].isdigit()})
     return pages
 
@@ -1939,7 +1942,7 @@ def _normalize_answer_markdown(content: str) -> str:
 
 def _answer_html(
     content: str,
-    citation_pages: dict[int, int] | None = None,
+    citation_pages: dict[int, int | None] | None = None,
     evidence_base: str = "/share/session",
 ):
     pages = citation_pages or {}
@@ -1955,10 +1958,14 @@ def _answer_html(
         phrase = match.group(1).strip()
         citation = int(match.group(2))
         escaped_phrase = phrase.replace("\\", "\\\\").replace("[", r"\[")
+        if citation in pages and pages[citation] is None:
+            return escaped_phrase
         return f"[{escaped_phrase}]({evidence_target(citation)})"
 
     def fallback_evidence_link(match: re.Match[str]) -> str:
         citation = int(match.group(1))
+        if citation in pages and pages[citation] is None:
+            return ""
         return (
             r" [\[See entry\]]"
             f"({evidence_target(citation)})"
@@ -2035,7 +2042,7 @@ def _guest_context(
         if owner_preview
         else "/share/session/references"
     )
-    views = guest_views(grant, owner_profile.display_name)
+    views = guest_views(grant)
     views['activity_items'] = {
         entry.id: {'entry': entry, 'html': _entry_html(entry),
                    'reference_views': _reference_views(entry, base_url=reference_base)}

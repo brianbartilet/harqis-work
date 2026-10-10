@@ -15,10 +15,9 @@ exact text in the Agent tab before generating a share. Attachment excerpts are s
 into bounded chunks; selecting an excerpt does not enable its original download.
 The separate original-download checkbox grants access to the **entire file**.
 
-The guest’s **About [nickname]** menu opens a dedicated reading view, grouped by
-Facet and source document. It uses the profile nickname (falling back to the
-profile display name), sanitized Markdown, and expandable excerpts. Chat citations
-open the matching excerpt. This view and the agent use the same published projection. Private journal evidence paths, unselected sections, and role metadata
+Selected personal context is available to the share agent, without a recipient-facing
+About page or excerpt catalogue. The agent uses the published personal context in its answers without exposing
+excerpt links or popups. Activity citations still open their shared sources. Private journal evidence paths, unselected sections, and role metadata
 are excluded. Company, role, job description, audience, tone, and optional
 icebreaker guidance influence presentation; they are not evidence of qualifications.
 Treat all guidance as potentially visible through answers.
@@ -146,8 +145,7 @@ automatic selections. Optional opportunity and audience guidance helps shape
 answers; it is not evidence of qualifications and may be reflected in answers.
 
 Review selected excerpts in **Agent → Personal context** and test the agent before publishing. These
-excerpts are displayed directly on the recipient's page, not hidden agent-only
-instructions. The chat uses them alongside the included activity, is instructed
+excerpts inform the agent's answers without appearing as a separate recipient view. The chat uses them alongside the included activity, is instructed
 to cite evidence and acknowledge insufficient context, and cannot browse the
 private Facet library or edit the owner's records. Original-file downloads
 require separate selection.

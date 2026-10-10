@@ -39,14 +39,16 @@ def editor_page(ideas, authenticated_client, monkeypatch, tmp_path):
 
 @pytest.mark.parametrize('query,expected', [
     ('scope={"any":[]}', 'All activity'),
-    ('scope={"any":[{"q":"planning"}]}', 'Corpus filters'),
-    ('views=missing', 'Unavailable Space'),
+    ('scope={"any":[{"q":"planning"}]}', 'All activity'),
+    ('views=missing', 'All activity'),
 ])
 def test_workspace_status_resolves_without_selection(editor_page, query, expected):
     from playwright.sync_api import expect
     page, _ = editor_page
     page.goto('https://editing.test/hfl-corpus/actions?' + query)
-    expect(page.locator('[data-board-context]')).to_have_text(expected)
+    # The shared Space indicator names saved Spaces, not legacy corpus filters.
+    expect(page.locator('[data-active-view-name]')).to_have_text(expected)
+    expect(page.locator('[data-board-context]')).not_to_be_visible()
 
 
 @pytest.mark.parametrize('width', [1440, 390])
@@ -320,7 +322,8 @@ def test_create_action_from_checklist(editor_page, entry, width, tmp_path):
     expect(draft).not_to_be_visible()
     assert client.get(uri).json()['item']['checklists'][0]['items'][1]['done']
     expect(card.get_by_role('checkbox').first).to_be_checked()
-    expect(card.locator('.checklist-card-cover > p')).to_have_text('First · 2/2')
+    expect(card.locator('.checklist-card-cover > p')).to_contain_text('First · 2/2')
+    expect(card.get_by_role('button', name='Collapse First', exact=True)).to_have_attribute('aria-expanded', 'true')
 
 
 @pytest.mark.parametrize('editor', ['timeline', 'idea'])
@@ -518,7 +521,8 @@ def test_drag_item_to_empty_list_and_guard_new_draft(editor_page, width):
     form.get_by_role('button', name='Close follow-up editor').click()
     page.locator('[data-board-create-menu] > summary').click()
     page.locator('[data-board-create-action]').click()
-    form.locator('[name=title]').fill('Uncreated draft')
+    # A title alone is a valid action now; leave it empty to exercise validation.
+    form.locator('[name=body]').fill('Uncreated draft details')
     page.keyboard.press('Escape')
     page.get_by_role('button', name='Save and close').click()
     expect(page.locator('.editor-close-question [role=alert]')).to_contain_text('required fields')

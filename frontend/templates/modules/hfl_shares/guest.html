@@ -96,7 +96,6 @@
     </header>
 
     {% include "modules/hfl_shares/_guest_main_views.html" %}
-    {% include "modules/hfl_shares/_guest_about.html" %}
     <div class="chat-scroll" data-chat-scroll>
       <div class="chat-content">
         <div class="chat-intro">
@@ -276,7 +275,7 @@
   let selectedView = 'entries';
   let viewRevision = 0;
   let sidebarView = 'entries';
-  const mainViews = new Set(['boards', 'graph', 'about']);
+  const mainViews = new Set(['boards', 'graph']);
   const viewTitle = document.querySelector('[data-view-title]');
   const viewDescription = document.querySelector('[data-view-description]');
   const chatDescription = viewDescription.textContent;
@@ -288,9 +287,9 @@
   const menuButtons = [...viewMenu.querySelectorAll('[data-share-view]')];
   const closeMenu = () => { viewMenu.hidden = true; menuToggle.setAttribute('aria-expanded', 'false'); };
   const updateViewHeading = () => {
-    viewTitle.textContent = selectedView === 'about' ? {{ ('About ' + owner_name)|tojson }} : selectedView === 'boards' ? 'Idea boards' : selectedView === 'graph' ? 'Activity graph' : 'Ask my agent';
+    viewTitle.textContent = selectedView === 'boards' ? 'Idea boards' : selectedView === 'graph' ? 'Activity graph' : 'Ask my agent';
     const board = document.querySelector('[data-share-board-picker]')?.selectedOptions[0]?.textContent;
-    viewDescription.textContent = selectedView === 'about' ? 'Personal context selected for this conversation.' : selectedView === 'boards'
+    viewDescription.textContent = selectedView === 'boards'
       ? `${board || 'Shared ideas'} · Explore ideas and their connections. Select a node for details.`
       : selectedView === 'graph'
         ? 'Discover connections across shared activity. Select a node to learn more.'
@@ -687,7 +686,7 @@
       }
       return;
     }
-    if (destination !== 'about') openEvidenceDrawer();
+    openEvidenceDrawer();
     let evidence = document.getElementById(evidenceId);
     if (!evidence && destination === 'entries' && entryList && liveSearchForm) {
       entryObserver?.disconnect();
@@ -731,9 +730,6 @@
     document.querySelectorAll('.is-cited-evidence').forEach(
       item => item.classList.remove('is-cited-evidence')
     );
-    if (destination === 'about') {
-      evidence.querySelector('details').open = true;
-    }
     evidence.classList.add('is-cited-evidence');
     evidence.setAttribute('tabindex', '-1');
     window.requestAnimationFrame(() => {

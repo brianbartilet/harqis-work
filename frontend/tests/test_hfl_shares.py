@@ -287,7 +287,7 @@ def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
     assert 'id="topic" name="topic" rows="3"' in response.text
     assert "Topic phrase filter" in response.text
     assert 'id="context-prompt" name="context_prompt"' in response.text
-    assert "Background for HARQIS" in response.text
+    assert "Agent guide" in response.text
     assert "Specific entry IDs" not in response.text
     assert 'data-clear-tags disabled' in response.text
     assert 'class="select-caret"' in response.text
@@ -1637,7 +1637,7 @@ def test_active_share_uses_live_profile_and_renders_contact_dialog(
     assert first.status_code == 200
     assert "You’re exploring Sami’s shared context." in first.text
     assert "I turn lived activity into useful systems." in first.text
-    assert "What is Sami currently working on?" in first.text
+    assert "What themes emerge from Sami&#39;s shared context?" in first.text
     assert 'placeholder="Ask Sami’s shared context…"' in first.text
     assert 'data-contact-open>Contact</button>' in first.text
     assert 'href="mailto:sami@example.test"' in first.text
@@ -1659,7 +1659,7 @@ def test_active_share_uses_live_profile_and_renders_contact_dialog(
 
     assert "You’re exploring Samuel’s shared context." in updated.text
     assert "Now building durable knowledge tools." in updated.text
-    assert "What is Samuel currently working on?" in updated.text
+    assert "What themes emerge from Samuel&#39;s shared context?" in updated.text
     assert "sami@example.test" not in updated.text
     assert 'href="mailto:samuel@example.test"' in updated.text
 

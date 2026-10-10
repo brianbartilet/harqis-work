@@ -270,7 +270,7 @@ def test_citations_switch_from_other_panels(editor_page, context, sharing_corpus
     page.goto('https://editing.test/sharing/shares/' + grant.id + '/preview')
     page.locator('[data-preview-toast-close]').click()
     citation = snapshot.entries[0].citation[1:]
-    page.locator('[data-chat-thread]').evaluate('(el, id) => { el.innerHTML = `<a href="?page=1#evidence-${id}">Activity source</a> <a href="#evidence-999">Personal source</a>`; }', citation)
+    page.locator('[data-chat-thread]').evaluate('(el, id) => { el.innerHTML = `<a href="?page=1#evidence-${id}">Activity source</a>`; }', citation)
 
     def open_plans():
         page.get_by_role('button', name='Choose shared view').click()
@@ -281,14 +281,7 @@ def test_citations_switch_from_other_panels(editor_page, context, sharing_corpus
             page.locator('[data-drawer-close]').click()
 
     open_plans()
-    page.get_by_role('link', name='Personal source', exact=True).click()
-    about = page.locator('[data-share-main=about]')
-    expect(about).to_be_visible()
-    expect(about.locator('#evidence-999')).to_be_focused()
-    expect(about.locator('details')).to_have_attribute('open', '')
-    assert not page.locator('.chat-workspace').evaluate('(el) => el.inert')
-    about.get_by_role('button', name='Back to chat').click()
-    open_plans()
+    expect(page.locator('[data-personal-citation-dialog]')).to_have_count(0)
     # Simulate an entry excluded by the current search or not yet loaded.
     page.locator('[data-entry-list]').evaluate('(el) => el.replaceChildren()')
     page.get_by_role('link', name='Activity source', exact=True).click()
@@ -296,4 +289,3 @@ def test_citations_switch_from_other_panels(editor_page, context, sharing_corpus
     expect(page.locator('[data-share-sidebar=plans]')).not_to_be_visible()
     expect(page.locator('#evidence-' + citation)).to_be_visible()
     expect(page.locator('#evidence-' + citation)).to_be_focused()
-    expect(about).not_to_be_visible()
