@@ -1,0 +1,6 @@
+{% if preview.persona_entries %}
+<details class="rounded border border-cyan-900 p-4 mb-4" open><summary>About the sharer · approved personal context ({{ preview.persona_entries|length }} excerpts)</summary>
+<p class="text-sm text-slate-400">This is the personal evidence the recipient and agent can access. It stays frozen until you explicitly publish a refreshed share.</p>
+{% for entry in preview.persona_entries %}<article class="mt-3"><strong>{{ entry.moment }}</strong><pre class="whitespace-pre-wrap text-sm">{{ entry.text }}</pre>{% for ref in entry.references %}<p class="text-sm">Original download enabled: {{ ref.label }}</p>{% endfor %}</article>{% endfor %}
+</details>
+{% endif %}

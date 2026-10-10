@@ -1,0 +1,25 @@
+{% set personal = cfg.persona if cfg and cfg.persona else {} %}
+{% set selected = personal.get('items', []) %}
+{% set selected_ids = selected|map(attribute='id')|list %}
+{% set available_ids = persona_choices|map(attribute='id')|list %}
+<details class="filter-group" open>
+  <summary>Personal context · Roles and Soul</summary>
+  <div class="p-4">
+    <p class="field-help">Choose exactly what this recipient may learn. These excerpts are frozen when published. Nothing is selected automatically. <a href="/roles" target="_blank" rel="noopener">Manage roles</a></p>
+    {% for item in persona_choices + selected|rejectattr('id', 'in', available_ids)|list %}
+    <details class="rounded border border-slate-700 p-3 mb-2">
+      <summary><label><input type="checkbox" name="persona_ids" value="{{ item.id }}" data-preview-filter {% if item.id in selected_ids %}checked{% endif %}> {{ item.role }} · {{ item.title }}</label>
+        <small class="text-slate-400">{{ item.origin }} · r{{ item.revision }}{% if cfg and cfg.activity and item.workspace_ids|select('in', cfg.activity.get('workspace_ids', []))|list %} · Linked to selected Space{% endif %}{% if item.id not in available_ids %} · Previously selected revision{% endif %}</small>
+      </summary>
+      <div class="whitespace-pre-wrap text-sm my-3">{{ item.text }}</div>
+      {% if item.file %}<label class="text-sm"><input type="checkbox" name="persona_downloads" value="{{ item.id }}" data-preview-filter {% if selected|selectattr('id', 'equalto', item.id)|selectattr('download')|list %}checked{% endif %}> Also allow downloading the entire original file: {{ item.file.name }}</label>{% endif %}
+    </details>
+    {% else %}<p class="field-help">Create a role with a Soul or attachment to select personal context.</p>{% endfor %}
+    <h3 class="mt-4">Opportunity and conversation guidance</h3>
+    <p class="field-help">Use these fields to shape relevant answers. Job requirements describe the opportunity, not your qualifications. Guidance may be reflected in answers; do not include private information here.</p>
+    {% set guidance = personal.get('guidance', {}) %}
+    {% for key, label in [('company','Target company'),('target_role','Target role'),('audience','Audience'),('tone','Tone'),('icebreakers','Optional icebreaker guidance'),('job_description','Job description')] %}
+    <div class="field"><label for="persona-{{ key }}">{{ label }}</label><textarea class="control" id="persona-{{ key }}" name="persona_{{ key }}" rows="{{ 5 if key == 'job_description' else 2 }}" maxlength="{{ 12000 if key == 'job_description' else 1000 }}" data-preview-filter>{{ guidance.get(key, '') }}</textarea></div>
+    {% endfor %}
+  </div>
+</details>

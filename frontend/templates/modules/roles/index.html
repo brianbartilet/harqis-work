@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Roles · HARQIS{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="/static/css/roles.css">
+<main class="roles-page" data-roles-csrf="{{ csrf }}">
+  <header class="roles-heading"><div><p class="roles-eyebrow">The person behind the activity</p><h1>Roles</h1><p>Give each part of your life a voice. Choose what to share, when you share it.</p></div><button id="role-new" class="role-primary">New role</button></header>
+  <p id="role-status" role="status" aria-live="polite"></p>
+  <div class="roles-layout"><aside><h2>Your roles</h2><div id="roles-list"></div><label><input id="roles-archived" type="checkbox"> Show archived</label><hr><button id="roles-analyze">Analyze now</button><p class="role-help">Weekly analysis suggests private observations from linked Spaces. Your Soul and existing shares stay under your control.</p><details><summary>Analysis history</summary><div id="roles-runs"></div></details></aside>
+  <section id="role-editor"><div class="roles-empty"><h2>Your life has more than one chapter.</h2><p>Create a role such as Programmer and tester, Parent, or Collector. Add the story and evidence you want people to understand.</p></div></section></div>
+</main>
+<template id="role-form-template"><form id="role-form">
+  <div class="role-title-row"><label>Role name<input name="name" maxlength="100" required placeholder="Programmer and tester"></label><label>Color<input name="color" type="color" value="#38bdf8"></label></div>
+  <div class="role-tabs"><button type="button" data-pane="soul">Soul</button><button type="button" data-pane="files">Attachments</button><button type="button" data-pane="journal">Agent journal</button><button type="button" data-pane="history">History</button></div>
+  <section data-panel="soul"><div class="role-section-head"><h2>Soul</h2><button type="button" id="role-preview">Preview Markdown</button></div><p class="role-help">Your experience, values, milestones, and stories. Use headings to create sections you can select separately when sharing.</p><textarea name="soul" rows="15" maxlength="100000" placeholder="## My story&#10;&#10;## Experience&#10;&#10;## What matters to me"></textarea><div id="role-markdown" class="markdown-body" hidden></div>
+  <h3>Linked Spaces</h3><p class="role-help">Suggest this role when sharing these Spaces. Linking does not publish anything.</p><div id="role-spaces" class="role-options"></div>
+  <h3>Related entities</h3><button type="button" id="role-load-entities">Load entity choices</button><div id="role-entities" class="role-options"></div></section>
+  <section data-panel="files" hidden><h2>Supporting attachments</h2><p class="role-help">PDF, DOCX, Markdown, text, or images with OCR. Up to 20 MB per file, 20 files per role. Extraction is private; choose excerpts and original downloads separately in a share.</p><input id="role-files" type="file" multiple accept=".pdf,.docx,.md,.markdown,.txt,.png,.jpg,.jpeg,.webp,.tif,.tiff,.bmp"><button type="button" id="role-upload">Upload and extract</button><div id="role-file-list"></div></section>
+  <section data-panel="journal" hidden><h2>Agent journal</h2><p class="role-help">Observations are inferences, not established facts. Approval makes an observation selectable for a future share; it does not publish it or edit your Soul.</p><div id="role-journal"></div></section>
+  <section data-panel="history" hidden><h2>Revision history</h2><div id="role-history"></div></section>
+  <footer><button class="role-primary" type="submit">Save role</button><button id="role-archive" type="button">Archive role</button><span id="role-revision" class="role-help"></span></footer>
+</form></template>
+<script src="/static/js/roles.js" defer></script>
+{% endblock %}
