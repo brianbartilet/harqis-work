@@ -1944,6 +1944,34 @@
     },
     {
       "method": "GET",
+      "path": "/sharing/personalization-options",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session entity lookup for share personalization; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/instant",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session and CSRF-protected instant share generation from a form; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/share-with/instant",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session and CSRF-protected personalized instant share generation; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/share-with/review",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session and CSRF-protected personalized share preview; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
       "path": "/sharing",
       "status": "ui",
       "tools": [],
