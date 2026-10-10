@@ -3,7 +3,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from filelock import FileLock
+from filelock import FileLock, Timeout
 from core.apps.sprout.app.celery import SPROUT
 
 @SPROUT.task(bind=True, acks_late=True, reject_on_worker_lost=True, max_retries=4)
@@ -15,7 +15,25 @@ def refresh_corpus_entities(self, entry_id='*', revision=None, use_model=True):
     from modules.hfl_corpus.entities import enrich
     store = get_store()
     try:
-        with FileLock(str(store.path) + '.worker.lock', timeout=0):
+        # Cheap stale-message rejection must not wait behind a long model batch.
+        # Recheck after acquisition below to cover concurrent canonical writes.
+        if revision:
+            with store.connection() as db:
+                row = db.execute('SELECT revision FROM pending WHERE id=?', (entry_id,)).fetchone()
+                if not row or row['revision'] != revision:
+                    return {'state': 'superseded'}
+        lock = FileLock(str(store.path) + '.worker.lock', timeout=0)
+        try:
+            lock.acquire()
+        except Timeout:
+            # Another pool thread/process is doing valid work. Hand off without
+            # spending the provider-error retry budget or overwriting its state.
+            child = self.apply_async(
+                kwargs=dict(entry_id=entry_id, revision=revision, use_model=use_model),
+                queue=os.environ.get('HARQIS_ENTITIES_QUEUE', 'hfl'), countdown=30,
+                retries=self.request.retries)
+            return {'state': 'deferred', 'task_id': str(child.id)}
+        try:
             if revision:
                 with store.connection() as db:
                     row = db.execute('SELECT revision FROM pending WHERE id=?', (entry_id,)).fetchone()
@@ -37,6 +55,8 @@ def refresh_corpus_entities(self, entry_id='*', revision=None, use_model=True):
                     db.execute('DELETE FROM pending WHERE id=? AND revision=?', (entry_id, revision))
                 store.state('job', {'state': 'complete', 'id': self.request.id, 'result': result})
             return result
+        finally:
+            lock.release()
     except Exception as exc:
         store.state('job', {'state': 'retrying' if self.request.retries < 4 else 'failed',
                             'error': type(exc).__name__, 'id': self.request.id})

@@ -69,6 +69,7 @@ from contextlib import contextmanager
 import os
 import plistlib
 import re
+import json
 import shlex
 import shutil
 import socket
@@ -506,7 +507,10 @@ def machine_env_vars(machine: dict) -> dict[str, str]:
     shared = (machine.get("_shared") or {}).get("env_vars") or {}
     own = machine.get("env_vars") or {}
     merged = {**shared, **own}
-    return {k: str(v) for k, v in merged.items()}
+    # TOML arrays/tables feed JSON consumers (not Python literal parsers).
+    # Leave strings and legacy scalar formatting unchanged.
+    return {k: json.dumps(v) if isinstance(v, (list, dict)) else str(v)
+            for k, v in merged.items()}
 
 
 # ── Env loading (for docker-compose) ──────────────────────────────────────────
