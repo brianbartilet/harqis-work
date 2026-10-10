@@ -1,0 +1,22 @@
+{% set suggestions = cfg.persona.get('suggestions', {}) if cfg and cfg.persona else {} %}
+<details class="expand-panel mb-4" style="margin-top:1.25rem">
+  <summary>
+    <span>Suggested questions</span>
+    <svg class="expand-arrow h-4 w-4 shrink-0 text-blue-400 transition" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
+  </summary>
+  <div class="p-4">
+<div class="field">
+  <label for="suggestion-mode">Question mode</label>
+  <p class="field-help" id="suggestion-help">Choose the starter questions shown to recipients. These buttons start a conversation; they do not change what the agent can access.</p>
+  <div class="select-wrap"><select class="control" id="suggestion-mode" name="suggestion_mode" aria-describedby="suggestion-help" data-preview-filter>
+    {% for value, label in [('off','Off — hide suggested questions'),('custom','Custom — write your own questions'),('automatic','Automatic — use shared-content prompts')] %}<option value="{{ value }}" {% if suggestions.get('mode', 'automatic') == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+  </select><svg class="select-caret" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"/></svg></div>
+</div>
+<div class="field" id="suggestion-custom-field" {% if suggestions.get('mode') != 'custom' %}hidden{% endif %}>
+  <label for="suggestion-questions">Your questions</label>
+  <p class="field-help" id="suggestion-custom-help">One question per line, up to five questions and 240 characters each. Use questions relevant to the evidence selected for this recipe.</p>
+  <textarea class="control" id="suggestion-questions" name="suggestion_questions" rows="5" maxlength="1204" aria-describedby="suggestion-custom-help" data-preview-filter placeholder="What decisions shaped this project?&#10;What should we discuss next?">{{ suggestions.get('questions', [])|join('
+') }}</textarea>
+</div>
+  </div>
+</details>
