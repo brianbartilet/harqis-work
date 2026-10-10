@@ -1,0 +1,31 @@
+/* Compact help entry point; documentation follows the shared modal pattern. */
+.context-help-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.context-help-heading h2{margin:0}
+.context-icon-button{display:inline-flex;align-items:center;justify-content:center;flex:none;width:40px;height:40px;padding:9px;border:0;background:transparent;box-shadow:none;color:#94a3b8}
+.context-icon-button:hover{color:#7dd3fc;background:#1e293b}
+.context-icon-button svg{width:20px;height:20px}
+.context-help{width:min(780px,calc(100vw - 32px));max-height:calc(100dvh - 32px);margin:auto;padding:0;border:1px solid #334155;border-radius:18px;background:#0f172a;color:#e2e8f0;overflow:hidden;box-shadow:0 24px 80px #0008}
+.context-help[open]{display:flex;flex-direction:column}
+.context-help::backdrop{background:rgb(2 6 23 / .8);backdrop-filter:blur(4px)}
+.context-help-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:24px 28px 20px;border-bottom:1px solid #263449;flex:none}
+.context-help-eyebrow{color:#38bdf8;text-transform:uppercase;letter-spacing:.16em;font-size:10px;font-weight:600;margin-bottom:7px}
+.context-help h2{font-size:24px;line-height:1.25;margin:0}
+.context-help-title:focus{outline:none}
+.context-help-body{padding:24px 28px;overflow:auto;min-height:0;overscroll-behavior:contain;font-size:13px;line-height:1.7;color:#a8b8cd}
+.context-help-body .context-help-intro{font-size:18px;font-weight:600;color:#f1f5f9;margin-bottom:6px}
+.context-help-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:24px}
+.context-help-grid>section{padding:18px;border:1px solid #29394f;border-radius:12px;background:#111d30}
+.context-help-step{color:#7dd3fc;font-size:11px;font-weight:600;letter-spacing:.06em}
+.context-help h3{font-size:15px;line-height:1.5;color:#e2e8f0;margin:6px 0 10px}
+.context-help-body p+p{margin-top:10px}
+.context-help-body strong{color:#dbeafe;font-weight:600}
+.context-help-note{margin-top:20px;border-left:3px solid #22d3ee;border-radius:0 8px 8px 0;background:#0c2636;padding:14px 16px}
+.context-help-note p{margin-top:3px}
+.context-help-details{margin-top:22px}
+.context-help-footer{display:flex;margin:0;flex:none;justify-content:center;padding:16px 28px;border-top:1px solid #263449;background:#0c1526}
+.context-help-footer button{min-width:140px;min-height:40px}
+@media(max-width:600px){.context-help-grid{grid-template-columns:1fr}.context-help-header{padding:18px}.context-help-body{padding:18px}.context-help h2{font-size:21px}.context-help-grid>section{padding:16px}}
+
+.context-help-flow{list-style:decimal;padding-left:22px;margin-top:12px}.context-help-flow li{padding-left:4px;margin:12px 0}.context-help-details>.context-help-grid{margin-top:14px}
+
+.context-icon-button{cursor:pointer;border-radius:8px}.context-icon-button:focus-visible,.context-help-footer button:focus-visible{outline:2px solid #38bdf8;outline-offset:3px}.context-help-footer button{cursor:pointer;border:1px solid #0891b2;border-radius:8px;background:#075985;color:#ecfeff;padding:8px 16px;font-size:13px}

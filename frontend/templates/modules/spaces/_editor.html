@@ -1,0 +1,25 @@
+    <div class="space-title-row"><div><label for="workspace-name">Name</label>
+    <input id="workspace-name" name="name" maxlength="100" required autocomplete="off"></div><div><span class="view-color-label">Space color</span><div data-view-colors class="view-color-palette" role="group" aria-label="Space colors"></div></div></div>
+    <div data-view-edit-options>
+      <details open data-assigned-schedules><summary>Assign schedules</summary>
+        <p data-schedule-timezone></p>
+        <p>Overlapping blocks combine Spaces. An end time before the start continues into the next day.</p>
+        <div data-schedule-blocks></div>
+        <button type="button" data-add-block>Add time block</button>
+      </details>
+      <details data-applied-filters><summary>Applied filters</summary>
+        <label>Search text or #tags<input data-edit-filter="q" placeholder="Search text or #tag"></label>
+        <div class="workspace-editor-source-field"><span id="editor-sources-label">Sources</span>
+          <input type="hidden" data-edit-filter="source">
+          <details data-edit-sources class="workspace-editor-sources">
+            <summary aria-labelledby="editor-sources-label editor-sources-caption"><span id="editor-sources-caption" data-edit-source-caption>All sources</span></summary>
+            <div class="workspace-editor-source-options"><button type="button" data-edit-sources-clear>All sources</button><div data-edit-source-options></div></div>
+          </details>
+        </div>
+        <label>Date type<select data-edit-filter="date_field" aria-describedby="view-date-type-help"><option value="created">Created</option><option value="updated">Updated</option><option value="entry">Entry</option></select></label>
+        <p id="view-date-type-help">Created: document creation date. Updated: document’s last modification date. Entry: date recorded in the entry heading. The date range applies to this choice.</p>
+        <label>Date range<select data-edit-filter="rolling"><option value="0">Fixed dates</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option></select></label>
+        <div class="space-field-pair"><label>From<input type="date" data-edit-filter="date_from"></label><label>To<input type="date" data-edit-filter="date_to"></label></div>
+<div class="space-field-pair"><label>Result order<select data-edit-filter="sort"><option value="desc">Newest first</option><option value="asc">Oldest first</option></select></label><label>Results per page<select data-edit-filter="page_size"><option>20</option><option>50</option><option>100</option></select></label></div>
+      </details>
+    </div>

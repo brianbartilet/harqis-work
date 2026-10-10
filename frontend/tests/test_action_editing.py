@@ -58,29 +58,23 @@ def test_kanban_full_workspace_controls(editor_page, workspace_corpus, width, tm
     menu = page.locator('[data-workspace-menu]')
     if not menu.evaluate('(element) => element.open'):
         menu.locator(':scope > summary').click()
-    for label in ('Save', 'New', 'Edit Views', 'Remove', 'Generate share recipe', 'Sharing preview', 'Visualize'):
+    for label in ('Generate share recipe', 'Sharing preview', 'Visualize'):
         expect(menu.get_by_role('button', name=label, exact=True)).to_be_visible()
     panel = menu.locator('.workspace-menu-panel').bounding_box()
     assert panel['x'] >= 0 and panel['x'] + panel['width'] <= width
     assert panel['width'] >= 280
     page.screenshot(path=str(tmp_path / 'kanban-workspace-menu.png'))
-    menu.get_by_role('button', name='New', exact=True).click()
-    dialog = page.locator('[data-workspace-dialog]')
-    dialog.get_by_label('Name', exact=True).fill('Kanban focus')
-    dialog.locator('[data-workspace-confirm]').click()
-    page.wait_for_url('**/hfl-corpus/actions?**')
+    menu.get_by_role('link', name='Manage Spaces').click()
+    page.locator('#space-destination').select_option('new')
+    page.locator('#space-apply-draft').click()
+    page.get_by_label('Name', exact=True).fill('Kanban focus')
+    page.locator('[data-add-block]').click()
+    page.get_by_role('button', name='Save Space', exact=True).click()
+    expect(page.locator('#space-status')).to_contain_text('Space saved')
+    page.goto('https://editing.test/hfl-corpus/actions')
     expect(page.locator('[data-active-view-name]')).to_have_text('Kanban focus')
-    expect(page.locator('[data-active-view-name]')).to_be_visible()
     expect(page.locator('[data-dynamic-badge]')).to_have_text('Dynamic OFF')
     expect(page.locator('[data-active-view-modified]')).to_have_text('Saved')
-    page.screenshot(path=str(tmp_path / 'kanban-workspace-indicator.png'))
-    if not menu.evaluate('(element) => element.open'):
-        menu.locator(':scope > summary').click()
-    menu.get_by_role('button', name='Edit Views', exact=True).click()
-    dialog.locator('[data-add-block]').click()
-    dialog.locator('[data-workspace-confirm]').click()
-    expect(dialog).not_to_be_visible()
-    expect(page.locator('[data-view-loading]')).not_to_be_visible()
     if not menu.evaluate('(element) => element.open'):
         menu.locator(':scope > summary').click()
     menu.get_by_role('button', name='Visualize', exact=True).click()
@@ -99,6 +93,9 @@ def test_kanban_full_workspace_controls(editor_page, workspace_corpus, width, tm
     page.locator('[data-corpus-share-close]').click()
     menu.locator('[data-view-picker] > summary').click()
     menu.locator('[data-view-all]').click()
+    page.wait_for_url('**dynamic=0**')
+    expect(page.locator('[data-dynamic-badge]')).to_have_text('Dynamic OFF')
+    expect(page.locator('[data-view-loading]')).not_to_be_visible()
     expect(page.locator('[data-active-view-name]')).to_have_text('All activity')
     assert '/hfl-corpus/actions' in page.url
     page.route('**/sharing/from-corpus', lambda route: route.fulfill(content_type='text/html', body='<h1>Share recipe draft</h1>'))

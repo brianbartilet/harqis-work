@@ -26,7 +26,6 @@
   const picker = $('[data-view-picker]');
   let pendingIds = [], pickerChanged = false;
   const status = $('[data-workspace-status]');
-  const dialog = $('[data-workspace-dialog]');
   const help = document.getElementById('workspace-help');
   const helpOpen = $('[data-workspace-help-open]');
   helpOpen.onclick = () => {
@@ -42,7 +41,6 @@
     const box = help.getBoundingClientRect();
     if (event.target === help && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) help.close();
   });
-  const nameForm = $('[data-workspace-name-form]');
   const csrf = JSON.parse($('[data-memory-csrf]').textContent);
   let viewData = JSON.parse($('[data-workspace-data]').textContent);
   let views = viewData.views;
@@ -55,10 +53,9 @@
       ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b))) : value);
   let observedShared = sharedFingerprint(viewData);
   let dynamicOn = initialParams.get('dynamic') === '1' && preferences.dynamic;
-  let editTarget = null;
 
   let current = views.find(view => view.id === form.elements.workspace.value);
-  let operation = '', busy = false, disposed = false, arrivalMessage = '';
+  let busy = false, disposed = false, arrivalMessage = '';
   const sources = [...form.querySelectorAll('[data-source-option]')];
   const sourcesDropdown = $('[data-workspace-sources]');
   document.addEventListener('click', event => {
@@ -195,15 +192,10 @@
       };
     });
     pickerCaption();
-    menu.querySelector('[data-workspace-action="save"]').disabled = activeIds.length > 1 || busy;
-    $('[data-workspace-save-hint]').hidden = activeIds.length <= 1;
-    menu.querySelector('[data-workspace-action="edit"]').disabled = (!current && !activeIds.length) || busy;
-    menu.querySelector('[data-workspace-action="remove"]').disabled = activeIds.length !== 1 || busy;
   }
   function setBusy(value) {
     busy = value;
     menu.querySelectorAll('button,select').forEach(input => input.disabled = value);
-    $('[data-workspace-confirm]').disabled = value;
     options();
   }
   async function request(path = '', method = 'GET', body) {
@@ -227,95 +219,19 @@
     $('[data-corpus-results]')?.removeAttribute('aria-busy');
   }
   window.addEventListener('pageshow', endViewLoading);
-  function openDialog(action) {
-    operation = action;
-    if (action === 'remove') {
-      editTarget = views.find(view => view.id === activeIds[0]);
-      if (activeIds.length !== 1 || !editTarget) return;
-      $('[data-view-edit-options]').hidden = true;
-      $('[data-edit-target-field]').hidden = true;
-      $('label[for="workspace-name"]').hidden = true;
-      nameForm.elements.name.hidden = true;
-      nameForm.elements.name.disabled = true;
-      document.getElementById('workspace-dialog-title').textContent = `Remove "${editTarget.name}"?`;
-      $('[data-workspace-dialog-hint]').textContent = 'This removes only this saved view. Your corpus entries are unchanged.';
-      $('[data-workspace-dialog-error]').textContent = '';
-      $('[data-workspace-confirm]').textContent = 'Yes';
-      menu.open = false;
-      dialog.showModal();
-      $('[data-workspace-cancel]').focus();
-      return;
-    }
-    $('label[for="workspace-name"]').hidden = false;
-    nameForm.elements.name.hidden = false;
-    const editing = action === 'new' || action === 'edit' || action === 'remove' || (['save','new'].includes(action) && aggregateScope.any.length);
-    $('[data-view-edit-options]').hidden = !editing;
-    $('[data-view-edit-options]').querySelectorAll('details').forEach(details => details.hidden = action === 'remove');
-    editTarget = action === 'new' && editing ? {state:snapshot(), schedule:[]} : editing ? current || views.find(view => activeIds.includes(view.id)) : null;
-    const target = $('[data-edit-target]');
-    target.parentElement.hidden = !editing || action === 'new';
-    $('[data-applied-filters]').open = false;
-    $('[data-assigned-schedules]').open = true;
-    target.replaceChildren(...views.map(view => new Option(view.name, view.id)));
-    if (editTarget) { target.value = editTarget.id; fillViewEditor(editTarget); }
-    target.onchange = () => { editTarget = views.find(view => view.id === target.value); fillViewEditor(editTarget); nameForm.elements.name.value = editTarget.name; };
-    $('[data-workspace-dialog-error]').textContent = '';
-    document.getElementById('workspace-dialog-title').textContent = action === 'remove' ? 'Remove view?' : action === 'edit' ? 'Edit view' : 'Save view';
-    nameForm.elements.name.value = action === 'new' ? '' : (editTarget || current)?.name || '';
-    nameForm.elements.name.disabled = action === 'remove';
-    $('[data-workspace-dialog-hint]').textContent = action === 'remove' ? 'This removes the saved view. Your corpus entries are unchanged.' : action === 'edit' ? 'Edit this view’s name, filters, and recurring time blocks. Other selected views are unchanged.' : 'Sources, tags, search text, dates and result settings will be saved.';
-    $('[data-workspace-confirm]').textContent = action === 'remove' ? 'Remove' : 'Save';
-    if (action === 'new' && aggregateScope.any.length) {
-      $('[data-workspace-dialog-hint]').textContent = 'Create a separate view using the additional filters. Combined views are not copied. Review Filters above before saving.';
-    }
-    menu.open = false;
-    dialog.showModal();
-    if (action !== 'remove') nameForm.elements.name.focus();
-  }
-  async function persist(action, name) {
-    if (action === 'save' && activeIds.length > 1) return;
-    if (action === 'remove' && (activeIds.length !== 1 || editTarget?.id !== activeIds[0])) return;
-    setBusy(true); status.textContent = action === 'remove' ? 'Removing…' : 'Saving…';
+  $('[data-manage-spaces]').addEventListener('click', event => {
+    event.preventDefault();
     try {
-      if (action === 'remove') {
-        const removed = (editTarget || current).id;
-        await request('/' + removed + '?revision=' + (editTarget || current).revision, 'DELETE');
-        dialog.close();
-        const latest = await request(); preferences = latest.preferences;
-        const data = await savePreferences({manual:latest.preferences.manual.filter(id => id !== removed),
-          dynamic:latest.preferences.dynamic && latest.views.some(view => view.schedule?.length)});
-        await loadCombined(data, data.active, data.preferences.dynamic);
-        return;
-      }
-      const existing = action === 'new' ? null : editTarget || current;
-      const view = await request(existing ? '/' + existing.id : '', existing ? 'PUT' : 'POST', {
-        name, color:editTarget ? $('[data-view-colors]').dataset.selected : undefined, state:editTarget ? readViewEditor() : snapshot(), schedule:editTarget ? readSchedule() : undefined, revision:existing?.revision || 0,
+      // Session-only handoff: filter text never goes in a URL or shared storage.
+      const state = snapshot();
+      const base = activeIds.length === 1 ? views.find(view => view.id === activeIds[0])?.state : null;
+      if (base && aggregateScope.any.length) inheritedFilters.forEach((entry, key) => {
+        if (!editedFilters.has(key) && String(form.elements[key].value) === entry.display) state[key] = base[key];
       });
-      viewData = await request(); preferences = viewData.preferences;
-      if (action === 'new') { dynamicOn = false; $('[data-dynamic-toggle]').checked = false; }
-      views = views.filter(item => item.id !== view.id); views.push(view);
-      views.sort((a,b) => a.name.localeCompare(b.name)); current = view;
-      if (!aggregateScope.any.length) { activeIds = [view.id]; form.elements.workspace.value = view.id; }
-      const url = new URL(location.href); url.searchParams.set('workspace', view.id); history.replaceState(null, '', url);
-      arrivalMessage = `Saved: ${view.name}`;
-      dialog.close(); menu.open = true;
-      const data = await savePreferences({manual:action === 'new' ? [view.id] : activeIds, dynamic:dynamicOn,
-        applied:action === 'save' || action === 'new' ? {} : preferences.applied});
-      await loadCombined(data, data.active, data.preferences.dynamic);
-    } catch (error) {
-      status.textContent = error.message;
-      $('[data-workspace-dialog-error]').textContent = error.message;
-    } finally { if (!disposed) setBusy(false); }
-  }
-  menu.querySelectorAll('[data-workspace-action]').forEach(button => button.onclick = () => {
-    if (busy) return;
-    const action = button.dataset.workspaceAction;
-    if (action === 'save' && activeIds.length > 1) return;
-    if (action === 'save' && current && !aggregateScope.any.length) { editTarget = null; persist(action, current.name); }
-    else openDialog(action);
+      sessionStorage.setItem('harqis:space-draft', JSON.stringify({state, ids:activeIds, combined:activeIds.length > 1, sources:sources.map(input => input.value), at:Date.now()}));
+      location.assign('/spaces?draft=1');
+    } catch (error) { status.textContent = 'Could not carry filters to Spaces. Allow session storage and try again.'; }
   });
-  nameForm.onsubmit = event => { event.preventDefault(); if (!busy) persist(operation, nameForm.elements.name.value.trim()); };
-  $('[data-workspace-cancel]').onclick = () => dialog.close();
   document.addEventListener('click', event => { if (!menu.contains(event.target)) menu.open = false; });
   menu.addEventListener('keydown', event => { if (event.key === 'Escape') { menu.open = false; menu.querySelector('summary').focus(); } });
   // Tag clicks retain pending source/date selections as well as the existing
@@ -358,83 +274,10 @@
   });
 
 
-  function fillViewEditor(view) {
-    if (!view) return;
-    $('[data-schedule-timezone]').textContent = `Times use ${preferences.timezone}. Change it in Profile settings.`;
-    document.querySelectorAll('[data-edit-filter]').forEach(input => input.value = view.state[input.dataset.editFilter] ?? '');
-    fillEditorSources(view.state.source || '');
-    const palette = $('[data-view-colors]'); palette.replaceChildren();
-    palette.dataset.selected = view.color || viewData.palette[views.length % viewData.palette.length];
-    viewData.palette.forEach(color => {
-      const button = document.createElement('button'); button.type = 'button';
-      button.className = 'view-color-swatch'; button.style.backgroundColor = color;
-      button.setAttribute('aria-label', `Color ${color}`); button.setAttribute('aria-pressed', String(palette.dataset.selected === color));
-      button.onclick = () => { palette.dataset.selected = color; palette.querySelectorAll('button').forEach(item => item.setAttribute('aria-pressed', String(item === button))); };
-      palette.append(button);
-    });
-    $('[data-schedule-blocks]').replaceChildren();
-    (view.schedule || []).forEach(addBlock);
-  }
-  function fillEditorSources(value) {
-    const selected = value.split(',').filter(Boolean);
-    const names = [...new Set([...sources.map(input => input.value), ...selected])].sort((a,b) => a.localeCompare(b));
-    const list = $('[data-edit-source-options]'); list.replaceChildren();
-    names.forEach(name => {
-      const label = document.createElement('label'), input = document.createElement('input');
-      input.type = 'checkbox'; input.value = name; input.checked = selected.includes(name);
-      input.onchange = syncEditorSources; label.append(input, name); list.append(label);
-    });
-    $('[data-edit-sources]').open = false;
-    syncEditorSources();
-  }
-  function syncEditorSources() {
-    const selected = [...$('[data-edit-source-options]').querySelectorAll('input:checked')].map(input => input.value);
-    $('[data-edit-filter="source"]').value = selected.join(',');
-    $('[data-edit-source-caption]').textContent = selected.length === 1 ? selected[0] : selected.length ? `${selected.length} selected` : 'All sources';
-  }
-  $('[data-edit-sources-clear]').onclick = () => {
-    $('[data-edit-source-options]').querySelectorAll('input').forEach(input => input.checked = false);
-    syncEditorSources();
-  };
-  dialog.addEventListener('click', event => { if (!$('[data-edit-sources]').contains(event.target)) $('[data-edit-sources]').open = false; });
-  $('[data-edit-sources]').addEventListener('keydown', event => {
-    if (event.key === 'Escape' && event.currentTarget.open) {
-      event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector('summary').focus();
-    }
-  });
   function updateDynamicAvailability() {
     const hasSchedule = views.some(view => view.schedule?.length);
     $('[data-dynamic-hint]').hidden = hasSchedule;
     $('[data-dynamic-toggle]').disabled = busy || (!hasSchedule && !dynamicOn);
-  }
-  function addBlock(block = {days:[0,1,2,3,4],start:'09:00',end:'17:00'}) {
-    const box = document.createElement('div'); box.className = 'workspace-time-block';
-    const days = document.createElement('div'); days.className = 'workspace-day-options';
-    ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach((name, day) => {
-      const label = document.createElement('label'), input = document.createElement('input');
-      input.type = 'checkbox'; input.value = day; input.checked = block.days.includes(day);
-      label.append(input, name); days.append(label);
-    });
-    const times = document.createElement('div'); times.className = 'workspace-block-times';
-    ['start','end'].forEach(key => {
-      const label = document.createElement('label'), input = document.createElement('input');
-      label.textContent = key === 'start' ? 'From' : 'To'; input.type = 'time'; input.value = block[key]; input.dataset.blockTime = key;
-      label.append(input); times.append(label);
-    });
-    const remove = document.createElement('button'); remove.type = 'button'; remove.dataset.removeBlock = ''; remove.textContent = 'Remove block'; remove.onclick = () => box.remove();
-    box.append(days, times, remove); $('[data-schedule-blocks]').append(box);
-  }
-  $('[data-add-block]').onclick = () => addBlock();
-  function readSchedule() {
-    return [...document.querySelectorAll('.workspace-time-block')].map(box => ({
-      days:[...box.querySelectorAll('input[type="checkbox"]:checked')].map(input => Number(input.value)),
-      start:box.querySelector('[data-block-time="start"]').value, end:box.querySelector('[data-block-time="end"]').value,
-    }));
-  }
-  function readViewEditor() {
-    const state = {...editTarget.state};
-    document.querySelectorAll('[data-edit-filter]').forEach(input => state[input.dataset.editFilter] = input.dataset.editFilter === 'rolling' ? Number(input.value) : input.value);
-    return state;
   }
   async function savePreferences(changes) {
     const response = await fetch('/hfl-corpus/view-preferences', {
@@ -520,14 +363,8 @@
       menu.open = true;
     } finally { clearTimeout(timeout); clearTimeout(slow); transitioning = false; }
   }
-  document.addEventListener('corpus:edit-scheduled-view', async event => {
-    try {
-      viewData = await request(); views = viewData.views; preferences = viewData.preferences;
-      const target = views.find(view => view.id === event.detail);
-      if (!target) throw Error('This view was removed. Refresh the schedule.');
-      openDialog('edit'); editTarget = target;
-      $('[data-edit-target]').value = target.id; fillViewEditor(target); nameForm.elements.name.value = target.name;
-    } catch (error) { status.textContent = error.message; menu.open = true; }
+  document.addEventListener('corpus:edit-scheduled-view', event => {
+    location.assign('/spaces?edit=' + encodeURIComponent(event.detail));
   });
   function pickerCaption() {
     const names = views.filter(view => pendingIds.includes(view.id)).map(view => view.name);

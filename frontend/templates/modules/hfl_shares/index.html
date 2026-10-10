@@ -3,6 +3,7 @@
 {% block title %}Share Activity · HARQIS{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ static_asset('css/share-activity.css') }}">
+<link rel="stylesheet" href="{{ static_asset('css/context-help.css') }}">
 <style>
   .share-grid { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(270px,.8fr); gap:1.25rem; }
   .share-grid > *, .two > *, .field, .control { min-width:0; }
@@ -233,6 +234,7 @@
           <h2 class="text-lg font-semibold text-white">{{ "Edit recipe" if cfg and cfg.id else "New recipe" }}</h2>
         </div>
         <div class="recipe-header-actions">
+          <button type="button" id="recipe-help-open" class="context-icon-button" aria-label="How share recipes work" title="How share recipes work" aria-haspopup="dialog" aria-controls="recipe-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7h.01"></path></svg></button>
           {% if cfg and cfg.id %}<a class="text-xs text-sky-400" href="/sharing" data-recipe-clear>Clear</a>{% endif %}
         </div>
       </div>
@@ -390,18 +392,14 @@
               <div class="field"><label for="date-from">From date</label><input class="control [color-scheme:dark]" id="date-from" type="date" name="date_from" value="{{ cfg.date_from if cfg else '' }}" data-preview-filter onclick="if (this.showPicker) this.showPicker()"></div>
               <div class="field"><label for="date-to">To date</label><input class="control [color-scheme:dark]" id="date-to" type="date" name="date_to" value="{{ cfg.date_to if cfg else '' }}" data-preview-filter onclick="if (this.showPicker) this.showPicker()"></div>
             </div>
-            <div class="field mb-0">
-              <div class="field-heading"><label for="context-prompt">Background for HARQIS</label>
-              </div>
-              <p id="context-prompt-help" class="field-help">Optional background guidance for the agent. It cannot override share-scoped privacy and safety rules.</p>
-              <textarea class="control" id="context-prompt" name="context_prompt" rows="4" maxlength="4000" data-preview-filter>{{ cfg.context_prompt if cfg else '' }}</textarea>
-            </div>
+
+
           </div>
         </details>
 
 
 
-        {% include "modules/hfl_shares/_persona.html" %}
+
 
         <div class="preview-shell" data-preview-shell>
           <div class="preview-status" data-preview-status role="status" aria-live="polite" hidden><span class="mini-spinner" aria-hidden="true"></span><span>Refreshing your preview…</span></div>
@@ -546,6 +544,8 @@
   </section>
 </div>
 {% include "modules/hfl_corpus/partials/secrets_pin_dialog.html" %}
+{% include "modules/hfl_shares/_recipe_help.html" %}
+{% include "modules/hfl_shares/_context_examples.html" %}
 <script>
 (() => {
   const form = document.querySelector('[data-social-form]');
@@ -1137,6 +1137,7 @@
   if (!previewContent?.querySelector('[data-preview-ready]')) schedulePreview();
 })();
 </script>
+<script src="{{ static_asset('js/recipe-help.js') }}"></script>
 <script src="{{ static_asset('js/share-graphs.js') }}"></script>
 <script src="{{ static_asset('js/share-activity.js') }}"></script>
 <script src="{{ static_asset('js/share-personalization.js') }}"></script>

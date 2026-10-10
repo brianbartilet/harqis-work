@@ -115,9 +115,9 @@ def object_view(item, identity, kind):
         {'title': safe_text(c.get('title')), 'items': [{'text': safe_text(i.get('text')), 'done': bool(i.get('done'))}
                                                     for i in c.get('items', [])]}
         for c in item.get('checklists', [])]
-    if kind == 'plans':
+    if kind in ('plans', 'boards'):
         color = str(item.get('color', ''))
-        result['color'] = color if re.fullmatch(r'#[0-9a-fA-F]{6}', color) else '#38bdf8'
+        result['color'] = color if re.fullmatch(r'#[0-9a-fA-F]{6}', color) else ('#f59e0b' if kind == 'boards' else '#38bdf8')
     if kind == 'goals':
         result['milestones'] = [{'title': safe_text(m.get('title')), 'status': safe_text(m.get('status'))}
                                 for m in item.get('milestones', [])]

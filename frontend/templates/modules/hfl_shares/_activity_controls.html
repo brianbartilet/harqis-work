@@ -6,7 +6,7 @@
 <input type="hidden" name="graph_view" value="{{ activity.get('graph_view', {})|tojson|forceescape }}">
 <div data-object-exclusions>{% for identity in activity.get('excluded_ids', []) %}<input type="hidden" name="excluded_object_ids" value="{{ identity }}">{% endfor %}</div>
 <nav class="share-tabs" role="tablist" aria-label="Share recipe sections">
-  {% for key, label in [('recipe','Details and Filtering'),('entries','Entries'),('actions','Actions and Ideas'),('boards','Boards'),('plans','Plans'),('graph','Graph'),('agent','Agent')] %}
+  {% for key, label in [('recipe','Settings'),('entries','Entries'),('actions','Actions'),('boards','Boards'),('plans','Plans'),('graph','Graph'),('agent','Agent')] %}
   <button type="button" role="tab" id="share-tab-{{ key }}" aria-controls="share-panel-{{ key }}" aria-selected="{{ 'true' if loop.first else 'false' }}" data-share-tab="{{ key }}">{{ label }}</button>
   {% endfor %}
 </nav>
@@ -45,6 +45,15 @@
 {% elif key == 'graph' %}
 <label class="check"><input type="checkbox" name="activity_sections" value="graph" {% if 'graph' in sections %}checked{% endif %} data-activity-control>Include activity graph</label>
 <p class="share-scope-note">Only approved shared objects and their derived entities appear. Graphs never add unrelated objects.</p>
+{% elif key == 'agent' %}
+            <div class="field mb-0">
+              <div class="field-heading"><label for="context-prompt">Agent guide</label>
+              </div>
+              <p id="context-prompt-help" class="field-help">Optional background guidance for the agent. It cannot override share-scoped privacy and safety rules.</p>
+              <textarea class="control" id="context-prompt" name="context_prompt" rows="4" maxlength="4000" data-preview-filter>{{ cfg.context_prompt if cfg else '' }}</textarea>
+            </div>
+{% include "modules/hfl_shares/_suggestion_settings.html" %}
+{% include "modules/hfl_shares/_persona.html" %}
 {% endif %}
 </section>
 {% endfor %}

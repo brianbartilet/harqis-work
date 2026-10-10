@@ -13,11 +13,11 @@ For implementation and administration, see [Activity Corpus Sharing](HFL-CORPUS-
    then choose **Generate share recipe**. This opens an unsaved sharing draft
    with eligible context preselected. Alternatively open **Express > Share
    Activity** (`/sharing`) to build a recipe yourself.
-2. Give the recipe a name and recipient label. Review **Details and Filtering**,
+2. Give the recipe a name and recipient label. Review **Settings**,
    including sources, tags and dates. New standalone recipes start without a date
    restriction and require source selection; a workspace handoff retains its filters. A name is not a permission
    boundary: inspect the selected content, not just the label.
-3. Review **Entries**, **Actions and Ideas**, **Boards**, **Plans**, **Graph**, and
+3. Review **Entries**, **Actions**, **Boards**, **Plans**, **Graph**, and
    **Agent**. New recipes include the content types by default; entries are
    required. Exclude anything the audience should not see. Workspace-linked
    objects can remain included independently of entry date filters. Board
@@ -103,7 +103,7 @@ managed share with the access settings you selected and a reopenable handoff.
    Workspace objects and supporting entries can be included even when they do not
    mention any selected entity.
 5. Choose **Review** to load an unsaved recipe into the normal editor. The
-   first selection supplies the initial **Recipient**, which you can edit. Review Entries, Actions and Ideas, Boards,
+   first selection supplies the initial **Recipient**, which you can edit. Review Entries, Actions, Boards,
    Plans, Graph and Agent as usual. All-people selections start with the **People**
    graph preset; mixed types use **Timeline**. Refine filters, exclude objects and check inclusion reasons.
 6. To reuse the rules later, enable **Save as a reusable entity template** before
@@ -206,3 +206,27 @@ a saved override is a recipe/share setting, not a special context behavior.
 
 Related: [frontend workspace sharing](../../frontend/README.md#workspace-context-sharing)
 and [sharing lifecycle and operations](HFL-CORPUS-SHARING.md#lifecycle).
+
+## Organizing the source context
+
+Use **Organize → Spaces** to manage saved entry filters, colors, and weekly schedules.
+The Space dropdown on Corpus, Graph, and Kanban retains selection, Dynamic mode,
+Visualize, and sharing actions. **Manage Spaces** carries filters to the dedicated
+editor for an explicit save. See [Spaces guide](SPACES-GUIDE.md).
+Personal context is managed in **Organize → Facets**, formerly Roles; publishing
+still requires explicit selection of the recipient’s allowed excerpts.
+
+The info icon beside **New recipe** / **Edit recipe** opens the detailed in-page
+recipe guide. Facet selection cards and Markdown share context are in the **Agent** tab,
+under **Personal context · Facets and Soul**; they remain part of the same recipe
+form and are preserved when switching tabs.
+
+Share context is one Markdown field for the purpose, audience, background, and
+conversation style. Use its info icon for adaptable examples. Existing structured
+guidance loads as Markdown headings; saving preserves it in the new field.
+Guidance is distinct from evidence and cannot expand the shared scope.
+
+In the **Agent** tab, Agent guide supplies optional agent instructions.
+**Suggested questions** supports Automatic (shared-context prompts), Custom (up to
+five questions, one per line), or Off. Choices are saved with the recipe and
+published snapshot; update an existing share explicitly to apply recipe changes.

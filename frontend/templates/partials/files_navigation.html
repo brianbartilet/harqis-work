@@ -1,4 +1,11 @@
-<div class="activity-navigation{% if active_module == 'files' %} is-active{% endif %}">
-  <a href="/files" {% if active_module == 'files' %}aria-current="page"{% endif %}>Organize</a>
-  <details class="activity-navigation-menu"><summary hidden>Organize navigation</summary><nav class="activity-navigation-options" aria-label="Organize views"><a href="/files">Files</a></nav></details>
+<div class="activity-navigation{% if active_module in ['spaces', 'roles', 'files'] %} is-active{% endif %}">
+  <button type="button" aria-haspopup="true" aria-expanded="false">Organize</button>
+  <details class="activity-navigation-menu">
+    <summary hidden>Organize navigation</summary>
+    <nav class="activity-navigation-options" aria-label="Organize views">
+      <a href="/spaces" {% if active_module == 'spaces' %}aria-current="page"{% endif %}>Spaces</a>
+      <a href="/roles" {% if active_module == 'roles' %}aria-current="page"{% endif %}>Facets</a>
+      <a href="/files" {% if active_module == 'files' %}aria-current="page"{% endif %}>Files</a>
+    </nav>
+  </details>
 </div>

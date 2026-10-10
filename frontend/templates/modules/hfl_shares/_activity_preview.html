@@ -20,7 +20,7 @@
 </div>
 <div data-preview-tab="boards" class="share-board-list">
 {% for board in preview.activity.get('boards', []) %}
-<article class="share-object-card share-board-card" data-kind="boards">
+<article class="share-object-card share-board-card" data-kind="boards" style="--board-color:{{ board.get('color', '#f59e0b') }}">
 <div class="share-card-meta"><span class="share-kind-pill" data-kind="boards">Board</span><span>{{ board.graph.nodes|length }} objects</span></div>
 <label class="share-card-title"><input type="checkbox" checked {% if hide_preview_agent %}disabled{% endif %} data-share-object="{{ board.id }}"><span>{{ board.title }}</span></label>
 {% if board.get('purpose') %}<p class="share-card-body">{{ board.purpose }}</p>{% endif %}

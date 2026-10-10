@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Spaces · HARQIS{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ static_asset('css/roles.css') }}">
+<link rel="stylesheet" href="{{ static_asset('css/corpus-workspaces.css') }}">
+<link rel="stylesheet" href="{{ static_asset('css/spaces.css') }}">
+<link rel="stylesheet" href="{{ static_asset('css/context-help.css') }}">
+<main class="roles-page spaces-page mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8" data-spaces-csrf="{{ csrf }}">
+<header class="roles-heading page-header mb-4"><div><p class="page-header-eyebrow">Make room for what matters</p><h1 class="page-header-title">Spaces</h1><p class="page-header-description">Gather activity around the parts of life you want to focus on.</p></div><button id="space-new" class="role-primary">New Space</button></header>
+
+<p id="space-status" role="status" aria-live="polite">{{ source_warning }}</p>
+<div id="space-handoff" class="spaces-guide" hidden><h2>Filters from your activity view</h2><p id="space-handoff-text"></p><label>Save destination<select id="space-destination"><option value="">Choose a destination</option><option value="new">New Space</option></select></label><button id="space-apply-draft">Use these filters</button><button id="space-dismiss-draft">Dismiss</button></div>
+<div class="roles-layout">
+<section class="space-editor-panel"><div id="space-empty" class="roles-empty"><h2>Select a Space to load</h2><p>Choose a Space on the right to edit its filters and weekly schedule, or create a new one.</p></div>
+<form id="space-form" hidden><h2 id="space-editor-title">Edit Space</h2>{% include "modules/spaces/_editor.html" %}<p id="space-error" role="alert"></p><footer><button type="submit" class="role-primary">Save Space</button><button type="button" id="space-remove">Remove Space</button></footer></form></section>
+<aside><div class="context-help-heading"><h2>Your Spaces</h2><button type="button" id="spaces-help-open" class="context-icon-button" aria-label="How Spaces work" title="How Spaces work" aria-haspopup="dialog" aria-controls="spaces-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7h.01"></path></svg></button></div><label for="space-search">Find a Space</label><input id="space-search" type="search" placeholder="Search names or filters"><p id="space-count" class="role-help"></p><div id="space-list"></div></aside>
+</div>
+<dialog class="context-help" id="spaces-help" aria-labelledby="spaces-help-title">
+  <header class="context-help-header"><div><p class="context-help-eyebrow">A little orientation</p><h2 id="spaces-help-title" class="context-help-title" tabindex="-1">How Spaces work</h2></div><button type="button" class="context-icon-button" data-spaces-help-close aria-label="Close Spaces guide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg></button></header>
+  <div class="context-help-body">
+    <p class="context-help-intro">A place for each part of your life.</p><p>Bring activity together around work, family, learning, or a project. A Space combines saved entry filters with objects you link to it.</p>
+    <div class="context-help-grid">
+      <section><span class="context-help-step">01 · Gather</span><h3>Choose what belongs</h3><p>Save sources, search text or #tags, and dates. Use <strong>Manage Spaces</strong> in Corpus, Graph, or Kanban to bring filters here, then choose a destination and save.</p><p>For several selected Spaces, only the additional filters carry over—not their combined rules. Review before saving.</p></section>
+      <section><span class="context-help-step">02 · Connect</span><h3>Add your context</h3><p>Link actions, ideas, and boards in their existing editors. These assignments are separate from entry filters. Link a <strong>Facet</strong> to suggest relevant personal context when sharing.</p></section>
+      <section><span class="context-help-step">03 · Focus</span><h3>Follow your rhythm</h3><p>Choose one or more Spaces in <strong>Focus on</strong>. Matching activity combines without duplicates; additional filters narrow it.</p><p>Add weekly time blocks here, then enable <strong>Dynamic mode</strong>. Overlaps combine Spaces; gaps show all activity. <strong>Visualize</strong> displays your schedule. Manual selection turns Dynamic mode off.</p></section>
+      <section><span class="context-help-step">04 · Share</span><h3>Decide what others see</h3><p>Use <strong>Sharing preview</strong> to review the context. <strong>Generate share recipe</strong> opens a draft for review before publishing. Search text does not transfer to a recipe.</p><p>Choose the Facet excerpts each recipient may receive. Published shares follow their own frozen or live settings.</p></section>
+    </div>
+    <section class="context-help-details"><h3>One Space, three ways to explore</h3>
+      <p>Select a Space in <strong>Focus on</strong> to carry the same context across Activity Corpus, Kanban, and Graph. Your selection, applied filters, and Dynamic mode are shared across these views on the same server. Explicit filter links can open a different context.</p>
+      <div class="context-help-grid">
+        <section><span class="context-help-step">Corpus · Read the evidence</span><h3>Find the moments that matter</h3><p>Saved sources, search text or #tags, and date rules determine which entries match. Select several Spaces to combine their matches without duplicates. Additional search filters narrow the combined activity.</p><p>Use <strong>Reset</strong> to return to the selected Space’s saved rules. To keep changed filters, choose <strong>Manage Spaces</strong>, select a destination, and save them there.</p></section>
+        <section><span class="context-help-step">Kanban · Move work forward</span><h3>Focus on relevant actions and ideas</h3><p>The Space context follows you into the action board and ideas view. Link an action or idea to a Space in its editor to make that membership explicit, even when it does not match the Space’s saved entry filters.</p><p>Additional filters can still narrow what appears. Moving an action between status columns changes its workflow status; edit its Space assignment separately.</p></section>
+        <section><span class="context-help-step">Graph · See the connections</span><h3>Explore the same context visually</h3><p>The Activity Graph uses the Space context to scope activity, linked objects, and their connections. Space-linked boards are included through their assignments.</p><p>Opening a board keeps its members together. Members outside the current Space filters are marked <strong>Outside Space filters</strong> so you can see the complete board without mistaking every member for a match.</p></section>
+        <section><span class="context-help-step">Example · A Work Space</span><h3>Read, act, then connect</h3><p>Save work-related sources and tags. In <strong>Corpus</strong>, review matching entries. In <strong>Kanban</strong>, manage related actions and ideas. In <strong>Graph</strong>, explore their relationships and linked boards.</p><p>Use the same dropdown in each view for <strong>Dynamic mode</strong>, <strong>Visualize</strong>, <strong>Sharing preview</strong>, or <strong>Generate share recipe</strong>.</p></section>
+      </div>
+    </section>
+    <div class="context-help-note"><strong>Filters and membership do different jobs</strong><p>Saved filters find matching entries. Space assignments connect objects deliberately. Changing a filter does not reassign objects, and moving an action’s status does not move it to another Space.</p></div>
+    <div class="context-help-note"><strong>Private until you choose to share</strong><p>Saving a Space or linking a Facet does not publish anything.</p></div>
+    <section class="context-help-details"><h3>A few useful details</h3><p><strong>Dates and schedules.</strong> Rolling dates move with today; fixed dates stay fixed. Schedules use your Profile timezone. An end before the start continues into the next day.</p><p><strong>Removing a Space.</strong> Removes its saved filters and schedule, not your entries or other objects. Review linked Facets and object assignments afterward.</p></section>
+  </div>
+  <footer class="context-help-footer"><button type="button" class="role-primary" data-spaces-help-close>Got it</button></footer>
+</dialog>
+<dialog id="space-delete" class="workspace-dialog" aria-labelledby="space-delete-title"><h2 id="space-delete-title">Remove Space?</h2><p id="space-delete-description"></p><div class="workspace-menu-actions"><button id="space-delete-cancel">Cancel</button><button id="space-delete-confirm">Remove Space</button></div><p id="space-delete-error" role="alert"></p></dialog>
+<script type="application/json" id="spaces-data">{{ space_data | tojson }}</script><script type="application/json" id="spaces-sources">{{ source_options | tojson }}</script>
+</main><script defer src="{{ static_asset('js/spaces.js') }}"></script>
+{% endblock %}

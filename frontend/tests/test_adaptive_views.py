@@ -261,10 +261,8 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             assert '2 matching entries' in page.locator('[data-corpus-results]').inner_text()
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.locator('[data-workspace-menu] > summary').click()
-            assert page.locator('[data-workspace-action="save"]').is_disabled()
-            assert page.locator('[data-workspace-action="remove"]').is_disabled()
-            assert page.locator('[data-workspace-action="new"]').is_enabled()
-            assert page.locator('[data-workspace-save-hint]').inner_text() == 'Select one view to save changes.'
+            assert page.locator('[data-workspace-action]').count() == 0
+            assert page.locator('[data-manage-spaces]').is_visible()
             page.locator('[data-corpus-share-preview]').click()
             preview = page.locator('[data-corpus-share-dialog]')
             playwright.expect(preview.locator('[data-preview-ready]')).to_be_visible()
@@ -272,12 +270,11 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             assert preview.locator('[data-test-question]').count() == 0
             page.screenshot(path=str(tmp_path/f'adaptive-sharing-{width}.png'),full_page=True)
             page.locator('[data-corpus-share-close]').click()
-            page.locator('[data-workspace-action="edit"]').click()
-            page.select_option('[data-edit-target]',first['id'])
+            activity_url = page.url
+            page.goto(activity_url.split('/hfl-corpus')[0]+'/spaces?edit='+first['id'])
             assert page.locator('[data-applied-filters]').get_attribute('open') is None
             assert page.locator('[data-assigned-schedules]').get_attribute('open') is not None
             assert page.locator('[data-assigned-schedules]').bounding_box()['y'] < page.locator('[data-applied-filters]').bounding_box()['y']
-            assert page.locator('[data-edit-target]').bounding_box()['y'] < page.locator('#workspace-name').bounding_box()['y']
             page.locator('[data-applied-filters] > summary').click()
             page.locator('[data-edit-sources] > summary').click()
             page.locator('[data-edit-source-options] input[value="notes"]').check()
@@ -285,7 +282,7 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             page.screenshot(path=str(tmp_path/f'editor-sources-{width}.png'),full_page=True)
             page.locator('[data-edit-source-options] input[value="notes"]').uncheck()
             page.keyboard.press('Escape')
-            assert page.locator('[data-workspace-dialog]').is_visible()
+            assert page.locator('#space-form').is_visible()
             assert page.locator('[data-edit-sources]').get_attribute('open') is None
             page.locator('[data-edit-sources] > summary').click()
             page.locator('#workspace-name').click()
@@ -296,10 +293,11 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             page.locator('[data-add-block]').click()
             assert page.locator('.workspace-day-options input:checked').count()==5
             page.screenshot(path=str(tmp_path/f'adaptive-edit-{width}.png'),full_page=True)
-            page.locator('[data-workspace-confirm]').click()
-            page.wait_for_function("!document.querySelector('[data-workspace-dialog]').open")
+            page.get_by_role('button', name='Save Space', exact=True).click()
+            playwright.expect(page.locator('#space-status')).to_contain_text('Space saved')
             updated=authenticated_client.get('/hfl-corpus/workspace-views').json()
             assert next(v for v in updated['views'] if v['id']==first['id'])['schedule'][0]['start']=='09:00'
+            page.goto(activity_url)
             page.wait_for_function("() => JSON.parse(document.querySelector('[data-workspace-data]').textContent).views.some(v => v.name === 'Work' && v.schedule.length === 1) && document.querySelector('[data-dynamic-toggle]').onchange !== null")
             page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
             # Another view overlaps Monday and crosses the Sunday/Monday boundary.
@@ -342,10 +340,10 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             assert '#work' in calendar.locator('[data-visualize-detail]').inner_text()
             page.screenshot(path=str(tmp_path/f'visualizer-{width}.png'),full_page=True)
             calendar.get_by_role('button', name='Edit view', exact=True).click()
-            playwright.expect(page.locator('[data-workspace-dialog]')).to_be_visible()
+            playwright.expect(page.locator('#space-form')).to_be_visible()
             assert page.locator('#workspace-name').input_value() == 'Work'
             assert page.locator('[data-view-colors] button').nth(5).get_attribute('aria-pressed') == 'true'
-            page.locator('[data-workspace-cancel]').click()
+            page.goto(activity_url)
             page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
             page.locator('[data-dynamic-toggle]').check()
             page.wait_for_function("document.querySelector('[data-dynamic-badge]').textContent==='Dynamic ON'")
@@ -367,8 +365,7 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             failed[0] = False
             page.locator('[data-adaptive-status] button').click()
             page.wait_for_function("document.querySelector('[data-active-view-name]').textContent==='Work'")
-            assert page.locator('[data-workspace-action="save"]').is_enabled()
-            assert page.locator('[data-workspace-save-hint]').is_hidden()
+            assert page.locator('[data-manage-spaces]').get_attribute('href') == '/spaces'
             assert '1 matching entries' in page.locator('[data-corpus-results]').inner_text()
             page.wait_for_function("document.querySelector('[data-activity-body]').classList.contains('workspace-arrive')")
             # Kanban is now a separate page (covered by the cross-tab workspace test).
