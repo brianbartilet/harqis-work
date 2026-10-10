@@ -252,7 +252,7 @@ def test_share_corpus_form_uses_new_labels_defaults_and_collapsed_sections(
     assert response.status_code == 200
     assert "<title>Share Activity · HARQIS</title>" in response.text
     assert ">Share Activity</h1>" in response.text
-    assert "Review workspace context, then generate frozen or live read-only shares." in response.text
+    assert "Review Space context, then generate frozen or live read-only shares." in response.text
     assert response.text.count('class="owner-list-arrow-shell"') == 4
     assert ">New recipe</h2>" in response.text
     assert "Verification mode" in response.text
@@ -2964,7 +2964,8 @@ def test_answer_question_routes_only_sanitized_prompt_to_hermes(tmp_path, monkey
     assert result == "Brian shipped [[the corpus portal|S1]]."
     assert captured["settings"] is settings
     assert "read-only HARQIS Activity Corpus" in captured["system"]
-    assert "first-person activity in an entry belongs to Brian" in captured["system"]
+    from modules.profile.store import get_profile_store
+    assert f"first-person activity in an entry belongs to {get_profile_store().get().display_name}" in captured["system"]
     assert "latest known snapshot activity" in captured["system"]
     assert "<shared_context>" in captured["user"]
     assert "What did Brian ship?" in captured["user"]

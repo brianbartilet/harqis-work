@@ -27,7 +27,7 @@
     host._disposeWorkspacePicker?.();
     const picker=element('details');picker.className='workspace-view-picker intent-workspace-picker';
     const summary=element('summary'),caption=element('span'),options=element('div'),choices=element('div');
-    summary.setAttribute('aria-label',boards?'Boards':name?'Workspaces':'Focus on');summary.append(caption);options.className='workspace-view-options';
+    summary.setAttribute('aria-label',boards?'Boards':name?'Spaces':'Focus on');summary.append(caption);options.className='workspace-view-options';
     const clear=element('button',empty);clear.type='button';options.append(clear,choices,element('p','Selections apply when you close this list.'));picker.append(summary,options);host.append(picker);
     let ids=new Set(selected),applied=[...ids].sort().join(','),views=[],loaded=false;
     const all=selectAll?element('button','Select all'):null;
@@ -43,17 +43,17 @@
     const controller=new AbortController();host._disposeWorkspacePicker=()=>controller.abort();document.addEventListener('click',event=>{if(!picker.isConnected){controller.abort();return;}if(!picker.contains(event.target)){picker.open=false;commit();}},{signal:controller.signal});
     // Close/apply on submit too, so a pending checkbox selection is never lost.
     host.closest('form')?.addEventListener('submit',commit,{capture:true,signal:controller.signal});
-    clear.disabled=true;update();fetch(boards?'/hfl-corpus/timeline/ideas/boards':'/hfl-corpus/workspace-views').then(async response=>{if(!response.ok)throw Error();return response.json();}).then(data=>{if(!picker.isConnected)return;views=boards?data.maps.filter(b=>b.active!==false).sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||'')||a.name.localeCompare(b.name)):data.views;if(!boards)for(const id of ids)if(!views.some(v=>v.id===id))views.push({id,name:'Unavailable workspace'});loaded=true;if(defaultAll)for(const view of views)ids.add(view.id);clear.disabled=false;if(all)all.disabled=false;render();if(defaultAll)commit();onload(views);}).catch(()=>{options.append(element('p',boards?'Boards unavailable. Reopen to retry.':'Workspaces unavailable. Reopen to retry.'));onerror();});
-    return {close:()=>{if(defaultAll&&!loaded)throw Error('Wait for workspaces to load, or reopen the category to retry.');picker.open=false;commit();}};
+    clear.disabled=true;update();fetch(boards?'/hfl-corpus/timeline/ideas/boards':'/hfl-corpus/workspace-views').then(async response=>{if(!response.ok)throw Error();return response.json();}).then(data=>{if(!picker.isConnected)return;views=boards?data.maps.filter(b=>b.active!==false).sort((a,b)=>(b.updated_at||'').localeCompare(a.updated_at||'')||a.name.localeCompare(b.name)):data.views;if(!boards)for(const id of ids)if(!views.some(v=>v.id===id))views.push({id,name:'Unavailable Space'});loaded=true;if(defaultAll)for(const view of views)ids.add(view.id);clear.disabled=false;if(all)all.disabled=false;render();if(defaultAll)commit();onload(views);}).catch(()=>{options.append(element('p',boards?'Boards unavailable. Reopen to retry.':'Spaces unavailable. Reopen to retry.'));onerror();});
+    return {close:()=>{if(defaultAll&&!loaded)throw Error('Wait for Spaces to load, or reopen the category to retry.');picker.open=false;commit();}};
   };
   window.HflIntentFields = (form, item={}, kind='actionable') => {
     let root=form.querySelector('[data-intent-fields]');
     if(!root){root=element('section');root.dataset.intentFields='';}
-    form.querySelector('[data-object-attachments]').after(root);root.replaceChildren(element('p','Workspaces'));
+    form.querySelector('[data-object-attachments]').after(root);root.replaceChildren(element('p','Spaces'));
     const params=new URLSearchParams(location.search);
     const activeWorkspaces=(params.get('views')||params.get('workspace')||params.get('workspace_ids')||'').split(',').filter(Boolean);
     const selectedWorkspaces=item?.workspace_ids??(item?.id?[]:activeWorkspaces);
-    window.HflWorkspacePicker(root,{selected:selectedWorkspaces,empty:'No workspace',name:'workspace_ids'});
+    window.HflWorkspacePicker(root,{selected:selectedWorkspaces,empty:'No Space',name:'workspace_ids'});
     const boardRoot=element('section');boardRoot.dataset.intentBoards='';boardRoot.append(element('p','Boards'));root.append(boardRoot);
     window.HflWorkspacePicker(boardRoot,{selected:item?.board_ids||[],empty:'No board',name:'board_ids',boards:true});
     boardRoot.dataset.baseline=JSON.stringify([...(item?.board_ids||[])].sort());

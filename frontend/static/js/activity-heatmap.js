@@ -268,7 +268,7 @@
       memoryRefs.categoryWorkspaces.replaceChildren();
       memoryRefs.workspacePicker = window.HflWorkspacePicker(memoryRefs.categoryWorkspaces, {
         selected: category?.workspace_ids || [], selectAll: true, defaultAll: !category,
-        empty: 'No workspace', name: 'workspace_ids',
+        empty: 'No Space', name: 'workspace_ids',
       });
       promptEditors.category.set(category?.instructions);
       memoryRefs.categoryDelete.hidden = !category;

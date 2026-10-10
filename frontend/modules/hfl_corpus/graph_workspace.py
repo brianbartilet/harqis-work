@@ -1,4 +1,4 @@
-"""Workspace membership for owner graphs; never an authorization boundary.
+"""Space membership for owner graphs; never an authorization boundary.
 
 Recipient sharing will separately validate access before including complete boards.
 """

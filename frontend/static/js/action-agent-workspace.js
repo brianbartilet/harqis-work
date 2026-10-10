@@ -160,7 +160,7 @@
     function showConfig() {
       const s=config.effective;
       description.replaceChildren();
-      for(const [label,value] of [['Agent','Hermes'],['Configuration',config.card.preset||'App Settings defaults'],['Profile',s.hermes_profile||'Worker profile'],['Permissions',s.agent_mode],['Workspace',s.agent_repository||'Isolated worktree'],['Idle expiry',s.agent_session_expiry_minutes+' minutes']])description.append(el('dt',label),el('dd',value));
+      for(const [label,value] of [['Agent','Hermes'],['Configuration',config.card.preset||'App Settings defaults'],['Profile',s.hermes_profile||'Worker profile'],['Permissions',s.agent_mode],['Repository',s.agent_repository||'Isolated worktree'],['Idle expiry',s.agent_session_expiry_minutes+' minutes']])description.append(el('dt',label),el('dd',value));
       if (summary && config.action) {
         const action=config.action;
         summary.replaceChildren(el('span','ACTION'),el('h3',action.title));
@@ -299,7 +299,7 @@
         const data=await refreshList();if(disposed)return;
         if(data.sessions.length)attach(data.sessions[0]);else showEmpty();
         await poll();
-      }catch(e){error.textContent=e.message;error.hidden=false;status.textContent='Workspace could not be loaded.';}
+      }catch(e){error.textContent=e.message;error.hidden=false;status.textContent='Agent session could not be loaded.';}
     })();
     return ()=>{disposed=true;clearTimeout(pasteNoticeTimer);window.removeEventListener('hfl:actions-updated',actionChanged);document.removeEventListener('close',editorClosed,true);clearTimeout(polling);clearTimeout(inputTimer);void flushInput();observer.disconnect();terminal?.dispose();};
   }

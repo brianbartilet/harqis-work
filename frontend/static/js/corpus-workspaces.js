@@ -169,7 +169,7 @@
     const modified = normalized(snapshot()) !== normalized(aggregateScope.any.length ? {} : current?.state || {});
     badge.textContent = modified ? 'Modified' : current || applied.length ? 'Saved' : 'Default';
     badge.dataset.state = modified ? 'modified' : current || applied.length ? 'saved' : 'default';
-    if(kanban)window.dispatchEvent(new CustomEvent('hfl:workspace-context',{detail:{names:activeIds.map(id=>views.find(view=>view.id===id)?.name||'Unavailable workspace')}}));
+    if(kanban)window.dispatchEvent(new CustomEvent('hfl:workspace-context',{detail:{names:activeIds.map(id=>views.find(view=>view.id===id)?.name||'Unavailable Space')}}));
   }
   form.addEventListener('input', updateViewContext);
   form.addEventListener('change', updateViewContext);
@@ -541,7 +541,7 @@
     $('#view-loading-detail').textContent = 'Applying selected views…'; viewLoading.showModal();
     try {
       const latest = await request(); preferences = latest.preferences;
-      if (ids.some(id => !latest.views.some(view => view.id === id))) throw Error('A selected view was removed. Reopen Workspaces and try again.');
+      if (ids.some(id => !latest.views.some(view => view.id === id))) throw Error('A selected view was removed. Reopen Spaces and try again.');
       const data = await savePreferences({manual:ids, dynamic:false, applied:{}});
       await loadCombined(data, ids, false);
     } catch (error) { endViewLoading(); status.textContent = error.message; menu.open = true; }
@@ -582,7 +582,7 @@
     if (transitioning || busy || pollInFlight || disposed || document.hidden || document.querySelector('#followups-board[data-busy=true]') || document.querySelector('dialog[open]:not(#followups-board)') || (menu.open && !(graph && dynamicOn && !picker.open && !pickerChanged))) return;
     // Applied filters are shared; unfinished typing stays local until submitted.
     if (JSON.stringify(snapshot()) !== initialFilterState) {
-      $('[data-adaptive-status]').textContent = 'Workspace sync paused while filters are being edited. Apply your filters to sync.';
+      $('[data-adaptive-status]').textContent = 'Space sync paused while filters are being edited. Apply your filters to sync.';
       return;
     }
     pollInFlight = true;
@@ -595,7 +595,7 @@
       }
     } catch (error) {
       const notice = $('[data-adaptive-status]');
-      notice.textContent = 'Could not sync workspaces. Will retry shortly. ';
+      notice.textContent = 'Could not sync Spaces. Will retry shortly. ';
       const retry = document.createElement('button'); retry.type = 'button'; retry.textContent = 'Retry';
       retry.onclick = () => checkDynamic(true); notice.append(retry);
     } finally { pollInFlight = false; }

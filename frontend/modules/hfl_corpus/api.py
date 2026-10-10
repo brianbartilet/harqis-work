@@ -627,3 +627,6 @@ router.include_router(ideas_router, prefix='/timeline')
 
 from modules.hfl_corpus.management_api import router as management_router
 router.include_router(management_router)
+
+from modules.roles.router import api as roles_api
+router.include_router(roles_api)

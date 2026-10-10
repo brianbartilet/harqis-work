@@ -851,3 +851,15 @@ tailscale acls set --file scripts/tailscale/acl-policy.hujson
 
 Tag model and rules — see the file's header comment, or the previous
 revision of this README in git history.
+
+
+### Persona review instance
+
+| Runtime script | Purpose |
+|---|---|
+| `persona_preview.py` | Isolated Roles/Soul frontend and manual audit worker. |
+
+Run `python scripts/persona_preview.py frontend` and, separately,
+`python scripts/persona_preview.py worker`. The default port is 8093 (`--port` can
+override it on both processes). No Beat instance starts. See
+[Roles and Spaces](../docs/info/ROLES-AND-SPACES.md) for storage and HFL behavior.

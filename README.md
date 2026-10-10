@@ -1044,3 +1044,7 @@ For questions or feedback: **[LinkedIn](https://www.linkedin.com/in/dbbartilet/)
 ## License
 
 Distributed under the [MIT License](LICENSE).
+
+Personal [Roles, Soul, and Spaces](docs/info/ROLES-AND-SPACES.md) enrich shared
+conversations through explicitly selected personal evidence and a private weekly
+`persona-audit` journal review.

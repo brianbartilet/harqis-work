@@ -544,7 +544,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     $('list').replaceChildren();
     items.sort((a,b)=>Number(b.kind==='sources')-Number(a.kind==='sources') || b.visibleDegree-a.visibleDegree || a.label.localeCompare(b.label)).slice(0,200).forEach(n => {
       const button=document.createElement('button'),dot=document.createElement('span'),name=document.createElement('span'),meta=document.createElement('small');
-      dot.className='kg-dot';dot.style.background=color(n.kind);name.textContent=n.label;meta.textContent=n.outside_workspace?'Outside workspace filters':n.visibleDegree+' links';button.title=n.label+' · '+kindLabel(n.kind);
+      dot.className='kg-dot';dot.style.background=color(n.kind);name.textContent=n.label;meta.textContent=n.outside_workspace?'Outside Space filters':n.visibleDegree+' links';button.title=n.label+' · '+kindLabel(n.kind);
       if(selected){const link=edges.find(e=>(e.source===selected&&e.target===n.id)||(e.target===selected&&e.source===n.id));if(link){const evidence=document.createElement('small');evidence.textContent=(link.relation||'linked')+' · '+(link.evidence||'');evidence.style.cssText='grid-column:2 / 4;white-space:normal;font-size:11px';button.append(evidence);button.title=link.evidence||n.label;}}
       button.prepend(dot,name,meta);button.onclick=event=>{window.HflIdeas?.maps.selectNode(n.id,event.shiftKey||event.ctrlKey||event.metaKey);select(n.id);};$('list').append(button);
     });
@@ -617,7 +617,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     heading.textContent=n?n.label:'';
     description.textContent=n?[kindLabel(n.kind),n.date,n.source,near.size+' visible connections'].filter(Boolean).join(' · '):window.HflIdeas?.maps.current?'Select an orb to build on a thought, connect ideas, or take the next step.':'Select an orb to explore its linked entries and entities.';
     if(n)$('detail').append(heading);$('detail').append(description);
-    if(n?.outside_workspace){const note=document.createElement('p');note.className='kg-outside-workspace';note.textContent='Outside workspace filters · Included as a member of this board.';$('detail').append(note);}
+    if(n?.outside_workspace){const note=document.createElement('p');note.className='kg-outside-workspace';note.textContent='Outside Space filters · Included as a member of this board.';$('detail').append(note);}
     if(n?.href&&n.kind==='entries') {const button=document.createElement('button');button.textContent='Open entry';button.className='kg-open-entry';button.onclick=()=>openEntry(n.id.replace(/^entry:/,''),n.locator);$('detail').append(button);}
     if(!exampleMode)window.HflIdeas?.inspect(n,$('detail'),data.edges);
     if(n){const focus=document.createElement('button');focus.textContent='Focus on this connection';focus.className='kg-focus-button';focus.onclick=()=>{focusId=n.id;render();};$('detail').append(focus);}
@@ -773,13 +773,13 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     const additional=split(params.has('source')?params.get('source'):scope.all?.source);
     if(additional.length)inherited=inherited?inherited.filter(source=>additional.includes(source)):additional;
     const scoped=!!(params.get('workspace')||params.get('views')||inherited);
-    const baseline=scoped?'Workspace sources':'All sources';
+    const baseline=scoped?'Space sources':'All sources';
     $('source-inherited').textContent=scoped
       ? 'Inherited: '+(inherited===null?'all sources':inherited.length?inherited.join(', '):'no overlapping sources')+'. Selections below narrow this graph only.'
       : 'Selections narrow this graph only.';
     $('source-options').replaceChildren();
     const reset=document.createElement('button');reset.type='button';reset.dataset.sourceReset='';
-    reset.textContent=scoped?'Reset to workspace sources':'Reset to all sources';
+    reset.textContent=scoped?'Reset to Space sources':'Reset to all sources';
     reset.onclick=()=>{selectedSources.clear();sourceOptions(values);};
     $('source-options').append(reset);
     for(const value of [...new Set([...(inherited||[]),...values,...selectedSources])].sort()) {

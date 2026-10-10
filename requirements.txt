@@ -49,6 +49,7 @@ opencv-python-headless>=4.9.0
 # (Audio transcription is intentionally NOT wired yet — audio files are
 # recorded metadata-only until a transcriber is chosen; see workflows/hfl/README.md.)
 pypdf>=4.0.0
+pytesseract>=0.3.13
 python-docx>=1.1.0
 openpyxl>=3.1.0
 python-pptx>=0.6.23

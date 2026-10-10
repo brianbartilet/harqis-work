@@ -11,7 +11,7 @@
   const scopeText = document.querySelector('[data-activity-context]');
   function updateScope() {
     scopeButton?.setAttribute('aria-checked', String(all));
-    if (scopeText) scopeText.textContent = all || !inherited ? 'All activity' : 'Following workspace and activity filters';
+    if (scopeText) scopeText.textContent = all || !inherited ? 'All activity' : 'Following Space and activity filters';
   }
   async function close() {
     try { await window.HflIdeas?.maps.flush(); }

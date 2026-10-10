@@ -217,10 +217,10 @@
   all.checked=new URLSearchParams(location.search).get('all')==='1';
   if(document.querySelector('[data-workspace-menu]')){
     const data=JSON.parse(document.querySelector('[data-workspace-data]').textContent),params=new URLSearchParams(location.search),ids=(params.get('views')||params.get('workspace')||params.get('workspace_ids')||'').split(',').filter(Boolean);
-    workspaceNames=ids.map(id=>data.views.find(view=>view.id===id)?.name||'Unavailable workspace');workspaceLoadState='loaded';
+    workspaceNames=ids.map(id=>data.views.find(view=>view.id===id)?.name||'Unavailable Space');workspaceLoadState='loaded';
     window.addEventListener('hfl:workspace-context',event=>{workspaceNames=event.detail.names;all.checked=false;context();},{signal:listeners.signal});
   }else{
-  const workspaceFilter=node('details',null,'board-workspace-filter'),workspaceTitle=node('summary','Workspace'),workspacePanel=node('div',null,'workspace-menu-panel');
+  const workspaceFilter=node('details',null,'board-workspace-filter'),workspaceTitle=node('summary','Space'),workspacePanel=node('div',null,'workspace-menu-panel');
   workspacePanel.append(node('p','Focus on'));workspaceFilter.append(workspaceTitle,workspacePanel);$('[data-board-context]').after(workspaceFilter);
   const params=new URLSearchParams(location.search),selectedWorkspaces=(params.get('views')||params.get('workspace')||params.get('workspace_ids')||'').split(',').filter(Boolean);
   all.checked=params.get('all')==='1';

@@ -279,6 +279,8 @@ app.include_router(action_agent_worker_router)
 app.include_router(hfl_share_owner_router)
 app.include_router(hfl_share_guest_router)
 app.include_router(git_forks_router)
+from modules.roles.router import router as roles_router
+app.include_router(roles_router)
 app.include_router(profile_router)
 app.include_router(app_settings_router)
 app.include_router(second_brain_router)

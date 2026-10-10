@@ -28,7 +28,7 @@ def load_context():
         data['_secrets_supported'] = not legacy
         return data
     except (httpx.HTTPError, ValueError) as exc:
-        raise ValueError('Workspace sharing context could not load. The canonical API must support workspace sharing.') from exc
+        raise ValueError('Space sharing context could not load. The canonical API must support workspace sharing.') from exc
 
 
 def load_plans():
@@ -139,7 +139,7 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
                                           'connections': {'nodes': [], 'edges': []}, 'graph': {'nodes': [], 'edges': []}})
     data = load_context() if context is None else context
     if configuration.include_secrets and not data.get('_secrets_supported', True):
-        raise ValueError('The canonical API needs the workspace-sharing update before secret-backed actions and ideas can be included. Entries-only secret shares remain supported.')
+        raise ValueError('The canonical API needs the Space-sharing update before secret-backed actions and ideas can be included. Entries-only secret shares remain supported.')
     permitted, matching = set(), set()
     evidence_entry_ids = {}
     selected_entries = {e.id for e in snapshot.entries} if matching_ids is None else matching_ids

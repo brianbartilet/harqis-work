@@ -32,6 +32,9 @@
       </div>
       <button class="drawer-close" type="button" data-drawer-close aria-label="Close source drawer">×</button>
     </header>
+    {% if grant.snapshot.persona_entries %}
+    <details class="p-4" open><summary>About the sharer</summary>{% for entry in grant.snapshot.persona_entries %}<article class="mt-4" id="evidence-{{ entry.citation[1:] }}"><h3>{{ entry.moment }}</h3><p class="whitespace-pre-wrap">{{ entry.text }}</p>{% for ref in entry.references %}<a href="{% if owner_preview %}/sharing/shares/{{ grant.id }}/preview{% else %}/share/session{% endif %}/references/{{ ref.id }}">Download {{ ref.label }}</a>{% endfor %}</article>{% endfor %}</details>
+    {% endif %}
     <section class="share-sidebar-view share-entries-view" data-share-sidebar="entries">
     <form class="drawer-search" method="get" action="{% if owner_preview %}/sharing/shares/{{ grant.id }}/preview{% else %}/share/session{% endif %}" data-live-search>
       <label for="search">Search these moments</label>
@@ -712,6 +715,7 @@
       }
     }
     if (!evidence) {appendError('The cited evidence is no longer available.');return;}
+    for (let parent = evidence.parentElement; parent; parent = parent.parentElement) { if (parent.tagName === 'DETAILS') parent.open = true; }
     document.querySelectorAll('.is-cited-evidence').forEach(
       item => item.classList.remove('is-cited-evidence')
     );

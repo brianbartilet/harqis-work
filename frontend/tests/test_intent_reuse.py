@@ -195,25 +195,17 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
                 content=r.post_data_buffer, headers={'content-type': r.headers.get('content-type', 'application/json')})
             route.fulfill(status=response.status_code, body=response.content, headers={'content-type':response.headers.get('content-type', 'text/html')})
         page.route('https://reuse.test/**', respond)
-        page.route('https://reuse.test/hfl-corpus/workspace-views', lambda route: route.fulfill(json={'views': [
+        from modules.hfl_corpus import workspace_views
+        page.route('https://reuse.test/hfl-corpus/workspace-views', lambda route: route.fulfill(json={**workspace_views.listing(), 'views': [
             {'id':'work','name':'Work','color':'#f59e0b','state':{}},
             {'id':'home','name':'Home','color':'#3b82f6','state':{}},
         ]}))
         page.goto('https://reuse.test/hfl-corpus/actions')
         expect(page.locator('[data-board-all]')).to_have_count(0)
-        page.locator('.board-workspace-filter > summary').click()
-        page.locator('.board-workspace-filter .workspace-view-picker > summary').click()
-        page.locator('.board-workspace-filter').get_by_label('Work', exact=True).check()
-        page.locator('.board-workspace-filter').get_by_label('Home', exact=True).check()
-        assert 'views=' not in page.url
-        page.locator('.board-workspace-filter .workspace-view-picker > summary').click()
-        expect(page.locator('[data-board-context]')).to_have_text('Work + Home')
-        page.locator('.board-workspace-filter .workspace-view-picker > summary').click()
-        page.locator('.board-workspace-filter').get_by_role('button', name='All activity', exact=True).click()
-        expect(page.locator('[data-board-context]')).to_have_text('All activity')
-        page.locator('.board-workspace-filter > summary').click()
+        # Kanban now uses the shared Space menu (covered by the cross-tab tests).
+        expect(page.locator('[data-workspace-menu]')).to_have_count(1)
         page.locator('[data-board-create-menu] > summary').click()
-        expect(page.locator('[data-board-create-menu]').get_by_role('link', name='Entry')).to_be_visible()
+        expect(page.locator('[data-board-create-menu]').get_by_role('button', name='Action', exact=True)).to_be_visible()
         expect(page.locator('[data-board-create-menu]').get_by_role('button', name='Idea', exact=True)).to_be_visible()
         page.locator('[data-board-create-menu] > summary').click()
 
@@ -234,11 +226,11 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
         modal = page.locator('dialog[open]').last
         expect(modal.get_by_label('Idea', exact=True)).to_have_value('Source idea (1)')
         assert modal.locator('[data-object-attachments] + [data-intent-fields]').count() == 1
-        modal.get_by_label('Workspaces', exact=True).click()
+        modal.get_by_label('Spaces', exact=True).click()
         modal.locator('[data-intent-fields]').get_by_label('Work', exact=True).check()
         modal.locator('[data-intent-fields]').get_by_label('Home', exact=True).check()
-        modal.get_by_label('Workspaces', exact=True).click()
-        expect(modal.get_by_label('Workspaces', exact=True)).to_have_text('Work + Home')
+        modal.get_by_label('Spaces', exact=True).click()
+        expect(modal.get_by_label('Spaces', exact=True)).to_have_text('Work + Home')
 
         expect(modal.locator('.checklist-markdown')).to_contain_text('Choose a shelf')
         for revised in ('**Updated shelf**', '*Updated again*'):
@@ -282,9 +274,9 @@ def test_reuse_editors_browser(ideas, authenticated_client, tmp_path, width):
         page.locator('[data-followup-id="'+action['id']+'"]').get_by_role('button', name='Edit', exact=True).click()
         action_form = page.locator('#followup-form')
         assert action_form.locator('[data-object-attachments] + [data-intent-fields]').count() == 1
-        action_form.get_by_label('Workspaces', exact=True).click()
+        action_form.get_by_label('Spaces', exact=True).click()
         action_form.locator('[data-intent-fields]').get_by_label('Home', exact=True).check()
-        action_form.get_by_label('Workspaces', exact=True).click()
+        action_form.get_by_label('Spaces', exact=True).click()
         action_form.get_by_text('Action plan', exact=True).click()
         action_form.get_by_label('Repeat', exact=True).select_option('monthly')
         action_form.get_by_label('First planned date').fill('2099-01-31')

@@ -15,10 +15,10 @@
 {% if key == 'recipe' %}
 <div data-recipe-fields></div>
 <div data-filter-section>
-<p class="share-scope-note">Entry filters apply to corpus entries and inherited objects. Explicitly workspace-linked actions and ideas remain eligible independently of entry source/date filters. Boards use workspace membership; goals follow selected boards.</p>
+<p class="share-scope-note">Entry filters apply to corpus entries and inherited objects. Explicitly Space-linked actions and ideas remain eligible independently of entry source/date filters. Boards use Space membership; goals follow selected boards.</p>
 <div data-filter-fields></div>
 <div data-workspace-reset hidden><button class="btn btn-soft" type="button" data-replace-workspace>Use custom filters instead</button>
-<p class="share-scope-note">Remove inherited workspace rules and membership. Only the filters you set here will apply, which may include more activity.</p></div>
+<p class="share-scope-note">Remove inherited Space rules and membership. Only the filters you set here will apply, which may include more activity.</p></div>
 </div>
 <fieldset class="field automatic-inclusion"><legend>Automatically include</legend><p class="share-scope-note">When Freeze is off, checked sections also include newly matching objects. Unchecked sections refresh approved objects only. Exclusions always apply.</p>
 {% for section, label in [('entries','Entries'),('actions','Actions'),('ideas','Ideas'),('boards','Boards'),('plans','Plans')] %}
@@ -41,7 +41,7 @@
 <div data-outside-board-values>{% for identity in activity.get('outside_board_ids', []) %}<input type="hidden" name="outside_board_ids" value="{{ identity }}">{% endfor %}</div>
 {% elif key == 'plans' %}
 <label class="check"><input type="checkbox" name="activity_sections" value="plans" {% if 'plans' in sections %}checked{% endif %} data-activity-control>Include pinned dates</label>
-<p class="share-scope-note">Plans inherit workspace membership from their categories. Shared dates include their title, description, and notes. Exclude individual dates below.</p>
+<p class="share-scope-note">Plans inherit Space membership from their categories. Shared dates include their title, description, and notes. Exclude individual dates below.</p>
 {% elif key == 'graph' %}
 <label class="check"><input type="checkbox" name="activity_sections" value="graph" {% if 'graph' in sections %}checked{% endif %} data-activity-control>Include activity graph</label>
 <p class="share-scope-note">Only approved shared objects and their derived entities appear. Graphs never add unrelated objects.</p>
