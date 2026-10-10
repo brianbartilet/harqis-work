@@ -118,3 +118,5 @@
 #persona-context { min-height:16rem; font-family:ui-monospace,monospace; font-size:.85rem; line-height:1.6; }
 @media(max-width:600px) { .persona-card-grid { grid-template-columns:1fr; } }
 .share-board-card{border-left-color:var(--board-color,#f59e0b)}
+
+.persona-file-group{border-top:1px solid #334155;margin-top:1rem;padding-top:1rem}.persona-excerpt-row{padding:.75rem 0;border-bottom:1px solid #334155}.persona-excerpt-row>.persona-excerpt{margin-top:.5rem}.persona-card-grid{align-items:start}

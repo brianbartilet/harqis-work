@@ -15,6 +15,10 @@
 
 @media(max-width:600px){#role-selected-entities{grid-template-columns:minmax(0,1fr)}}
 
-#role-browse-files{align-self:center;min-width:160px;margin-top:8px}.role-file-picker{cursor:default}
+#role-browse-files{align-self:center;min-width:160px;margin-top:16px}.role-file-picker{cursor:default}
 
 #role-pending-files li{align-items:center}#role-pending-files li>span{flex:1}#role-pending-files li>button{flex:none}#role-file-preview{width:min(900px,calc(100vw - 32px));max-height:90vh;margin:auto;padding:20px;border:1px solid #334155;border-radius:14px;background:#0f172a;color:#e2e8f0}#role-file-preview::backdrop{background:rgb(2 6 23 / .8)}#role-file-preview>header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}#role-file-preview h2{margin:0;overflow-wrap:anywhere;min-width:0}#role-file-preview-content{overflow:auto;max-height:70vh}#role-file-preview-content img{display:block;max-width:100%;max-height:65vh;object-fit:contain;margin:auto}#role-file-preview-content iframe{width:100%;height:60vh;border:0;background:white}#role-file-preview-content pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}#role-file-preview-content a{display:inline-block;color:#7dd3fc;margin-top:10px}
+
+#role-upload-status:empty{display:none}
+
+#role-file-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}#role-file-list>.role-file{min-width:0;margin:0;overflow-wrap:anywhere}#role-file-list>.role-help{grid-column:1/-1}
