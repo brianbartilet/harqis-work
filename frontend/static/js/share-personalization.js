@@ -19,7 +19,7 @@
     const inputs = [...form.querySelectorAll('[name="share_with_workspaces"]:checked')];
     const summary = form.querySelector('[data-workspace-summary]');
     summary.replaceChildren();
-    if (!inputs.length) summary.textContent = field('workspace_confirmed').value ? 'No workspace context' : 'Choose workspaces';
+    if (!inputs.length) summary.textContent = field('workspace_confirmed').value ? 'No Space context' : 'Choose Spaces';
     inputs.forEach(input => {
       const item = document.createElement('span'); item.className = 'share-workspace-name';
       item.append(workspaceDot(input.dataset.color), document.createTextNode(input.dataset.label)); summary.append(item);
@@ -79,9 +79,9 @@
           label.append(input, workspaceDot(input.dataset.color), document.createTextNode(workspace.name)); container.append(label);
         }
         const missingSavedWorkspace = template && (template.activity.workspace_ids || []).some(id => !data.workspaces.some(row => row.id === id));
-        if (missingSavedWorkspace) showError('A saved workspace is unavailable. Choose a workspace or No workspace context.');
+        if (missingSavedWorkspace) showError('A saved Space is unavailable. Choose a Space or No Space context.');
         else if (template || defaults.length === 1) field('workspace_confirmed').value = 'on';
-        else showError('Default workspace is unavailable or ambiguous. Choose a workspace or No workspace context.');
+        else showError('Default workspace is unavailable or ambiguous. Choose a Space or No Space context.');
         updateWorkspaceSummary();
         loaded = true;
       }
@@ -165,7 +165,7 @@
   const submit = async instant => {
     if (busy) return;
     if (!selected.size) { showError('Choose an entity first.'); return; }
-    if (!field('workspace_confirmed').value) { showError('Choose a workspace or No workspace context.'); return; }
+    if (!field('workspace_confirmed').value) { showError('Choose a Space or No Space context.'); return; }
     controller?.abort(); clearTimeout(timer);
     busy=true; showError(''); status.textContent=instant ? 'Generating one-time QR…' : 'Loading the recipe preview…';
     const controls=[...form.elements]; const disabled=controls.map(el=>el.disabled);

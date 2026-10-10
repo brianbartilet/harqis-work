@@ -196,21 +196,20 @@ def _stable_live_citations(
     snapshot: ScopeSnapshot,
     previous: ScopeSnapshot,
 ) -> ScopeSnapshot:
-    existing = {entry.id: entry.citation for entry in previous.entries}
-    used_numbers = {
-        int(citation[1:])
-        for citation in existing.values()
-        if citation.startswith("S") and citation[1:].isdigit()
-    }
-    next_number = max(used_numbers, default=0) + 1
-    entries = []
-    for entry in snapshot.entries:
-        citation = existing.get(entry.id)
-        if not citation:
-            citation = f"S{next_number}"
-            next_number += 1
-        entries.append(replace(entry, citation=citation))
-    return replace(snapshot, entries=tuple(entries))
+    existing = {entry.id: entry.citation for entry in previous.all_entries}
+    next_number = max((int(v[1:]) for v in existing.values() if v.startswith('S') and v[1:].isdigit()), default=0) + 1
+    def stable(entries):
+        nonlocal next_number
+        result = []
+        for entry in entries:
+            citation = existing.get(entry.id)
+            if not citation:
+                citation = f'S{next_number}'
+                next_number += 1
+            result.append(replace(entry, citation=citation))
+        return tuple(result)
+    return replace(snapshot, entries=stable(snapshot.entries), activity_entries=stable(snapshot.activity_entries), persona_entries=stable(snapshot.persona_entries))
+
 
 
 def _refresh_live_grant(grant: ShareGrant) -> ShareGrant:
@@ -364,6 +363,7 @@ def _configuration_from_form(
         )
     no_expiry = form.get("no_expiry") == "on"
     from modules.hfl_shares.activity_models import from_form
+    from modules.roles.sharing import from_form as persona_from_form
     return ShareConfiguration(
         id=str(form.get("configuration_id") or ""),
         name=str(form.get("name") or "").strip() or ("Preview" if preview else ""),
@@ -387,6 +387,7 @@ def _configuration_from_form(
         selected_entry_ids=(),
         activity=from_form(form),
         context_prompt=str(form.get("context_prompt") or "").strip(),
+        persona=persona_from_form(form, existing),
         auth_mode=str(form.get("auth_mode") or "pin"),
         allowed_email=str(form.get("allowed_email") or "").strip(),
         references_enabled=form.get("references_enabled") == "on",
@@ -567,6 +568,7 @@ def _owner_context_sync(
         offset=(share_page - 1) * _OWNER_SHARE_PAGE_SIZE,
     )
     from modules.hfl_shares.date_filters import date_presets, resolve_date_preset
+    from modules.roles.sharing import choices as persona_choices
     if configuration:
         configuration = resolve_date_preset(configuration)
     return page_context(
@@ -574,6 +576,7 @@ def _owner_context_sync(
         user,
         "sharing",
         date_presets=date_presets(),
+        persona_choices=persona_choices(),
         configurations=tuple(
             {
                 "configuration": item,
@@ -1354,7 +1357,7 @@ def _share_with_configuration(form):
     if not identity:
         raise ValueError('Choose an entity before sharing.')
     if form.get('workspace_confirmed') != 'on':
-        raise ValueError('Choose a workspace or explicitly choose no workspace context.')
+        raise ValueError('Choose a Space or explicitly choose no Space context.')
     workspaces = list(dict.fromkeys(form.getlist('share_with_workspaces')))
     available = {row['id'] for row in listing()['views']}
     if set(workspaces) - available:
@@ -1899,7 +1902,7 @@ def _citation_pages(grant) -> dict[int, int]:
         for index, entry in enumerate(_guest_entries(grant, ""), start=1)
         if entry.citation.startswith("S") and entry.citation[1:].isdigit()
     }
-    pages.update({int(entry.citation[1:]): 1 for entry in grant.snapshot.activity_entries
+    pages.update({int(entry.citation[1:]): 1 for entry in grant.snapshot.activity_entries + grant.snapshot.persona_entries
                   if entry.citation.startswith('S') and entry.citation[1:].isdigit()})
     return pages
 
@@ -2255,6 +2258,9 @@ def _download_response(grant, reference_id: str):
     reference = _enabled_reference(grant, reference_id)
     if not reference:
         raise HTTPException(status_code=404, detail="Reference unavailable.")
+    if reference.kind == 'persona_attachment':
+        from modules.roles.sharing import download
+        return download(reference)
     if reference.kind == 'activity_attachment':
         from modules.hfl_shares.activity_references import download
         response = download(reference)

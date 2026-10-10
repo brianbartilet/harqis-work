@@ -100,7 +100,7 @@ def test_workspace_boards_and_global_entities_browser(ideas, authenticated_clien
             expect(page.locator('[data-board-id="'+board['id']+'"]')).to_have_count(1)
             expect(page.locator('[data-board-id="'+other['id']+'"]')).to_have_count(0)
             expect(page.locator('#kg-list')).to_contain_text('Context member')
-            expect(page.locator('#kg-list')).to_contain_text('Outside workspace filters')
+            expect(page.locator('#kg-list')).to_contain_text('Outside Space filters')
             page.locator('#kg-entities').click()
             frame = page.locator('.activity-entities-drawer iframe')
             assert 'context=' not in frame.get_attribute('src')

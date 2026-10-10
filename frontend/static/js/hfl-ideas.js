@@ -40,9 +40,9 @@ window.HflObjectDescription = (item = {}) => {
     d.body.innerHTML = `
       <p class="board-guide-intro">A place to connect what you know, explore possibilities, and decide what to do next.</p>
       <section aria-labelledby="board-guide-basics">
-        <h3 id="board-guide-basics">Your workspace and your outcome</h3>
+        <h3 id="board-guide-basics">Your Space and your outcome</h3>
         <dl class="board-guide-definitions">
-          <div><dt>Board</dt><dd>A saved workspace around a question or project. It holds thoughts, attached objects, connections, and their layout. Attaching an existing object reuses it across boards.</dd></div>
+          <div><dt>Board</dt><dd>A saved Space around a question or project. It holds thoughts, attached objects, connections, and their layout. Attaching an existing object reuses it across boards.</dd></div>
           <div><dt>Goal</dt><dd>The outcome you want, with success criteria, status, a target date, and milestones. Associate a board with a goal in Settings; link supporting ideas and actions in the goal editor.</dd></div>
         </dl>
       </section>
@@ -812,7 +812,7 @@ window.HflObjectDescription = (item = {}) => {
     },
     assignBoard(){
       const ids=this.workspaceIds(),d=dialog('Add existing board to workspace');
-      if(!ids.length){d.body.append(el('p','Select one or more workspaces first. All activity already includes every board.'));return;}
+      if(!ids.length){d.body.append(el('p','Select one or more Spaces first. All activity already includes every board.'));return;}
       const candidates=this.loaded.filter(board=>!ids.every(id=>(board.workspace_ids||[]).includes(id)));
       if(!candidates.length)d.body.append(el('p','Every board is already assigned to the selected workspaces.'));
       for(const board of candidates)d.body.append(button(board.name,async()=>{
@@ -913,8 +913,8 @@ window.HflObjectDescription = (item = {}) => {
       const active=el('input');active.type='checkbox';active.name='active';active.checked=current?.active!==false;active.setAttribute('role','switch');active.setAttribute('aria-label','Active');active.setAttribute('aria-describedby',activeHint.id);
       const updateActive=()=>{activeHint.textContent=active.checked?'Available when adding Ideas and Actions to a board.':'Inactive · Existing board contents are kept.';};active.onchange=updateActive;updateActive();
       activeRow.append(activeCopy,active);d.body.append(activeRow);
-      const workspaceHost=el('section',undefined,'board-workspace-field');workspaceHost.append(el('p','Workspaces (optional)','board-field-label'));d.body.append(workspaceHost);
-      const workspacePicker=window.HflWorkspacePicker(workspaceHost,{selected:current?.workspace_ids||this.workspaceIds(),empty:'No workspace',name:'workspace_ids'});
+      const workspaceHost=el('section',undefined,'board-workspace-field');workspaceHost.append(el('p','Spaces (optional)','board-field-label'));d.body.append(workspaceHost);
+      const workspacePicker=window.HflWorkspacePicker(workspaceHost,{selected:current?.workspace_ids||this.workspaceIds(),empty:'No Space',name:'workspace_ids'});
       const getColor=colorField(d.body,'Board color',current?.color||this.palette[this.loaded.length%this.palette.length]);
       const purpose = field(d.body, 'purpose', 'What are you exploring or trying to achieve?', current?.purpose || seed?.label, 'textarea', true, 3000);
       const starting = current || seed ? null : field(d.body, 'seed', 'Starting thought (optional)', '', 'text', false, 200);

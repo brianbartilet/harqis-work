@@ -25,7 +25,8 @@ window.RoleControls = (form, role, catalog, api, report) => {
   picker.onkeydown = event => { if (event.key === 'Escape') { picker.open = false; picker.querySelector('summary').focus(); } };
   $('#role-clear-spaces').onclick = () => { form.querySelectorAll('[name=spaces]').forEach(e => e.checked=false); summarizeSpaces(); picker.open=false; picker.querySelector('summary').focus(); };
   const renderSelected = () => {
-    $('#role-selected-entities').innerHTML = [...selected.values()].map(e => `<button type="button" data-remove-entity="${escape(e.id)}" aria-label="Remove ${escape(e.label)}">${escape(e.label)} <span aria-hidden="true">×</span></button>`).join('');
+    $('#role-entity-selected').textContent = selected.size ? `${selected.size} selected` : 'Choose entities related to this role.';
+    $('#role-selected-entities').innerHTML = [...selected.values()].map(e => `<div class="role-selected-entity" style="--entity-color:${color(e.color)}"><span><strong>${escape(e.label)}</strong>${e.kind?`<br><span class="role-entity-kind">${escape(e.kind)}</span>`:''}</span><button type="button" data-remove-entity="${escape(e.id)}" aria-label="Remove ${escape(e.label)}">Remove</button></div>`).join('');
     $('#role-clear-entities').disabled = !selected.size;
     $('#role-entities').querySelectorAll('[data-entity]').forEach(b => b.setAttribute('aria-pressed',String(selected.has(b.dataset.entity))));
   };

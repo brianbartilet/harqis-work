@@ -40,7 +40,7 @@ def editor_page(ideas, authenticated_client, monkeypatch, tmp_path):
 @pytest.mark.parametrize('query,expected', [
     ('scope={"any":[]}', 'All activity'),
     ('scope={"any":[{"q":"planning"}]}', 'Corpus filters'),
-    ('views=missing', 'Unavailable workspace'),
+    ('views=missing', 'Unavailable Space'),
 ])
 def test_workspace_status_resolves_without_selection(editor_page, query, expected):
     from playwright.sync_api import expect
@@ -215,8 +215,8 @@ def test_planned_categories_workspace_filter_and_editor(editor_page, workspace_c
     host.locator('summary').click()
     expect(host.get_by_label('Work', exact=True)).to_be_checked()
     expect(host.get_by_label('Personal', exact=True)).to_be_checked()
-    host.get_by_role('button', name='No workspace', exact=True).click()
-    expect(host.locator('summary')).to_have_text('No workspace')
+    host.get_by_role('button', name='No Space', exact=True).click()
+    expect(host.locator('summary')).to_have_text('No Space')
     host.locator('summary').click()
     host.get_by_role('button', name='Select all', exact=True).click()
     expect(host.get_by_label('Work', exact=True)).to_be_checked()

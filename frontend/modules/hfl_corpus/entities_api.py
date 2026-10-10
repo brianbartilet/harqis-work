@@ -102,7 +102,7 @@ async def page(request: Request):
             state = workspace_views.WorkspaceState.model_validate(values)
             scope = parse_scope(request.query_params.get('scope'))
         except ValueError:
-            raise HTTPException(422, 'Invalid workspace filters.') from None
+            raise HTTPException(422, 'Invalid Space filters.') from None
         workspace_context = dict(saved_workspaces=saved, workspace_state=state.model_dump(), workspace_scope=scope.model_dump())
     return templates.TemplateResponse(request, 'modules/hfl_corpus/' + template,
                                       page_context(request, user, 'hfl_corpus', memory_csrf=make_csrf_token(user), **workspace_context))

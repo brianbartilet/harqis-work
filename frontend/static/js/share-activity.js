@@ -114,7 +114,7 @@
       form.querySelector('details.message')?.remove();
       const inherited=JSON.parse(scope.value), editor=document.createElement('details');
       editor.dataset.inheritedRules='';editor.className='expand-panel';editor.open=true;
-      const title=document.createElement('summary');title.textContent='Inherited workspace rules';editor.append(title);
+      const title=document.createElement('summary');title.textContent='Inherited Space rules';editor.append(title);
       const rules=[...(inherited.any||[]).map((rule,index)=>({rule,label:`Included view ${index+1}`})),{rule:inherited.all||{},label:'Additional rules for every included view'}];
       rules.forEach(({rule,label})=>{
         const group=document.createElement('fieldset');group.className='field';

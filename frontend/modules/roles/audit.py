@@ -1,6 +1,7 @@
 """Incremental, source-scoped persona observations with durable run receipts."""
 import hashlib
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 
 from filelock import FileLock
@@ -43,11 +44,16 @@ def report(run):
     from workflows.hfl.dto import HflEntry
     from workflows.hfl.persistence import submit_hfl_entry
     summary = '\n'.join(f"- {r['name']}: {r.get('selected', 0)} new/changed sources; {r.get('observations', 0)} observations; {r.get('status', 'complete')}. Coverage: {r.get('coverage', '')}" for r in run.get('roles', []))
+    summary = summary or 'No active roles with linked Spaces; no personal analysis was needed.'
     entry = HflEntry(when=datetime.fromisoformat(run['created_at']), moment='Persona audit · ' + run['status'],
         what_happened=f"Run {run['id']}\n\n{summary}\n\n" + run.get('error', ''),
         why_it_stayed='Private role refinement review; Soul and published shares were not changed.',
         tags=('persona-audit', 'secrets'), source='persona-audit')
-    return submit_hfl_entry(entry, source='persona-audit', dedup_key='persona-audit:' + run['id'], replace_duplicate=True)
+    response = submit_hfl_entry(entry, source='persona-audit', dedup_key='persona-audit:' + run['id'], replace_duplicate=True)
+    run['report_delivery'] = response.get('delivery', 'persisted')
+    if response.get('delivery') == 'outbox':
+        raise RuntimeError('The persona receipt is retained in the HFL outbox for retry.')
+    return response
 
 
 def run(identity):
@@ -99,19 +105,15 @@ def run(identity):
                 known = {n['id'] for n in role['journal']}
                 additions = [n for n in additions if n['id'] not in known]
                 # A concurrent owner edit aborts this role without advancing evidence checkpoints.
-                if additions:
-                    store.save(role['id'], role['revision'], {'journal': role['journal'] + additions})
-                elif store.get(role['id'])['revision'] != role['revision']:
-                    raise ValueError('Role changed while analysis was running.')
-                with store.connection() as db:
-                    db.executemany('INSERT INTO persona_seen VALUES(?,?,?) ON CONFLICT(role_id,evidence_id) DO UPDATE SET digest=excluded.digest',
-                                   [(role['id'], row['id'], digest) for row, digest in bounded])
+                store.save(role['id'], role['revision'], {'journal': role['journal'] + additions} if additions else {},
+                           checkpoints=[(row['id'], digest) for row, digest in bounded])
                 result['roles'] = [r for r in result['roles'] if r['id'] != role['id']]
                 result['roles'].append({'id': role['id'], 'name': role['name'], 'selected': len(bounded), 'observations': len(additions),
                     'coverage': f"90-day entries plus linked actions/ideas; {len(pending)-len(bounded)} sources deferred; per-source text capped at 6000 characters"})
                 store.record_run(result)
             result['status'] = 'complete'
-        except Exception:
+        except Exception as exc:
+            logging.getLogger(__name__).warning('Persona audit failed run=%s type=%s', identity, type(exc).__name__)
             result['status'] = 'failed'
             result['error'] = 'Analysis failed or evidence changed. Existing Soul and published shares are preserved; retry is safe.'
         store.record_run(result)

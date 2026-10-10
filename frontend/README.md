@@ -492,12 +492,12 @@ workspace assignments include the object even when its source, tags, or
 dates do not match that workspace's saved filters. Additional search filters and
 protected-entry restrictions still apply. Removing an assignment restores the
 usual source-based inclusion for that workspace. The board's
-rightmost Workspaces picker aggregates selected views, applies selections when
+rightmost Spaces picker aggregates selected views, applies selections when
 closed, and includes All activity; its adjacent caption names the selected views. Clone buttons open an
 independent draft with supporting files and reset checklists. Dates, recurrence,
 and previous relationships are omitted; a `copied-from` connection records its source.
 
-The optional **Boards** checkbox dropdown follows **Workspaces** in both editors.
+The optional **Boards** checkbox dropdown follows **Spaces** in both editors.
 It lists active boards by most recent update. Selections mirror board membership:
 adding one attaches an orphan orb without connections to other objects; removing
 one detaches the object without deleting it. Creating an object inside a board
@@ -532,7 +532,7 @@ creates one next future occurrence atomically, resets checklist completion, and
 preserves the completed record. Month-end dates clamp without losing the original
 anchor. Reopening and completing an occurrence again does not create a second successor.
 
-`/hfl-corpus/graph` uses the shared Workspace picker, including All activity,
+`/hfl-corpus/graph` uses the shared Space picker, including All activity,
 combined selections, and Dynamic mode. Corpus, Kanban, and Graph synchronize
 workspace selection and applied corpus filters through the existing owner profile
 and cross-tab updates. Graph-only filters and presets further narrow that scope.
@@ -952,7 +952,7 @@ responsive navigation, corpus filtering, and reference downloads.
   `/share/access/*` and guest-session paths.
 
 
-#### Workspace context sharing
+#### Space context sharing
 
 Personalized recipes combine multiple canonical entities of any available types. The separate
 **Share with** accordion and owner-saved entity templates combine filtered entity activity
@@ -970,7 +970,7 @@ described above, bind it to loopback on an unused port, and open `/sharing`.
 Use a separate `HFL_SHARE_STORE_PATH` and local `HFL_SHARE_PUBLIC_URL` when creating
 test grants. A localhost QR works only on the machine running that instance.
 
-For step-by-step owner instructions, see the [Workspace sharing user guide](../docs/info/WORKSPACE-SHARING-GUIDE.md)
+For step-by-step owner instructions, see the [Space sharing user guide](../docs/info/WORKSPACE-SHARING-GUIDE.md)
 (QR generation, browser redemption limits, expiry, refresh, and context names).
 
 Express > **Share Activity** now has Details and Filtering, Entries, Actions and Ideas,
@@ -1055,3 +1055,26 @@ canvas graphs from approved snapshot data. Details and Filtering combines recipe
 after Description, and hides the preview region;
 workspace-reset controls only appear for inherited scope. Graph assets are rebuilt
 by `npm run build:knowledge-graph`, including `share-graphs.jsx`.
+
+
+### Roles, Soul, and personal share context
+
+The profile menu includes **Roles** at `/roles`: name/color, Markdown Soul,
+attachments with extraction preview, Space/entity links, revision history, and a
+private agent journal. Share recipes explicitly select personal excerpts and
+optional original downloads; existing shares retain their publication-time persona
+revision even when activity refreshes. Opportunity fields tailor presentation
+without adding unsupported qualifications. **About the sharer** exposes the same
+approved evidence to guests and chat citations.
+
+See [Roles and Spaces](../docs/info/ROLES-AND-SPACES.md) for selection, refresh,
+archive/revocation, file limits, API ownership, and the weekly `persona-audit` job.
+
+| Method | Route | Purpose |
+|---|---|---|
+| GET | `/roles` | Authenticated role editor. |
+| GET/POST | `/roles/data` | List/create roles; writes require CSRF. |
+| PUT | `/roles/data/{id}` | Version-checked edits, archive, and restore. |
+| POST | `/roles/analyze` | Queue a manual persona audit. |
+| GET/POST/PUT | `/api/hfl/roles[/{id}]` | Bearer-protected role operations. |
+| POST | `/api/hfl/roles/audit/run` | Idempotent worker-to-owner analysis command. |

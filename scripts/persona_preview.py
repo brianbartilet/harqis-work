@@ -33,7 +33,7 @@ def bootstrap(port):
         'HFL_AGENT_BRIDGE_STORE_PATH': str(data / 'agent-bridge.sqlite3'),
         'HARQIS_ENTITIES_DB': str(data / 'entities.sqlite3'),
         'HFL_PERSONA_API_URL': f'http://127.0.0.1:{port}',
-        'HFL_PERSONA_QUEUE': 'persona-preview.host', 'HARQIS_QUEUE_PREFIX': 'persona-preview',
+        'HFL_PERSONA_QUEUE': 'persona-preview.host',
         'HFL_SHARE_PUBLIC_URL': f'http://127.0.0.1:{port}', 'BEHIND_PROXY': 'false',
         'HFL_TIMELINE_LOCAL_PREVIEW': '1',
     })

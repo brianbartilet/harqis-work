@@ -366,7 +366,7 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
               const messages=['Loading last session…','Loading session…','Waiting for a worker to connect…','Starting Hermes…','Ready for commands',
                 'Worker capacity reached — waiting for an execution slot… 100/100 executions active.',
                 'Running — waiting for reply','Session expired — transcript archived','Session closed — transcript archived',
-                'Session stopped — transcript available','Reconnecting…','Workspace could not be loaded.',
+                'Session stopped — transcript available','Reconnecting…','Agent session could not be loaded.',
                 'Error: '+ 'LongUnbrokenWorkerError'.repeat(100)];
               const fits=messages.every(message=>{
                 status.textContent=message;

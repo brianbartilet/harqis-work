@@ -29,13 +29,29 @@ This workflow is active — `WORKFLOW_HFL` is merged into
 `workflows/config.py`'s beat schedule.
 """
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from celery.schedules import crontab
 
 from workflows.queues import WorkflowQueue
 
 
+def persona_audit_now():
+    return datetime.now(ZoneInfo("Asia/Singapore"))
+
+
 WORKFLOW_HFL = {
+    'run-job--persona_audit': {
+        'task': 'workflows.hfl.tasks.persona_audit.persona_audit',
+        'schedule': crontab(day_of_week=os.getenv('HFL_PERSONA_AUDIT_DAY', 'sun'),
+                            hour=os.getenv('HFL_PERSONA_AUDIT_HOUR', '9'),
+                            minute=os.getenv('HFL_PERSONA_AUDIT_MINUTE', '0'), nowfun=persona_audit_now),
+        'kwargs': {},
+        'options': {'queue': WorkflowQueue.HOST, 'expires': 86400},
+        'manifesto': {'code_role': 'distill+express', 'para_bucket': 'area',
+                      'express_target': 'hfl:persona-audit', 'review_artifact': 'es_log+hfl+persona_journal', 'hfl_signal': True},
+    },
     # Canonical host only. Previous Singapore day; browsing never invokes this.
     'run-job--generate_timeline_suggestions': {
         'task': 'workflows.hfl.tasks.timeline_suggestions.generate_timeline_suggestions',

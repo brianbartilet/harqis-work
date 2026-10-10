@@ -201,3 +201,7 @@ When a worker disconnects, its anonymous fanout-bound queue is auto-deleted. A b
 Entity consolidation is a Hermes-owned daily hybrid: the `auto-merge-entities` skill
 uses the entity API and the callable HFL `deliver_entity_consolidation` task for
 grouped HFL/Telegram reporting. It adds no Beat schedule. See [HFL workflows](hfl/README.md).
+
+The HFL category also owns the weekly Celery `persona_audit` task: linked-Space
+evidence becomes private role observations and a `persona-audit` HFL receipt.
+See [Roles and Spaces](../docs/info/ROLES-AND-SPACES.md) for ownership and controls.

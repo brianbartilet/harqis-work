@@ -1,4 +1,4 @@
-"""Recipient binding, additive workspace context, and template isolation."""
+"""Recipient binding, additive Space context, and template isolation."""
 from dataclasses import replace
 
 import pytest
@@ -300,7 +300,7 @@ def test_missing_default_requires_choice_and_failure_keeps_draft(editor_page, en
     page.locator('[data-personalization] > summary').click()
     page.locator('[data-entity-results] button').filter(has_text='Alex').click()
     page.locator('[data-personal-review]').click()
-    expect(page.locator('[data-share-with-error]')).to_contain_text('Choose a workspace')
+    expect(page.locator('[data-share-with-error]')).to_contain_text('Choose a Space')
     expect(page.locator('#recipient')).to_have_value('Keep draft')
     page.locator('[data-workspace-selector] > summary').click()
     page.locator('[data-no-workspace]').click()

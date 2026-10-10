@@ -54,6 +54,14 @@ any shared component.
 
 ## Step 0 — Read the codebase before asking anything
 
+For frontend changes, apply `$review-frontend-patterns` (installed in
+`~/.codex/skills/review-frontend-patterns/SKILL.md`) before proposing controls.
+Inspect the nearest existing template, styles, and interaction code; include the
+source paths and reuse decisions in the implementation plan. If the skill is not
+installed, perform that same pattern comparison directly. Existing approval
+covers routine UI consistency fixes within the agreed scope.
+
+
 Before posing a single question, spend a moment reading the relevant code so your
 questions are informed, not generic. Check:
 

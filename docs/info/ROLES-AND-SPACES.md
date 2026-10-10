@@ -47,6 +47,8 @@ uses `workflows/hfl/prompts/persona_audit.md`; no autonomous tool-selection loop
 The registered task is `workflows.hfl.tasks.persona_audit.persona_audit`.
 Its active weekly schedule is Sunday 09:00 Asia/Singapore, on `WorkflowQueue.HOST`.
 Manual **Analyze now** dispatches the same task with a unique run ID.
+`HFL_PERSONA_AUDIT_DAY`, `HFL_PERSONA_AUDIT_HOUR`, and
+`HFL_PERSONA_AUDIT_MINUTE` optionally override the weekly timing (Singapore time).
 
 The owner frontend stores roles with its profile database and exposes bearer-
 authenticated `/api/hfl/roles` and `/api/hfl/roles/audit/run`. Set
@@ -73,7 +75,9 @@ Every logical run submits a concise HFL entry with source **persona-audit** and
 the `secrets` tag, including no-change and failed runs. Stable delivery IDs prevent
 duplicates; retried runs replace their receipt. Raw attachments and full personal
 narratives are excluded from these reports. The standard HFL outbox preserves
-delivery; pending reports are retried on subsequent runs. If the owner API itself
+delivery; pending reports are retried on subsequent runs. Forwarded receipts are
+shown as **HFL queued** until the canonical HFL worker consumes them; a running
+preview analysis worker does not replace that canonical persistence worker. If the owner API itself
 is unreachable, Celery retries twice; no owner-side report can be written until
 that API is reachable. Task logs identify this delivery failure.
 
@@ -102,3 +106,11 @@ still produce the requested real `persona-audit` HFL entries. It does not run Be
 revision conflicts, private observations, frozen excerpts, citation stability,
 incremental analysis, and report failure handling. Existing sharing, Space, and
 guest-view regression tests protect compatibility.
+
+### Role editor patterns
+
+Role colors use the pinned-date palette (existing custom colors remain selectable). Linked Spaces use a checkbox dropdown. Related entities follow Linked Spaces in a vertical layout; the type/search picker returns at most 50 results and preserves selections across filters. Soul renders sanitized Markdown on blur and opens for editing with a click, Enter, or Space. Save always uses the underlying Markdown. The frontend pattern review skill is integrated into feature clarification to inspect existing controls before implementing new UI.
+
+The Roles page follows the recipe layout: a wide editor on the left and the roles list with analysis controls in the right sidebar. At 900px and below, the roles sidebar appears first, above the editor.
+
+The sidebar shows roles in two columns and an archived toggle. Analysis help precedes the centered Analyze now button, with queued/error feedback inside the same section. Dropdowns use the recipe SVG caret; selected entities use typed cards with Remove controls.

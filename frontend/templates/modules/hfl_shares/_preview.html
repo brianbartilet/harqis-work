@@ -11,7 +11,7 @@
   <div class="message" id="personalized-review">
     <strong>For {{ preview.recipient }}</strong>
     {% if preview.filters.get('entities') %}<p>Combined activity: {{ preview.filters.entities|map(attribute='label')|join(', ') }}</p>{% endif %}
-    <p>Entity-linked activity follows your filters. Workspace and linked board content can add supporting entries. Full records may mention other people.</p>
+    <p>Entity-linked activity follows your filters. Space and linked board content can add supporting entries. Full records may mention other people.</p>
     {% if preview.activity.get('inclusion_reasons') %}
     <details><summary>Why content is included</summary>
       <ul>{% for entry in preview.all_entries %}<li>{{ entry.moment or entry.header }} — {{ preview.activity.inclusion_reasons.get(entry.id if entry.id in preview.activity.inclusion_reasons else 'entry:' ~ entry.id, 'Entity-linked activity') }}</li>{% endfor %}</ul>
@@ -19,6 +19,7 @@
     {% endif %}
   </div>
   {% endif %}
+  {% include "modules/hfl_shares/_persona_preview.html" %}
   <input type="hidden" name="reference_selection_initialized" value="1">
   <div data-preview-tab="entries">
   {% set page_size = 50 %}

@@ -1,5 +1,6 @@
 """Authenticated role editor and bearer-protected canonical operations."""
 import asyncio
+import os
 from uuid import uuid4
 from typing import Literal
 
@@ -17,7 +18,7 @@ class RoleWrite(BaseModel):
     model_config = ConfigDict(extra='forbid')
     revision: int = Field(default=0, ge=0)
     name: str = Field(min_length=1, max_length=100, pattern=r'\S')
-    color: str = Field(default='#38bdf8', pattern=r'^#[0-9a-fA-F]{6}$')
+    color: str = Field(default='#3b82f6', pattern=r'^#[0-9a-fA-F]{6}$')
     soul: str = Field(default='', max_length=100000)
     workspace_ids: list[str] = Field(default_factory=list, max_length=30)
     entity_ids: list[str] = Field(default_factory=list, max_length=100)
@@ -35,7 +36,8 @@ def authorize(request, write=False):
 
 def catalog():
     from modules.hfl_corpus.workspace_views import listing
-    return {'roles': store.listing(), 'spaces': listing()['views'], 'runs': store.runs()}
+    from workflows.hfl.colors import PIN_COLORS
+    return {'roles': store.listing(), 'spaces': listing()['views'], 'runs': store.runs(), 'palette': list(PIN_COLORS)}
 
 
 @router.get('')
@@ -99,10 +101,19 @@ def history(request: Request, identity: str):
 
 
 @router.get('/entities')
-def entities(request: Request):
+def entities(request: Request, q: str = "", kind: str = "people", selected: str = ""):
     authorize(request)
     from modules.hfl_shares.personalization import entity_catalog
-    return {'entities': entity_catalog()}
+    try:
+        rows = entity_catalog()
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    rows.sort(key=lambda e: (e['label'].casefold(), e['id']))
+    matches = [e for e in rows if (not kind or e['kind'] == kind) and all(word in e['label'].casefold() for word in q.casefold().split())]
+    ids = set(selected.split(','))
+    return {'entities': matches[:50], 'total': len(matches),
+            'types': sorted({e['kind'] for e in rows}),
+            'selected': [e for e in rows if e['id'] in ids]}
 
 
 @router.post('/markdown')
@@ -148,9 +159,24 @@ class Revision(BaseModel):
 def detach(request: Request, identity: str, attachment_id: str, payload: Revision):
     authorize(request, True)
     role = store.get(identity)
+    if not any(f['id'] == attachment_id for f in role['files']):
+        raise HTTPException(404, 'Attachment not found.')
     result = store.save(identity, payload.revision, {'files': [f for f in role['files'] if f['id'] != attachment_id]})
     store.attachment_store().detach('role:' + identity, attachment_id)
     return result
+
+
+@router.get('/data/{identity}/attachments/{attachment_id}')
+def owner_attachment(request: Request, identity: str, attachment_id: str):
+    authorize(request)
+    from fastapi.responses import FileResponse
+    role = store.get(identity)
+    if not any(f['id'] == attachment_id for f in role['files']):
+        raise HTTPException(404, 'Attachment not found.')
+    attachments = store.attachment_store()
+    manifest = attachments.get('role:' + identity, attachment_id)
+    return FileResponse(attachments.path(manifest), filename=manifest['name'], media_type='application/octet-stream',
+                        headers={'Cache-Control':'no-store', 'X-Content-Type-Options':'nosniff'})
 
 
 class Review(Revision):
@@ -176,9 +202,17 @@ async def analyze(request: Request):
     store.record_run({'id': run_id, 'status': 'queued', 'created_at': store.now(), 'trigger': 'manual'})
     try:
         result = await asyncio.to_thread(SPROUT.send_task, 'workflows.hfl.tasks.persona_audit.persona_audit',
-            kwargs={'run_id': run_id}, queue=WorkflowQueue.HOST)
+            kwargs={'run_id': run_id}, queue=os.environ.get('HFL_PERSONA_QUEUE') or WorkflowQueue.HOST)
     except Exception:
-        store.record_run({'id': run_id, 'status': 'failed', 'error': 'Task could not be queued.', 'created_at': store.now()})
+        from modules.roles.audit import report
+        failed = {'id': run_id, 'status': 'failed', 'error': 'Task could not be queued.', 'created_at': store.now(), 'report_pending': True}
+        store.record_run(failed)
+        try:
+            await asyncio.to_thread(report, failed)
+            failed['report_pending'] = False
+            store.record_run(failed)
+        except Exception:
+            pass
         raise HTTPException(503, 'Analysis could not be queued. Try again.') from None
     return {'id': run_id, 'status': 'queued', 'task_id': result.id}
 

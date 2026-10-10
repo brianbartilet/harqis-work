@@ -43,7 +43,7 @@ def history(identity):
         return [json.loads(row[0]) for row in db.execute('SELECT payload FROM persona_history WHERE id=? ORDER BY revision DESC', (identity,))]
 
 
-def save(identity, revision, changes):
+def save(identity, revision, changes, *, checkpoints=None):
     with connection() as db:
         db.execute('BEGIN IMMEDIATE')
         row = db.execute('SELECT payload FROM persona_roles WHERE id=?', (identity,)).fetchone() if identity else None
@@ -52,10 +52,15 @@ def save(identity, revision, changes):
         old = json.loads(row[0]) if row else {'id': uuid4().hex, 'revision': 0, 'journal': [], 'files': [], 'created_at': now()}
         if old['revision'] != revision:
             raise HTTPException(409, 'This role changed. Reload and review before saving.')
-        value = {**old, **changes, 'id': old['id'], 'revision': revision + 1, 'updated_at': now()}
-        encoded = json.dumps(value)
-        db.execute('INSERT INTO persona_roles VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload', (value['id'], value['revision'], encoded))
-        db.execute('INSERT INTO persona_history VALUES(?,?,?)', (value['id'], value['revision'], encoded))
+        value = old
+        if changes or not row:
+            value = {**old, **changes, 'id': old['id'], 'revision': revision + 1, 'updated_at': now()}
+            encoded = json.dumps(value)
+            db.execute('INSERT INTO persona_roles VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload', (value['id'], value['revision'], encoded))
+            db.execute('INSERT INTO persona_history VALUES(?,?,?)', (value['id'], value['revision'], encoded))
+        if checkpoints:
+            db.executemany('INSERT INTO persona_seen VALUES(?,?,?) ON CONFLICT(role_id,evidence_id) DO UPDATE SET digest=excluded.digest',
+                           [(value['id'], evidence_id, digest) for evidence_id, digest in checkpoints])
     return value
 
 

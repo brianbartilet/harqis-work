@@ -61,6 +61,7 @@ class ShareConfiguration:
     entity_template: bool = False
     entity_ids: tuple[str, ...] = ()
     entities: tuple[dict[str, str], ...] = ()
+    persona: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.entity_ids, (tuple, list)) or any(not isinstance(value, str) or not value.strip() or len(value) > 500 for value in self.entity_ids):
@@ -216,9 +217,12 @@ class ScopeSnapshot:
     activity: dict[str, Any] = field(default_factory=dict)
     activity_entries: tuple[SnapshotEntry, ...] = ()
 
+    persona_entries: tuple[SnapshotEntry, ...] = ()
+    opportunity: dict[str, str] = field(default_factory=dict)
+
     @property
     def all_entries(self):
-        return self.entries + self.activity_entries
+        return self.entries + self.activity_entries + self.persona_entries
 
     def to_record(self) -> dict[str, Any]:
         return {
@@ -238,6 +242,8 @@ class ScopeSnapshot:
             "recipient": self.recipient,
             "activity": self.activity,
             "activity_entries": [entry.to_record() for entry in self.activity_entries],
+            "persona_entries": [entry.to_record() for entry in self.persona_entries],
+            "opportunity": self.opportunity,
         }
 
     @classmethod
@@ -270,6 +276,8 @@ class ScopeSnapshot:
             recipient=str(value.get("recipient") or ""),
             activity=dict(value.get("activity") or {}),
             activity_entries=tuple(SnapshotEntry.from_record(item) for item in value.get("activity_entries") or []),
+            persona_entries=tuple(SnapshotEntry.from_record(item) for item in value.get("persona_entries") or []),
+            opportunity=dict(value.get("opportunity") or {}),
         )
 
 

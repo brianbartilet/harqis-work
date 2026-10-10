@@ -216,7 +216,7 @@
   <div class="page-header mb-4">
     <p class="page-header-eyebrow">Activity Corpus</p>
     <h1 class="page-header-title">Share Activity</h1>
-    <p class="page-header-description">Review workspace context, then generate frozen or live read-only shares.</p>
+    <p class="page-header-description">Review Space context, then generate frozen or live read-only shares.</p>
   </div>
 
   {% if error %}<div class="message error">{{ error }}</div>{% endif %}
@@ -385,7 +385,7 @@
               </div>
             </div>
             </div>
-            <p id="share-date-range-help" class="field-help">Last X days, including today, by Entry date. Live shares roll forward each day. None clears the range; editing dates switches to a custom range. Applies to entries and inherited objects; workspace-linked objects keep their own scope.</p>
+            <p id="share-date-range-help" class="field-help">Last X days, including today, by Entry date. Live shares roll forward each day. None clears the range; editing dates switches to a custom range. Applies to entries and inherited objects; Space-linked objects keep their own scope.</p>
             <div class="two">
               <div class="field"><label for="date-from">From date</label><input class="control [color-scheme:dark]" id="date-from" type="date" name="date_from" value="{{ cfg.date_from if cfg else '' }}" data-preview-filter onclick="if (this.showPicker) this.showPicker()"></div>
               <div class="field"><label for="date-to">To date</label><input class="control [color-scheme:dark]" id="date-to" type="date" name="date_to" value="{{ cfg.date_to if cfg else '' }}" data-preview-filter onclick="if (this.showPicker) this.showPicker()"></div>
@@ -400,6 +400,8 @@
         </details>
 
 
+
+        {% include "modules/hfl_shares/_persona.html" %}
 
         <div class="preview-shell" data-preview-shell>
           <div class="preview-status" data-preview-status role="status" aria-live="polite" hidden><span class="mini-spinner" aria-hidden="true"></span><span>Refreshing your preview…</span></div>

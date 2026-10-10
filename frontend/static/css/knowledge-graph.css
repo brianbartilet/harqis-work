@@ -293,3 +293,6 @@
 }
 .kg-shell:not(.has-board) .kg-map-caption { display:none }
 .kg-shell .kg-zoom svg { width:16px; height:16px; pointer-events:none }
+
+/* Open graph menus must sit above the adjacent Space picker on narrow screens. */
+.kg-menu-panel { z-index:60 }

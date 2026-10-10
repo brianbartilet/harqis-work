@@ -57,7 +57,7 @@ def test_board_settings_switch_and_workspaces_browser(ideas, authenticated_clien
         toggle.focus()
         page.keyboard.press('Space')
         expect(toggle).not_to_be_checked()
-        dialog.get_by_label('Workspaces', exact=True).click()
+        dialog.get_by_label('Spaces', exact=True).click()
         dialog.get_by_role('checkbox', name='Work', exact=True).check()
         dialog.get_by_role('checkbox', name='Home', exact=True).check()
         page.screenshot(path=str(tmp_path / ('board-settings-'+str(width)+'.png')))
@@ -70,9 +70,9 @@ def test_board_settings_switch_and_workspaces_browser(ideas, authenticated_clien
         page.wait_for_selector('#kg-workspace:not([inert])')
         page.evaluate('window.HflIdeas.maps.edit(window.HflIdeas.maps.current)')
         expect(dialog.get_by_role('switch', name='Active')).not_to_be_checked()
-        dialog.get_by_label('Workspaces', exact=True).click()
+        dialog.get_by_label('Spaces', exact=True).click()
         expect(dialog.get_by_role('checkbox', name='Work', exact=True)).to_be_checked()
-        dialog.get_by_role('button', name='No workspace', exact=True).click()
+        dialog.get_by_role('button', name='No Space', exact=True).click()
         dialog.get_by_role('button', name='Save board', exact=True).click()
         expect(dialog).to_have_count(0)
         assert ideas.map(board['id'])['workspace_ids'] == []
@@ -289,15 +289,18 @@ def test_board_sidebar_order_collapse_and_saved_lines_browser(ideas, authenticat
             sidebar.locator('[data-section=boards] > summary').click()
             expect(sidebar.locator('[data-section=goals] .board-list')).not_to_be_visible()
             button_sizes=sidebar.locator('.board-explore,.board-add-menu>.idea-add-toggle,.board-controls>button').evaluate_all('(buttons)=>buttons.map(b=>({width:b.getBoundingClientRect().width,height:b.getBoundingClientRect().height}))')
+            # Reordering preserves the graph's ready message; it need not be empty.
+            expect(sidebar.locator('.idea-map-status')).to_contain_text('Board ready')
+            ready_status = sidebar.locator('.idea-map-status').inner_text()
             with page.expect_response(lambda r: r.url.endswith('/boards/order') and r.request.method=='PUT'):
                 sidebar.locator('[data-board-id="'+second['id']+'"]').drag_to(sidebar.locator('[data-board-id="'+first['id']+'"]'))
-            expect(sidebar.locator('.idea-map-status')).to_be_empty()
+            expect(sidebar.locator('.idea-map-status')).to_have_text(ready_status)
             assert [b['id'] for b in ideas.maps()]==[second['id'],first['id']]
             sidebar.locator('[data-section=goals] > summary').click()
             assert sidebar.locator('.board-explore,.board-add-menu>.idea-add-toggle,.board-controls>button').evaluate_all('(buttons)=>buttons.map(b=>({width:b.getBoundingClientRect().width,height:b.getBoundingClientRect().height}))')==button_sizes
             with page.expect_response(lambda r: r.url.endswith('/goals/order') and r.request.method=='PUT'):
                 sidebar.locator('[data-goal-id="'+goal2['id']+'"]').drag_to(sidebar.locator('[data-goal-id="'+goal1['id']+'"]'))
-            expect(sidebar.locator('.idea-map-status')).to_be_empty()
+            expect(sidebar.locator('.idea-map-status')).to_have_text(ready_status)
             assert [g['id'] for g in ideas.goals()]==[goal2['id'],goal1['id']]
             sidebar.locator('[data-goal-id="'+goal1['id']+'"]').click()
             editor=page.locator('.idea-dialog')

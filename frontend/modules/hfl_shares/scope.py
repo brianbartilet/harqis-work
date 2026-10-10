@@ -357,6 +357,9 @@ def build_snapshot(
         snapshot = project(configuration, snapshot, all_documents, allow_secrets=allow_secrets, secret_tags=protected_tags,
                            enabled_reference_ids=enabled_reference_ids, disabled_reference_ids=disabled_reference_ids,
                            matching_ids=matching_ids, context=activity_context, entity_mentions=entity_mentions)
+    if configuration.persona:
+        from modules.roles.sharing import project as project_persona
+        snapshot = project_persona(configuration, snapshot)
     return snapshot
 
 

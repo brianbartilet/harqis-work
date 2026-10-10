@@ -107,8 +107,10 @@ def test_workspace_cross_tab_sync_browser(authenticated_client, workspace_corpus
             corpus.locator('#q').fill('unfinished')
             board.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
             board.locator('[data-view-picker]').evaluate('(el) => el.open = true')
-            board.locator('[data-view-all]').click()
-            board.wait_for_function("document.querySelector('[data-view-picker-caption]').textContent === 'All activity'")
+            # The caption updates optimistically; wait for persistence before opening another tab.
+            with board.expect_response(lambda response: '/view-preferences' in response.url and response.request.method == 'PUT'):
+                board.locator('[data-view-all]').click()
+            board.wait_for_function("document.querySelector('[data-view-picker-caption]')?.textContent === 'All activity' && !document.querySelector('[data-view-loading]')?.open")
             corpus.evaluate("window.dispatchEvent(new Event('focus'))")
             playwright.expect(corpus.locator('#q')).to_have_value('unfinished')
             corpus.goto('http://workspace.test/hfl-corpus')
@@ -259,7 +261,7 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
                 assert panel['x'] >= 0 and panel['x'] + panel['width'] <= width
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                 page.screenshot(path=str(tmp_path / f'workspace-{width}.png'), full_page=True)
-                assert page.locator('[data-workspace-menu] > summary').inner_text() == 'Workspace'
+                assert page.locator('[data-workspace-menu] > summary').inner_text() == 'Space'
                 page.get_by_role('button', name='About saved views').click()
                 help_dialog = page.locator('#workspace-help')
                 assert help_dialog.is_visible()
@@ -371,7 +373,7 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             assert [item['name'] for item in remaining['views']] == ['Personal']
             assert remaining['last_used'] is None
             assert not errors, errors
-            print(f'Workspace screenshots: {tmp_path}')
+            print(f'Space screenshots: {tmp_path}')
         finally:
             browser.close()
 
@@ -481,7 +483,7 @@ def test_graph_sources_inherit_and_reset_without_editing_workspaces(authenticate
             page.goto('http://workspace.test/hfl-corpus/graph?'+query)
             page.wait_for_selector('#kg-workspace:not([inert])')
             page.locator('#kg-open-filters').click()
-            playwright.expect(page.locator('#kg-source-caption')).to_have_text('Workspace sources')
+            playwright.expect(page.locator('#kg-source-caption')).to_have_text('Space sources')
             playwright.expect(page.locator('#kg-source-inherited')).to_contain_text('Inherited: '+('all sources' if unrestricted else 'git, notes'))
             page.locator('#kg-source-caption').click()
             page.locator('#kg-source-options input[value=git]').check()
@@ -491,8 +493,8 @@ def test_graph_sources_inherit_and_reset_without_editing_workspaces(authenticate
             assert parse_qs(calls[-1][1])['scope'] == [json.dumps(scope)]
             page.locator('#kg-open-filters').click()
             page.locator('#kg-source-caption').click()
-            page.get_by_role('button', name='Reset to workspace sources', exact=True).click()
-            playwright.expect(page.locator('#kg-source-caption')).to_have_text('Workspace sources')
+            page.get_by_role('button', name='Reset to Space sources', exact=True).click()
+            playwright.expect(page.locator('#kg-source-caption')).to_have_text('Space sources')
             page.locator('#kg-filter').click()
             page.wait_for_selector('#kg-workspace:not([inert])')
             assert not calls[-1][0]

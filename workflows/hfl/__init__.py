@@ -36,3 +36,5 @@ import workflows.hfl.tasks.monitor_pending_captures  # noqa: F401
 import workflows.hfl.tasks.timeline_suggestions  # noqa: F401
 
 import workflows.hfl.tasks.entity_consolidation  # noqa: F401
+
+import workflows.hfl.tasks.persona_audit

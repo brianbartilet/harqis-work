@@ -1073,3 +1073,23 @@ the task definition so the Hermes-owned schedule remains reviewable.
 - `/create-new-ingest-source-hfl` —
   [`.agents/skills/create-new-ingest-source-hfl/SKILL.md`](../../.agents/skills/create-new-ingest-source-hfl/SKILL.md)
   scaffolds new dual-writing ingest sources
+
+
+### `persona_audit`
+
+Active weekly bounded LLM analysis of role-linked Spaces. **Runtime:** Celery;
+**schedule owner:** Celery Beat, Sunday 09:00 Asia/Singapore. **Queue:** HOST;
+**OS:** cross-platform. Manual dispatch is also available from Roles.
+
+Data flow: owner API scoped entries/actions/ideas → `apps.antropic` (`ANTHROPIC`)
+→ validated private journal observations → canonical HFL persistence/outbox with
+source `persona-audit`. Every run has a private deduplicated HFL receipt and ES
+execution log. Soul and existing publications are never automatically edited.
+The prompt is `prompts/persona_audit.md`. The task retries transient owner API or
+report failures twice using the same run ID; already consumed evidence is skipped.
+
+Configuration: `HFL_PERSONA_API_URL` (defaults to `HFL_CORPUS_API_URL`) must identify
+the frontend owning the role/Space profile; `HFL_CORPUS_API_TOKEN` authenticates it.
+`HFL_PERSONA_QUEUE` optionally changes the owner UI manual queue. The frontend needs
+existing Anthropic credentials. See [Roles and Spaces](../../docs/info/ROLES-AND-SPACES.md)
+for limits, failure handling, extraction, and local review.

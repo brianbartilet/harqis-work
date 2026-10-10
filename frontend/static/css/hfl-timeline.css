@@ -448,3 +448,7 @@
 @media(max-width:640px) { .agent-config-field { grid-template-columns:1.2rem 1fr; } .agent-config-field :last-child { grid-column:2; } .agent-terminal { height:50dvh; } }
 
 .agent-paste-notice[hidden] { display:none; }
+
+[data-create-entry-form] .entry-select-wrap{display:block;position:relative;margin-top:.375rem}
+[data-create-entry-form] .entry-select-wrap select{appearance:none;margin-top:0;padding-right:3rem}
+[data-create-entry-form] .entry-select-caret{position:absolute;top:50%;right:1rem;width:1.15rem;height:1.15rem;transform:translateY(-50%);pointer-events:none;color:#60a5fa}

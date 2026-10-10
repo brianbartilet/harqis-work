@@ -75,7 +75,9 @@ def project(configuration, snapshot):
             what_happened=item['text'], source='persona', tags=(),
             text=f"{item['role']} — {item['title']}\n{item['origin']} · revision {item['revision']}\n\n{item['text']}", references=references))
     return replace(snapshot, persona_entries=tuple(entries), opportunity=configuration.persona.get('guidance', {}),
-                   estimated_chars=snapshot.estimated_chars + sum(len(e.text) for e in entries))
+                   estimated_chars=snapshot.estimated_chars + sum(len(e.text) for e in entries),
+                   available_references=snapshot.available_references + sum(len(e.references) for e in entries),
+                   enabled_reference_ids=snapshot.enabled_reference_ids + tuple(r.id for e in entries for r in e.references))
 
 
 def download(reference):

@@ -7,9 +7,9 @@
   <div class="p-4">
     <p class="field-help">Choose exactly what this recipient may learn. These excerpts are frozen when published. Nothing is selected automatically. <a href="/roles" target="_blank" rel="noopener">Manage roles</a></p>
     {% for item in persona_choices + selected|rejectattr('id', 'in', available_ids)|list %}
-    <details class="rounded border border-slate-700 p-3 mb-2">
+    <details class="rounded border border-slate-700 p-3 mb-2" data-persona-spaces='{{ item.workspace_ids|tojson|forceescape }}'>
       <summary><label><input type="checkbox" name="persona_ids" value="{{ item.id }}" data-preview-filter {% if item.id in selected_ids %}checked{% endif %}> {{ item.role }} · {{ item.title }}</label>
-        <small class="text-slate-400">{{ item.origin }} · r{{ item.revision }}{% if cfg and cfg.activity and item.workspace_ids|select('in', cfg.activity.get('workspace_ids', []))|list %} · Linked to selected Space{% endif %}{% if item.id not in available_ids %} · Previously selected revision{% endif %}</small>
+        <small class="text-slate-400">{{ item.origin }} · r{{ item.revision }}<span data-persona-suggestion hidden> · Suggested by linked Space</span>{% if item.id not in available_ids %} · Previously selected revision{% endif %}</small>
       </summary>
       <div class="whitespace-pre-wrap text-sm my-3">{{ item.text }}</div>
       {% if item.file %}<label class="text-sm"><input type="checkbox" name="persona_downloads" value="{{ item.id }}" data-preview-filter {% if selected|selectattr('id', 'equalto', item.id)|selectattr('download')|list %}checked{% endif %}> Also allow downloading the entire original file: {{ item.file.name }}</label>{% endif %}
@@ -23,3 +23,4 @@
     {% endfor %}
   </div>
 </details>
+<script src="/static/js/share-persona.js" defer></script>
