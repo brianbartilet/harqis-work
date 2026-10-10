@@ -509,7 +509,7 @@ The owner editor is named **Share Activity**, under Express. It contains:
   The editor loads batches of 50 on scroll and keeps at most 150 cards mounted.
   Scrolling back reloads earlier batches with exclusions intact. Continuous scrolling replaces pagination buttons; loading does not narrow the generated snapshot.
   Bulk reference selection affects loaded controls only.
-- **Actions and Ideas:** active-object selection, optional completed/dismissed items,
+- **Actions:** active-object selection, optional completed/dismissed items,
   Kanban-style descriptions/checklists and a per-card Connections dialog limited to
   approved direct neighbours.
 - **Boards:** board selection, draft thoughts, saved positions, member graphs and

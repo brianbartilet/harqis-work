@@ -238,7 +238,7 @@ source; factual claims must still be grounded in <shared_context>.
         )
     )
     import json
-    owner_context += html.escape("\nOpportunity guidance (job requirements are not evidence of qualifications): " + json.dumps(snapshot.opportunity)) if snapshot.opportunity else ""
+    owner_context += html.escape("\nShare context and guidance (not factual evidence; requirements are not proof of qualifications): " + json.dumps(snapshot.opportunity)) if snapshot.opportunity else ""
     conversation = _conversation(history)
     retrieval_query = prompt
     if not has_recency_intent(prompt):

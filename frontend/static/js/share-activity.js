@@ -103,7 +103,7 @@
     const recipe=form.querySelector('[data-recipe-fields]'), filters=form.querySelector('[data-filter-fields]'), entries=form.querySelector('[data-entry-fields]');
     // Reuse the existing controls and handlers, preserving saved-recipe behavior.
     [...form.children].forEach(el=>{if(el.matches('.two, .field, details.expand-panel'))recipe.append(el);});
-    ['[data-source-selector]','#topic','#context-prompt'].forEach(sel=>{
+    ['[data-source-selector]','#topic'].forEach(sel=>{
       const el=form.querySelector(sel);if(el)filters.append(el.closest('details.expand-panel')||el.closest('.field'));
     });
     form.querySelector('#description').closest('.field').after(form.querySelector('[data-filter-section]'));

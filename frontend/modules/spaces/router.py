@@ -26,7 +26,8 @@ async def page(request: Request):
             result = await asyncio.to_thread(RemoteCorpusClient.from_settings().index, params={'page_size': '20', 'include_secrets': 'false', 'secret_tags': ','.join(tags)})
             sources = result.get('sources', [])
         else:
-            view = await asyncio.to_thread(corpus_view_cache.get, corpus_index.documents(), include_secrets=False, secret_tags=tags)
+            documents = await asyncio.to_thread(corpus_index.documents)
+            view = await asyncio.to_thread(corpus_view_cache.get, documents, include_secrets=False, secret_tags=tags)
             sources = view.sources
     except RemoteCorpusError:
         sources = []

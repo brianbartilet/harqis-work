@@ -205,6 +205,20 @@ def test_remote_multisource_search(authenticated_client, workspace_corpus, monke
         remote.index(params={'source': 'git,notes'})
 
 
+def save_carried_space(page, name=None, identity=None):
+    from playwright.sync_api import expect
+    origin = page.url.split('/hfl-corpus')[0]
+    page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
+    page.locator('[data-manage-spaces]').click()
+    page.locator('#space-destination').select_option(identity or 'new')
+    page.locator('#space-apply-draft').click()
+    if name:
+        page.locator('#workspace-name').fill(name)
+    page.get_by_role('button', name='Save Space', exact=True).click()
+    expect(page.locator('#space-status')).to_contain_text('Space saved')
+    page.goto(origin+'/hfl-corpus')
+
+
 def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_corpus, tmp_path):
     playwright = pytest.importorskip('playwright.sync_api')
     with playwright.sync_playwright() as engine:
@@ -240,10 +254,7 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             assert page.evaluate("sessionStorage.getItem('search-feedback')") == 'Searching…'
             playwright.expect(page.locator('[data-corpus-results]')).to_contain_text('2 matching entries')
             page.locator('[data-workspace-menu] > summary').click()
-            page.locator('[data-workspace-action="new"]').click()
-            page.locator('#workspace-name').fill('Work sources')
-            page.locator('[data-workspace-confirm]').click()
-            page.wait_for_function("document.querySelector('[data-workspace-status]').textContent==='Saved: Work sources'")
+            save_carried_space(page, 'Work sources')
             view = authenticated_client.get('/hfl-corpus/workspace-views').json()['views'][0]
             assert view['state']['source'] == 'git,notes'
             assert view['state']['rolling'] == 7
@@ -296,14 +307,11 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             assert page.locator('[name="rolling"]').input_value() == '7'
             page.locator('#q').fill('#work planning')
             page.locator('[data-workspace-menu] > summary').click()
-            page.locator('[data-workspace-action="save"]').click()
-            page.wait_for_function("document.querySelector('[data-workspace-status]').textContent==='Saved: Work sources'")
+            save_carried_space(page, identity=view['id'])
             assert authenticated_client.get('/hfl-corpus/workspace-views').json()['views'][0]['state']['q'] == '#work planning'
             page.locator('#q').fill('#personal')
-            page.locator('[data-workspace-action="new"]').click()
-            page.locator('#workspace-name').fill('Personal')
-            page.locator('[data-workspace-confirm]').click()
-            page.wait_for_function("document.querySelector('[data-workspace-status]').textContent==='Saved: Personal'")
+            save_carried_space(page, 'Personal')
+            page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
             page.evaluate("""() => {
                 const fetchOriginal = window.fetch;
                 window.fetch = (...args) => String(args[0]).endsWith('/view-preferences')
@@ -353,20 +361,18 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             playwright.expect(page.locator('#q')).to_have_value('#work planning')
             playwright.expect(page.locator('[data-active-view-name]')).to_have_text('Work sources')
             page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
-            page.locator('[data-workspace-action="edit"]').click()
+            page.goto('http://workspace.test/spaces?edit='+view['id'])
             page.locator('#workspace-name').fill('Renamed workspace')
-            page.locator('[data-workspace-confirm]').click()
-            page.wait_for_function("document.querySelector('[data-workspace-status]').textContent==='Saved: Renamed workspace'")
-            page.locator('[data-workspace-action="remove"]').click()
-            assert page.locator('#workspace-dialog-title').inner_text() == 'Remove "Renamed workspace"?'
-            assert page.locator('[data-edit-target-field]').is_hidden()
-            assert page.locator('#workspace-name').is_hidden()
-            assert page.locator('[data-workspace-confirm]').inner_text() == 'Yes'
-            page.locator('[data-workspace-cancel]').click()
+            page.get_by_role('button', name='Save Space', exact=True).click()
+            playwright.expect(page.locator('#space-status')).to_contain_text('Space saved')
+            page.locator('#space-remove').click()
+            assert 'Renamed workspace' in page.locator('#space-delete-description').inner_text()
+            page.locator('#space-delete-cancel').click()
             assert len(authenticated_client.get('/hfl-corpus/workspace-views').json()['views']) == 2
-            page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
-            page.locator('[data-workspace-action="remove"]').click()
-            page.locator('[data-workspace-confirm]').click()
+            page.locator('#space-remove').click()
+            page.locator('#space-delete-confirm').click()
+            playwright.expect(page.locator('#space-status')).to_contain_text('Space removed')
+            page.goto('http://workspace.test/hfl-corpus')
             playwright.expect(page.locator('[data-view-picker-caption]')).to_have_text('All activity')
             playwright.expect(page.locator('#q')).to_have_value('')
             remaining = authenticated_client.get('/hfl-corpus/workspace-views').json()

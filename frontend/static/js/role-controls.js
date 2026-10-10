@@ -13,7 +13,7 @@ window.RoleControls = (form, role, catalog, api, report) => {
     $('#role-colors').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
   };
   const dot = c => `<span class="role-space-dot" style="background:${color(c)}" aria-hidden="true"></span>`;
-  $('#role-spaces').innerHTML = catalog.spaces.map(s => `<label><input type="checkbox" name="spaces" value="${escape(s.id)}" ${role.workspace_ids.includes(s.id)?'checked':''}>${dot(s.color)}${escape(s.name)}</label>`).join('') || '<p class="role-help">Create a Space in Activity Corpus first.</p>';
+  $('#role-spaces').innerHTML = catalog.spaces.map(s => `<label><input type="checkbox" name="spaces" value="${escape(s.id)}" ${role.workspace_ids.includes(s.id)?'checked':''}>${dot(s.color)}${escape(s.name)}</label>`).join('') || '<p class="role-help">Create a Space in Organize → Spaces first.</p>';
   const summarizeSpaces = () => {
     const ids = new Set([...form.querySelectorAll('[name=spaces]:checked')].map(e => e.value));
     $('#role-space-summary').innerHTML = catalog.spaces.filter(s => ids.has(s.id)).map(s => `<span>${dot(s.color)}${escape(s.name)}</span>`).join('') || 'Choose Spaces';
@@ -25,7 +25,7 @@ window.RoleControls = (form, role, catalog, api, report) => {
   picker.onkeydown = event => { if (event.key === 'Escape') { picker.open = false; picker.querySelector('summary').focus(); } };
   $('#role-clear-spaces').onclick = () => { form.querySelectorAll('[name=spaces]').forEach(e => e.checked=false); summarizeSpaces(); picker.open=false; picker.querySelector('summary').focus(); };
   const renderSelected = () => {
-    $('#role-entity-selected').textContent = selected.size ? `${selected.size} selected` : 'Choose entities related to this role.';
+    $('#role-entity-selected').textContent = selected.size ? `${selected.size} selected` : 'Choose entities related to this facet.';
     $('#role-selected-entities').innerHTML = [...selected.values()].map(e => `<div class="role-selected-entity" style="--entity-color:${color(e.color)}"><span><strong>${escape(e.label)}</strong>${e.kind?`<br><span class="role-entity-kind">${escape(e.kind)}</span>`:''}</span><button type="button" data-remove-entity="${escape(e.id)}" aria-label="Remove ${escape(e.label)}">Remove</button></div>`).join('');
     $('#role-clear-entities').disabled = !selected.size;
     $('#role-entities').querySelectorAll('[data-entity]').forEach(b => b.setAttribute('aria-pressed',String(selected.has(b.dataset.entity))));

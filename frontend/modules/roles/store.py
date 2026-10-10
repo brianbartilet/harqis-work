@@ -33,7 +33,7 @@ def get(identity):
     with connection() as db:
         row = db.execute('SELECT payload FROM persona_roles WHERE id=?', (identity,)).fetchone()
     if row is None:
-        raise HTTPException(404, 'Role not found.')
+        raise HTTPException(404, 'Facet not found.')
     return json.loads(row[0])
 
 
@@ -48,10 +48,10 @@ def save(identity, revision, changes, *, checkpoints=None):
         db.execute('BEGIN IMMEDIATE')
         row = db.execute('SELECT payload FROM persona_roles WHERE id=?', (identity,)).fetchone() if identity else None
         if identity and row is None:
-            raise HTTPException(404, 'Role not found.')
+            raise HTTPException(404, 'Facet not found.')
         old = json.loads(row[0]) if row else {'id': uuid4().hex, 'revision': 0, 'journal': [], 'files': [], 'created_at': now()}
         if old['revision'] != revision:
-            raise HTTPException(409, 'This role changed. Reload and review before saving.')
+            raise HTTPException(409, 'This facet changed. Reload and review before saving.')
         value = old
         if changes or not row:
             value = {**old, **changes, 'id': old['id'], 'revision': revision + 1, 'updated_at': now()}

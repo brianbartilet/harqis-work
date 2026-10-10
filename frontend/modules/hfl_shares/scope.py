@@ -368,23 +368,24 @@ def suggested_prompts(
     snapshot: ScopeSnapshot,
     owner_name: str = "P",
 ) -> tuple[str, ...]:
+    settings = snapshot.suggestion_settings
+    if settings.get('mode') == 'off':
+        return ()
+    if settings.get('mode') == 'custom':
+        return tuple(settings.get('questions', ()))[:5]
     if not snapshot.all_entries:
         return ()
     owner = owner_name.strip() or "P"
     suggestions = [
-        f"What is {owner} currently working on?",
-        f"Can you curate interview questions for me from {owner}'s work?",
+        f"What themes emerge from {owner}'s shared context?",
+        "Which examples in this share are worth exploring further?",
     ]
-    travel_terms = {
-        "travel", "trip", "japan", "place", "places", "location", "holiday"
-    }
-    if travel_terms.intersection(tag.casefold() for tag in snapshot.tag_counts):
-        suggestions.append(f"Show me places {owner} visited over the past year.")
     for source in list(snapshot.source_counts)[:1]:
-        suggestions.append(f"What stands out from {owner}'s {source} activity?")
+        suggestions.append(f"What stands out from {owner}'s shared {source} activity?")
     for tag in list(snapshot.tag_counts)[:1]:
-        suggestions.append(f"What does #{tag} reveal about {owner}'s work?")
+        suggestions.append(f"What does the shared context say about #{tag}?")
     return tuple(dict.fromkeys(suggestions))[:5]
+
 
 
 def snapshot_entry(snapshot: ScopeSnapshot, entry_id: str) -> SnapshotEntry | None:

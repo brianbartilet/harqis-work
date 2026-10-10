@@ -1,7 +1,9 @@
 # Spaces
 
 Open **Organize → Spaces** to manage a Space's name, color, saved entry filters,
-and weekly schedule. The Organize menu contains Spaces, Facets, and Files.
+and weekly schedule. The Organize menu contains Spaces, Facets, and Files. Use the info icon beside
+**Your Spaces** for the in-page guide. It opens a dialog you can close with Escape,
+the close icon, or Got it.
 
 ## Create or edit
 
@@ -27,6 +29,29 @@ Entry filters and object assignments are different. Assign actions, ideas, and
 boards through their existing activity and board editors. Link Facets to Spaces
 from **Organize → Facets** to suggest relevant personal context when sharing.
 Neither a link nor a saved filter publishes content.
+
+## Across Corpus, Kanban, and Graph
+
+The same Space selection, applied filters, and Dynamic mode carry across these
+views on the same server. Explicit filter links can open a different context.
+
+- **Activity Corpus:** saved sources, text/tags, and dates select matching entries.
+  Multiple Spaces combine matches without duplicates; additional filters narrow
+  the result. Reset restores the selected saved rules. Manage Spaces carries
+  changed filters into the explicit save flow.
+- **Kanban:** use the same context to focus actions and ideas. Explicit Space
+  assignments can include objects independently of saved entry filters;
+  additional filters can still narrow them. Status-column moves change workflow
+  status, not Space membership. Edit membership in the object editor.
+- **Graph:** explore activity, linked objects, and connections within the Space
+  context. Boards use Space assignments. Opening a board retains its members,
+  marking those outside the current context as **Outside Space filters**.
+
+For example, use a Work Space to read matching entries in Corpus, manage related
+actions in Kanban, and explore connections and boards in Graph. Each view keeps
+Dynamic mode, Visualize, and sharing controls in the Space dropdown. Saved
+filters and object membership remain separate: filter edits do not reassign
+objects.
 
 ## Dynamic mode
 

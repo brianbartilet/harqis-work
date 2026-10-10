@@ -428,6 +428,11 @@ For a personal touch, use [entity templates](docs/info/WORKSPACE-SHARING-GUIDE.m
 to combine selected entities, add optional workspace ideas and other context, then review
 and generate a regular or Instant Share.
 
+Use **Organize → Spaces** to manage saved filters, colors, and weekly schedules;
+see the [Spaces guide](docs/info/SPACES-GUIDE.md). **Organize → Facets** manages
+personal context you can explicitly select for shared conversations; see
+[Facets, Soul, and Spaces](docs/info/ROLES-AND-SPACES.md).
+
 **Features:** Home manifesto · context-aware Second Brain feed and mode overrides · reorderable workflow and app layouts · one-click task triggering · live HTMX status polling · app documentation and controlled pytest runs · recursive HFL browsing, tag cloud, date search, authenticated canonical-host reads, and signed reference downloads · immutable source-scoped guest portals with QR/PIN access and cited Q&A · Flower link
 
 ```sh
@@ -1044,7 +1049,3 @@ For questions or feedback: **[LinkedIn](https://www.linkedin.com/in/dbbartilet/)
 ## License
 
 Distributed under the [MIT License](LICENSE).
-
-Personal [Roles, Soul, and Spaces](docs/info/ROLES-AND-SPACES.md) enrich shared
-conversations through explicitly selected personal evidence and a private weekly
-`persona-audit` journal review.

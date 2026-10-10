@@ -725,14 +725,15 @@ guidance is in
 
 ### Activity Corpus focus views
 
-**Views**, beside Graph, opens the **Focus on** selector. A view combines sources,
+**Space**, on Corpus, Graph, and Kanban, opens the **Focus on** selector. A view combines sources,
 tags/search text, date type and range, sort order, and page size to focus on a
 particular aspect of your activity: work, learning, relationships, or a project.
 Use the information button beside **Focus on** for in-page guidance.
 
-Choose filters, click **Search** to review the results, then choose **New** and
-name the view. **Save** updates the selected view with the current filters;
-**Edit** changes its name, filters, and weekly schedule; **Remove** deletes the saved view without changing entries.
+Choose filters and click **Search** to review results. **Manage Spaces** carries
+filters to **Organize → Spaces**. Choose an explicit new or existing destination,
+review, and **Save Space**. The dedicated page manages names, colors, filters,
+and weekly schedules; **Remove Space** confirms removal without deleting entries.
 Sources use OR matching (`source=git,notes`), combined with the existing tag and
 text matching rules. Fixed dates and rolling last 7/30/90 days are supported,
 including today. Rolling dates are recalculated when the view is opened.
@@ -744,7 +745,7 @@ and remote servers do not automatically synchronize their view databases.
 Explicit query parameters take precedence. **Reset** clears additional search
 filters and restores the currently selected view or combination, retaining Dynamic
 mode when enabled. With no selected views it shows All activity.
-Removing the selected view clears that selection. **Save** updates the named
+Removing the selected view clears that selection. **Save Space** in Organize → Spaces updates the named
 view; applying a search shares its filters without changing that definition.
 Unsubmitted typing is discarded on navigation. Secrets access is
 never stored in a view. Graph profiles remain independent.
@@ -756,12 +757,12 @@ Each view retains its own source/tag/text/date rules. An entry matching any view
 appears once in document results, matching-entry navigation, and Memory Signal
 counts. Search controls show inherited sources and shared filter values; differing
 values are marked as varying by view. Unchanged inherited values preserve each
-view’s original rules. Inspect each view’s rules in **Edit Views**; the search controls
-further narrow the union. **Save** and **Remove** are disabled when multiple views
-are selected. **Edit Views** lets you choose one view to edit without changing
-the others. Removing a single selected view requires Yes/Cancel confirmation.
+view’s original rules. Inspect each Space’s rules in **Organize → Spaces**; the search
+controls further narrow the union. A combined handoff carries only the additional
+filters and requires an explicit destination; it cannot flatten the union into
+a single saved Space. Removal requires confirmation.
 
-In **Edit View → Assign schedules**, choose weekdays and add one or more time blocks.
+In **Organize → Spaces → Assign schedules**, choose weekdays and add one or more time blocks.
 End times are exclusive; an end before the start continues into the next day.
 Overlapping blocks combine all active views. The shared schedule timezone is
 configured in **Profile → Timezone**, initially `Asia/Singapore` (existing schedule settings are preserved); Views read it automatically. It follows
@@ -973,7 +974,7 @@ test grants. A localhost QR works only on the machine running that instance.
 For step-by-step owner instructions, see the [Space sharing user guide](../docs/info/WORKSPACE-SHARING-GUIDE.md)
 (QR generation, browser redemption limits, expiry, refresh, and context names).
 
-Express > **Share Activity** now has Details and Filtering, Entries, Actions and Ideas,
+Express > **Share Activity** now has Settings, Entries, Actions,
 Boards, Plans, Graph, and Agent tabs. Generate share recipe from Corpus, Graph, or Kanban
 preselects eligible workspace context in an unsaved draft. Saved recipes and
 generated-share lists retain their existing controls.
@@ -1051,15 +1052,15 @@ for canonical API requirements and local acceptance checks.
 
 Sharing review uses bounded entry scroll loading (50 per batch, 150 mounted),
 Kanban-style action/idea cards with per-item Connections, and read-only board/timeline
-canvas graphs from approved snapshot data. Details and Filtering combines recipe details and filters, with filters immediately
+canvas graphs from approved snapshot data. Settings combines recipe details and filters, with filters immediately
 after Description, and hides the preview region;
 workspace-reset controls only appear for inherited scope. Graph assets are rebuilt
 by `npm run build:knowledge-graph`, including `share-graphs.jsx`.
 
 
-### Roles, Soul, and personal share context
+### Facets, Soul, and personal share context
 
-The profile menu includes **Roles** at `/roles`: name/color, Markdown Soul,
+**Organize → Facets** opens `/roles`: name/color, Markdown Soul,
 attachments with extraction preview, Space/entity links, revision history, and a
 private agent journal. Share recipes explicitly select personal excerpts and
 optional original downloads; existing shares retain their publication-time persona
@@ -1067,7 +1068,7 @@ revision even when activity refreshes. Opportunity fields tailor presentation
 without adding unsupported qualifications. **About the sharer** exposes the same
 approved evidence to guests and chat citations.
 
-See [Roles and Spaces](../docs/info/ROLES-AND-SPACES.md) for selection, refresh,
+See [Facets and Spaces](../docs/info/ROLES-AND-SPACES.md) for selection, refresh,
 archive/revocation, file limits, API ownership, and the weekly `persona-audit` job.
 
 | Method | Route | Purpose |
@@ -1078,3 +1079,7 @@ archive/revocation, file limits, API ownership, and the weekly `persona-audit` j
 | POST | `/roles/analyze` | Queue a manual persona audit. |
 | GET/POST/PUT | `/api/hfl/roles[/{id}]` | Bearer-protected role operations. |
 | POST | `/api/hfl/roles/audit/run` | Idempotent worker-to-owner analysis command. |
+
+The Spaces management route is `/spaces`; it reuses the existing authenticated
+`/hfl-corpus/workspace-views` APIs and revision checks. The frontend Space editor
+was moved out of the activity dropdowns. See [Spaces guide](../docs/info/SPACES-GUIDE.md).

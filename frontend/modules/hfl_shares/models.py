@@ -219,6 +219,7 @@ class ScopeSnapshot:
 
     persona_entries: tuple[SnapshotEntry, ...] = ()
     opportunity: dict[str, str] = field(default_factory=dict)
+    suggestion_settings: dict[str, Any] = field(default_factory=dict)
 
     @property
     def all_entries(self):
@@ -244,6 +245,7 @@ class ScopeSnapshot:
             "activity_entries": [entry.to_record() for entry in self.activity_entries],
             "persona_entries": [entry.to_record() for entry in self.persona_entries],
             "opportunity": self.opportunity,
+            "suggestion_settings": self.suggestion_settings,
         }
 
     @classmethod
@@ -278,6 +280,7 @@ class ScopeSnapshot:
             activity_entries=tuple(SnapshotEntry.from_record(item) for item in value.get("activity_entries") or []),
             persona_entries=tuple(SnapshotEntry.from_record(item) for item in value.get("persona_entries") or []),
             opportunity=dict(value.get("opportunity") or {}),
+            suggestion_settings=dict(value.get("suggestion_settings") or {}),
         )
 
 

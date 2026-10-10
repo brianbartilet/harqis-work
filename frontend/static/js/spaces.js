@@ -1,6 +1,15 @@
 (() => {
   const root = document.querySelector('[data-spaces-csrf]'); if (!root) return;
   const $ = selector => root.querySelector(selector);
+  const help = $('#spaces-help'), helpTrigger = $('#spaces-help-open');
+  helpTrigger.onclick = () => { help.showModal(); $('#spaces-help-title').focus(); };
+  help.querySelectorAll('[data-spaces-help-close]').forEach(button => button.onclick = () => help.close());
+  help.addEventListener('close', () => helpTrigger.focus());
+  help.addEventListener('click', event => {
+    const box = help.getBoundingClientRect();
+    if (event.target === help && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) help.close();
+  });
+
   let viewData = JSON.parse($('#spaces-data').textContent), views = viewData.views, preferences = viewData.preferences;
   const sources = JSON.parse($('#spaces-sources').textContent).map(value => ({value}));
   let editTarget = null, busy = false, baseline = '', draft = null;
@@ -49,8 +58,10 @@
   form.onsubmit=async event=>{
     event.preventDefault();if(busy||!form.reportValidity())return;
     const body=payload();lock(true);$('#space-error').textContent='';
-    try {const saved=await request(editTarget.id?'/'+editTarget.id:'',editTarget.id?'PUT':'POST',body);baseline=JSON.stringify(body);changed();
-      await refresh();open(saved);announce('Space saved. Its filters and schedule are ready to use.');
+    try {const saved=await request(editTarget.id?'/'+editTarget.id:'',editTarget.id?'PUT':'POST',body);
+      views=[...views.filter(v=>v.id!==saved.id),saved].sort((a,b)=>a.name.localeCompare(b.name));
+      open(saved);changed();announce('Space saved. Its filters and schedule are ready to use.');
+      try {await refresh();} catch (_) {announce('Space saved. The list could not refresh; reload to see changes from other browsers.');}
     } catch(error){$('#space-error').textContent=error.message+' Your edits are still here. Reload the page to get the latest version if another browser changed this Space.';}
     finally{lock(false);}
   };
@@ -59,7 +70,9 @@
   $('#space-delete-cancel').onclick=()=>removeDialog.close();
   $('#space-delete-confirm').onclick=async()=>{
     if(busy)return;lock(true);
-    try{await request('/'+encodeURIComponent(editTarget.id)+'?revision='+editTarget.revision,'DELETE');editTarget=null;baseline='';changed();removeDialog.close();form.hidden=true;$('#space-empty').hidden=false;await refresh();announce('Space removed. Your entries and objects are unchanged.');}
+    try{await request('/'+encodeURIComponent(editTarget.id)+'?revision='+editTarget.revision,'DELETE');views=views.filter(v=>v.id!==editTarget.id);editTarget=null;baseline='';changed();removeDialog.close();form.hidden=true;$('#space-empty').hidden=false;list();announce('Space removed. Your entries and objects are unchanged.');
+      try {await refresh();} catch (_) {announce('Space removed. The list could not refresh; reload to see changes from other browsers.');}
+    }
     catch(error){$('#space-delete-error').textContent=error.message;}finally{lock(false);}
   };
   const params=new URLSearchParams(location.search);

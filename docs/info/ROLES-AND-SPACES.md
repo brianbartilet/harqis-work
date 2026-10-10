@@ -1,15 +1,15 @@
-# Roles, Soul, and Spaces
+# Facets, Soul, and Spaces
 
-Roles describe aspects of the owner’s life. Spaces collect activity and objects.
-The profile menu’s **Roles** page supports name, color, Markdown Soul, PDF/DOCX/
+Facets describe aspects of the owner’s life. Spaces collect activity and objects.
+The **Organize → Facets** page supports name, color, Markdown Soul, PDF/DOCX/
 Markdown/text/image attachments, Space associations, entity links, private agent
 observations, archive/restore, and revision history. Internal `workspace` IDs,
 routes, query parameters, and database names remain compatible.
 
 ## Sharing
 
-Open a share recipe and expand **Personal context · Roles and Soul**. Space links
-suggest relevant roles; they do not grant access. Select individual Soul heading
+Open a share recipe and expand **Personal context · Facets and Soul**. Space links
+suggest relevant facets; they do not grant access. Select individual Soul heading
 sections, attachment excerpts, or owner-approved journal observations. Review the
 exact text in the preview before generating a share. Attachment excerpts are split
 into bounded chunks; selecting an excerpt does not enable its original download.
@@ -31,7 +31,7 @@ Detached files remain immutable for previously approved references and history.
 
 ## Attachments
 
-Roles allow 20 attachments, at most 20 MB each, with 10 files per upload. Extraction
+Facets allow 20 attachments, at most 20 MB each, with 10 files per upload. Extraction
 is private and reports success/failure. Text is capped at 60,000 characters; PDFs
 process at most 50 pages. DOCX paragraphs and tables are supported. PDF encryption
 and empty extraction produce errors; upload scanned PDF pages as images for OCR.
@@ -107,10 +107,50 @@ revision conflicts, private observations, frozen excerpts, citation stability,
 incremental analysis, and report failure handling. Existing sharing, Space, and
 guest-view regression tests protect compatibility.
 
-### Role editor patterns
+### Facet editor patterns
 
-Role colors use the pinned-date palette (existing custom colors remain selectable). Linked Spaces use a checkbox dropdown. Related entities follow Linked Spaces in a vertical layout; the type/search picker returns at most 50 results and preserves selections across filters. Soul renders sanitized Markdown on blur and opens for editing with a click, Enter, or Space. Save always uses the underlying Markdown. The frontend pattern review skill is integrated into feature clarification to inspect existing controls before implementing new UI.
+Facet colors use the pinned-date palette (existing custom colors remain selectable). Linked Spaces use a checkbox dropdown. Related entities follow Linked Spaces in a vertical layout; the type/search picker returns at most 50 results and preserves selections across filters. Soul renders sanitized Markdown on blur and opens for editing with a click, Enter, or Space. Save always uses the underlying Markdown. The frontend pattern review skill is integrated into feature clarification to inspect existing controls before implementing new UI.
 
-The Roles page follows the recipe layout: a wide editor on the left and the roles list with analysis controls in the right sidebar. At 900px and below, the roles sidebar appears first, above the editor.
+The Facets page follows the recipe layout: a wide editor on the left and the facets list with analysis controls in the right sidebar. At 900px and below, the facets sidebar appears first, above the editor.
 
-The sidebar shows roles in two columns and an archived toggle. Analysis help precedes the centered Analyze now button, with queued/error feedback inside the same section. Dropdowns use the recipe SVG caret; selected entities use typed cards with Remove controls.
+The sidebar shows facets in two columns and an archived toggle. Analysis help precedes the centered Analyze now button, with queued/error feedback inside the same section. Dropdowns use the recipe SVG caret; selected entities use typed cards with Remove controls.
+
+### Spaces management
+
+Use **Organize → Spaces** to create, edit, or remove saved Spaces. The dropdowns
+on Corpus, Graph, and Kanban keep selection, Dynamic mode, Visualize, and sharing.
+Manage Spaces carries filters into an explicit save flow. See [Spaces guide](SPACES-GUIDE.md).
+Facets is the visible name for the former Roles feature; `/roles`, API paths,
+identifiers, and stored records are unchanged.
+
+The info icon beside **Your facets** opens an in-page guide with examples, Soul
+writing tips, Space links, journal review, sharing controls, and archive behavior.
+It uses the same accessible help-dialog presentation as Spaces.
+
+### How agents and shares use Facets
+
+The analysis agent works for the owner: manual and weekly runs check active
+facets with linked Spaces, compare new or changed evidence, and propose private,
+evidence-linked journal observations. It uses the facet name and Soul alongside
+recent entries and linked actions/ideas. Review suggestions before approving
+anything. Approval only makes an observation available to select in a recipe;
+it does not publish it or edit the Soul. Analysis history reports coverage and
+outcomes, and each run records an HFL receipt with source `persona-audit`.
+
+The share chat agent works within the recipient's published context. Select
+Soul sections, extracted attachment excerpts, and approved observations in
+**Personal context · Facets and Soul**. Linked Spaces provide suggestions, not
+automatic selections. Optional opportunity and audience guidance helps shape
+answers; it is not evidence of qualifications and may be reflected in answers.
+
+Review **About the sharer** in the recipe preview before publishing. These
+excerpts are displayed directly on the recipient's page, not hidden agent-only
+instructions. The chat uses them alongside the included activity, is instructed
+to cite evidence and acknowledge insufficient context, and cannot browse the
+private Facet library or edit the owner's records. Original-file downloads
+require separate selection.
+
+Recipes retain selected personal revisions. Later Facet edits and approvals do
+not silently update that context, including in live-activity shares. Select the
+updated excerpts in the recipe and explicitly update or generate the intended
+share. Archiving a Facet does not revoke existing shares.

@@ -31,6 +31,7 @@ def choices():
         for key, title, text, origin, file in parts:
             token = f"{role['id']}:{role['revision']}:{key}"
             result.append({'id': token, 'role_id': role['id'], 'revision': role['revision'], 'role': role['name'],
+                           'color': role.get('color') if re.fullmatch(r'#[0-9a-fA-F]{6}', str(role.get('color', ''))) else '#3b82f6',
                            'title': title, 'text': text, 'origin': origin, 'file': file and {k: file[k] for k in ('id', 'name', 'digest')},
                            'workspace_ids': role.get('workspace_ids', [])})
     return result
@@ -55,10 +56,27 @@ def from_form(form, existing=None):
         items.append(item)
     if sum(len(item['text']) for item in items) > 120000:
         raise ValueError('Select no more than 120,000 characters of personal context.')
-    guidance = {key: str(form.get('persona_' + key) or '').strip() for key in ('company', 'target_role', 'job_description', 'audience', 'tone', 'icebreakers')}
-    if any(len(value) > (12000 if key == 'job_description' else 1000) for key, value in guidance.items()):
-        raise ValueError('Opportunity guidance is too long.')
-    return {'items': items, 'guidance': guidance}
+    if 'persona_context' in form:
+        guidance = {'context': str(form.get('persona_context') or '').strip()}
+        if len(guidance['context']) > 20000:
+            raise ValueError('Share context must be at most 20,000 characters.')
+    else:
+        # Older clients can still submit the original structured guidance.
+        guidance = {key: str(form.get('persona_' + key) or '').strip() for key in ('company', 'target_role', 'job_description', 'audience', 'tone', 'icebreakers')}
+        if any(len(value) > (12000 if key == 'job_description' else 1000) for key, value in guidance.items()):
+            raise ValueError('Opportunity guidance is too long.')
+    suggestions = previous.get('suggestions', {'mode': 'automatic', 'questions': []})
+    if 'suggestion_mode' in form:
+        mode = str(form.get('suggestion_mode') or '')
+        questions = list(dict.fromkeys(line.strip() for line in str(form.get('suggestion_questions') or '').splitlines() if line.strip()))
+        if mode not in ('off', 'custom', 'automatic'):
+            raise ValueError('Choose a valid suggested-question mode.')
+        if len(questions) > 5 or any(len(question) > 240 for question in questions):
+            raise ValueError('Use at most five suggested questions, with 240 characters each.')
+        if mode == 'custom' and not questions:
+            raise ValueError('Add at least one custom question or choose Off.')
+        suggestions = {'mode': mode, 'questions': questions}
+    return {'items': items, 'guidance': guidance, 'suggestions': suggestions}
 
 
 def project(configuration, snapshot):
@@ -75,6 +93,7 @@ def project(configuration, snapshot):
             what_happened=item['text'], source='persona', tags=(),
             text=f"{item['role']} — {item['title']}\n{item['origin']} · revision {item['revision']}\n\n{item['text']}", references=references))
     return replace(snapshot, persona_entries=tuple(entries), opportunity=configuration.persona.get('guidance', {}),
+                   suggestion_settings=configuration.persona.get('suggestions', {}),
                    estimated_chars=snapshot.estimated_chars + sum(len(e.text) for e in entries),
                    available_references=snapshot.available_references + sum(len(e.references) for e in entries),
                    enabled_reference_ids=snapshot.enabled_reference_ids + tuple(r.id for e in entries for r in e.references))

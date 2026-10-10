@@ -62,6 +62,7 @@ from modules.hfl_shares.router import owner_router as hfl_share_owner_router
 from modules.git_forks.router import router as git_forks_router
 from modules.home.router import router as home_router
 from modules.files.router import router as files_router, guest_router as file_guest_router
+from modules.spaces.router import router as spaces_router
 from modules.manifesto.router import router as manifesto_router
 from modules.profile.router import router as profile_router
 from modules.app_settings.router import router as app_settings_router
@@ -281,6 +282,7 @@ app.include_router(hfl_share_guest_router)
 app.include_router(git_forks_router)
 from modules.roles.router import router as roles_router
 app.include_router(roles_router)
+app.include_router(spaces_router)
 app.include_router(profile_router)
 app.include_router(app_settings_router)
 app.include_router(second_brain_router)

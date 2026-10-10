@@ -28,7 +28,7 @@ class RoleWrite(BaseModel):
 def authorize(request, write=False):
     user, redirect = require_user(request)
     if redirect:
-        raise HTTPException(401, 'Sign in to manage roles.')
+        raise HTTPException(401, 'Sign in to manage facets.')
     if write and not verify_csrf_token(request.headers.get('X-CSRF-Token', ''), user):
         raise HTTPException(403, 'Invalid form token.')
     return user
@@ -131,9 +131,9 @@ async def upload(request: Request, identity: str, files: list[UploadFile] = File
     from modules.roles.extraction import extract, SUPPORTED, MAX_BYTES
     from pathlib import Path
     if role.get('archived'):
-        raise HTTPException(409, 'Restore the role before adding files.')
+        raise HTTPException(409, 'Restore the facet before adding files.')
     if len(files) > 10 or len(role['files']) + len(files) > 20:
-        raise HTTPException(422, 'Use at most 20 files per role and 10 per upload.')
+        raise HTTPException(422, 'Use at most 20 files per facet and 10 per upload.')
     for file in files:
         if Path(file.filename or '').suffix.lower() not in SUPPORTED or (file.size or 0) > MAX_BYTES:
             raise HTTPException(422, 'Use supported files of at most 20 MB each.')

@@ -2,25 +2,34 @@
 {% set selected = personal.get('items', []) %}
 {% set selected_ids = selected|map(attribute='id')|list %}
 {% set available_ids = persona_choices|map(attribute='id')|list %}
-<details class="filter-group" open>
-  <summary>Personal context · Roles and Soul</summary>
+<details class="expand-panel mb-4">
+  <summary>
+    <span>Personal context · Facets and soul</span>
+    <svg class="expand-arrow h-4 w-4 shrink-0 text-blue-400 transition" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg>
+  </summary>
   <div class="p-4">
-    <p class="field-help">Choose exactly what this recipient may learn. These excerpts are frozen when published. Nothing is selected automatically. <a href="/roles" target="_blank" rel="noopener">Manage roles</a></p>
+    <p class="field-help">Choose exactly what this recipient may learn. These excerpts are frozen when published. Nothing is selected automatically. <a href="/roles" target="_blank" rel="noopener">Manage facets</a></p>
+    <div class="persona-card-grid">
     {% for item in persona_choices + selected|rejectattr('id', 'in', available_ids)|list %}
-    <details class="rounded border border-slate-700 p-3 mb-2" data-persona-spaces='{{ item.workspace_ids|tojson|forceescape }}'>
-      <summary><label><input type="checkbox" name="persona_ids" value="{{ item.id }}" data-preview-filter {% if item.id in selected_ids %}checked{% endif %}> {{ item.role }} · {{ item.title }}</label>
-        <small class="text-slate-400">{{ item.origin }} · r{{ item.revision }}<span data-persona-suggestion hidden> · Suggested by linked Space</span>{% if item.id not in available_ids %} · Previously selected revision{% endif %}</small>
-      </summary>
-      <div class="whitespace-pre-wrap text-sm my-3">{{ item.text }}</div>
-      {% if item.file %}<label class="text-sm"><input type="checkbox" name="persona_downloads" value="{{ item.id }}" data-preview-filter {% if selected|selectattr('id', 'equalto', item.id)|selectattr('download')|list %}checked{% endif %}> Also allow downloading the entire original file: {{ item.file.name }}</label>{% endif %}
-    </details>
-    {% else %}<p class="field-help">Create a role with a Soul or attachment to select personal context.</p>{% endfor %}
-    <h3 class="mt-4">Opportunity and conversation guidance</h3>
-    <p class="field-help">Use these fields to shape relevant answers. Job requirements describe the opportunity, not your qualifications. Guidance may be reflected in answers; do not include private information here.</p>
+    {% set current_facet = persona_choices|selectattr('role_id', 'equalto', item.role_id)|first %}
+    {% set facet_color = current_facet.color if current_facet else '#3b82f6' %}
+    <article style="--facet-color:{{ facet_color }}" class="persona-card" data-persona-spaces='{{ item.workspace_ids|tojson|forceescape }}'>
+      <label class="persona-card-choice"><input type="checkbox" name="persona_ids" value="{{ item.id }}" data-preview-filter {% if item.id in selected_ids %}checked{% endif %}>
+        <span><strong>{{ item.role }}</strong><span class="persona-card-title">{{ item.title }}</span></span>
+      </label>
+      <p class="persona-card-meta">{{ item.origin }} · Revision {{ item.revision }}<span data-persona-suggestion hidden> · Suggested by linked Space</span>{% if item.id not in available_ids %} · Previously selected revision{% endif %}</p>
+      <details class="persona-excerpt"><summary>Read excerpt</summary><div class="whitespace-pre-wrap text-sm my-3">{{ item.text }}</div></details>
+      {% if item.file %}<label class="persona-download"><input type="checkbox" name="persona_downloads" value="{{ item.id }}" data-preview-filter {% if selected|selectattr('id', 'equalto', item.id)|selectattr('download')|list %}checked{% endif %}> Allow original download: {{ item.file.name }}</label>{% endif %}
+    </article>
+    {% else %}<p class="field-help">Create a facet with a Soul or attachment to select personal context.</p>{% endfor %}
+    </div>
     {% set guidance = personal.get('guidance', {}) %}
-    {% for key, label in [('company','Target company'),('target_role','Target role'),('audience','Audience'),('tone','Tone'),('icebreakers','Optional icebreaker guidance'),('job_description','Job description')] %}
-    <div class="field"><label for="persona-{{ key }}">{{ label }}</label><textarea class="control" id="persona-{{ key }}" name="persona_{{ key }}" rows="{{ 5 if key == 'job_description' else 2 }}" maxlength="{{ 12000 if key == 'job_description' else 1000 }}" data-preview-filter>{{ guidance.get(key, '') }}</textarea></div>
-    {% endfor %}
+    <div class="persona-guidance-heading"><label for="persona-context">Share context and guidance</label><button type="button" class="context-icon-button" id="persona-examples-open" aria-label="Share context examples" aria-haspopup="dialog" aria-controls="persona-examples"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg></button></div>
+    <p class="field-help" id="persona-context-help">Describe the purpose, audience, background, and how you want the conversation to feel. Markdown supported. Guidance may appear in answers; include only context you want to share. Facts still need support from selected evidence.</p>
+    <div class="field"><textarea class="control" id="persona-context" name="persona_context" rows="12" maxlength="20000" aria-describedby="persona-context-help" placeholder="## Purpose&#10;What should this share help someone understand?&#10;&#10;## Audience and approach&#10;Who is it for, and what should the agent focus on?" data-preview-filter>{% if 'context' in guidance %}{{ guidance.context }}{% else %}{% for key, label in [('company','Target company'),('target_role','Target role'),('audience','Audience'),('tone','Tone'),('icebreakers','Icebreaker guidance'),('job_description','Job description')] %}{% if guidance.get(key) %}## {{ label }}
+{{ guidance[key] }}
+
+{% endif %}{% endfor %}{% endif %}</textarea></div>
   </div>
 </details>
-<script src="/static/js/share-persona.js" defer></script>
+<script src="{{ static_asset('js/share-persona.js') }}" defer></script>
