@@ -235,7 +235,7 @@
         </div>
         <div class="recipe-header-actions">
           <button type="button" id="recipe-help-open" class="context-icon-button" aria-label="How share recipes work" title="How share recipes work" aria-haspopup="dialog" aria-controls="recipe-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7h.01"></path></svg></button>
-          {% if cfg and cfg.id %}<a class="text-xs text-sky-400" href="/sharing" data-recipe-clear>Clear</a>{% endif %}
+          {% if cfg and cfg.id %}<a class="btn btn-danger" href="/sharing" data-recipe-clear>Clear</a>{% endif %}
         </div>
       </div>
       <form id="social-recipe-form" method="post" data-social-form>

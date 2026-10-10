@@ -1,4 +1,25 @@
 (() => {
+  document.querySelectorAll('[data-persona-group]').forEach(group => {
+    const choices = [...group.querySelectorAll('[name=persona_ids]')];
+    const downloads = [...group.querySelectorAll('[name=persona_downloads]')];
+    const all = group.querySelector('[data-persona-select-all]');
+    const download = group.querySelector('[data-persona-download-all]');
+    const sync = () => {
+      const count = choices.filter(input => input.checked).length;
+      all.checked = count === choices.length;
+      all.indeterminate = count > 0 && count < choices.length;
+      group.querySelector('[data-persona-count]').textContent = `${count} of ${choices.length} sections selected`;
+      if(download){
+        const enabled = downloads.filter(input => input.checked).length;
+        download.checked = enabled === downloads.length;
+        download.indeterminate = enabled > 0 && enabled < downloads.length;
+      }
+    };
+    all.addEventListener('change', () => { choices.forEach(input => input.checked = all.checked); sync(); });
+    download?.addEventListener('change', () => { downloads.forEach(input => input.checked = download.checked); sync(); });
+    choices.forEach(input => input.addEventListener('change', sync));
+    sync();
+  });
   const mode = document.getElementById('suggestion-mode');
   const custom = document.getElementById('suggestion-custom-field');
   const toggleQuestions = () => { if (mode && custom) custom.hidden = mode.value !== 'custom'; };

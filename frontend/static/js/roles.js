@@ -49,7 +49,7 @@
     controls?.destroy();
     controls=window.RoleControls($('#role-form'), current, data, api, status);
     $('#role-archive').textContent=current.archived?'Restore facet':'Archive facet'; $('#role-archive').disabled=!current.id;
-    $('#role-file-list').innerHTML=current.files.map(f=>`<article class="role-file"><strong><a href="/roles/data/${encodeURIComponent(current.id)}/attachments/${encodeURIComponent(f.id)}">${esc(f.name)}</a></strong><p>${esc(f.status)}${f.truncated?' · extraction truncated':''}</p>${f.error?`<p>${esc(f.error)}</p>`:''}<details><summary>Review extraction</summary><pre>${esc(f.text)}</pre></details><button type="button" data-detach="${esc(f.id)}">Detach</button></article>`).join('');
+    $('#role-file-list').innerHTML=current.files.map(f=>`<article class="role-file"><strong><a href="/roles/data/${encodeURIComponent(current.id)}/attachments/${encodeURIComponent(f.id)}">${esc(f.name)}</a></strong><p>${esc(f.status)}${f.truncated?' · extraction truncated':''}</p>${f.error?`<p>${esc(f.error)}</p>`:''}<button type="button" data-preview-attachment="${esc(f.id)}" aria-label="Preview ${esc(f.name)}">Preview</button><button type="button" data-detach="${esc(f.id)}">Detach</button></article>`).join('');
     $('#role-journal').innerHTML=current.journal.map(n=>`<article class="role-observation"><small>${esc(n.created_at)} · ${esc(n.status)} · Agent inference</small><p>${esc(n.text)}</p><details><summary>Evidence</summary>${(n.evidence||[]).map(e=>`<p>${e.path?`<a href="/hfl-corpus/document/${esc(e.path.split('/').map(encodeURIComponent).join('/'))}#${encodeURIComponent(e.anchor||'')}" target="_blank" rel="noopener">${esc(e.title||e.id)}</a>`:esc(e.title||e.id)}</p>`).join('')}</details>${['approved','rejected','pending'].map(s=>`<button type="button" data-note="${esc(n.id)}" data-review="${s}">${s==='approved'?'Approve':s==='rejected'?'Reject':'Reset review'}</button>`).join('')}</article>`).join('')||'<p class="role-help">No observations yet. Link a Space, save, then run an analysis.</p>';
     root.querySelectorAll('[data-panel]').forEach(p=>p.hidden=p.dataset.panel!==pane);
     $('#role-files').addEventListener('change', updateUpload);
@@ -62,7 +62,7 @@
     const files=[...$('#role-files').files];
     $('#role-pending-files').innerHTML=files.map((f,index)=>`<li><span>${esc(f.name)}</span><small>${(f.size/1024/1024).toFixed(2)} MB</small><button type="button" data-preview-file="${index}" aria-label="Preview ${esc(f.name)}">Preview</button></li>`).join('');
     const invalid=files.some(f=>f.size>20*1024*1024 || !/\.(pdf|docx|md|markdown|txt|png|jpe?g|webp|tiff?|bmp)$/i.test(f.name));
-    const message=!current.id?'Save this facet before uploading files.':current.archived?'Restore this facet before adding files.':files.length>10?'Choose at most 10 files per upload.':files.length+current.files.length>20?'A facet can have up to 20 attachments.':invalid?'Use supported files of at most 20 MB each.':files.length?`${files.length} ${files.length===1?'file ready':'files ready'} to upload.`:'No files selected.';
+    const message=!current.id?'Save this facet before uploading files.':current.archived?'Restore this facet before adding files.':files.length>10?'Choose at most 10 files per upload.':files.length+current.files.length>20?'A facet can have up to 20 attachments.':invalid?'Use supported files of at most 20 MB each.':files.length?`${files.length} ${files.length===1?'file ready':'files ready'} to upload.`:'';
     $('#role-upload-status').textContent=message;
     $('#role-upload').disabled=!current.id||current.archived||!files.length||files.length>10||files.length+current.files.length>20||invalid;
     $('#role-clear-files').disabled=!files.length;
@@ -71,12 +71,22 @@
   const previewDialog=$('#role-file-preview'), previewContent=$('#role-file-preview-content');
   previewDialog.addEventListener('close',()=>{++previewVersion;previewContent.replaceChildren();if(previewUrl)URL.revokeObjectURL(previewUrl);previewUrl=null;});
   $('#role-file-preview-close').onclick=()=>previewDialog.close();
-  async function previewFile(index) {
-    const file=$('#role-files')?.files[index];if(!file)return;
+  async function previewFile(index, attachment) {
+    let file=attachment || $('#role-files')?.files[index];if(!file)return;
     if(previewUrl)URL.revokeObjectURL(previewUrl);
     const version=++previewVersion;
     $('#role-file-preview-title').textContent=file.name;
     previewContent.replaceChildren();previewDialog.showModal();
+    if(attachment){
+      previewContent.textContent='Loading preview…';
+      try {
+        const response=await fetch(`/roles/data/${encodeURIComponent(current.id)}/attachments/${encodeURIComponent(attachment.id)}`,{cache:'no-store'});
+        if(!response.ok)throw Error('Unable to load this attachment. Try again.');
+        const blob=await response.blob();if(version!==previewVersion)return;
+        file=new File([blob],attachment.name,{type:blob.type});
+        previewContent.replaceChildren();
+      }catch(error){if(version===previewVersion)previewContent.textContent=error.message;return;}
+    }
     if(/\.(png|jpe?g|webp|bmp)$/i.test(file.name)){
       previewUrl=URL.createObjectURL(file);const img=document.createElement('img');img.alt=file.name;img.src=previewUrl;
       img.onerror=()=>{if(version===previewVersion)previewContent.textContent='This image could not be displayed in your browser.';};previewContent.append(img);
@@ -89,7 +99,10 @@
       const text=await file.slice(0,200000).text();if(version!==previewVersion)return;
       const pre=document.createElement('pre');pre.textContent=text;previewContent.replaceChildren(pre);
       if(file.size>200000){const note=document.createElement('p');note.textContent='Preview limited to the first 200 KB.';previewContent.append(note);}
-    }else previewContent.textContent='This format cannot be previewed in the browser. Open the original file on your device, or upload it and review its extracted text below.';
+    }else if(attachment?.text){
+      const note=document.createElement('p');note.textContent='Extracted text preview';
+      const pre=document.createElement('pre');pre.textContent=attachment.text;previewContent.append(note,pre);
+    }else previewContent.textContent='This format cannot be previewed in the browser. Open the original file on your device.';
   }
   async function save() {
     const form=$('#role-form'); if (!form.reportValidity()) return;
@@ -100,6 +113,7 @@
   root.addEventListener('submit',event=>{if(event.target.id==='role-form'){event.preventDefault();save().catch(e=>status(e.message));}});
   root.addEventListener('click',async event=>{const b=event.target.closest('button'); if(!b)return; try {
     if(b.hasAttribute('data-preview-file'))await previewFile(Number(b.dataset.previewFile));
+    if(b.hasAttribute('data-preview-attachment'))await previewFile(null,current.files.find(f=>f.id===b.dataset.previewAttachment));
     if(b.dataset.role) open(data.roles.find(r=>r.id===b.dataset.role));
     if(b.id==='role-new') open();
     if(b.dataset.pane){root.querySelectorAll('[data-panel]').forEach(p=>p.hidden=p.dataset.panel!==b.dataset.pane); if(b.dataset.pane==='history'&&current.id){const h=await api('/data/'+current.id+'/history');$('#role-history').innerHTML=h.history.map(r=>`<details><summary>Revision ${r.revision} · ${esc(r.updated_at)}</summary><pre style="white-space:pre-wrap">${esc(r.soul)}</pre></details>`).join('');}}

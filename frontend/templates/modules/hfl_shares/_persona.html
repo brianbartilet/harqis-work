@@ -10,16 +10,38 @@
   <div class="p-4">
     <p class="field-help">Choose exactly what this recipient may learn. These excerpts are frozen when published. Nothing is selected automatically. <a href="/roles" target="_blank" rel="noopener">Manage facets</a></p>
     <div class="persona-card-grid">
-    {% for item in persona_choices + selected|rejectattr('id', 'in', available_ids)|list %}
-    {% set current_facet = persona_choices|selectattr('role_id', 'equalto', item.role_id)|first %}
-    {% set facet_color = current_facet.color if current_facet else '#3b82f6' %}
-    <article style="--facet-color:{{ facet_color }}" class="persona-card" data-persona-spaces='{{ item.workspace_ids|tojson|forceescape }}'>
-      <label class="persona-card-choice"><input type="checkbox" name="persona_ids" value="{{ item.id }}" data-preview-filter {% if item.id in selected_ids %}checked{% endif %}>
-        <span><strong>{{ item.role }}</strong><span class="persona-card-title">{{ item.title }}</span></span>
-      </label>
-      <p class="persona-card-meta">{{ item.origin }} · Revision {{ item.revision }}<span data-persona-suggestion hidden> · Suggested by linked Space</span>{% if item.id not in available_ids %} · Previously selected revision{% endif %}</p>
-      <details class="persona-excerpt"><summary>Read excerpt</summary><div class="whitespace-pre-wrap text-sm my-3">{{ item.text }}</div></details>
-      {% if item.file %}<label class="persona-download"><input type="checkbox" name="persona_downloads" value="{{ item.id }}" data-preview-filter {% if selected|selectattr('id', 'equalto', item.id)|selectattr('download')|list %}checked{% endif %}> Allow original download: {{ item.file.name }}</label>{% endif %}
+    {% macro excerpt(item) %}
+      <div class="persona-excerpt-row">
+        <label class="persona-card-choice"><input type="checkbox" name="persona_ids" value="{{ item.id }}" data-preview-filter {% if item.id in selected_ids %}checked{% endif %}><span>{{ item.title.split(' · excerpt ')[-1] if item.file else item.title }}{% if item.file %} · Text excerpt{% endif %}</span></label>
+        {% if item.id not in available_ids %}<p class="persona-card-meta">Previously selected revision {{ item.revision }}</p>{% endif %}
+        <details class="persona-excerpt"><summary>Read text</summary><div class="whitespace-pre-wrap text-sm my-3">{{ item.text }}</div></details>
+        {% if item.file %}<input hidden type="checkbox" name="persona_downloads" value="{{ item.id }}" {% if selected|selectattr('id', 'equalto', item.id)|selectattr('download')|list %}checked{% endif %}>{% endif %}
+      </div>
+    {% endmacro %}
+    {% set all_items = persona_choices + selected|rejectattr('id', 'in', available_ids)|list %}
+    {% for role_id, items in all_items|groupby('role_id') %}
+    {% set current_facet = persona_choices|selectattr('role_id', 'equalto', role_id)|first %}
+    {% set facet = current_facet or items[0] %}
+    <article style="--facet-color:{{ current_facet.color if current_facet else '#3b82f6' }}" class="persona-card" data-persona-spaces='{{ facet.workspace_ids|tojson|forceescape }}'>
+      <strong>{{ facet.role }}</strong>
+      <p class="persona-card-meta">Revision {{ facet.revision }}<span data-persona-suggestion hidden> · Suggested by linked Space</span></p>
+      {% for file_id, chunks in items|selectattr('file')|groupby('file.id') %}
+      <section class="persona-file-group" data-persona-group>
+        <label class="persona-card-choice"><input type="checkbox" data-persona-select-all data-preview-filter><strong>{{ chunks[0].file.name }}</strong></label>
+        <p class="persona-card-meta" data-persona-count></p>
+        <details class="persona-excerpt"><summary>Choose excerpts ({{ chunks|length }})</summary>
+          {% for item in chunks %}{{ excerpt(item) }}{% endfor %}
+        </details>
+        <label class="persona-download"><input type="checkbox" data-persona-download-all data-preview-filter> Allow original file download</label>
+      </section>
+      {% endfor %}
+      {% for origin, chunks in items|rejectattr('file')|groupby('origin') %}
+      <section class="persona-file-group" data-persona-group>
+        <label class="persona-card-choice"><input type="checkbox" data-persona-select-all data-preview-filter><strong>{{ 'Soul' if origin == 'Owner-authored' else 'Approved observations' }}</strong></label>
+        <p class="persona-card-meta" data-persona-count></p>
+        <details class="persona-excerpt"><summary>Choose sections ({{ chunks|length }})</summary>{% for item in chunks %}{{ excerpt(item) }}{% endfor %}</details>
+      </section>
+      {% endfor %}
     </article>
     {% else %}<p class="field-help">Create a facet with a Soul or attachment to select personal context.</p>{% endfor %}
     </div>
