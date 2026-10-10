@@ -2035,7 +2035,7 @@ def _guest_context(
         if owner_preview
         else "/share/session/references"
     )
-    views = guest_views(grant)
+    views = guest_views(grant, owner_profile.display_name)
     views['activity_items'] = {
         entry.id: {'entry': entry, 'html': _entry_html(entry),
                    'reference_views': _reference_views(entry, base_url=reference_base)}

@@ -254,3 +254,46 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
     assert boards.evaluate('(el)=>el.scrollHeight <= el.clientHeight + 1')
     boards.get_by_role('button', name='Close object details').click()
     expect(boards.locator('.share-graph-inspector')).to_have_count(0)
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_citations_switch_from_other_panels(editor_page, context, sharing_corpus, width):
+    from playwright.sync_api import expect
+    context['plans'] = [dict(id='plan', title='Upcoming work', category='Work', start_date='2026-10-01', workspace_ids=['work'])]
+    snapshot = build_snapshot(recipe(activity={'sections':['entries','actions','plans']}), (sharing_corpus,))
+    personal = replace(snapshot.entries[0], id='persona:role:1:soul-0', citation='S999',
+        header='Experience', moment='Engineer · Experience', what_happened='## Experience\nApproved background.',
+        text='Approved background.', source='persona', references=())
+    grant = make_share(replace(snapshot, persona_entries=(personal,)))
+    page, client = editor_page
+    page.set_viewport_size({'width':width, 'height':844})
+    page.goto('https://editing.test/sharing/shares/' + grant.id + '/preview')
+    page.locator('[data-preview-toast-close]').click()
+    citation = snapshot.entries[0].citation[1:]
+    page.locator('[data-chat-thread]').evaluate('(el, id) => { el.innerHTML = `<a href="?page=1#evidence-${id}">Activity source</a> <a href="#evidence-999">Personal source</a>`; }', citation)
+
+    def open_plans():
+        page.get_by_role('button', name='Choose shared view').click()
+        page.locator('[data-share-view=plans]').click()
+        expect(page.locator('[data-share-sidebar=plans]')).to_be_visible()
+        if width <= 900:
+            # Close the overlay to reach chat, retaining the selected Plans view.
+            page.locator('[data-drawer-close]').click()
+
+    open_plans()
+    page.get_by_role('link', name='Personal source', exact=True).click()
+    about = page.locator('[data-share-main=about]')
+    expect(about).to_be_visible()
+    expect(about.locator('#evidence-999')).to_be_focused()
+    expect(about.locator('details')).to_have_attribute('open', '')
+    assert not page.locator('.chat-workspace').evaluate('(el) => el.inert')
+    about.get_by_role('button', name='Back to chat').click()
+    open_plans()
+    # Simulate an entry excluded by the current search or not yet loaded.
+    page.locator('[data-entry-list]').evaluate('(el) => el.replaceChildren()')
+    page.get_by_role('link', name='Activity source', exact=True).click()
+    expect(page.locator('[data-share-sidebar=entries]')).to_be_visible()
+    expect(page.locator('[data-share-sidebar=plans]')).not_to_be_visible()
+    expect(page.locator('#evidence-' + citation)).to_be_visible()
+    expect(page.locator('#evidence-' + citation)).to_be_focused()
+    expect(about).not_to_be_visible()

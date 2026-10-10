@@ -1,8 +1,40 @@
 """Read-only navigation derived exclusively from a grant's published snapshot."""
 from collections import defaultdict
+import re
 
 
-def guest_views(grant):
+def personal_groups(entries):
+    """Present only published evidence; never look up mutable owner context."""
+    groups = {}
+    for entry in entries:
+        role = entry.moment.removesuffix(' · ' + entry.header)
+        title = re.sub(r' · excerpt \d+\.\d+$', '', entry.header)
+        # Keep different Facets and revisions distinct, even with identical names.
+        identity = entry.id.rsplit(':', 1)[0]
+        token = entry.id.rsplit(':', 1)[-1]
+        if token.startswith('file-'):
+            identity += ':' + token.rsplit('-', 2)[0]
+        key = (identity, title)
+        group = groups.setdefault(key, {'role': role, 'title': title, 'excerpts': [], 'references': {}})
+        body = entry.what_happened or entry.text
+        lines = body.splitlines()
+        if lines and lines[0].startswith('#') and lines[0].lstrip('# ').strip() == title:
+            body = '\n'.join(lines[1:]).lstrip()
+        # Extracted PDF bullets often arrive inline. Restore list structure without
+        # rewriting claims or joining independently approved excerpt boundaries.
+        if ':file-' in entry.id:
+            body = re.sub(r'\s*[●•]\s*', '\n\n- ', body).strip()
+        preview = re.sub(r'\s+', ' ', re.sub(r'[#*`]', '', body)).strip()
+        if len(preview) > 180:
+            preview = preview[:180].rsplit(' ', 1)[0] + '…'
+        group['excerpts'].append({'entry': entry, 'markdown': body, 'preview': preview})
+        for ref in entry.references:
+            if ref.enabled:
+                group['references'].setdefault(ref.label, ref)
+    return list(groups.values())
+
+
+def guest_views(grant, owner_name='the sharer'):
     activity = grant.snapshot.activity
     sections = activity.get('sections')
     if sections is None:
@@ -16,6 +48,8 @@ def guest_views(grant):
     objects = {kind: activity.get(kind, []) if kind in sections else []
                for kind in ('actions', 'ideas', 'plans', 'boards')}
     menu = [('entries', 'Activity entries')]
+    if grant.snapshot.persona_entries:
+        menu.append(('about', 'About ' + owner_name))
     if objects['actions'] or objects['ideas']:
         menu.append(('actions', 'Actions and ideas'))
     if objects['plans']:
@@ -53,12 +87,15 @@ def guest_views(grant):
             if node['id'] in evidence:
                 board_targets.setdefault(evidence[node['id']].citation[1:], {'board': index, 'node': node['id']})
     return {
+        'personal_groups': personal_groups(grant.snapshot.persona_entries),
         'share_menu': menu,
         'shared_objects': objects,
         'shared_plan_groups': groups,
         'board_evidence': board_evidence,
         'activity_evidence': evidence,
         'board_evidence_targets': board_targets,
-        'evidence_destinations': {entry.citation[1:]: destinations.get(entry.id, 'entries')
-                                  for entry in grant.snapshot.activity_entries},
+        'evidence_destinations': {
+            **{entry.citation[1:]: destinations.get(entry.id, 'entries') for entry in grant.snapshot.activity_entries},
+            **{entry.citation[1:]: 'about' for entry in grant.snapshot.persona_entries},
+        },
     }

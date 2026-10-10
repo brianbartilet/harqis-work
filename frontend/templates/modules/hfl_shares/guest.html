@@ -30,11 +30,8 @@
         <p class="eyebrow" data-sidebar-description>Moments behind the story</p>
         <h2 data-sidebar-title>Activity entries</h2>
       </div>
-      <button class="drawer-close" type="button" data-drawer-close aria-label="Close source drawer">×</button>
+      <button class="drawer-close" type="button" data-drawer-close aria-label="Close source drawer"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 8 8M14 6l-8 8"/></svg></button>
     </header>
-    {% if grant.snapshot.persona_entries %}
-    <details class="p-4" open><summary>About the sharer</summary>{% for entry in grant.snapshot.persona_entries %}<article class="mt-4" id="evidence-{{ entry.citation[1:] }}"><h3>{{ entry.moment }}</h3><p class="whitespace-pre-wrap">{{ entry.text }}</p>{% for ref in entry.references %}<a href="{% if owner_preview %}/sharing/shares/{{ grant.id }}/preview{% else %}/share/session{% endif %}/references/{{ ref.id }}">Download {{ ref.label }}</a>{% endfor %}</article>{% endfor %}</details>
-    {% endif %}
     <section class="share-sidebar-view share-entries-view" data-share-sidebar="entries">
     <form class="drawer-search" method="get" action="{% if owner_preview %}/sharing/shares/{{ grant.id }}/preview{% else %}/share/session{% endif %}" data-live-search>
       <label for="search">Search these moments</label>
@@ -82,7 +79,7 @@
   <section class="chat-workspace">
     <header class="workspace-header">
       <div class="share-menu-control">
-        <button class="drawer-toggle" type="button" data-view-menu-toggle aria-label="Choose shared view" aria-controls="share-view-menu" aria-expanded="false"><span aria-hidden="true">☰</span></button>
+        <button class="drawer-toggle" type="button" data-view-menu-toggle aria-label="Choose shared view" aria-controls="share-view-menu" aria-expanded="false"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h12M4 10h12M4 15h12"/></svg></button>
         <nav id="share-view-menu" class="share-view-menu" aria-label="Shared views" hidden>
           {% for key, label in share_menu %}<button type="button" data-share-view="{{ key }}" aria-current="{{ 'page' if key == 'entries' else 'false' }}">{{ label }}</button>{% endfor %}
         </nav>
@@ -99,6 +96,7 @@
     </header>
 
     {% include "modules/hfl_shares/_guest_main_views.html" %}
+    {% include "modules/hfl_shares/_guest_about.html" %}
     <div class="chat-scroll" data-chat-scroll>
       <div class="chat-content">
         <div class="chat-intro">
@@ -276,8 +274,9 @@
   };
   drawerState?.addEventListener('change', syncDrawer);
   let selectedView = 'entries';
+  let viewRevision = 0;
   let sidebarView = 'entries';
-  const mainViews = new Set(['boards', 'graph']);
+  const mainViews = new Set(['boards', 'graph', 'about']);
   const viewTitle = document.querySelector('[data-view-title]');
   const viewDescription = document.querySelector('[data-view-description]');
   const chatDescription = viewDescription.textContent;
@@ -289,9 +288,9 @@
   const menuButtons = [...viewMenu.querySelectorAll('[data-share-view]')];
   const closeMenu = () => { viewMenu.hidden = true; menuToggle.setAttribute('aria-expanded', 'false'); };
   const updateViewHeading = () => {
-    viewTitle.textContent = selectedView === 'boards' ? 'Idea boards' : selectedView === 'graph' ? 'Activity graph' : 'Ask my agent';
+    viewTitle.textContent = selectedView === 'about' ? {{ ('About ' + owner_name)|tojson }} : selectedView === 'boards' ? 'Idea boards' : selectedView === 'graph' ? 'Activity graph' : 'Ask my agent';
     const board = document.querySelector('[data-share-board-picker]')?.selectedOptions[0]?.textContent;
-    viewDescription.textContent = selectedView === 'boards'
+    viewDescription.textContent = selectedView === 'about' ? 'Personal context selected for this conversation.' : selectedView === 'boards'
       ? `${board || 'Shared ideas'} · Explore ideas and their connections. Select a node for details.`
       : selectedView === 'graph'
         ? 'Discover connections across shared activity. Select a node to learn more.'
@@ -308,6 +307,7 @@
     drawerClose.setAttribute('aria-label', isCompact() ? 'Close source drawer' : 'Return to activity entries');
   };
   const showView = (view, {openDrawer = true} = {}) => {
+    viewRevision += 1;
     if (!menuButtons.some(button => button.dataset.shareView === view)) view = 'entries';
     selectedView = view;
     const main = mainViews.has(view);
@@ -675,6 +675,7 @@
     if (!evidenceId.startsWith('evidence-')) return;
     const destination = evidenceDestinations[evidenceId.slice('evidence-'.length)] || 'entries';
     showView(destination);
+    const navigationRevision = viewRevision;
     if (destination === 'boards') {
       const target = boardEvidenceTargets[evidenceId.slice('evidence-'.length)];
       if (target) {
@@ -686,13 +687,20 @@
       }
       return;
     }
-    openEvidenceDrawer();
+    if (destination !== 'about') openEvidenceDrawer();
     let evidence = document.getElementById(evidenceId);
     if (!evidence && destination === 'entries' && entryList && liveSearchForm) {
       entryObserver?.disconnect();
       entryLoading = true;
+      const previousEntries = entryList.innerHTML;
       entryList.innerHTML =
         '<div class="entry-load-status" role="status"><span class="typing-dots" aria-hidden="true"><span></span><span></span><span></span></span><span>Finding cited evidence…</span></div>';
+      const loadingEvidence = entryList.firstElementChild;
+      const staleNavigation = () => {
+        if (navigationRevision === viewRevision && entryList.firstElementChild === loadingEvidence) return false;
+        if (entryList.firstElementChild === loadingEvidence) entryList.innerHTML = previousEntries;
+        return true;
+      };
       const fragmentUrl = new URL(liveSearchForm.action, window.location.origin);
       fragmentUrl.searchParams.set(
         'page',
@@ -704,21 +712,28 @@
           headers:{'Accept':'text/html'},
         });
         if (!response.ok) throw new Error('The cited evidence could not be loaded.');
-        entryList.innerHTML = await response.text();
+        const html = await response.text();
+        if (staleNavigation()) return;
+        entryList.innerHTML = html;
         const total = Number(response.headers.get('X-HFL-Result-Count') || 0);
         drawerCount.textContent = 'Showing cited evidence';
         evidence = document.getElementById(evidenceId);
       } catch (error) {
+        if (staleNavigation()) return;
         entryList.innerHTML = `<div class="empty-state"><p>${error.message}</p></div>`;
       } finally {
         entryLoading = false;
       }
     }
+    if (navigationRevision !== viewRevision) return;
     if (!evidence) {appendError('The cited evidence is no longer available.');return;}
     for (let parent = evidence.parentElement; parent; parent = parent.parentElement) { if (parent.tagName === 'DETAILS') parent.open = true; }
     document.querySelectorAll('.is-cited-evidence').forEach(
       item => item.classList.remove('is-cited-evidence')
     );
+    if (destination === 'about') {
+      evidence.querySelector('details').open = true;
+    }
     evidence.classList.add('is-cited-evidence');
     evidence.setAttribute('tabindex', '-1');
     window.requestAnimationFrame(() => {

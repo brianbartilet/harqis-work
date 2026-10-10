@@ -11,12 +11,14 @@ routes, query parameters, and database names remain compatible.
 Open a share recipe and expand **Personal context · Facets and Soul**. Space links
 suggest relevant facets; they do not grant access. Select individual Soul heading
 sections, attachment excerpts, or owner-approved journal observations. Review the
-exact text in the preview before generating a share. Attachment excerpts are split
+exact text in the Agent tab before generating a share. Attachment excerpts are split
 into bounded chunks; selecting an excerpt does not enable its original download.
 The separate original-download checkbox grants access to the **entire file**.
 
-The guest’s **About the sharer** view and chat citations use the same published
-projection. Private journal evidence paths, unselected sections, and role metadata
+The guest’s **About [nickname]** menu opens a dedicated reading view, grouped by
+Facet and source document. It uses the profile nickname (falling back to the
+profile display name), sanitized Markdown, and expandable excerpts. Chat citations
+open the matching excerpt. This view and the agent use the same published projection. Private journal evidence paths, unselected sections, and role metadata
 are excluded. Company, role, job description, audience, tone, and optional
 icebreaker guidance influence presentation; they are not evidence of qualifications.
 Treat all guidance as potentially visible through answers.
@@ -143,7 +145,7 @@ Soul sections, extracted attachment excerpts, and approved observations in
 automatic selections. Optional opportunity and audience guidance helps shape
 answers; it is not evidence of qualifications and may be reflected in answers.
 
-Review **About the sharer** in the recipe preview before publishing. These
+Review selected excerpts in **Agent → Personal context** and test the agent before publishing. These
 excerpts are displayed directly on the recipient's page, not hidden agent-only
 instructions. The chat uses them alongside the included activity, is instructed
 to cite evidence and acknowledge insufficient context, and cannot browse the

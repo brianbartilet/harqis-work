@@ -3,7 +3,9 @@ body .preview-toast{top:148px}
 .share-workspace [hidden]{display:none!important}
 .share-workspace .workspace-header{overflow:visible;position:relative;z-index:10}
 .share-menu-control{position:relative;flex:none}
-.share-workspace .drawer-toggle{display:grid;width:40px;height:40px;padding:0;font-size:1.1rem}
+.share-workspace .drawer-head{align-items:center;padding:11px 16px}
+.share-workspace :is(.drawer-close,.drawer-toggle){display:grid;place-items:center;width:44px;height:44px;flex:0 0 44px;padding:0}
+.share-workspace :is(.drawer-close,.drawer-toggle) svg{width:18px;height:18px;pointer-events:none}
 .share-view-menu{position:absolute;top:calc(100% + 9px);left:0;width:230px;max-width:calc(100vw - 40px);padding:7px;border:1px solid #334155;border-radius:12px;background:#101b2e;box-shadow:0 16px 40px #0008;z-index:50}
 .share-view-menu button{display:block;width:100%;padding:12px;text-align:left;background:transparent;color:#cbd5e1;border-radius:7px;font-size:.85rem}
 .share-view-menu button:hover,.share-view-menu button:focus-visible{background:#1e293b;color:white}
@@ -71,9 +73,27 @@ body .preview-toast{top:148px}
   .share-main-view .share-entity-orbs-collapsed{display:none}
   body .preview-toast{top:140px}
   .share-main-view{padding:14px}
-  .share-workspace .drawer-close{width:44px;height:44px;flex-basis:44px}
+  .share-workspace .drawer-head{padding:9px 10px}
   .share-main-view .share-graph-toolbar button{width:32px;height:32px}
   .share-main-view .shared-graph{padding:4px}
   .share-workspace .workspace-header{gap:9px}
   .share-sidebar-view{scrollbar-gutter:stable}
 }
+
+.share-about-scroll{overflow:auto;min-height:0;padding:0 0 20px;scrollbar-gutter:stable}
+.share-about-intro{margin:0 0 16px}
+.share-about-card>.share-card-title{margin:0}
+.share-about-excerpt{border-top:1px solid #29394e;scroll-margin-top:16px}
+.share-about-excerpt summary{display:flex;align-items:center;gap:12px;padding:16px 0;cursor:pointer;list-style:none;font-size:.85rem;color:#cbd5e1}
+.share-about-excerpt summary::-webkit-details-marker{display:none}
+.share-about-excerpt summary>span{flex:1;overflow-wrap:anywhere}
+.share-about-snippet{display:block;color:#94a3b8;font-size:.8rem;line-height:1.6;margin-top:6px}
+.share-about-excerpt details[open] .share-about-snippet{display:none}
+.share-about-excerpt summary small{color:#94a3b8;white-space:nowrap}
+.share-about-excerpt summary svg{width:16px;height:16px;flex:none;color:#7dd3fc;pointer-events:none}
+.share-about-excerpt details[open]>summary svg{transform:rotate(180deg)}
+.share-about-excerpt summary:focus-visible{outline:2px solid #38bdf8;outline-offset:3px}
+.share-about-markdown{max-width:76ch;overflow-wrap:anywhere;padding-bottom:8px}
+.share-about-markdown :is(pre,table){max-width:100%;overflow:auto;display:block}
+.share-about-markdown img{max-width:100%}
+.share-about-download{display:inline-block;margin-top:16px;font-size:.85rem;color:#7dd3fc}

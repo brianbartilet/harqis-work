@@ -175,7 +175,7 @@ def test_role_editor_and_sharing_preview_browser(editor_page, sharing_corpus, tm
             'sources':'__all__', 'persona_ids':token, 'persona_company':'Example Co'}
     result = client.post('/sharing/preview', data=data, headers=headers)
     assert result.status_code == 200, result.text[:500]
-    assert 'approved personal context (1 excerpts)' in result.text
+    assert 'approved personal context (1 excerpts)' not in result.text
     assert 'Built reliable testing tools' in result.text
     # Private text may remain in the owner's selection catalog, never the snapshot.
     selected = sharing.from_form(FormData([('persona_ids', token)]))
@@ -211,7 +211,8 @@ def test_guest_persona_is_frozen_until_explicit_recipe_update(authenticated_clie
     store.save(owner['id'], 1, {'soul':'## Updated\nA new achievement.'})
     page = authenticated_client.get('/sharing/shares/'+grant.id+'/preview')
     assert page.status_code == 200
-    assert 'About the sharer' in page.text and 'Built test tools' in page.text
+    assert 'data-share-view="about"' in page.text and 'Built test tools' in page.text
+    assert '<summary>About the sharer</summary>' not in page.text
     assert 'A new achievement' not in page.text and 'Personal phone' not in page.text
     current = sharing.choices()[0]
     get_share_store().save_configuration(replace(cfg, persona=sharing.from_form(FormData([('persona_ids',current['id'])]))))
@@ -305,3 +306,44 @@ def test_role_upload_browser(editor_page):
     expect(page.locator('#role-file-list')).to_contain_text('notes.txt')
     expect(page.locator('#role-upload')).to_be_disabled()
     assert store.get(owner['id'])['files'][0]['text']=='Experience building reliable tools.'
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_guest_about_navigation_and_markdown(editor_page, monkeypatch, width, tmp_path):
+    from playwright.sync_api import expect
+    from test_share_guest_views import make_share
+    from modules.hfl_shares import router
+    role()
+    selected = sharing.from_form(FormData([('persona_ids', sharing.choices()[0]['id'])]))
+    snapshot = build_snapshot(config(selected), ())
+    from modules.hfl_shares.models import SnapshotEntry
+    attachments = tuple(SnapshotEntry(id=f'persona:role:1:file-doc-0-{i}', citation=f'S{i+2}',
+        relative_path='', anchor='', header=f'Portfolio.pdf · excerpt 1.{i+1}',
+        moment=f'Engineer · Portfolio.pdf · excerpt 1.{i+1}', source='persona', tags=(),
+        what_happened='## Experience\n\nSelected work ● **Testing**: Built tools. ● **Automation**: Improved delivery.',
+        text='Published evidence') for i in range(2))
+    grant = make_share(replace(snapshot, persona_entries=snapshot.persona_entries + attachments))
+    original_profile = router._profile()
+    monkeypatch.setattr(router, '_profile', lambda: replace(original_profile, nickname='Alex'))
+    page, client = editor_page
+    page.set_viewport_size({'width': width, 'height': 844})
+    page.goto('https://editing.test/sharing/shares/' + grant.id + '/preview')
+    page.locator('[data-preview-toast-close]').click()
+    page.get_by_role('button', name='Choose shared view').click()
+    page.get_by_role('button', name='About Alex', exact=True).click()
+    panel = page.locator('[data-share-main=about]')
+    expect(panel).to_be_visible()
+    expect(panel.locator('.share-about-markdown').first).to_contain_text('Built test tools')
+    assert panel.locator('.share-about-card').count() == 2
+    panel.locator('#evidence-2 summary').click()
+    expect(panel.locator('#evidence-2 li')).to_have_count(2)
+    expect(panel).not_to_contain_text('Personal phone')
+    assert page.locator('[data-entry-drawer]').locator('#evidence-' + grant.snapshot.persona_entries[0].citation[1:]).count() == 0
+    assert panel.evaluate('(el) => el.scrollWidth <= el.clientWidth')
+    page.screenshot(path=str(tmp_path / f'about-{width}.png'))
+    panel.get_by_role('button', name='Back to chat').click()
+    expect(page.locator('[data-chat-form]')).to_be_visible()
+    page.locator('[data-chat-thread]').evaluate('(el) => el.innerHTML = `<a href="#evidence-3">Source</a>`')
+    page.get_by_role('link', name='Source', exact=True).click()
+    expect(panel).to_be_visible()
+    expect(panel.locator('#evidence-3 details')).to_have_attribute('open', '')
