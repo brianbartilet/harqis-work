@@ -64,8 +64,8 @@ def extract_batch(entries):
                 '"evidence":"verbatim excerpt"}]}]}. At most 10 mentions per entry. Names and evidence must occur in the content.'),
         messages=[{'role': 'user', 'content': json.dumps([
             {'id': e['id'], 'content': e['text'][:16000]} for e in entries])}])
-    raw = re.sub(r'^```(?:json)?\s*|\s*```$', '', response.content[0].text.strip())
-    result = json.loads(raw)
+    from modules.hfl_corpus.entity_response import parse_response
+    result = parse_response(response)
     supplied = {e['id']: e for e in entries}
     accepted = {}
     for row in result.get('entries', []):
