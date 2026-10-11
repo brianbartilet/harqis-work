@@ -144,7 +144,9 @@ def setup_env() -> None:
     os.environ.setdefault("PATH_APP_CONFIG_SECRETS", str(REPO_ROOT / ".env"))
     os.environ.setdefault("WORKFLOW_CONFIG", "workflows.config")
     os.environ.setdefault("APP_CONFIG_FILE", "apps_config.yaml")
-    os.environ.setdefault("CELERY_BROKER_URL", "amqp://guest:guest@localhost:5672/")
+    # An unset override must stay unset: Sprout reads the broker from the
+    # machine-resolved app config. A localhost default here silently overrides
+    # that configured broker on remote workers and breaks readiness checks.
     os.environ.setdefault("CONFIG_SOURCE", "local")
 
 

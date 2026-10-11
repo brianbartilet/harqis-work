@@ -105,16 +105,18 @@ def _resolve_target_dates(
     return [fmt(yesterday)]
 
 
-def _scan_day(inbox: Path, date_suffix: str) -> list[dict]:
-    """Return the per-machine dump stats for a single day in the inbox."""
+def _scan_day(inbox: Path, date_suffix: str, machine: str | None = None) -> list[dict]:
+    """Return stats, rejecting unrelated device/date names before filesystem I/O."""
     machines: list[dict] = []
     for entry in sorted(inbox.iterdir()):
-        if not entry.is_dir():
-            continue
         parsed = parse_dump_dir_name(entry.name)
         if parsed is None or parsed[1] != date_suffix:
             continue
         machine_name = parsed[0]
+        if machine and machine_name != machine:
+            continue
+        if not entry.is_dir():
+            continue
         files = [p for p in entry.rglob("*") if p.is_file()]
         size = sum(p.stat().st_size for p in files if p.exists())
         machines.append({
@@ -358,10 +360,12 @@ def analyze_daily_dumps(**kwargs) -> dict:
     if not inbox.exists():
         _log.info("dumps: inbox %s does not exist yet", inbox)
         empty_text = f"Daily dumps - {dates[0]} - inbox {inbox} not yet created.\n"
-        return {"text": empty_text, "date": dates[0], "machines": 0}
+        return {"text": empty_text, "date": dates[0], "machines": 0,
+                "days": len(dates), "days_with_dumps": 0,
+                "files_total": 0, "bytes_total": 0}
 
     machine_filter = kwargs.get("machine")
-    per_day = {d: _filter_machines(_scan_day(inbox, d), machine_filter) for d in dates}
+    per_day = {d: _scan_day(inbox, d, machine=machine_filter) for d in dates}
     missing_only = bool(kwargs.get("missing_only"))
     write_md = bool(kwargs.get("write_md", True))
     notify_missing = bool(kwargs.get(
@@ -397,6 +401,9 @@ def analyze_daily_dumps(**kwargs) -> dict:
             "end": dates[-1],
             "days": len(dates),
             "days_missing": len(gap_dates),
+            "days_with_dumps": len(dates) - len(gap_dates),
+            "files_total": sum(m["files_count"] for d in dates for m in per_day[d]),
+            "bytes_total": sum(m["bytes_total"] for d in dates for m in per_day[d]),
             "gaps": gap_dates,
         }
 

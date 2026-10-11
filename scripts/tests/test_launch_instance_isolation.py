@@ -62,6 +62,34 @@ def test_setup_env_adds_repo_to_live_python_import_path(monkeypatch):
     assert str(launch.SCRIPTS_DIR) in launch.sys.path
 
 
+def test_setup_env_preserves_configured_broker_without_override(monkeypatch):
+    from celery import Celery
+    launch = load_launch_module()
+    monkeypatch.setattr(launch.os, 'environ', {})
+    monkeypatch.setattr(launch, 'load_env_file', lambda: {})
+    monkeypatch.setattr(launch, '_machine_env_vars', lambda: {})
+    launch.setup_env()
+    app = Celery('broker-regression', broker='amqp://configured-hub:5672//')
+    try:
+        assert app.conf.broker_url == 'amqp://configured-hub:5672//'
+    finally:
+        app.close()
+
+
+def test_setup_env_respects_explicit_machine_broker_override(monkeypatch):
+    from celery import Celery
+    launch = load_launch_module()
+    monkeypatch.setattr(launch.os, 'environ', {})
+    monkeypatch.setattr(launch, 'load_env_file', lambda: {'CELERY_BROKER_URL': 'amqp://shared:5672//'})
+    monkeypatch.setattr(launch, '_machine_env_vars', lambda: {'CELERY_BROKER_URL': 'amqp://machine:5672//'})
+    launch.setup_env()
+    app = Celery('broker-regression', broker='amqp://configured-hub:5672//')
+    try:
+        assert app.conf.broker_url == 'amqp://machine:5672//'
+    finally:
+        app.close()
+
+
 def test_mcp_bootstrap_loads_machine_api_url_and_app_filter(monkeypatch):
     launch = load_launch_module()
     monkeypatch.setattr(launch.os, 'environ', {})
