@@ -9,6 +9,8 @@ import time
 
 import pytest
 
+pytestmark = pytest.mark.skipif(os.name != "posix", reason="Supervisor targets the POSIX dumps hub")
+
 WRAPPER = Path(__file__).parents[1] / "harqis_dumps_summary_android_7d.py"
 
 
