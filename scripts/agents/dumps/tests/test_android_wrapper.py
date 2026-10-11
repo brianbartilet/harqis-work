@@ -54,11 +54,13 @@ def test_success_preserves_safe_summary_and_discards_private_output(tmp_path):
 
 
 def test_nonzero_is_meaningful_and_redacted(tmp_path):
-    code, text = run_child(tmp_path, "import sys; print('secret Exception: private', file=sys.stderr); sys.exit(9)")
+    secret = "child-stderr-secret-8d4f71"
+    code, text = run_child(tmp_path, f"import sys; print({secret!r}, file=sys.stderr); sys.exit(9)")
     assert code == 9
     assert "exit 9" in text
-    assert "private" not in text.lower()
-    assert diagnostics(tmp_path)[-1]["returncode"] == 9
+    rows = diagnostics(tmp_path)
+    assert secret not in text + json.dumps(rows)
+    assert rows[-1]["returncode"] == 9
 
 
 def test_timeout_kills_term_ignoring_descendant(tmp_path):

@@ -41,11 +41,11 @@ def test_management_contract_matches_runtime_and_all_references_resolve():
     contract = yaml.safe_load((root / "apps/hfl_corpus/openapi.yaml").read_text(encoding="utf-8"))
     live = app.openapi()
     for path, operations in live["paths"].items():
-        if path.startswith(("/api/hfl/actions", "/api/hfl/categories", "/api/hfl/pins")):
+        if path.startswith(("/api/hfl/actions", "/api/hfl/categories", "/api/hfl/pins", "/api/hfl/roles")):
             assert contract["paths"][path] == operations
             for operation in operations.values():
                 assert operation["security"] == [{"HTTPBearer": []}]
-    for name in ("CreateAction", "UpdateAction", "ActionSource", "SaveCategory", "UpdateCategory", "CreatePin", "UpdatePin"):
+    for name in ("CreateAction", "UpdateAction", "ActionSource", "SaveCategory", "UpdateCategory", "CreatePin", "UpdatePin", "RoleWrite", "AuditRequest"):
         assert contract["components"]["schemas"][name] == live["components"]["schemas"][name]
 
     def check_refs(value):

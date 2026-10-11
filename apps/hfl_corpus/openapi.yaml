@@ -3524,8 +3524,160 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/roles:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Api List
+      operationId: api_list_api_hfl_roles_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Api Create
+      operationId: api_create_api_hfl_roles_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleWrite'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
+  /api/hfl/roles/{identity}:
+    put:
+      tags:
+      - hfl-corpus-api
+      summary: Api Update
+      operationId: api_update_api_hfl_roles__identity__put
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleWrite'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/roles/audit/run:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Run Audit
+      operationId: run_audit_api_hfl_roles_audit_run_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuditRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+      security:
+      - HTTPBearer: []
 components:
   schemas:
+    AuditRequest:
+      properties:
+        run_id:
+          type: string
+          pattern: ^[a-zA-Z0-9_-]{1,100}$
+          title: Run Id
+      type: object
+      required:
+      - run_id
+      title: AuditRequest
+    RoleWrite:
+      properties:
+        revision:
+          type: integer
+          minimum: 0.0
+          title: Revision
+          default: 0
+        name:
+          type: string
+          maxLength: 100
+          minLength: 1
+          pattern: \S
+          title: Name
+        color:
+          type: string
+          pattern: ^#[0-9a-fA-F]{6}$
+          title: Color
+          default: '#3b82f6'
+        soul:
+          type: string
+          maxLength: 100000
+          title: Soul
+          default: ''
+        workspace_ids:
+          items:
+            type: string
+          type: array
+          maxItems: 30
+          title: Workspace Ids
+        entity_ids:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Entity Ids
+        archived:
+          type: boolean
+          title: Archived
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - name
+      title: RoleWrite
     ActionSource:
       properties:
         path:
