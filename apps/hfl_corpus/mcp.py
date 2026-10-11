@@ -15,6 +15,7 @@ from apps.hfl_corpus.references.web.api.entities import ApiServiceHflCorpusEntit
 from apps.hfl_corpus.references.web.api.graph_views import ApiServiceHflCorpusGraphViews
 from apps.hfl_corpus.references.web.api.ideas import ApiServiceHflCorpusIdeas
 from apps.hfl_corpus.references.web.api.timeline import ApiServiceHflCorpusTimeline
+from apps.hfl_corpus.references.web.api.roles import ApiServiceHflCorpusRoles
 
 logger = logging.getLogger("harqis-mcp.hfl_corpus")
 
@@ -28,6 +29,35 @@ def _dict_result(result) -> dict:
 
 
 def register_hfl_corpus_tools(mcp: FastMCP):
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def list_hfl_corpus_roles() -> dict:
+        """List private facets, linked Spaces, analysis runs, and palette."""
+        return ApiServiceHflCorpusRoles(CONFIG).list_roles()
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_role(payload: dict) -> dict:
+        """Create a facet (remote write). Payload: name, color, soul,
+        workspace_ids, entity_ids, archived; revision defaults to zero.
+        Server validates all fields. Does not grant share access.
+        """
+        return ApiServiceHflCorpusRoles(CONFIG).create_role(payload)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_role(identity: str, payload: dict) -> dict:
+        """Replace a facet (remote write). Include its latest revision and all
+        editable fields: name, color, soul, workspace_ids, entity_ids, archived.
+        Omitted fields take defaults; stale revisions fail with 409.
+        """
+        return ApiServiceHflCorpusRoles(CONFIG).update_role(identity, payload)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_role_audit(run_id: str) -> dict:
+        """Run facet analysis (remote write) using a stable retry ID: 1–100
+        letters, digits, underscores or hyphens. Saves private observations and
+        an HFL report. Does not publish personal context into existing shares.
+        """
+        return ApiServiceHflCorpusRoles(CONFIG).create_role_audit(run_id)
 
     # --- Actions, categories, and date pins ---
 

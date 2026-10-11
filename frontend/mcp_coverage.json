@@ -3052,6 +3052,143 @@
       "status": "deferred",
       "tools": [],
       "reason": "Owner-session and CSRF-protected refresh from a saved recipe; dedicated machine-facing sharing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/roles",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_roles"
+      ],
+      "reason": "Dedicated canonical bearer-authenticated facet API service and MCP tool.",
+      "service": "apps.hfl_corpus.references.web.api.roles.ApiServiceHflCorpusRoles.list_roles"
+    },
+    {
+      "method": "GET",
+      "path": "/roles",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation or safe Markdown rendering for the owner editor."
+    },
+    {
+      "method": "GET",
+      "path": "/roles/data",
+      "status": "alias",
+      "tools": [
+        "list_hfl_corpus_roles"
+      ],
+      "reason": "Session-authenticated editor counterpart of the canonical facet API."
+    },
+    {
+      "method": "GET",
+      "path": "/roles/data/{identity}/attachments/{attachment_id}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated facet editor operation; no equivalent canonical machine-facing operation yet."
+    },
+    {
+      "method": "GET",
+      "path": "/roles/data/{identity}/history",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated facet editor operation; no equivalent canonical machine-facing operation yet."
+    },
+    {
+      "method": "GET",
+      "path": "/roles/entities",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated facet editor operation; no equivalent canonical machine-facing operation yet."
+    },
+    {
+      "method": "GET",
+      "path": "/spaces",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation or safe Markdown rendering for the owner editor."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/roles",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_role"
+      ],
+      "reason": "Dedicated canonical bearer-authenticated facet API service and MCP tool.",
+      "service": "apps.hfl_corpus.references.web.api.roles.ApiServiceHflCorpusRoles.create_role"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/roles/audit/run",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_role_audit"
+      ],
+      "reason": "Dedicated canonical bearer-authenticated facet API service and MCP tool.",
+      "service": "apps.hfl_corpus.references.web.api.roles.ApiServiceHflCorpusRoles.create_role_audit"
+    },
+    {
+      "method": "POST",
+      "path": "/roles/analyze",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated facet editor operation; no equivalent canonical machine-facing operation yet."
+    },
+    {
+      "method": "POST",
+      "path": "/roles/data",
+      "status": "alias",
+      "tools": [
+        "create_hfl_corpus_role"
+      ],
+      "reason": "Session-authenticated editor counterpart of the canonical facet API."
+    },
+    {
+      "method": "POST",
+      "path": "/roles/data/{identity}/attachments",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated facet editor operation; no equivalent canonical machine-facing operation yet."
+    },
+    {
+      "method": "POST",
+      "path": "/roles/data/{identity}/attachments/{attachment_id}/detach",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated facet editor operation; no equivalent canonical machine-facing operation yet."
+    },
+    {
+      "method": "POST",
+      "path": "/roles/data/{identity}/journal/{note_id}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated facet editor operation; no equivalent canonical machine-facing operation yet."
+    },
+    {
+      "method": "POST",
+      "path": "/roles/markdown",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation or safe Markdown rendering for the owner editor."
+    },
+    {
+      "method": "PUT",
+      "path": "/api/hfl/roles/{identity}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_role"
+      ],
+      "reason": "Dedicated canonical bearer-authenticated facet API service and MCP tool.",
+      "service": "apps.hfl_corpus.references.web.api.roles.ApiServiceHflCorpusRoles.update_role"
+    },
+    {
+      "method": "PUT",
+      "path": "/roles/data/{identity}",
+      "status": "alias",
+      "tools": [
+        "update_hfl_corpus_role"
+      ],
+      "reason": "Session-authenticated editor counterpart of the canonical facet API."
     }
   ]
 }
