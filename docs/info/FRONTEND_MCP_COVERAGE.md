@@ -1,25 +1,27 @@
 # HARQIS frontend MCP coverage
 
-Updated 2026-09-27. This is a source and test-backed contract; deployed tool
+Summary verified against source revision `0acc1e6`. This is a source and test-backed contract; deployed tool
 availability still depends on configuration, `MCP_ENABLED_APPS`, API revision,
 and reconnecting the MCP client.
 
 ## Implemented coverage
 
-All **110 canonical `/api/hfl` method/path endpoints** now have dedicated MCP
-wrappers in the existing `hfl_corpus` integration: the original 31 plus 79 added
-operations. Existing names remain compatible. This covers corpus/calendar,
+**125 canonical `/api/hfl` method/path endpoints** have dedicated MCP
+wrappers in the existing `hfl_corpus` integration. Two additional internal
+sharing-input endpoints remain protocol-only and must not be exposed through
+general MCP tools. Existing names remain compatible. This covers corpus/calendar,
 entries and references, actions/categories/pins, entity graph and profiles,
 merge/unmerge/audits/matching, saved graph views, timeline, ideas, mind maps,
-goals, graph links, proposals/conversions, and attachments.
+goals, graph links, proposals/conversions, attachments, and facets.
 
-Another **66 browser-facing routes** have canonical API equivalents, and **5
-fork routes** have shared-service equivalents in the Git MCP integration. Git
+Another **71 browser-facing routes** have canonical API equivalents, and **10
+routes** have shared-service equivalents: five fork routes and five file-catalog
+routes. Git
 operations execute on the MCP host, which may differ from the frontend host.
 
-The complete inventory contains **315 method/path routes**. Remaining surfaces
-are explicitly recorded: **74 deferred routes**, **31 UI/session routes**, and
-**29 guest/worker protocol routes**. Some deferred routes have partial related
+The complete inventory contains **383 method/path routes**. Remaining surfaces
+are explicitly recorded: **99 deferred routes**, **45 UI/session routes**, and
+**33 protocol routes** (guest/worker and internal sharing). Some deferred routes have partial related
 tools (for example pin CRUD without all browser scheduling controls). These are
 not counted as exact equivalents. This PR does not claim every frontend feature
 is exposed to MCP.
@@ -98,6 +100,11 @@ changed by this implementation.
    worker claims/leases and desktop open-path as specialized flows.
 
 ## Every mounted endpoint
+
+The tables below retain the earlier review snapshot, including historical source
+line links; they are not the current exhaustive inventory. Use
+[`frontend/mcp_coverage.json`](../../frontend/mcp_coverage.json) and the checker
+above for current routes, tool mappings, and coverage decisions.
 
 `covered` means a dedicated HTTP tool, `alias` a canonical semantic equivalent,
 `service` an existing shared-service tool, and `deferred`/`ui`/`protocol` explain
