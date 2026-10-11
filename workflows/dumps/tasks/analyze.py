@@ -105,16 +105,18 @@ def _resolve_target_dates(
     return [fmt(yesterday)]
 
 
-def _scan_day(inbox: Path, date_suffix: str) -> list[dict]:
-    """Return the per-machine dump stats for a single day in the inbox."""
+def _scan_day(inbox: Path, date_suffix: str, machine: str | None = None) -> list[dict]:
+    """Return stats, rejecting unrelated device/date names before filesystem I/O."""
     machines: list[dict] = []
     for entry in sorted(inbox.iterdir()):
-        if not entry.is_dir():
-            continue
         parsed = parse_dump_dir_name(entry.name)
         if parsed is None or parsed[1] != date_suffix:
             continue
         machine_name = parsed[0]
+        if machine and machine_name != machine:
+            continue
+        if not entry.is_dir():
+            continue
         files = [p for p in entry.rglob("*") if p.is_file()]
         size = sum(p.stat().st_size for p in files if p.exists())
         machines.append({
@@ -361,7 +363,7 @@ def analyze_daily_dumps(**kwargs) -> dict:
         return {"text": empty_text, "date": dates[0], "machines": 0}
 
     machine_filter = kwargs.get("machine")
-    per_day = {d: _filter_machines(_scan_day(inbox, d), machine_filter) for d in dates}
+    per_day = {d: _scan_day(inbox, d, machine=machine_filter) for d in dates}
     missing_only = bool(kwargs.get("missing_only"))
     write_md = bool(kwargs.get("write_md", True))
     notify_missing = bool(kwargs.get(
