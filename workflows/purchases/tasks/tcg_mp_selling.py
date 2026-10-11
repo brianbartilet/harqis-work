@@ -2101,7 +2101,9 @@ def generate_audit_for_tcg_orders(last_x_days=15, **kwargs) -> None:
             "new_status": new_status,
             "changed_at": now_utc_iso(),
             "source": source,
-            "raw_payload": raw_payload,
+            # Provider identifiers can change type. Preserve the entire response
+            # as JSON text in a new field, bypassing legacy dynamic object mappings.
+            "raw_payload_json": json.dumps(raw_payload, ensure_ascii=False),
         }
 
         post(
@@ -2120,7 +2122,7 @@ def generate_audit_for_tcg_orders(last_x_days=15, **kwargs) -> None:
             "external_id": external_id,
             "current_status": new_status,
             "last_updated_at": now_utc_iso(),
-            "last_raw_payload": raw_payload,
+            "last_raw_payload_json": json.dumps(raw_payload, ensure_ascii=False),
         }
 
         post(

@@ -18,7 +18,13 @@ class BaseApiServiceTrello(BaseFixtureServiceRest):
         self.api_key = kwargs.get('api_key', config.app_data['api_key'])
         self.api_token = kwargs.get('api_token', config.app_data['api_token'])
 
-        self.request \
-            .add_header(HttpHeaders.CONTENT_TYPE, 'application/json') \
-            .add_query_string('key', self.api_key) \
-            .add_query_string('token', self.api_token)
+        self.request.add_header(HttpHeaders.CONTENT_TYPE, 'application/json')
+
+    @property
+    def request(self):
+        # build() clears query parameters. Inject credentials on every access,
+        # not only construction, so a reused service authenticates every call.
+        request = super().request
+        request.add_query_string('key', self.api_key)
+        request.add_query_string('token', self.api_token)
+        return request
