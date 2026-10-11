@@ -618,6 +618,12 @@ def _gather_es_order_details(status_labels: set) -> dict:
         return details
     for doc in docs or []:
         payload = doc.get("last_raw_payload")
+        if "last_raw_payload_json" in doc:
+            try:
+                payload = json.loads(doc["last_raw_payload_json"])
+            except (ValueError, TypeError):
+                _log.warning("radar: invalid JSON payload in %s; skipping order", AUDIT_CURRENT_INDEX)
+                continue
         raw_status = doc.get("current_status")
         if isinstance(payload, dict):
             raw_status = _first(payload, "status", "current_status", default=raw_status)

@@ -370,6 +370,19 @@ The sold-inventory radar can use `tcg-mp-audit-current` as a cheap historical
 source. It also does a live poll, but the audit job keeps older order evidence
 available without repeatedly crawling every order.
 
+**Raw payload compatibility:** new current documents store the complete order
+response as JSON text in `last_raw_payload_json`; new audit events use
+`raw_payload_json`. These replace the dynamically mapped object fields on new
+writes, because provider values such as `merchant_id` can change from numbers
+to alphanumeric identifiers. Identifiers and nested data are preserved without
+coercion or filtering; status and order IDs remain separately queryable. The
+radar reads both the new JSON text and legacy `last_raw_payload` objects, and
+skips corrupt JSON rather than treating it as sale evidence. No existing
+mapping is changed and no backfill is required. Unchanged statuses retain their
+existing documents; deploy the reader and writer together. Consumers outside
+this repository that inspect nested raw fields must adopt the JSON-text fields
+before using newly written documents.
+
 ### 5. Reconcile Sold Inventory, Then Update Listings
 
 `reconcile_then_update_tcg_listings` runs Monday and Thursday at `02:00`.
