@@ -11,7 +11,7 @@ def load_scanner():
     namespace = {"Path": Path, "_log": logging.getLogger(__name__), "re": re}
     for file, names in [(root / "files.py", {"parse_dump_dir_name"}),
                         (root / "tasks/analyze.py", {"_scan_day"})]:
-        tree = ast.parse(file.read_text())
+        tree = ast.parse(file.read_text(encoding="utf-8"))
         nodes: list[ast.stmt] = [n for n in tree.body if
             (isinstance(n, ast.FunctionDef) and n.name in names)
             or (isinstance(n, ast.Assign) and any(
@@ -58,7 +58,7 @@ def test_unfiltered_scan_preserves_counts_and_missing_day(tmp_path):
 def test_task_passes_machine_filter_into_scan(tmp_path):
     from types import SimpleNamespace
     file = Path(__file__).parents[4] / "workflows/dumps/tasks/analyze.py"
-    tree = ast.parse(file.read_text())
+    tree = ast.parse(file.read_text(encoding="utf-8"))
     task = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
                 and n.name == "analyze_daily_dumps")
     task.decorator_list = []  # Never invoke feed/ES publishers in this test.

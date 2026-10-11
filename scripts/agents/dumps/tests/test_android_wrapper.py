@@ -16,7 +16,7 @@ WRAPPER = Path(__file__).parents[1] / "harqis_dumps_summary_android_7d.py"
 
 def load_wrapper():
     # Safely load the old unguarded wrapper as well, proving the regression.
-    tree = ast.parse(WRAPPER.read_text())
+    tree = ast.parse(WRAPPER.read_text(encoding="utf-8"))
     nodes = []
     for node in tree.body:
         if isinstance(node, ast.If):
@@ -39,7 +39,7 @@ def diagnostics(tmp_path):
     files = list((tmp_path / "diagnostics").glob("*.jsonl"))
     assert len(files) == 1
     assert files[0].stat().st_mode & 0o777 == 0o600
-    return [json.loads(line) for line in files[0].read_text().splitlines()]
+    return [json.loads(line) for line in files[0].read_text(encoding="utf-8").splitlines()]
 
 
 def test_success_preserves_safe_summary_and_discards_private_output(tmp_path):
@@ -68,14 +68,18 @@ def test_timeout_kills_term_ignoring_descendant(tmp_path):
             f"pathlib.Path({str(pidfile)!r}).write_text(str(p.pid)); time.sleep(60)")
     start = time.monotonic()
     status, text = run_child(tmp_path, code, timeout=0.4)
-    assert status == 124 and "timed out" in text
+    # Some Linux hosts retain orphan zombies. Conservative cleanup verification
+    # reports these as incomplete, while preserving the timeout in diagnostics.
+    assert status in (124, 1)
+    assert "timed out" in text or "cleanup incomplete" in text
     assert time.monotonic() - start < 3
-    pid = int(pidfile.read_text())
+    pid = int(pidfile.read_text(encoding="utf-8"))
     # A killed orphan can briefly be a zombie pending OS reaping.
     import subprocess
     state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
     assert not state or state.startswith("Z")
-    assert diagnostics(tmp_path)[-1]["event"] == "timeout"
+    rows = diagnostics(tmp_path)
+    assert rows[-1]["event"] == "timeout" or any(row.get("outcome") == "timeout" for row in rows)
 
 
 def test_large_unterminated_output_does_not_hide_deadline(tmp_path):
@@ -113,7 +117,7 @@ def test_terminated_supervisor_cleans_child(tmp_path):
         proc.send_signal(signal.SIGTERM)
         assert proc.wait(timeout=3) == 143
         with pytest.raises(ProcessLookupError):
-            os.kill(int(pidfile.read_text()), 0)
+            os.kill(int(pidfile.read_text(encoding="utf-8")), 0)
         assert diagnostics(tmp_path)[-1]["event"] == "interrupted"
     finally:
         if proc.poll() is None:
@@ -144,3 +148,77 @@ def test_cleanup_error_fails_without_raw_exception(tmp_path):
     assert code == 1
     assert "private process" not in text
     assert diagnostics(tmp_path)[-1]["event"] == "cleanup_failed"
+
+
+def test_existing_group_is_not_reported_as_cleaned(monkeypatch):
+    from types import SimpleNamespace
+    wrapper = load_wrapper()
+    monkeypatch.setattr(wrapper['os'], 'killpg', lambda *args: None)
+    proc = SimpleNamespace(pid=123, poll=lambda: 0, wait=lambda timeout: 0)
+    assert wrapper['_stop_group'](proc, 0) is False
+
+
+def test_cleanup_waits_for_group_disappearance(monkeypatch):
+    from types import SimpleNamespace
+    wrapper = load_wrapper()
+    probes = []
+    def killpg(pid, sig):
+        if sig == 0:
+            probes.append(sig)
+            if len(probes) == 2:
+                raise ProcessLookupError
+    monkeypatch.setattr(wrapper['os'], 'killpg', killpg)
+    proc = SimpleNamespace(pid=123, poll=lambda: 0, wait=lambda timeout: 0)
+    assert wrapper['_stop_group'](proc, 0) is True
+    assert len(probes) == 2
+
+
+def test_stalled_diagnostics_do_not_block_timeout_or_cleanup(tmp_path, monkeypatch):
+    import threading
+    wrapper = load_wrapper()
+    entered, release = threading.Event(), threading.Event()
+    def blocked(fd):
+        entered.set()
+        release.wait(10)
+    monkeypatch.setattr(wrapper['os'], 'fsync', blocked)
+    pidfile = tmp_path / 'pid'
+    child = f"import os,pathlib,time; pathlib.Path({str(pidfile)!r}).write_text(str(os.getpid())); time.sleep(60)"
+    started = time.monotonic()
+    try:
+        code, text = wrapper['run_bounded']([sys.executable, '-c', child], cwd=tmp_path,
+            diagnostics_dir=tmp_path / 'diagnostics', timeout=.4, heartbeat=.05, grace=.1)
+        assert entered.is_set()
+        assert time.monotonic() - started < 3
+        assert code == 1 and 'stalled' in text
+        with pytest.raises(ProcessLookupError):
+            os.kill(int(pidfile.read_text(encoding="utf-8")), 0)
+    finally:
+        release.set()
+
+
+@pytest.mark.parametrize('status,files', [('success', 3), ('no_data', 0)])
+def test_structured_summary(tmp_path, status, files):
+    payload = dict(version=1, status=status, files_total=files, bytes_total=files * 100,
+                   days=7, days_with_dumps=int(bool(files)), summary_files_count=2 if files else 0)
+    code, text = run_child(tmp_path, f"print('DUMPS_RESULT ' + {json.dumps(payload)!r})")
+    assert code == 0
+    assert f'{files} files' in text
+    assert ('No dumps available' in text) == (status == 'no_data')
+    if files:
+        assert 'md: 2 files' in text
+
+
+@pytest.mark.parametrize('record', ['', 'DUMPS_RESULT {broken', 'DUMPS_RESULT {"version":1,"status":"success"}'])
+def test_required_result_cannot_silently_report_complete(tmp_path, record):
+    wrapper = load_wrapper()
+    code, text = wrapper['run_bounded']([sys.executable, '-c', f'print({record!r})'],
+        cwd=tmp_path, diagnostics_dir=tmp_path / 'diagnostics', require_result=True, grace=.1)
+    assert code == 1 and 'structured summary' in text
+    assert diagnostics(tmp_path)[-1]['event'] == 'invalid_result'
+
+
+def test_nonzero_exit_overrides_success_record(tmp_path):
+    payload = dict(version=1, status='success', files_total=1, bytes_total=10,
+                   days=7, days_with_dumps=1, summary_files_count=2)
+    code, text = run_child(tmp_path, f"print('DUMPS_RESULT ' + {json.dumps(payload)!r}); raise SystemExit(9)")
+    assert code == 9 and 'exit 9' in text

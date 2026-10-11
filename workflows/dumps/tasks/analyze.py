@@ -360,7 +360,9 @@ def analyze_daily_dumps(**kwargs) -> dict:
     if not inbox.exists():
         _log.info("dumps: inbox %s does not exist yet", inbox)
         empty_text = f"Daily dumps - {dates[0]} - inbox {inbox} not yet created.\n"
-        return {"text": empty_text, "date": dates[0], "machines": 0}
+        return {"text": empty_text, "date": dates[0], "machines": 0,
+                "days": len(dates), "days_with_dumps": 0,
+                "files_total": 0, "bytes_total": 0}
 
     machine_filter = kwargs.get("machine")
     per_day = {d: _scan_day(inbox, d, machine=machine_filter) for d in dates}
@@ -399,6 +401,9 @@ def analyze_daily_dumps(**kwargs) -> dict:
             "end": dates[-1],
             "days": len(dates),
             "days_missing": len(gap_dates),
+            "days_with_dumps": len(dates) - len(gap_dates),
+            "files_total": sum(m["files_count"] for d in dates for m in per_day[d]),
+            "bytes_total": sum(m["bytes_total"] for d in dates for m in per_day[d]),
             "gaps": gap_dates,
         }
 

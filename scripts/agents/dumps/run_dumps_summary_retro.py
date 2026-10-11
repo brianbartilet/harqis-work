@@ -34,12 +34,14 @@ Flags (map 1:1 to the task kwargs; precedence: date → start/end → month → 
     --month YYYY-MM   whole calendar month (capped at yesterday)
     --missing-only    report only the days with NO dumps (gap report)
     --no-md           skip appending to daily-dumps.log (feed/ES summary only)
+    --result-json     emit versioned aggregate JSON instead of Markdown/paths
 
 Exit codes: 0 ok · 1 error (e.g. inbox/config) · 2 skipped (ran off the hub).
 """
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -77,7 +79,21 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--no-md", action="store_false", dest="write_md",
                    help="Skip appending to daily-dumps.log (feed/ES summary "
                         "only). The Markdown log is appended by default.")
+    p.add_argument("--result-json", action="store_true",
+                   help="Print one versioned DUMPS_RESULT JSON record instead of Markdown and paths.")
     return p.parse_args()
+
+
+def _summary_result(result: dict) -> dict:
+    """Allowlisted aggregates only: no dump contents, paths, or error messages."""
+    files = result.get("files_total", 0)
+    days_with = result.get("days_with_dumps", int(bool(result.get("machines"))))
+    status = "error" if result.get("error") else "skipped" if result.get("skipped") else "success" if files else "no_data"
+    return {"version": 1, "status": status, "files_total": files,
+            "bytes_total": result.get("bytes_total", 0),
+            "days": result.get("days", int(bool(result.get("date")))),
+            "days_with_dumps": days_with,
+            "summary_files_count": len(result.get("summary_files") or [])}
 
 
 def main() -> int:
@@ -101,6 +117,10 @@ def main() -> int:
         kwargs["write_md"] = False
 
     result = analyze_daily_dumps(**kwargs)
+
+    if args.result_json:
+        print("DUMPS_RESULT " + json.dumps(_summary_result(result)), flush=True)
+        return 1 if result.get("error") else 2 if result.get("skipped") else 0
 
     if result.get("error"):
         print(f"ERROR: {result['error']}", file=sys.stderr)

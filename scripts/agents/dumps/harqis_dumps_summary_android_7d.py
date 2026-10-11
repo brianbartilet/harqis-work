@@ -10,10 +10,12 @@ import json
 import os
 from pathlib import Path
 import re
+import queue
 import selectors
 import signal
 import subprocess
 import time
+import threading
 import uuid
 
 REPO = Path("/Users/harqis-one/GIT/harqis-work")
@@ -24,6 +26,50 @@ TIMEOUT_SECONDS = 3000  # Leave cleanup/reporting headroom before the 3600s cron
 DIAGNOSTICS_DIR = Path.home() / ".hermes" / "logs" / "android-dumps-summary"
 _TOTAL = re.compile(r"TOTAL: (\d+ files, [\d.]+ [KMGTPE]?B across \d+/\d+ day\(s\) with dumps)")
 _MD = re.compile(r"Wrote (\d+) summary files?\.?")
+_RESULT_PREFIX = "DUMPS_RESULT "
+
+
+class _Diagnostics:
+    """Bounded, fail-closed logging without filesystem I/O on the supervisor."""
+
+    def __init__(self, path):
+        self.path = path
+        self.rows = queue.Queue(maxsize=128)
+        self.failed = threading.Event()
+        self.thread = threading.Thread(target=self._write, daemon=True)
+        self.thread.start()
+
+    def _write(self):
+        try:
+            self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            fd = os.open(self.path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as log:
+                while True:
+                    row = self.rows.get()
+                    if row is None:
+                        return
+                    log.write(json.dumps(row) + "\n")
+                    log.flush()
+                    os.fsync(log.fileno())
+        except Exception:
+            self.failed.set()
+
+    def note(self, row):
+        if self.failed.is_set():
+            raise OSError("diagnostics unavailable")
+        try:
+            self.rows.put_nowait(row)
+        except queue.Full:
+            self.failed.set()
+            raise OSError("diagnostics backlog") from None
+
+    def finish(self):
+        try:
+            self.rows.put_nowait(None)
+        except queue.Full:
+            return False
+        self.thread.join(timeout=1)
+        return not self.thread.is_alive() and not self.failed.is_set()
 
 
 def _stop_group(proc, grace):
@@ -40,7 +86,6 @@ def _stop_group(proc, grace):
         except ProcessLookupError:
             break
         time.sleep(min(.05, max(0, deadline - time.monotonic())))
-    kill_denied = False
     try:
         os.killpg(proc.pid, signal.SIGKILL)
     except ProcessLookupError:
@@ -48,23 +93,28 @@ def _stop_group(proc, grace):
     except PermissionError:
         # macOS can return EPERM while a signalled process is exiting. Reap
         # below, but do not claim cleanup if the group still exists afterward.
-        kill_denied = True
+        pass
     try:
         proc.wait(timeout=max(grace, 1))
-        try:
-            os.killpg(proc.pid, 0)
-        except ProcessLookupError:
-            return True
-        except PermissionError:
-            return not kill_denied
-        # Descendant zombies can persist briefly; SIGKILL was delivered above.
-        return not kill_denied
+        deadline = time.monotonic() + max(grace, .1)
+        while True:
+            try:
+                os.killpg(proc.pid, 0)
+            except ProcessLookupError:
+                return True
+            except PermissionError:
+                return False
+            # A remaining group may be live, blocked in kernel I/O, or zombies.
+            # Do not claim confirmed cleanup merely because KILL was delivered.
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(min(.05, max(0, deadline - time.monotonic())))
     except subprocess.TimeoutExpired:
         return False  # Uninterruptible kernel I/O: never hang the supervisor too.
 
 
 def run_bounded(cmd, *, cwd, diagnostics_dir=DIAGNOSTICS_DIR,
-                timeout=TIMEOUT_SECONDS, heartbeat=30, grace=5):
+                timeout=TIMEOUT_SECONDS, heartbeat=30, grace=5, require_result=False):
     """Return (exit status, concise report); POSIX process-group supervision.
 
     Deadline applies even with no output, unlimited output, or inherited pipes.
@@ -76,30 +126,23 @@ def run_bounded(cmd, *, cwd, diagnostics_dir=DIAGNOSTICS_DIR,
     proc = None
     previous = {}
     interrupted = []
-    total, md = "complete", None
+    total, md, result = "complete", None, None
     pending = b""
     dropping = False
     event, code = "supervisor_failed", 1
-    try:
-        diagnostics_dir = Path(diagnostics_dir)
-        diagnostics_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
-        path = diagnostics_dir / (time.strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex + ".jsonl")
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except OSError:
-        return 1, title + "\n❌ failed: diagnostics unavailable; child not started"
+    path = Path(diagnostics_dir) / (time.strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex + ".jsonl")
+    diagnostics = _Diagnostics(path)
 
     def note(kind, **fields):
         row = dict(event=kind, timestamp=time.time(), elapsed_seconds=round(time.monotonic() - started, 3),
                    **counts, **fields)
-        log.write(json.dumps(row) + "\n")
-        log.flush()
-        os.fsync(log.fileno())
+        diagnostics.note(row)
 
     def on_signal(signum, frame):
         interrupted.append(signum)
 
     def consume(chunk):
-        nonlocal pending, dropping, total, md
+        nonlocal pending, dropping, total, md, result
         for part in chunk.splitlines(keepends=True):
             ended = part.endswith(b"\n")
             if not dropping:
@@ -109,6 +152,17 @@ def run_bounded(cmd, *, cwd, diagnostics_dir=DIAGNOSTICS_DIR,
             if ended:
                 if not dropping:
                     line = pending.decode("utf-8", errors="replace").strip()
+                    if line.startswith(_RESULT_PREFIX):
+                        try:
+                            candidate = json.loads(line[len(_RESULT_PREFIX):])
+                            keys = ("files_total", "bytes_total", "days", "days_with_dumps", "summary_files_count")
+                            if (isinstance(candidate, dict) and candidate.get("version") == 1
+                                    and candidate.get("status") in ("success", "no_data")
+                                    and all(type(candidate.get(k)) is int and candidate[k] >= 0 for k in keys)
+                                    and candidate["days_with_dumps"] <= candidate["days"]):
+                                result = {k: candidate[k] for k in (*keys, "status")}
+                        except (ValueError, TypeError):
+                            pass
                     match = _TOTAL.fullmatch(line)
                     if match:
                         total = match.group(1)
@@ -117,7 +171,7 @@ def run_bounded(cmd, *, cwd, diagnostics_dir=DIAGNOSTICS_DIR,
                         md = match.group(1)
                 pending, dropping = b"", False
 
-    with os.fdopen(fd, "w", encoding="utf-8") as log, selectors.DefaultSelector() as selector:
+    with selectors.DefaultSelector() as selector:
         try:
             for sig in (signal.SIGTERM, signal.SIGINT):
                 previous[sig] = signal.signal(sig, on_signal)
@@ -128,7 +182,7 @@ def run_bounded(cmd, *, cwd, diagnostics_dir=DIAGNOSTICS_DIR,
             except OSError as exc:
                 event = "launch_failed"
                 note(event, error_type=type(exc).__name__, returncode=1)
-                return 1, title + "\n❌ failed: unable to launch summary process"
+                raise
             note("started", pid=proc.pid)
             for pipe, name in ((proc.stdout, "stdout_bytes"), (proc.stderr, "stderr_bytes")):
                 os.set_blocking(pipe.fileno(), False)
@@ -136,6 +190,8 @@ def run_bounded(cmd, *, cwd, diagnostics_dir=DIAGNOSTICS_DIR,
             deadline, next_heartbeat = started + timeout, started + heartbeat
             while True:
                 now = time.monotonic()
+                if diagnostics.failed.is_set():
+                    raise OSError("diagnostics unavailable")
                 if interrupted:
                     code, event = 128 + interrupted[0], "interrupted"
                     break
@@ -162,7 +218,7 @@ def run_bounded(cmd, *, cwd, diagnostics_dir=DIAGNOSTICS_DIR,
                     event = "finished" if code == 0 else "failed"
                     break
         except Exception as exc:
-            event, code = "supervisor_failed", 1
+            event, code = ("launch_failed" if proc is None else "supervisor_failed"), 1
             # Exception messages may contain paths/content; persist only the type.
             try:
                 note(event, error_type=type(exc).__name__)
@@ -175,21 +231,38 @@ def run_bounded(cmd, *, cwd, diagnostics_dir=DIAGNOSTICS_DIR,
                 except OSError:
                     cleaned = False
                 if not cleaned:
+                    # Keep timeout/interruption provenance while reporting the
+                    # independently unsuccessful cleanup in the final event.
+                    try:
+                        note("cleanup_failed", outcome=event, returncode=code)
+                    except OSError:
+                        pass
                     event, code = "cleanup_failed", 1
                 for pipe in (proc.stdout, proc.stderr):
                     if pipe:
                         pipe.close()
             for sig, handler in previous.items():
                 signal.signal(sig, handler)
+        if code == 0 and require_result and result is None:
+            event, code = "invalid_result", 1
         try:
             note(event, returncode=code)
         except OSError:
-            return 1, title + "\n❌ failed: diagnostics write failed"
+            diagnostics.failed.set()
+    if not diagnostics.finish():
+        return 1, title + "\n❌ failed: diagnostics write failed or stalled; process supervision completed"
     if code:
         reason = {"timeout": f"timed out after {timeout:g}s", "interrupted": "interrupted",
                   "cleanup_failed": "process-group cleanup incomplete",
-                  "supervisor_failed": "supervisor error"}.get(event, f"summary process exit {code}")
+                  "supervisor_failed": "supervisor error", "launch_failed": "unable to launch summary process",
+                  "invalid_result": "missing or invalid structured summary result"}.get(event, f"summary process exit {code}")
         return code, title + f"\n❌ failed: {reason}; redacted diagnostics: {path}"
+    if result is not None:
+        total = (f"{result['files_total']} files, {result['bytes_total']} bytes across "
+                 f"{result['days_with_dumps']}/{result['days']} day(s) with dumps")
+        if result["status"] == "no_data":
+            total = "No dumps available: " + total
+        md = result["summary_files_count"]
     lines = [title, f"✅ {total}"]
     if md:
         lines.append(f"📝 md: {md} files")
@@ -198,7 +271,8 @@ def run_bounded(cmd, *, cwd, diagnostics_dir=DIAGNOSTICS_DIR,
 
 def main():
     # Same runtime, flags and publishing semantics as the previous local wrapper.
-    code, report = run_bounded([str(PY), "-u", str(SCRIPT), "--days", "7", "--device", DEVICE], cwd=REPO)
+    code, report = run_bounded([str(PY), "-u", str(SCRIPT), "--days", "7", "--device", DEVICE,
+                               "--result-json"], cwd=REPO, require_result=True)
     print(report, flush=True)
     return code
 

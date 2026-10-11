@@ -38,3 +38,5 @@ jobs:
               raise SystemExit('No deployment contract tests found')
           subprocess.run([sys.executable, '-m', 'pytest', '-q',
                           *map(str, tests)], check=True)
+      - name: Test dumps scanning and process supervision
+        run: python -m pytest scripts/agents/dumps/tests -q
