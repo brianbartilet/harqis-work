@@ -110,6 +110,7 @@
   .instant-share-button { flex:0 0 auto; border:1px solid #1d4ed8; background:#172554; color:#bfdbfe; }
   .instant-share-button:hover { background:#1e3a8a; color:#eff6ff; }
   .instant-share-button:focus-visible { outline:2px solid #60a5fa; outline-offset:2px; }
+  .recipe-title-help { display:flex; align-items:center; gap:4px; }
   .recipe-header-actions { display:flex; flex:0 0 auto; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:.55rem; }
   .selected-entity-cards { display:grid; gap:.5rem; margin:.5rem 0; }
   .selected-entity-card { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.65rem; border:1px solid #155e75; background:#0b2335; border-radius:.65rem; }
@@ -230,11 +231,11 @@
   <div class="share-grid">
     <section class="panel recipe-editor">
       <div class="recipe-heading mb-5 flex items-start justify-between gap-4">
-        <div>
+        <div class="recipe-title-help">
           <h2 class="text-lg font-semibold text-white">{{ "Edit recipe" if cfg and cfg.id else "New recipe" }}</h2>
+          <button type="button" id="recipe-help-open" class="context-icon-button" aria-label="How share recipes work" title="How share recipes work" aria-haspopup="dialog" aria-controls="recipe-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7h.01"></path></svg></button>
         </div>
         <div class="recipe-header-actions">
-          <button type="button" id="recipe-help-open" class="context-icon-button" aria-label="How share recipes work" title="How share recipes work" aria-haspopup="dialog" aria-controls="recipe-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7h.01"></path></svg></button>
           {% if cfg and cfg.id %}<a class="btn btn-danger" href="/sharing" data-recipe-clear>Clear</a>{% endif %}
         </div>
       </div>
