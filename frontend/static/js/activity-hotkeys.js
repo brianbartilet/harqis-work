@@ -6,7 +6,7 @@
   const named=(root,pattern)=>[...(root?.querySelectorAll('button')||[])].find(button=>pattern.test(button.textContent.trim()));
   function confirmCommand(button,label){
     if(!button||button.disabled)return;
-    const dialog=document.createElement('dialog');dialog.className='context-help';
+    const dialog=document.createElement('dialog');dialog.className='context-help activity-hotkey-confirm';
     const body=document.createElement('div');body.className='context-help-body';
     const title=document.createElement('h2');title.id='hotkey-confirm-title';title.textContent=label+'?';
     dialog.setAttribute('aria-labelledby',title.id);
@@ -20,14 +20,14 @@
   document.addEventListener('DOMContentLoaded',()=>{
     const board=query('[data-actions-page]'), graph=query('.kg-shell'), corpus=query('[data-corpus-index]');
     if((!board&&!graph&&!corpus)||graph?.dataset.readonly==='true')return;
-    const pageKeys=board?[['i','Ideas drawer'],['a','Create Action'],['d','Create Idea'],['m','Multiselect (Ideas when drawer is open)'],['Space','Refresh']]:graph?[['a','Explore Activity Graph'],['e','Entities'],['f','Filters'],['b','Board guide'],['r','Refresh'],['Space','Reapply preset and refresh / Attach existing on a Board'],['p','Fit view'],['[','Zoom in'],[']','Zoom out'],['\\','Toggle fullscreen']]:[['e','Create Entry'],['a','Create Action'],['d','Create Idea'],['x','Secrets'],['t','Tags'],['m','Memory Signal'],['c','Manage categories'],['Space','Go to today']];
-    const contextKeys=board?[['e','Edit'],['o','Done (confirm)'],['a','Agents'],['i','Dismiss (confirm)'],['c','Connections'],['h','History'],['x','Expand / collapse all sections and checklists']]:graph?[['t','Add thought'],['c','Connect on this board'],['n','Clone'],['d','Dismiss (confirm)'],['r','Promote'],['e','Edit'],['u','Use as starting point'],['o','Board connections'],['x','Clear selection'],['f','Focus connections / overview'],['Delete','Remove selected from board'],['↑ / ↓','Increase / decrease orb size']]:[];
+    const pageKeys=board?[['i','Ideas drawer'],['a','Create action'],['d','Create idea'],['m','Multiselect'],['Space','Refresh']]:graph?[['a','Explore activity graph'],['e','Entities'],['f','Filters'],['b','Board guide'],['r','Refresh'],['Space','Reapply preset and refresh'],['p','Fit view'],['[','Zoom in'],[']','Zoom out'],['\\','Toggle fullscreen']]:[['e','Create entry'],['a','Create action'],['d','Create idea'],['x','Secrets'],['t','Tags'],['m','Expand/collapse memory signal'],['c','Manage categories'],['Space','Go to today']];
+    const contextKeys=board?[['e','Edit'],['o','Move to done'],['a','Agents'],['i','Dismiss'],['c','Connections'],['h','History'],['x','Expand/collapse card sections']]:graph?[['t','Add thought'],['c','Connect on this board'],['n','Clone'],['d','Dismiss'],['r','Promote'],['e','Edit'],['u','Use as starting point'],['o','Board connections'],['x','Clear selection'],['f','Focus connection'],['Delete','Remove selected from board'],['↑ / ↓','+/- orb size']]:[];
     const dialog=document.createElement('dialog');dialog.className='context-help';dialog.id='activity-hotkey-help';dialog.setAttribute('aria-labelledby','activity-hotkey-title');
     const header=document.createElement('header');header.className='context-help-header';
     const title=document.createElement('h2');title.id='activity-hotkey-title';title.textContent='Keyboard shortcuts';
     const close=document.createElement('button');close.type='button';close.className='context-icon-button';close.setAttribute('aria-label','Close keyboard shortcuts');close.title='Close';close.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';close.onclick=()=>dialog.close();header.append(title,close);
     const body=document.createElement('div');body.className='context-help-body';
-    for(const [heading,rows] of [['Page',[['k','Keyboard help'],...pageKeys,['n','Toggle Dynamic'],['Alt + `','All activity'],['Alt + 1–9','Select Space in picker order']]], [board?'Focused or hovered card':'Selected orb',contextKeys]]){
+    for(const [heading,rows] of [['Page',[['k','Keyboard help'],...pageKeys,['n','Toggle dynamic mode'],['Alt + `','All activity'],['Alt + 1–9','Select space']]], ['Selected board',graph?[['Space','Attach existing'],['Ctrl + S','Save now'],['Ctrl + L','Save layout'],['Ctrl + E','Open board settings'],['Ctrl + D','Delete board']]:[]], [board?'Focused or hovered card':'Selected orb',contextKeys]]){
       if(!rows.length)continue;
       const h=document.createElement('h3');h.textContent=heading;body.append(h);
       const list=document.createElement('dl');list.className='activity-hotkey-list';
@@ -40,8 +40,15 @@
     else query('.corpus-navigation-actions .corpus-create-menu').before(help);
     let opener;help.onclick=()=>{opener=document.activeElement;dialog.showModal();close.focus();};dialog.onclose=()=>opener?.focus();
     document.addEventListener('keydown',event=>{
-      if(event.defaultPrevented||event.repeat||event.isComposing||event.ctrlKey||event.metaKey||event.shiftKey||event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),.xterm,[role="textbox"]')||query('dialog[open]:not(#followups-board):not(#activity-standalone)'))return;
+      if(event.defaultPrevented||event.repeat||event.isComposing||event.metaKey||event.shiftKey||event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),.xterm,[role="textbox"]')||query('dialog[open]:not(#followups-board):not(#activity-standalone)'))return;
       const key=event.key.toLowerCase();
+      if(event.ctrlKey){
+        if(graph&&!event.altKey&&window.HflIdeas?.maps.current){
+          const pattern={s:/^Save now$/,l:/^Save layout$/,e:/^Settings$/,d:/^Delete$/}[key];
+          if(pattern){event.preventDefault();click(named(query('.board-controls'),pattern));}
+        }
+        return;
+      }
       if(event.altKey){if((key==='`'||event.code==='Backquote'||/^[1-9]$/.test(key))&&window.HflSelectSpace){event.preventDefault();window.HflSelectSpace(event.code==='Backquote'||key==='`'?0:Number(key));}return;}
       if(key==='k'){event.preventDefault();help.click();return;}
       if(board){
@@ -55,7 +62,7 @@
       if(key==='n'){event.preventDefault();click(query('[data-dynamic-toggle]'));return;}
       if(corpus){
         const selectors={e:'[data-create-entry-open]',a:'[data-create-action-open]',x:'[data-secrets-toggle], [data-secrets-setup]',t:'[data-tag-cloud] > summary',m:'[data-activity-toggle]',c:'[data-memory-category-new]',' ':'[data-activity-today]'};
-        if(key==='d'){event.preventDefault();window.dispatchEvent(new CustomEvent('hfl:create-idea'));}
+        if(key==='d'){event.preventDefault();window.HflIdeas?.openEditor('idea');}
         else if(selectors[key]){event.preventDefault();click(query(selectors[key]));}
       }
     },{signal:controller.signal});

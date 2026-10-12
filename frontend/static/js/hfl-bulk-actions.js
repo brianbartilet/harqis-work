@@ -43,7 +43,7 @@
             update(kind);
           });
           label.append(check,node('span','Select all'));
-          lane.firstElementChild.after(label);
+          lane.firstElementChild.append(label);
         }
         const ids=[...lane.querySelectorAll(selector(kind))].map(card=>kind==='action'?card.dataset.followupId:card.dataset.ideaId);
         const count=ids.filter(id=>group.selected.has(id)).length,check=label.querySelector('input');

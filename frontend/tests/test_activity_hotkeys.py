@@ -73,6 +73,23 @@ def test_graph_shortcuts_and_board_space(editor_page):
     page.locator('.activity-hotkey-trigger').focus()
     page.keyboard.press('x')
     expect(page.locator('#kg-orb-actions-menu')).not_to_be_visible()
+    page.evaluate("""() => {
+      window.boardShortcutCalls=[];
+      HflIdeas.maps.saveNow=()=>boardShortcutCalls.push('save');
+      HflIdeas.maps.saveLayout=()=>boardShortcutCalls.push('layout');
+    }""")
+    page.keyboard.press('Control+s')
+    page.keyboard.press('Control+l')
+    assert page.evaluate('boardShortcutCalls') == ['save','layout']
+    page.keyboard.press('Control+e')
+    expect(page.get_by_role('dialog').filter(has=page.get_by_role('heading',name='Settings',exact=True))).to_be_visible()
+    page.keyboard.press('Control+s')
+    assert page.evaluate('boardShortcutCalls') == ['save','layout']
+    page.keyboard.press('Escape')
+    page.locator('.activity-hotkey-trigger').focus()
+    page.keyboard.press('Control+d')
+    expect(page.get_by_role('dialog').filter(has=page.get_by_role('heading',name='Delete board',exact=True))).to_be_visible()
+    page.keyboard.press('Escape')
 
 
 def test_corpus_shortcuts_and_space_order(editor_page, workspace_corpus):
@@ -82,6 +99,10 @@ def test_corpus_shortcuts_and_space_order(editor_page, workspace_corpus):
         response=client.post('/hfl-corpus/workspace-views',json={'name':name,'state':{}},headers={'X-CSRF-Token':make_csrf_token('frontend-test-user')})
         assert response.status_code == 200
     page.goto('https://editing.test/hfl-corpus')
+    page.locator('.activity-hotkey-trigger').focus()
+    page.keyboard.press('d')
+    expect(page.get_by_role('dialog').filter(has=page.get_by_role('heading',name='New idea',exact=True))).to_be_visible()
+    page.keyboard.press('Escape')
     page.keyboard.press('k')
     expect(page.locator('#activity-hotkey-help')).to_be_visible()
     page.keyboard.press('Escape')
@@ -107,6 +128,9 @@ def test_corpus_shortcuts_and_space_order(editor_page, workspace_corpus):
     expect(page.locator('[data-dynamic-badge]')).to_have_text('Dynamic OFF')
     page.keyboard.press('Alt+Backquote')
     expect(page.locator('[data-active-view-name]')).to_have_text('All activity')
+    page.locator('.activity-hotkey-trigger').focus()
+    page.keyboard.press('d')
+    expect(page.get_by_role('dialog').filter(has=page.get_by_role('heading',name='New idea',exact=True))).to_be_visible()
 
 
 @pytest.mark.parametrize('path', ['/hfl-corpus/actions', '/hfl-corpus', '/hfl-corpus/graph'])

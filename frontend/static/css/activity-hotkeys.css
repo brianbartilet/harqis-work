@@ -3,7 +3,7 @@
 .kg-shell .kg-main-toolbar .kg-toolbar-actions>.activity-hotkey-trigger,
 #followups-board .followups-toolbar>.activity-hotkey-trigger,
 [data-corpus-index] .corpus-navigation-actions>.activity-hotkey-trigger{width:38px;min-width:38px;flex:0 0 38px;padding:8px;box-sizing:border-box}
-#activity-hotkey-help{width:min(540px,calc(100vw - 24px));border-radius:14px}
+#activity-hotkey-help{width:min(324px,calc(100vw - 24px));border-radius:14px}
 #activity-hotkey-help .context-help-header{padding:16px 20px;gap:12px}
 #activity-hotkey-help h2{font-size:20px}
 #activity-hotkey-help .context-help-body{padding:16px 20px;font-size:13px;line-height:1.45}
@@ -12,3 +12,7 @@
 .activity-hotkey-list{display:grid;grid-template-columns:5rem minmax(0,1fr);gap:5px 12px;margin:0 0 18px}
 .activity-hotkey-list dt{font-family:monospace;color:#7dd3fc}.activity-hotkey-list dd{margin:0;min-width:0}
 .context-help-body>button{padding:8px 16px;margin:12px 8px 0 0;border:1px solid #475569;border-radius:8px}
+
+.activity-hotkey-confirm{width:min(340px,calc(100vw - 24px));border-radius:14px}
+.activity-hotkey-confirm .context-help-body{padding:18px}
+.activity-hotkey-confirm h2{font-size:18px}
