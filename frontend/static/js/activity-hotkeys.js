@@ -37,7 +37,7 @@
     const help=document.createElement('button');help.type='button';help.className='activity-hotkey-trigger';help.setAttribute('aria-label','Keyboard shortcuts');help.title='Keyboard shortcuts (K)';help.setAttribute('aria-haspopup','dialog');help.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M6 9h2m3 0h2m3 0h2M6 12h2m3 0h2m3 0h2M7 15h10"/></svg>';
     if(board)query('[data-board-bulk]').before(help);
     else if(graph)query('#kg-animation-menu').before(help);
-    else query('.corpus-navigation-actions').prepend(help);
+    else query('.corpus-navigation-actions .corpus-create-menu').before(help);
     let opener;help.onclick=()=>{opener=document.activeElement;dialog.showModal();close.focus();};dialog.onclose=()=>opener?.focus();
     document.addEventListener('keydown',event=>{
       if(event.defaultPrevented||event.repeat||event.isComposing||event.ctrlKey||event.metaKey||event.shiftKey||event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),.xterm,[role="textbox"]')||query('dialog[open]:not(#followups-board):not(#activity-standalone)'))return;
