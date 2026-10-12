@@ -114,12 +114,60 @@ def begin():
         return view(run)
 
 
+TYPE_PRIORITY = ('people', 'companies', 'tools', 'apps', 'pets', 'games')
+
+
+def pair_priority(pair):
+    """Frequency chooses the work anchor, never the canonical merge name."""
+    anchor, other = sorted((pair['left'], pair['right']),
+                           key=lambda e: (-e.get('related_items', 0), e['id']))
+    kind = pair['kind']
+    signals = pair.get('signals', {})
+    return (TYPE_PRIORITY.index(kind) if kind in TYPE_PRIORITY else len(TYPE_PRIORITY),
+            -anchor.get('related_items', 0), anchor['id'],
+            -bool(signals.get('contact')), -bool(signals.get('exact')),
+            -bool(signals.get('partial')), -signals.get('fuzzy', 0),
+            -other.get('related_items', 0), pair['id'])
+
+
 def view(run, offset=0, limit=20):
     pairs = list(run['pairs'].values())
     counts = {s: sum(p['state'] == s for p in pairs) for s in ('pending', 'merged', 'deferred', 'separate', 'stale')}
-    pending = [p for p in pairs if p['state'] == 'pending']
+    pending = sorted((p for p in pairs if p['state'] == 'pending'), key=pair_priority)
     return {k: run[k] for k in ('id', 'state', 'initial', 'delivery')} | {
+        'capabilities': ['atomic-anchor-groups-v1', 'anchor-packets-v1'],
+        'merged_groups': merged_group_count(pairs),
         'counts': counts, 'pairs': pending[offset:offset+limit], 'pending_total': len(pending)}
+
+
+def compact_view(result):
+    """Deduplicate evidence losslessly and propose disjoint, unapproved stars."""
+    evidence_by_id, pairs, groups, used = {}, [], [], set()
+    for pair in result['pairs']:
+        for side in ('left', 'right'):
+            entity = pair[side]
+            previous = evidence_by_id.setdefault(entity['id'], entity)
+            if previous != entity:
+                raise ValueError('Inconsistent evidence snapshots; do not deduplicate')
+        pairs.append({k: v for k, v in pair.items() if k not in ('left', 'right')} | {
+            'left_id': pair['left']['id'], 'right_id': pair['right']['id']})
+    def rank(entity):
+        kind = entity['kind']
+        return (TYPE_PRIORITY.index(kind) if kind in TYPE_PRIORITY else len(TYPE_PRIORITY),
+                -entity.get('related_items', 0), entity['id'])
+    assigned = set()
+    for anchor in sorted(evidence_by_id.values(), key=rank):
+        if anchor['id'] in used:
+            continue
+        edges = [p for p in pairs if anchor['id'] in p['ids'] and not used.intersection(p['ids'])]
+        if not edges:
+            continue
+        groups.append({'anchor_id': anchor['id'], 'pair_ids': [p['id'] for p in edges]})
+        used.update(i for p in edges for i in p['ids'])
+        assigned.update(p['id'] for p in edges)
+    return result | {'format': 'anchor-packets-v1', 'entities': evidence_by_id,
+                     'pairs': pairs, 'groups': groups,
+                     'ungrouped_pair_ids': [p['id'] for p in pairs if p['id'] not in assigned]}
 
 
 def corroborated(decision, pair):
@@ -209,6 +257,85 @@ def decide(run_id, pair_id, decision):
         return pair
 
 
+def merge_group(run_id, payload):
+    """Commit a corroborated star, not sequential overlapping pair merges."""
+    from modules.hfl_corpus.entity_merge_api import MergePreview, build_preview
+    from modules.hfl_corpus.entities_api import Profile, validated_profile
+    anchor = payload['anchor_id']
+    decisions = payload['decisions']
+    if not 2 <= len(decisions) <= 20:
+        raise ValueError('A group requires 2–20 anchor-pair decisions')
+    store = get_store()
+    with FileLock(str(store.path) + '.matching.lock', timeout=30):
+        run = load(run_id)
+        pairs = [run['pairs'].get(i) for i in sorted(decisions)]
+        if any(p is None or anchor not in p['ids'] for p in pairs):
+            raise ValueError('Every pair must belong to this run and share the explicit anchor')
+        ids = sorted({i for p in pairs for i in p['ids']})
+        if len(ids) != len(pairs) + 1 or len({p['kind'] for p in pairs}) != 1:
+            raise ValueError('A group must contain distinct same-type anchor pairs')
+        group_id = str(uuid5(NAMESPACE_URL, POLICY + run_id + ':group:' + digest(sorted(decisions))))
+        fingerprint = digest(payload)
+        receipt = entity_merges.operation(group_id, fingerprint)
+        if not receipt:
+            if run['state'] != 'running' or any(p['state'] != 'pending' for p in pairs):
+                raise ValueError('Group requires pending pairs in a running run')
+            if any(set(p['ids']).issubset(ids) and (p['state'] == 'separate'
+                   or p.get('decision', {}).get('contradictions')) for p in run['pairs'].values()):
+                raise ValueError('Existing cross-member separate decision or contradiction blocks this group')
+            if payload.get('contradictions') or any(
+                decisions[p['id']]['decision'] != 'merge' or decisions[p['id']].get('contradictions')
+                or not corroborated(decisions[p['id']], p) for p in pairs
+            ):
+                raise ValueError('Every member needs independent corroboration without contradictions')
+            with store.connection() as db:
+                observed_revision = entity_merges.revision(db)
+            live = {e['id']: e for e in current_entities()}
+            if any(i not in live or signature(live[i]) != run['snapshots'][i] for i in ids):
+                raise ValueError('Group evidence changed; reconsider from a fresh run')
+            selected = [live[i] for i in ids]
+            if len({e['external_id'] for e in selected if e.get('external_id')}) > 1:
+                raise ValueError('Conflicting external identities across group members')
+            curated = [e for e in selected if matching.curated_profile(e)]
+            explicit = [e for e in selected if (e.get('profile') or {}).get('preferred_name')]
+            if len(curated) > 1 or len(explicit) > 1:
+                raise ValueError('Conflicting curated identities require review')
+            target = preferred(selected)
+            reasons = '\n'.join(decisions[p['id']]['reason'] for p in pairs)
+            preview = build_preview(MergePreview(entity_ids=ids, name=target['label'], evidence=reasons[:10000]), current=list(live.values()))
+            if preview['revision'] != observed_revision:
+                raise ValueError('Entities changed during group assessment; request fresh evidence')
+            profile = preview['profile']
+            sources = profile['alias_sources']
+            for decision in decisions.values():
+                for key in ('aliases', 'partial_aliases'):
+                    for alias in decision.get(key, []):
+                        if alias not in profile[key]:
+                            profile[key].append(alias)
+                            sources[alias] = 'llm'
+            validated = validated_profile(Profile(**profile))
+            validated['alias_sources'] = sources
+            if curated:
+                validated['notes'] = '\n\n'.join((e.get('profile') or {}).get('notes', '')
+                    for e in [target] + [e for e in selected if e['id'] != target['id']]
+                    if (e.get('profile') or {}).get('notes'))
+            preview['profile'] = validated
+            preview['automatic'] = dict(run_id=run_id, policy=POLICY, skill_hash=run['skill_hash'],
+                group=payload, input_hash=digest(pairs), protected_profile=bool(curated))
+            receipt = entity_merges.commit_merge(preview, group_id, fingerprint, 'entity-matcher:hermes')
+        # Receipt-first recovery also repairs a crash after commit and before run save.
+        event = next(e for e in entity_merges.history(receipt['entity_id']) if e['id'] == receipt['event_id'])
+        result = dict(group_id=group_id, pair_ids=sorted(decisions), state='merged', operation=receipt,
+                      result_name=event['data']['name'], related_items=event['data']['unique_entries'])
+        for pair in pairs:
+            pair.update({k: v for k, v in result.items() if k != 'pair_ids'}, decision=decisions[pair['id']])
+        for pair in run['pairs'].values():
+            if pair['state'] == 'pending' and set(ids).intersection(pair['ids']):
+                pair.update(state='stale', note='Group changed an endpoint; fresh evidence required, not a carried-over approval')
+        save(run)
+        return result
+
+
 def finish(run_id):
     store = get_store()
     with FileLock(str(store.path) + '.matching.lock', timeout=30):
@@ -226,6 +353,12 @@ def finish(run_id):
         return view(run)
 
 
+def merged_group_count(pairs):
+    """N approved anchor edges can share one reversible merge operation."""
+    return len({p.get('operation', {}).get('event_id') or p['id']
+                for p in pairs if p['state'] == 'merged'})
+
+
 def report(run):
     lines = [f"# Entity consolidation — {run['id']}", f"Run: {run['state']}; policy: {run['policy']}"]
     groups = {}
@@ -234,7 +367,7 @@ def report(run):
     if not groups:
         lines.append('No new matching candidates; no changes.')
     for kind, pairs in sorted(groups.items()):
-        lines += ['', '## ' + kind, f"{sum(p['state']=='merged' for p in pairs)} merged groups; {len(pairs)} comparisons"]
+        lines += ['', '## ' + kind, f"{merged_group_count(pairs)} merged groups; {len(pairs)} comparisons"]
         for p in pairs:
             lines.append(f"- {p['left']['name']} ({p['left']['related_items']} items) + {p['right']['name']} ({p['right']['related_items']} items): {p['state']}")
             if p.get('operation'):

@@ -1,4 +1,5 @@
 """Exercise agent decisions against the real isolated entity store and API."""
+import json
 from uuid import uuid4
 
 import pytest
@@ -33,6 +34,221 @@ def decision(**changes):
 def first():
     run = consolidation.begin()
     return run, run['pairs'][0]
+
+
+def test_pending_priority_is_global_type_then_occurrence_not_insertion():
+    kinds = ['people', 'companies', 'tools', 'apps', 'pets', 'games', 'topics']
+    pairs = {}
+    for kind in reversed(kinds):
+        for count in [1, 50]:
+            key = f'{kind}-{count}'
+            pairs[key] = dict(id=key, state='pending', kind=kind, ids=[key, key+'-alias'],
+                left={'id': key, 'related_items': count},
+                right={'id': key+'-alias', 'related_items': 0},
+                signals={'exact': True, 'contact': False, 'partial': False, 'fuzzy': 1})
+    run = dict(id='test', state='running', initial=True, delivery={}, pairs=pairs)
+    expected = [f'{kind}-{count}' for kind in kinds for count in [50, 1]]
+    assert [p['id'] for p in consolidation.view(run, limit=20)['pairs']] == expected
+    assert [p['id'] for p in consolidation.view(run, offset=2, limit=2)['pairs']] == expected[2:4]
+
+
+@pytest.fixture
+def alias_group(corpus):
+    row = dict(corpus[0], id='entry-2', anchor='2')
+    corpus.append(row)
+    mention = entities.mention(row, 'people', 'Kevin Hildgendorf', FACT, 'model-extracted')
+    get_store().save(row['id'], entities.entry_hash(row), [mention])
+    run = consolidation.begin()
+    anchor = run['pairs'][0]['ids'][0]
+    decisions = {p['id']: decision() for p in run['pairs'] if anchor in p['ids']}
+    assert len(decisions) == 2
+    return run, dict(anchor_id=anchor, decisions=decisions, contradictions=[])
+
+
+def test_alias_group_commits_once_and_undo_restores_all(alias_group, authenticated_client):
+    run, payload = alias_group
+    url = '/api/hfl/entities/consolidation/' + run['id'] + '/groups'
+    response = authenticated_client.post(url, json=payload)
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result['state'] == 'merged' and len(result['pair_ids']) == 2
+    assert len(entities.entity_index()) == 1
+    assert result['related_items'] == 3
+    assert authenticated_client.post(url, json=payload).json() == result
+    stored = consolidation.load(run['id'])
+    assert consolidation.view(stored)['counts'] == dict(pending=0, merged=2, deferred=0, separate=0, stale=1)
+    event = entity_merges.history(result['operation']['entity_id'])[0]
+    assert len(event['data']['members']) == 3 and event['delivery'] == 'not-required'
+    entity_merges.unmerge(result['operation']['entity_id'], str(uuid4()), 'undo', 'owner')
+    assert len(entities.entity_index()) == 3
+
+
+def test_group_rejects_conflicting_leaf_external_ids(alias_group, monkeypatch):
+    run, payload = alias_group
+    live = consolidation.current_entities()
+    leaves = [e for e in live if e['id'] != payload['anchor_id']]
+    for i, e in enumerate(leaves):
+        e['external_id'] = f'distinct-person-{i}'
+    stored = consolidation.load(run['id'])
+    for e in live:
+        stored['snapshots'][e['id']] = consolidation.signature(e)
+    for p in stored['pairs'].values():
+        for side in ['left', 'right']:
+            p[side] = consolidation.evidence(next(e for e in live if e['id'] == p[side]['id']))
+    consolidation.save(stored)
+    monkeypatch.setattr(consolidation, 'current_entities', lambda: live)
+    with pytest.raises(ValueError, match='external'):
+        consolidation.merge_group(run['id'], payload)
+    assert len(entities.entity_index()) == 3
+
+
+def test_group_reports_count_unique_operations_not_approved_edges(alias_group, monkeypatch):
+    from workflows.hfl.tasks import entity_consolidation as delivery
+    from workflows.hfl import persistence
+    from workflows.hfl.tasks import activity_radar
+    run, payload = alias_group
+    consolidation.merge_group(run['id'], payload)
+    consolidation.finish(run['id'])
+    assert '1 merged groups; 3 comparisons' in consolidation.report(consolidation.load(run['id']))
+    monkeypatch.setattr(persistence, 'submit_hfl_entry', lambda *a, **k: {'url': 'https://corpus/group'})
+    monkeypatch.setattr(activity_radar, 'corpus_document_url', lambda *a, **k: 'https://corpus/group')
+    sent = []
+    monkeypatch.setattr(activity_radar, '_notify', lambda text: sent.append(text) or [1])
+    delivery.deliver(run['id'])
+    assert 'people: 1 merged groups' in sent[0]
+
+
+def test_compact_packet_preserves_evidence_and_pair_orientation(alias_group):
+    run, _ = alias_group
+    packet = consolidation.compact_view(run)
+    assert len(packet['entities']) == 3
+    assert packet['format'] == 'anchor-packets-v1'
+    for original in run['pairs']:
+        pair = next(p for p in packet['pairs'] if p['id'] == original['id'])
+        assert packet['entities'][pair['left_id']] == original['left']
+        assert packet['entities'][pair['right_id']] == original['right']
+    groups = packet['groups']
+    assert len(groups) == 1 and len(groups[0]['pair_ids']) == 2
+    assert len(packet['ungrouped_pair_ids']) == 1
+    assert len(json.dumps(packet)) < len(json.dumps(run))
+
+
+@pytest.mark.parametrize('failure', ['uncorroborated', 'contradiction', 'group-conflict', 'stale', 'blocked-leaves', 'separate-leaves', 'wrong-anchor', 'closed'])
+def test_group_fails_closed_without_partial_merges(alias_group, failure):
+    run, payload = alias_group
+    stored = consolidation.load(run['id'])
+    pair_id = next(iter(payload['decisions']))
+    if failure == 'uncorroborated':
+        payload['decisions'][pair_id]['facts'] = []
+    elif failure == 'contradiction':
+        payload['decisions'][pair_id]['contradictions'] = ['Different identities']
+    elif failure == 'group-conflict':
+        payload['contradictions'] = ['Leaves have incompatible identifying details']
+    elif failure == 'stale':
+        stored['snapshots'][payload['anchor_id']] = 'old'
+        consolidation.save(stored)
+    elif failure in {'blocked-leaves', 'separate-leaves'}:
+        leaf_pair = next(p for p in stored['pairs'].values() if payload['anchor_id'] not in p['ids'])
+        if failure == 'blocked-leaves':
+            with get_store().connection() as db:
+                entity_matching.block_members(db, leaf_pair['ids'], 'unmerged')
+        else:
+            consolidation.decide(run['id'], leaf_pair['id'], decision() | {'decision': 'separate', 'facts': []})
+    elif failure == 'wrong-anchor':
+        payload['anchor_id'] = 'not-a-member'
+    elif failure == 'closed':
+        stored['state'] = 'complete'
+        consolidation.save(stored)
+    with pytest.raises(ValueError):
+        consolidation.merge_group(run['id'], payload)
+    assert len(entities.entity_index()) == 3
+    with get_store().connection() as db:
+        assert db.execute('SELECT count(*) FROM entity_operations').fetchone()[0] == 0
+
+
+def test_group_receipt_recovers_after_commit_before_save(alias_group, monkeypatch):
+    run, payload = alias_group
+    save = consolidation.save
+    def fail(_):
+        raise RuntimeError('lost run save')
+    monkeypatch.setattr(consolidation, 'save', fail)
+    with pytest.raises(RuntimeError, match='lost run save'):
+        consolidation.merge_group(run['id'], payload)
+    assert len(entities.entity_index()) == 1
+    monkeypatch.setattr(consolidation, 'save', save)
+    result = consolidation.merge_group(run['id'], payload)
+    assert result == consolidation.merge_group(run['id'], payload)
+    assert consolidation.view(consolidation.load(run['id']))['pending_total'] == 0
+    with get_store().connection() as db:
+        assert db.execute('SELECT count(*) FROM entity_operations').fetchone()[0] == 1
+    payload['decisions'][next(iter(payload['decisions']))]['reason'] = 'Changed approval'
+    with pytest.raises(ValueError, match='different operation'):
+        consolidation.merge_group(run['id'], payload)
+
+
+def test_group_api_requires_explicit_cross_member_check(alias_group, authenticated_client):
+    run, payload = alias_group
+    payload.pop('contradictions')
+    response = authenticated_client.post('/api/hfl/entities/consolidation/' + run['id'] + '/groups', json=payload)
+    assert response.status_code == 422
+    assert len(entities.entity_index()) == 3
+
+
+def test_compact_api_is_opt_in_bounded_and_has_explicit_capability(alias_group, authenticated_client):
+    run, _ = alias_group
+    url = '/api/hfl/entities/consolidation/' + run['id']
+    raw = authenticated_client.get(url).json()
+    assert 'left' in raw['pairs'][0]
+    compact = authenticated_client.get(url, params={'compact': True, 'limit': 2}).json()
+    assert compact['format'] == 'anchor-packets-v1'
+    assert 'atomic-anchor-groups-v1' in compact['capabilities']
+    assert len(compact['pairs']) == 2 and compact['pending_total'] == 3
+    assert authenticated_client.get(url, params={'limit': 21}).status_code == 422
+    assert authenticated_client.post('/api/hfl/entities/consolidation/begin?compact=true').json()['format'] == 'anchor-packets-v1'
+
+
+def test_group_rejects_store_change_during_snapshot_read(alias_group, monkeypatch):
+    run, payload = alias_group
+    read = consolidation.current_entities
+    def race():
+        live = read()
+        with get_store().connection() as db:
+            db.execute('INSERT INTO profiles(id,kind,data) VALUES (?,?,?)',
+                       (payload['anchor_id'], 'people', json.dumps({
+                           'name': next(e['label'] for e in live if e['id'] == payload['anchor_id']),
+                           'notes': 'New owner evidence'})))
+        return live
+    monkeypatch.setattr(consolidation, 'current_entities', race)
+    with pytest.raises(ValueError, match='changed'):
+        consolidation.merge_group(run['id'], payload)
+    assert len(entities.entity_index()) == 3
+
+
+@pytest.mark.parametrize('mode', ['one-curated', 'two-curated', 'preferred-conflict'])
+def test_group_protects_curated_profiles(alias_group, monkeypatch, mode):
+    run, payload = alias_group
+    live = consolidation.current_entities()
+    anchor = next(e for e in live if e['id'] == payload['anchor_id'])
+    other = next(e for e in live if e['id'] != anchor['id'])
+    anchor['profile'] = {'notes': 'Owner-maintained identity details'}
+    if mode == 'two-curated':
+        other['profile'] = {'notes': 'A different curated identity'}
+    elif mode == 'preferred-conflict':
+        other['profile'] = {'preferred_name': True}
+    stored = consolidation.load(run['id'])
+    for e in live:
+        stored['snapshots'][e['id']] = consolidation.signature(e)
+    consolidation.save(stored)
+    monkeypatch.setattr(consolidation, 'current_entities', lambda: live)
+    if mode != 'one-curated':
+        with pytest.raises(ValueError, match='curated'):
+            consolidation.merge_group(run['id'], payload)
+        assert len(entities.entity_index()) == 3
+    else:
+        result = consolidation.merge_group(run['id'], payload)
+        event = entity_merges.history(result['operation']['entity_id'])[0]
+        assert event['data']['name'] == anchor['label']
+        assert event['data']['profile']['notes'].startswith('Owner-maintained identity details')
 
 
 def test_agent_merge_retains_undo_but_suppresses_individual_hfl(corpus):

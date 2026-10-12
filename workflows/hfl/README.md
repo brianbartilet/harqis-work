@@ -807,8 +807,9 @@ package, credential, or environment variable.
 
 ### `deliver_entity_consolidation` (daily Hermes entity consolidation)
 
-**Runtime:** hybrid. Hermes owns adaptive identity decisions and the sole daily
-03:00 Asia/Singapore schedule. The canonical entity API validates same-type,
+**Runtime:** hybrid. Hermes owns adaptive identity decisions and the installed
+consolidation schedule (inspect the scheduler for actual cadence rather than assuming
+its checked-in default is live). The canonical entity API validates same-type,
 evidence-grounded decisions, exclusions and current snapshots. The callable
 `workflows.hfl.tasks.entity_consolidation.deliver_entity_consolidation` Celery task
 persists the grouped HFL report and sends its Telegram summary only for actual
@@ -821,6 +822,28 @@ Initial runs inspect existing entities and suggestions; later runs use changed
 entity snapshots. Exact aliases and partial hints are editable and retain their
 user/LLM/merged-name provenance. Activity counts rank candidates and names without
 establishing identity. Ambiguous matches remain separate.
+
+**Alias-first batches:** pending work is globally ordered People → Organization
+(`companies`) → Tools → Apps → Pets → Games → remaining kinds, then by unique
+non-audit related-entry counts. Optional `compact=true` on begin/status returns a
+lossless entity evidence table and disjoint anchor work packets; status also accepts
+`limit=1..20`. The `atomic-anchor-groups-v1` capability permits
+`POST /api/hfl/entities/consolidation/{run_id}/groups`: 2–20 independently approved
+anchor pairs become one reversible operation. Every member still needs source-backed
+identity evidence and an explicit cross-member contradiction check. The group path
+validates current snapshots, store revision, all-pair exclusions, known in-run
+keep-separate decisions, external IDs and curated profiles before commit. Matching
+names or transitive candidate links never auto-approve a group.
+
+Use the skill's `group` command for shared-anchor merges; the existing `batch`
+command is sequential and is only suitable for non-overlapping merge decisions.
+Exact retries recover receipts after a lost response or run save. Other pending
+comparisons touching consumed IDs become stale. `merged_groups` counts unique
+operations, while `counts.merged` counts approved comparisons. See
+[the algorithm and cost protocol](../../.agents/skills/auto-merge-entities/references/alias-first-batching.md).
+Deploy the API/helper together before using new flags or group commands; skill
+publication alone does not deploy them. Candidate caps, whole-run JSON rewrites,
+and the full-backlog finish/report gate remain unchanged.
 
 **Queue / OS:** `HARQIS_ENTITIES_QUEUE` (default `hfl`), cross-platform. The API
 and delivery worker must share `HARQIS_ENTITIES_DB` on the canonical host.
