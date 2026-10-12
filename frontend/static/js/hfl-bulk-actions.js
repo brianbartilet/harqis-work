@@ -29,6 +29,28 @@
         card.classList.toggle('bulk-selecting',group.enabled);
         card.classList.toggle('bulk-selected',group.enabled&&check.checked);
       });
+      root.querySelectorAll(kind==='idea'?'.ideas-drawer':'.followups-lane:not(.ideas-drawer)').forEach(lane=>{
+        let label=lane.querySelector('[data-bulk-list-select]');
+        if(!label){
+          label=node('label',null,'bulk-list-select');label.dataset.bulkListSelect='';
+          const check=node('input');check.type='checkbox';check.dataset.bulkListCheck='';
+          check.setAttribute('aria-label','Select all '+(lane.getAttribute('aria-label')||'cards'));
+          check.addEventListener('change',()=>{
+            lane.querySelectorAll(selector(kind)).forEach(card=>{
+              const id=kind==='action'?card.dataset.followupId:card.dataset.ideaId;
+              check.checked?group.selected.add(id):group.selected.delete(id);
+            });
+            update(kind);
+          });
+          label.append(check,node('span','Select all'));
+          lane.firstElementChild.after(label);
+        }
+        const ids=[...lane.querySelectorAll(selector(kind))].map(card=>kind==='action'?card.dataset.followupId:card.dataset.ideaId);
+        const count=ids.filter(id=>group.selected.has(id)).length,check=label.querySelector('input');
+        label.hidden=!group.enabled;check.disabled=busy||!ids.length;
+        check.checked=!!ids.length&&count===ids.length;
+        check.indeterminate=count>0&&count<ids.length;
+      });
     }
     function closeMenu(controls) {
       controls.querySelector('[data-bulk-options]').hidden=true;

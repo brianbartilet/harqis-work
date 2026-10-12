@@ -113,7 +113,10 @@
 .ideas-bulk-toolbar > button { margin-left:auto; padding:.5rem .65rem; border:1px solid #475569; border-radius:.5rem; color:#cbd5e1; }
 .followups-board .agenda-card.bulk-selected { outline:2px solid #60a5fa; outline-offset:-2px; }
 .followups-board .agenda-card.bulk-selecting > :is(.action-clone-handle,.action-drag-handle) { display:none; }
-.followups-board .agenda-card > .bulk-card-check { float:right; width:22px; height:22px; margin:5px; accent-color:#2563eb; cursor:pointer; }
+.followups-board .agenda-card > .bulk-card-check { float:right; width:16px; height:16px; margin:5px; accent-color:#2563eb; cursor:pointer; }
+.followups-board .bulk-list-select { display:flex; align-items:center; gap:7px; padding:4px 2px 8px; font-size:.75rem; color:#94a3b8; cursor:pointer; }
+.followups-board .bulk-list-select[hidden] { display:none; }
+.followups-board .bulk-list-select input { width:16px; height:16px; margin:0; accent-color:#2563eb; cursor:pointer; }
 .followups-board .agenda-card > .bulk-card-check[hidden] { display:none; }
 .bulk-dialog .bulk-failures { margin:1rem 0; padding-left:1.25rem; overflow-wrap:anywhere; }
 .bulk-dialog .agenda-form-body select { appearance:none; padding-right:2.5rem; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2360a5fa' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 8 4 4 4-4'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right .6rem center; background-size:20px 20px; }

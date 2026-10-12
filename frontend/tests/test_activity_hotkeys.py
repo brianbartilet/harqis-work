@@ -107,3 +107,36 @@ def test_corpus_shortcuts_and_space_order(editor_page, workspace_corpus):
     expect(page.locator('[data-dynamic-badge]')).to_have_text('Dynamic OFF')
     page.keyboard.press('Alt+Backquote')
     expect(page.locator('[data-active-view-name]')).to_have_text('All activity')
+
+
+@pytest.mark.parametrize('path', ['/hfl-corpus/actions', '/hfl-corpus', '/hfl-corpus/graph'])
+def test_dialog_backdrop_dismissal(editor_page, path):
+    page, _ = editor_page
+    page.goto('https://editing.test'+path)
+    trigger=page.get_by_role('button',name='Keyboard shortcuts',exact=True)
+    trigger.click()
+    dialog=page.locator('#activity-hotkey-help')
+    dialog.locator('h2').click()
+    expect(dialog).to_be_visible()
+    # A drag beginning inside the dialog is not a backdrop click.
+    box=dialog.bounding_box()
+    page.mouse.move(box['x']+30,box['y']+30)
+    page.mouse.down()
+    page.mouse.move(2,2)
+    page.mouse.up()
+    expect(dialog).to_be_visible()
+    page.mouse.click(2,2)
+    expect(dialog).not_to_be_visible()
+    expect(trigger).to_be_focused()
+    # Dynamic dialogs inherit dismissal and can veto it while busy.
+    page.evaluate("""() => {
+      const d=document.createElement('dialog');d.id='dynamic-test-dialog';
+      d.textContent='Saving';d.style.cssText='margin:auto;width:200px;height:100px';
+      d.addEventListener('cancel',e=>{if(d.dataset.saving==='true')e.preventDefault();});
+      d.dataset.saving='true';document.body.append(d);d.showModal();
+    }""")
+    page.mouse.click(2,2)
+    expect(page.locator('#dynamic-test-dialog')).to_be_visible()
+    page.locator('#dynamic-test-dialog').evaluate("d=>d.dataset.saving='false'")
+    page.mouse.click(2,2)
+    expect(page.locator('#dynamic-test-dialog')).not_to_be_visible()
