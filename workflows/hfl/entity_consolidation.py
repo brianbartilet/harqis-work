@@ -1,6 +1,8 @@
 """Durable Hermes runs. Agents propose; this service validates and commits."""
 from datetime import datetime
 import json
+import logging
+from copy import deepcopy
 import os
 import time
 from pathlib import Path
@@ -15,6 +17,7 @@ from workflows.hfl.entity_store import digest, get_store
 
 POLICY = 'hermes-entity-consolidation-v1'
 SKILL = Path(__file__).resolve().parents[2] / '.agents/skills/auto-merge-entities/SKILL.md'
+log = logging.getLogger(__name__)
 
 
 def current_entities():
@@ -53,19 +56,28 @@ def evidence(entity):
     result = matching.evidence_entity(entity)
     # Hints aid discovery but are not corroborating facts.
     result['hints'] = {k: (entity.get('profile') or {}).get(k, []) for k in ('aliases', 'partial_aliases')}
+    from workflows.hfl.entity_evidence import select_activity
+    result['activity'], result['excluded_activity'], result['activity_total'] = select_activity(entity['entries'])
+    result['evidence_version'] = 2
     result['related_items'] = activity_count(entity)
     return result
 
 
 def load(run_id):
+    started = time.perf_counter()
     run = get_store().state('consolidation:' + run_id)
     if not run:
         raise ValueError('Unknown consolidation run')
+    metric(run, 'load', time.perf_counter() - started)
     return run
 
 
 def save(run):
+    started = time.perf_counter()
     get_store().state('consolidation:' + run['id'], run)
+    # Log the actual write duration without a second write solely for timing.
+    log.info('entity-consolidation run=%s operation=save seconds=%.6f pairs=%d',
+             run['id'], time.perf_counter() - started, len(run['pairs']))
 
 
 def begin():
@@ -87,7 +99,9 @@ def begin():
         changed = {i for i, value in snapshots.items() if previous.get(i) != value}
         run = dict(id=run_id, state='running', created=datetime.now(ZoneInfo('Asia/Singapore')).isoformat(),
                    policy=POLICY, skill_hash=digest(SKILL.read_text(encoding='utf-8')),
-                   snapshots=snapshots, pairs={}, delivery={}, initial=not bool(previous))
+                   snapshots=snapshots, discovery_snapshots=dict(snapshots),
+                   pairs={}, delivery={}, initial=not bool(previous))
+        evidence_cache = {}
         with store.connection() as db:
             pairs = candidates(rows, changed)
             # Existing review suggestions participate in the first pass even when
@@ -101,8 +115,12 @@ def begin():
                 if by_id[left]['kind'] != by_id[right]['kind'] or matching.blocked(db, [left, right]):
                     continue
                 pair_id = digest([left, right])
+                for identity in (left, right):
+                    if identity not in evidence_cache:
+                        evidence_cache[identity] = evidence(by_id[identity])
                 run['pairs'][pair_id] = dict(id=pair_id, ids=[left, right], state='pending',
-                    kind=by_id[left]['kind'], left=evidence(by_id[left]), right=evidence(by_id[right]),
+                    snapshots={i: snapshots[i] for i in (left, right)},
+                    kind=by_id[left]['kind'], left=evidence_cache[left], right=evidence_cache[right],
                     signals=similarity(by_id[left], by_id[right]), preferred_id=preferred([by_id[left], by_id[right]])['id'])
         # The owner switch and initial work intent are atomic. Queued old tasks
         # see this owner before applying another automatic merge.
@@ -133,11 +151,13 @@ def pair_priority(pair):
 def view(run, offset=0, limit=20):
     pairs = list(run['pairs'].values())
     counts = {s: sum(p['state'] == s for p in pairs) for s in ('pending', 'merged', 'deferred', 'separate', 'stale')}
-    pending = sorted((p for p in pairs if p['state'] == 'pending'), key=pair_priority)
+    pending = sorted((p for p in pairs if p['state'] == 'pending'), key=pair_priority) if limit else []
     return {k: run[k] for k in ('id', 'state', 'initial', 'delivery')} | {
-        'capabilities': ['atomic-anchor-groups-v1', 'anchor-packets-v1'],
+        'capabilities': ['atomic-anchor-groups-v1', 'anchor-packets-v1',
+                         'claimed-anchor-packets-v1', 'consolidation-batch-v2'],
+        'metrics': run.get('metrics', {}), 'checkpoint': run.get('checkpoint'),
         'merged_groups': merged_group_count(pairs),
-        'counts': counts, 'pairs': pending[offset:offset+limit], 'pending_total': len(pending)}
+        'counts': counts, 'pairs': pending[offset:offset+limit], 'pending_total': counts['pending']}
 
 
 def compact_view(result):
@@ -171,93 +191,155 @@ def compact_view(result):
 
 
 def corroborated(decision, pair):
-    if matching.supported(decision, pair):
-        return True
+    from workflows.hfl.entity_evidence import fact_origins
+    if decision.get('decision') != 'merge' or decision.get('contradictions') or not decision.get('reason'):
+        return False
     a, b = pair['left'].get('external_id'), pair['right'].get('external_id')
     if a and b and a != b:
         return False
+    facts, origins = fact_origins(decision, pair)
+    # Ordinary matches need independently sourced facts on BOTH sides. Different
+    # excerpts of one capture must never count as independent evidence.
+    if all(len(values) >= 2 for values in origins.values()) and matching.supported(decision, pair):
+        return True
     signals = pair['signals']
-    if not (signals['exact'] or signals['fuzzy'] >= .88 or signals['contact']):
-        return False
-    # Sparse typo evidence may contain just one activity, but it must supply a
-    # substantial, specific fact on each side, not the alias itself.
-    for fact in decision.get('facts', []):
-        if all(isinstance(fact.get(side+'_quote'), str) and len(fact[side+'_quote']) >= 25
-               and len(fact[side+'_quote'].split()) >= 5
-               and any(fact[side+'_quote'] in a['text'] for a in pair[side]['activity'])
-               for side in ('left', 'right')) and fact.get('explanation'):
-            return True
-    return False
+    return bool(facts) and bool(signals['exact'] or signals['fuzzy'] >= .88 or signals['contact'])
 
 
-def decide(run_id, pair_id, decision):
-    from modules.hfl_corpus.entity_merge_api import MergePreview, build_preview
-    from modules.hfl_corpus.entities_api import Profile, validated_profile
+def invalidate(run, ids):
+    for pair in run['pairs'].values():
+        if pair['state'] == 'pending' and set(ids).intersection(pair['ids']):
+            pair.update(state='stale', note='Endpoint changed; fresh evidence required, not a carried-over approval')
+
+
+def metric(run, name, elapsed):
+    metrics = run.setdefault('metrics', {})
+    values = metrics.setdefault(name, {'calls': 0, 'seconds': 0})
+    values['calls'] += 1
+    values['seconds'] += elapsed
+
+
+def live_snapshot(run):
+    started = time.perf_counter()
+    with get_store().connection() as db:
+        revision = entity_merges.revision(db)
+    live = {e['id']: e for e in current_entities()}
+    metric(run, 'entity_index', time.perf_counter() - started)
+    return live, revision
+
+
+def decide(run_id, pair_id, decision, claim_token=None):
     store = get_store()
     with FileLock(str(store.path) + '.matching.lock', timeout=30):
         run = load(run_id)
-        pair = run['pairs'].get(pair_id)
-        if not pair:
-            raise ValueError('Pair is outside this run')
-        request_id = str(uuid5(NAMESPACE_URL, POLICY + run_id + pair_id))
-        fingerprint = digest(decision)
-        receipt = entity_merges.operation(request_id, fingerprint)
-        if receipt:
-            event = next(e for e in entity_merges.history(receipt['entity_id']) if e['id'] == receipt['event_id'])
-            pair.update(state='merged', operation=receipt, decision=decision,
-                        result_name=event['data']['name'], related_items=event['data']['unique_entries'])
-            save(run)
-            return pair
-        if pair['state'] != 'pending':
-            if pair.get('decision') != decision:
-                raise ValueError('Decision already recorded; cannot replace it')
-            return pair
-        if run['state'] != 'running':
-            raise ValueError('Run is closed')
-        pair['decision'] = decision
-        if decision['decision'] != 'merge':
-            pair['state'] = 'separate' if decision['decision'] == 'separate' else 'deferred'
-            save(run)
-            return pair
-        live = {e['id']: e for e in current_entities()}
-        ids = pair['ids']
-        if any(i not in live or signature(live[i]) != run['snapshots'][i] for i in ids):
-            pair.update(state='stale', note='Evidence changed; reconsider on next run')
-        elif decision.get('contradictions') or not corroborated(decision, pair):
-            pair.update(state='deferred', note='Insufficient corroboration or conflicting evidence')
-        else:
-            selected = [live[i] for i in ids]
-            curated = [e for e in selected if matching.curated_profile(e)]
-            explicit = [e for e in selected if (e.get('profile') or {}).get('preferred_name')]
-            if len(curated) > 1 or len(explicit) > 1:
-                pair.update(state='deferred', note='Conflicting curated identities require review')
-            else:
-                target = preferred(selected)
-                preview = build_preview(MergePreview(entity_ids=ids, name=target['label'], evidence=decision['reason']), current=list(live.values()))
-                profile = preview['profile']
-                sources = profile['alias_sources']
-                for key in ('aliases', 'partial_aliases'):
-                    for alias in decision.get(key, []):
-                        if alias not in profile[key]:
-                            profile[key].append(alias)
-                            sources[alias] = 'llm'
-                validated = validated_profile(Profile(**profile))
-                validated['alias_sources'] = sources
-                if curated:
-                    other = next(e for e in selected if e['id'] != target['id'])
-                    validated['notes'] = (target.get('profile') or {}).get('notes', '')
-                    if (other.get('profile') or {}).get('notes'):
-                        validated['notes'] += '\n\n' + other['profile']['notes']
-                preview['profile'] = validated
-                preview['automatic'] = dict(run_id=run_id, policy=POLICY, skill_hash=run['skill_hash'],
-                    decision=decision, input_hash=digest(pair), protected_profile=bool(curated))
-                receipt = entity_merges.commit_merge(preview, request_id, fingerprint, 'entity-matcher:hermes')
-                pair.update(state='merged', operation=receipt, result_name=target['label'], related_items=preview['unique_entries'])
+        pair = _decide(run, pair_id, decision, claim_token)
         save(run)
         return pair
 
 
-def merge_group(run_id, payload):
+def decide_batch(run_id, decisions, claim_token=None):
+    """One lock/load/save, with individual merge receipts and partial results."""
+    if not 1 <= len(decisions) <= 20:
+        raise ValueError('A batch requires 1–20 decisions')
+    store = get_store()
+    started = time.perf_counter()
+    with FileLock(str(store.path) + '.matching.lock', timeout=30):
+        lock_wait = time.perf_counter() - started
+        run = load(run_id)
+        metric(run, 'lock_wait', lock_wait)
+        results = []
+        try:
+            for pair_id, decision in decisions.items():
+                before = deepcopy(run['pairs'].get(pair_id))
+                try:
+                    pair = _decide(run, pair_id, decision, claim_token)
+                    results.append({'id': pair_id, 'state': pair['state'],
+                        'operation': pair.get('operation'), 'note': pair.get('note')})
+                except ValueError as exc:
+                    if before is not None:
+                        run['pairs'][pair_id] = before
+                    results.append({'id': pair_id, 'error': str(exc)})
+        finally:
+            metric(run, 'batch', time.perf_counter() - started)
+            save(run)
+        return {'results': results, 'metrics': run.get('metrics', {})}
+
+
+def _decide(run, pair_id, decision, claim_token=None):
+    from modules.hfl_corpus.entity_merge_api import MergePreview, build_preview
+    from modules.hfl_corpus.entities_api import Profile, validated_profile
+    run_id = run['id']
+    pair = run['pairs'].get(pair_id)
+    if not pair:
+        raise ValueError('Pair is outside this run')
+    request_id = str(uuid5(NAMESPACE_URL, POLICY + run_id + pair_id))
+    fingerprint = digest(decision)
+    receipt = entity_merges.operation(request_id, fingerprint)
+    if receipt:
+        event = next(e for e in entity_merges.history(receipt['entity_id']) if e['id'] == receipt['event_id'])
+        pair.update(state='merged', operation=receipt, decision=decision,
+                    result_name=event['data']['name'], related_items=event['data']['unique_entries'])
+        invalidate(run, pair['ids'])
+        return pair
+    if pair['state'] != 'pending':
+        if pair.get('decision') != decision:
+            raise ValueError('Decision already recorded; cannot replace it')
+        return pair
+    if run['state'] != 'running':
+        raise ValueError('Run is closed')
+    from workflows.hfl.entity_consolidation_work import check_claim
+    check_claim(run, pair['ids'], claim_token)
+    pair['decision'] = decision
+    if decision['decision'] != 'merge':
+        pair['state'] = 'separate' if decision['decision'] == 'separate' else 'deferred'
+        return pair
+    live, observed_revision = live_snapshot(run)
+    ids = pair['ids']
+    if any(i not in live or signature(live[i]) != run['snapshots'][i] for i in ids):
+        pair.update(state='stale', note='Evidence changed; reconsider on next run')
+        return pair
+    for side in ('left', 'right'):
+        if pair[side].get('evidence_version') != 2:
+            pair[side] = evidence(live[pair[side]['id']])
+    if decision.get('contradictions') or not corroborated(decision, pair):
+        pair.update(state='deferred', note='Insufficient corroboration or conflicting evidence')
+    else:
+        selected = [live[i] for i in ids]
+        curated = [e for e in selected if matching.curated_profile(e)]
+        explicit = [e for e in selected if (e.get('profile') or {}).get('preferred_name')]
+        if len(curated) > 1 or len(explicit) > 1:
+            pair.update(state='deferred', note='Conflicting curated identities require review')
+        else:
+            target = preferred(selected)
+            preview = build_preview(MergePreview(entity_ids=ids, name=target['label'], evidence=decision['reason']), current=list(live.values()))
+            if preview['revision'] != observed_revision:
+                raise ValueError('Entities changed during assessment; request fresh evidence')
+            profile = preview['profile']
+            sources = profile['alias_sources']
+            for key in ('aliases', 'partial_aliases'):
+                for alias in decision.get(key, []):
+                    if alias not in profile[key]:
+                        profile[key].append(alias)
+                        sources[alias] = 'llm'
+            validated = validated_profile(Profile(**profile))
+            validated['alias_sources'] = sources
+            if curated:
+                other = next(e for e in selected if e['id'] != target['id'])
+                validated['notes'] = (target.get('profile') or {}).get('notes', '')
+                if (other.get('profile') or {}).get('notes'):
+                    validated['notes'] += '\n\n' + other['profile']['notes']
+            preview['profile'] = validated
+            preview['automatic'] = dict(run_id=run_id, policy=POLICY, skill_hash=run['skill_hash'],
+                decision=decision, input_hash=digest(pair), protected_profile=bool(curated))
+            started = time.perf_counter()
+            receipt = entity_merges.commit_merge(preview, request_id, fingerprint, 'entity-matcher:hermes')
+            metric(run, 'merge_commit', time.perf_counter() - started)
+            pair.update(state='merged', operation=receipt, result_name=target['label'], related_items=preview['unique_entries'])
+            invalidate(run, ids)
+    return pair
+
+
+def merge_group(run_id, payload, claim_token=None):
     """Commit a corroborated star, not sequential overlapping pair merges."""
     from modules.hfl_corpus.entity_merge_api import MergePreview, build_preview
     from modules.hfl_corpus.entities_api import Profile, validated_profile
@@ -278,21 +360,25 @@ def merge_group(run_id, payload):
         fingerprint = digest(payload)
         receipt = entity_merges.operation(group_id, fingerprint)
         if not receipt:
+            from workflows.hfl.entity_consolidation_work import check_claim
+            check_claim(run, ids, claim_token)
             if run['state'] != 'running' or any(p['state'] != 'pending' for p in pairs):
                 raise ValueError('Group requires pending pairs in a running run')
             if any(set(p['ids']).issubset(ids) and (p['state'] == 'separate'
                    or p.get('decision', {}).get('contradictions')) for p in run['pairs'].values()):
                 raise ValueError('Existing cross-member separate decision or contradiction blocks this group')
+            live, observed_revision = live_snapshot(run)
+            if any(i not in live or signature(live[i]) != run['snapshots'][i] for i in ids):
+                raise ValueError('Group evidence changed; reconsider from a fresh run')
+            for pair in pairs:
+                for side in ('left', 'right'):
+                    if pair[side].get('evidence_version') != 2:
+                        pair[side] = evidence(live[pair[side]['id']])
             if payload.get('contradictions') or any(
                 decisions[p['id']]['decision'] != 'merge' or decisions[p['id']].get('contradictions')
                 or not corroborated(decisions[p['id']], p) for p in pairs
             ):
                 raise ValueError('Every member needs independent corroboration without contradictions')
-            with store.connection() as db:
-                observed_revision = entity_merges.revision(db)
-            live = {e['id']: e for e in current_entities()}
-            if any(i not in live or signature(live[i]) != run['snapshots'][i] for i in ids):
-                raise ValueError('Group evidence changed; reconsider from a fresh run')
             selected = [live[i] for i in ids]
             if len({e['external_id'] for e in selected if e.get('external_id')}) > 1:
                 raise ValueError('Conflicting external identities across group members')
@@ -322,16 +408,16 @@ def merge_group(run_id, payload):
             preview['profile'] = validated
             preview['automatic'] = dict(run_id=run_id, policy=POLICY, skill_hash=run['skill_hash'],
                 group=payload, input_hash=digest(pairs), protected_profile=bool(curated))
+            started = time.perf_counter()
             receipt = entity_merges.commit_merge(preview, group_id, fingerprint, 'entity-matcher:hermes')
+            metric(run, 'merge_commit', time.perf_counter() - started)
         # Receipt-first recovery also repairs a crash after commit and before run save.
         event = next(e for e in entity_merges.history(receipt['entity_id']) if e['id'] == receipt['event_id'])
         result = dict(group_id=group_id, pair_ids=sorted(decisions), state='merged', operation=receipt,
                       result_name=event['data']['name'], related_items=event['data']['unique_entries'])
         for pair in pairs:
             pair.update({k: v for k, v in result.items() if k != 'pair_ids'}, decision=decisions[pair['id']])
-        for pair in run['pairs'].values():
-            if pair['state'] == 'pending' and set(ids).intersection(pair['ids']):
-                pair.update(state='stale', note='Group changed an endpoint; fresh evidence required, not a carried-over approval')
+        invalidate(run, ids)
         save(run)
         return result
 

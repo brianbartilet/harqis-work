@@ -276,6 +276,7 @@ def entity_index(source='', since='', until='', context='', graph_query='', grap
                 continue
             entity['entries'].append(dict(id=entry['id'], title=entry['title'], date=entry['date'],
                 source=entry['source'], evidence=m['evidence'], method=m['method'],
+                content_hash=entry_hash(entry), origin_id=entry.get('origin_id'),
                 href='/hfl-corpus/entities/entry/' + quote(entry['id'], safe='')))
     for group in groups.values():
         group['entries'].sort(key=lambda e: e['date'], reverse=True)

@@ -65,3 +65,35 @@ def test_cli_non_json_error_is_safe(helper, alias_group, monkeypatch, authentica
     result = json.loads(capsys.readouterr().out)
     assert result['status'] == 502
     assert 'private proxy body' not in str(result)
+
+
+def test_cli_claim_renew_hydrate_commit_and_checkpoint(helper, alias_group, tmp_path, capsys):
+    from test_entity_consolidation import decision
+    run, _ = alias_group
+    assert helper('claim', run['id'], '--worker', 'cli-test') == 0
+    packet = json.loads(capsys.readouterr().out)
+    claim = packet['claim']
+    assert helper('renew', run['id'], '--claim-token', claim['token']) == 0
+    assert json.loads(capsys.readouterr().out)['action'] == 'renew'
+    entry_id = packet['entities'][claim['anchor_id']]['activity'][0]['id']
+    path = tmp_path / 'hydrate.json'
+    path.write_text(json.dumps({'entity_id': claim['anchor_id'], 'entry_ids': [entry_id]}))
+    assert helper('evidence', run['id'], '--file', str(path), '--claim-token', claim['token']) == 0
+    assert json.loads(capsys.readouterr().out)['activity'][0]['expanded']
+    path.write_text(json.dumps({'anchor_id': claim['anchor_id'], 'contradictions': [],
+                               'decisions': {key: decision() for key in claim['pair_ids']}}))
+    assert helper('group', run['id'], '--file', str(path), '--claim-token', claim['token']) == 0
+    assert json.loads(capsys.readouterr().out)['state'] == 'merged'
+    assert helper('checkpoint', run['id']) == 0
+    assert json.loads(capsys.readouterr().out)['state'] == 'running'
+    assert helper('release', run['id'], '--claim-token', claim['token']) == 0
+    assert json.loads(capsys.readouterr().out)['action'] == 'release'
+
+
+def test_cli_partial_batch_error_returns_failure(helper, alias_group, tmp_path, capsys):
+    from test_entity_consolidation import decision
+    run, _ = alias_group
+    path = tmp_path / 'batch.json'
+    path.write_text(json.dumps({'decisions': {'missing': decision()}}))
+    assert helper('batch', run['id'], '--file', str(path)) == 1
+    assert 'error' in json.loads(capsys.readouterr().out)['results'][0]

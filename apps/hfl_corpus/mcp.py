@@ -1811,24 +1811,29 @@ def register_hfl_corpus_tools(mcp: FastMCP):
     # --- Entity consolidation ---
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
-    def create_hfl_corpus_entity_consolidation() -> dict:
+    def create_hfl_corpus_entity_consolidation(compact: bool = False) -> dict:
         """Begin or resume an entity consolidation run. Destructive: writes remote state.
+
+        Args:
+            compact: Deduplicate entity evidence in the response.
         """
         logger.info("Tool called: create_hfl_corpus_entity_consolidation")
-        result = ApiServiceHflCorpusEntities(CONFIG).create_entity_consolidation()
+        result = ApiServiceHflCorpusEntities(CONFIG).create_entity_consolidation(compact=compact)
         output = _dict_result(result)
         logger.info("create_hfl_corpus_entity_consolidation done")
         return output
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
-    def get_hfl_corpus_entity_consolidation(run_id: str) -> dict:
+    def get_hfl_corpus_entity_consolidation(run_id: str, compact: bool = False, limit: int = 20) -> dict:
         """Read a consolidation run and its candidate decisions.
 
         Args:
             run_id: Run ID returned by create_hfl_corpus_entity_consolidation.
+            compact: Deduplicate entity evidence in the response.
+            limit: Maximum returned pairs, 1-20.
         """
         logger.info("Tool called: get_hfl_corpus_entity_consolidation")
-        result = ApiServiceHflCorpusEntities(CONFIG).get_entity_consolidation(run_id=run_id)
+        result = ApiServiceHflCorpusEntities(CONFIG).get_entity_consolidation(run_id=run_id, compact=compact, limit=limit)
         output = _dict_result(result)
         logger.info("get_hfl_corpus_entity_consolidation done")
         return output
@@ -1849,15 +1854,16 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         return output
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
-    def update_hfl_corpus_entity_consolidation_decisions(run_id: str, decisions: dict) -> dict:
+    def update_hfl_corpus_entity_consolidation_decisions(run_id: str, decisions: dict, claim_token: str | None = None) -> dict:
         """Submit up to 20 pair decisions; results report each success or error. Destructive: writes remote state.
 
         Args:
             run_id: Consolidation run ID.
             decisions: Pair IDs mapped to decision objects, as in update_hfl_corpus_entity_consolidation_decision.
+            claim_token: Active review lease token, if claimed.
         """
         logger.info("Tool called: update_hfl_corpus_entity_consolidation_decisions")
-        result = ApiServiceHflCorpusEntities(CONFIG).update_entity_consolidation_decisions(run_id=run_id, decisions=decisions)
+        result = ApiServiceHflCorpusEntities(CONFIG).update_entity_consolidation_decisions(run_id=run_id, decisions=decisions, claim_token=claim_token)
         output = _dict_result(result)
         logger.info("update_hfl_corpus_entity_consolidation_decisions done")
         return output
@@ -1873,4 +1879,88 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         result = ApiServiceHflCorpusEntities(CONFIG).update_entity_consolidation_finish(run_id=run_id)
         output = _dict_result(result)
         logger.info("update_hfl_corpus_entity_consolidation_finish done")
+        return output
+
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_entity_consolidation_claim(run_id: str, worker_id: str, max_pairs: int = 8, max_bytes: int = 100000, lease_seconds: int = 900) -> dict:
+        """Claim a disjoint anchor packet. Destructive: writes remote state.
+
+        Args:
+            run_id: Consolidation run ID.
+            worker_id: Stable unique reviewer ID; reuse to recover an active packet.
+            max_pairs: Maximum comparisons, 1-20.
+            max_bytes: UTF-8 entities/pairs evidence budget, 4096-1000000 bytes.
+            lease_seconds: Lease duration, 60-3600 seconds.
+        """
+        logger.info("Tool called: create_hfl_corpus_entity_consolidation_claim")
+        result = ApiServiceHflCorpusEntities(CONFIG).create_entity_consolidation_claim(run_id=run_id, worker_id=worker_id, max_pairs=max_pairs, max_bytes=max_bytes, lease_seconds=lease_seconds)
+        output = _dict_result(result)
+        logger.info("create_hfl_corpus_entity_consolidation_claim done")
+        return output
+
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_consolidation_claim(run_id: str, token: str, action: str, lease_seconds: int = 900) -> dict:
+        """Renew or release a review lease. Destructive: writes remote state.
+
+        Args:
+            run_id: Consolidation run ID.
+            token: Token returned by the claim operation.
+            action: renew or release.
+            lease_seconds: Lease duration, 60-3600 seconds.
+        """
+        logger.info("Tool called: update_hfl_corpus_entity_consolidation_claim")
+        result = ApiServiceHflCorpusEntities(CONFIG).update_entity_consolidation_claim(run_id=run_id, token=token, action=action, lease_seconds=lease_seconds)
+        output = _dict_result(result)
+        logger.info("update_hfl_corpus_entity_consolidation_claim done")
+        return output
+
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_consolidation_checkpoint(run_id: str) -> dict:
+        """Checkpoint partial progress and discover changed inputs. Destructive: writes remote state.
+
+        Args:
+            run_id: Consolidation run ID.
+        """
+        logger.info("Tool called: update_hfl_corpus_entity_consolidation_checkpoint")
+        result = ApiServiceHflCorpusEntities(CONFIG).update_entity_consolidation_checkpoint(run_id=run_id)
+        output = _dict_result(result)
+        logger.info("update_hfl_corpus_entity_consolidation_checkpoint done")
+        return output
+
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_consolidation_evidence(run_id: str, entity_id: str, entry_ids: list[str], claim_token: str | None = None) -> dict:
+        """Cache bounded original-entry context across pending pairs. Destructive: writes remote state.
+
+        Args:
+            run_id: Consolidation run ID.
+            entity_id: Entity ID in the current run.
+            entry_ids: One to four original entry IDs supporting that entity.
+            claim_token: Active claim token for new writes; receipts remain recoverable after expiry.
+        """
+        logger.info("Tool called: update_hfl_corpus_entity_consolidation_evidence")
+        result = ApiServiceHflCorpusEntities(CONFIG).update_entity_consolidation_evidence(run_id=run_id, entity_id=entity_id, entry_ids=entry_ids, claim_token=claim_token)
+        output = _dict_result(result)
+        logger.info("update_hfl_corpus_entity_consolidation_evidence done")
+        return output
+
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_entity_consolidation_group(run_id: str, anchor_id: str, decisions: dict, contradictions: list[str], claim_token: str | None = None) -> dict:
+        """Commit independently corroborated anchor pairs atomically. Destructive: writes remote state.
+
+        Args:
+            run_id: Consolidation run ID.
+            anchor_id: Shared anchor entity ID.
+            decisions: Two to twenty pair IDs mapped to independently corroborated merge decisions.
+            contradictions: Explicit cross-member contradiction check; must be empty to merge.
+            claim_token: Active claim token for new writes; receipts remain recoverable after expiry.
+        """
+        logger.info("Tool called: create_hfl_corpus_entity_consolidation_group")
+        result = ApiServiceHflCorpusEntities(CONFIG).create_entity_consolidation_group(run_id=run_id, anchor_id=anchor_id, decisions=decisions, contradictions=contradictions, claim_token=claim_token)
+        output = _dict_result(result)
+        logger.info("create_hfl_corpus_entity_consolidation_group done")
         return output
