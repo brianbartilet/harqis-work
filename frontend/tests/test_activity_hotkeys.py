@@ -1,0 +1,109 @@
+"""Keyboard workflows through isolated APIs and real browser events."""
+from test_action_editing import editor_page
+from test_hfl_ideas import ideas
+from test_hfl_timeline import payload
+from test_corpus_workspaces import workspace_corpus
+import re
+import pytest
+from playwright.sync_api import expect
+
+
+@pytest.mark.parametrize('width', [390, 1440])
+def test_kanban_shortcut_context_and_confirmation(editor_page, ideas, width):
+    page, client = editor_page
+    page.set_viewport_size({'width':width,'height':1000})
+    first = client.post('/hfl-corpus/timeline/items', json=payload(title='Keyboard action')).json()['item']
+    page.goto('https://editing.test/hfl-corpus/actions?all=1')
+    card = page.locator(f'[data-board-lanes] [data-followup-id="{first["id"]}"]')
+    expect(card).to_be_visible()
+    page.evaluate("document.body.dispatchEvent(new KeyboardEvent('keydown',{key:'k',repeat:true,bubbles:true}))")
+    expect(page.locator('#activity-hotkey-help')).not_to_be_visible()
+    page.keyboard.press('k')
+    expect(page.locator('#activity-hotkey-help')).to_be_visible()
+    assert page.locator('#activity-hotkey-help').bounding_box()['width'] <= width
+    page.keyboard.press('a')
+    expect(page.locator('#followup-editor')).not_to_be_visible()
+    page.keyboard.press('Escape')
+    card.focus()
+    page.keyboard.press('o')
+    confirm = page.get_by_role('dialog', name='Done this action?')
+    expect(confirm).to_be_visible()
+    confirm.get_by_role('button', name='Cancel', exact=True).click()
+    expect(card.locator('.action-status')).to_have_text('In Review')
+    page.keyboard.press('o')
+    confirm.get_by_role('button', name='Done this action', exact=True).click()
+    expect(card.locator('.action-status')).to_have_text('Done')
+    page.mouse.move(0, 0)
+    page.locator('[data-board-refresh]').focus()
+    page.keyboard.press('i')
+    expect(page.locator('.ideas-drawer')).to_be_visible()
+    page.keyboard.press('m')
+    expect(page.locator('[data-bulk-kind=idea] [data-bulk-toggle]')).to_have_attribute('aria-pressed','true')
+    page.keyboard.press('Escape')
+    page.keyboard.press('a')
+    expect(page.locator('#followup-editor')).to_be_visible()
+    page.keyboard.press('k')
+    expect(page.locator('#activity-hotkey-help')).not_to_be_visible()
+
+
+def test_graph_shortcuts_and_board_space(editor_page):
+    page, client = editor_page
+    page.goto('https://editing.test/hfl-corpus/graph')
+    page.wait_for_selector('#kg-workspace:not([inert])')
+    page.keyboard.press('f')
+    expect(page.locator('#kg-filter-drawer')).to_be_visible()
+    page.keyboard.press('Escape')
+    page.keyboard.press('Backslash')
+    expect(page.locator('.kg-shell')).to_have_class(re.compile('kg-fullscreen'))
+    page.keyboard.press('Backslash')
+    expect(page.locator('.kg-shell')).not_to_have_class(re.compile('kg-fullscreen'))
+    page.evaluate("async () => { const maps=HflIdeas.maps; await HflIdeas.api('/maps','POST',{request_id:crypto.randomUUID(),name:'Keyboard board',members:[],drafts:[{id:'draft:keyboard',title:'Keyboard thought',body:''}]}); await maps.reload(); await maps.selectBoard(maps.loaded.find(item=>item.name==='Keyboard board')); }")
+    page.keyboard.press('Space')
+    expect(page.locator('.idea-dialog[open]')).to_contain_text('Attach')
+    page.keyboard.press('Escape')
+    page.locator('#kg-list').get_by_role('button',name=re.compile('Keyboard thought')).click()
+    page.locator('.activity-hotkey-trigger').focus()
+    page.keyboard.press('ArrowUp')
+    page.wait_for_function("HflIdeas.maps.current.node_sizes['draft:keyboard']===4")
+    page.keyboard.press('ArrowDown')
+    page.wait_for_function("HflIdeas.maps.current.node_sizes['draft:keyboard']===3")
+    page.keyboard.press('e')
+    expect(page.locator('.idea-dialog[open]')).to_contain_text('Edit thought')
+    page.keyboard.press('Escape')
+    page.locator('.activity-hotkey-trigger').focus()
+    page.keyboard.press('x')
+    expect(page.locator('#kg-orb-actions-menu')).not_to_be_visible()
+
+
+def test_corpus_shortcuts_and_space_order(editor_page, workspace_corpus):
+    from modules.hfl_shares.security import make_csrf_token
+    page, client = editor_page
+    for name in ('First Space','Second Space'):
+        response=client.post('/hfl-corpus/workspace-views',json={'name':name,'state':{}},headers={'X-CSRF-Token':make_csrf_token('frontend-test-user')})
+        assert response.status_code == 200
+    page.goto('https://editing.test/hfl-corpus')
+    page.keyboard.press('k')
+    expect(page.locator('#activity-hotkey-help')).to_be_visible()
+    page.keyboard.press('Escape')
+    tags=page.locator('[data-tag-cloud]')
+    was_open=tags.evaluate('(el)=>el.open')
+    page.keyboard.press('t')
+    assert tags.evaluate('(el)=>el.open') != was_open
+    page.keyboard.press('Space')
+    expect(page.locator('#activity-cell-tooltip')).to_be_visible()
+    page.keyboard.press('c')
+    expect(page.locator('[data-memory-dialog]')).to_be_visible()
+    page.locator('[data-memory-dialog-close]').first.click()
+    expect(page.locator('[data-memory-dialog]')).not_to_be_visible()
+    # A typing target must not switch Space or open help.
+    search=page.locator('#corpus-search-form input[name=q]')
+    search.focus()
+    page.keyboard.press('k')
+    expect(page.locator('#activity-hotkey-help')).not_to_be_visible()
+    page.locator('.activity-hotkey-trigger').focus()
+    expected=page.locator('[data-view-choices] label').nth(0).text_content().strip()
+    page.keyboard.press('Alt+1')
+    expect(page.locator('[data-active-view-name]')).to_have_text(expected)
+    expect(page.locator('[data-dynamic-badge]')).to_have_text('Dynamic OFF')
+    page.keyboard.press('Alt+Backquote')
+    expect(page.locator('[data-active-view-name]')).to_have_text('All activity')

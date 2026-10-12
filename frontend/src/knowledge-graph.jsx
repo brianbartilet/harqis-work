@@ -206,7 +206,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     $('view-status').textContent=PRESETS[preset]+' preset';
     $('preset-notice').hidden=!notice;$('preset-notice').textContent=notice;
   }
+  let lastChosenPreset=preset;
   function choosePreset(next){
+    lastChosenPreset=next;
     labelRevision++;
     draggedNode=null;dragNodes.clear();
     layoutSeed=Math.random();
@@ -873,6 +875,29 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   window.addEventListener('pagehide',()=>{backgroundController?.abort();});
   let searchTimer;$('search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>exampleMode?render():load(),300);};
   $('filter').onclick=()=>{$('filter-drawer').close();if(!exampleMode)load();};
+  window.HflHotkeys?.register(key=>{
+    if(readOnly)return false;
+    const hotkeys=window.HflHotkeys, maps=window.HflIdeas?.maps;
+    const named=(root,pattern)=>[...(root?.querySelectorAll('button')||[])].find(button=>pattern.test(button.textContent.trim()));
+    const orbKeys={t:/^Add thought$/,c:/^Connect on this board$/,n:/^Clone /,d:/^Dismiss /,r:/^Promote /,e:/^Edit /,u:/^Use as starting point$/,o:/^Board connections/};
+    if(selected&&(orbKeys[key]||['x','f','arrowup','arrowdown'].includes(key))){
+      if(['n','r','e'].includes(key)&&maps?.selection?.size>1)return true;
+      if(key==='x'){maps?.selectNode(null);select(null);return true;}
+      if(key==='f'){focusId=focusId?null:selected;render();return true;}
+      if(key==='arrowup'||key==='arrowdown'){
+        if(maps?.current){const node=nodes.find(n=>n.id===selected),board=maps.current,level=Math.max(1,Math.min(20,(board.node_sizes?.[selected]||3)+(key==='arrowup'?1:-1)));if(node){node.radius=8+level*3;maps.persist({node_sizes:{...board.node_sizes,[selected]:level}});draw();}}
+        return true;
+      }
+      const pattern=orbKeys[key],button=nodeActions.find(action=>pattern.test(action.label))?.button||named($('detail'),pattern);
+      if(key==='d')hotkeys.confirm(button,'Dismiss this object');else hotkeys.click(button);
+      return true;
+    }
+    const selectors={a:'.board-explore',e:'#kg-entities',f:'#kg-open-filters',b:'.board-guide-trigger',r:'#kg-reload',p:'#kg-fit','[':'#kg-in',']':'#kg-out'};
+    if(selectors[key]){hotkeys.click(document.querySelector(selectors[key]));return true;}
+    if(key==='\\'){setFullscreen(!fullscreen);return true;}
+    if(key===' '){if(maps?.current)hotkeys.click(named(document.querySelector('.board-controls'),/^Attach existing$/));else{choosePreset(lastChosenPreset);hotkeys.click($('reload'));}return true;}
+    return false;
+  });
   $('shared').onchange=()=>exampleMode?render():load();$('in').onclick=()=>zoom(1.3);$('out').onclick=()=>zoom(1/1.3);$('fit').onclick=()=>fitTargets(true,true);$('reload').onclick=async()=>{try{await window.HflIdeas?.maps.reload();await load(true);}catch(error){showInfo('status',error.message,true);}};
   $('reset').onclick=()=>{
     pendingState=null;try {localStorage.removeItem(stateKey);} catch {}

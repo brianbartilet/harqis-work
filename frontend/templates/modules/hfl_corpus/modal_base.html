@@ -12,4 +12,7 @@
 {% block content %}{% endblock %}
 {% if request.query_params.get('embed') != '1' and request.url.path.endswith('/entities') %}</dialog><script>document.getElementById('activity-standalone').showModal();</script>{% endif %}
 <script src="{{ static_asset('js/activity-modals.js') }}"></script>
+<link rel="stylesheet" href="{{ static_asset('css/context-help.css') }}">
+<link rel="stylesheet" href="{{ static_asset('css/activity-hotkeys.css') }}">
+<script src="{{ static_asset('js/activity-hotkeys.js') }}"></script>
 </body></html>

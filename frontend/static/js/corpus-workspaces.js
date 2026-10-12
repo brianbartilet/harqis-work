@@ -385,6 +385,14 @@
     finally { if (!disposed) { busy = false; options(); } }
   }
   picker.addEventListener('toggle', () => { if (!picker.open) applyPicker(); });
+  window.HflSelectSpace = number => {
+    if (disposed || busy || transitioning || (number && !views[number-1])) return;
+    pendingIds = number ? [views[number-1].id] : [];
+    pickerChanged = true;
+    pickerCaption();
+    picker.open = false;
+    void applyPicker();
+  };
   menu.addEventListener('toggle', () => { if (!menu.open) picker.open = false; });
   $('[data-view-all]').onclick = () => {
     if (busy) return;
