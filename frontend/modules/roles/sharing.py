@@ -56,7 +56,8 @@ def history_text(revision):
     return '\n\n'.join(lines)
 
 
-def choices():
+def choices(*, warnings=None):
+    from modules.hfl_shares.personalization import UnavailableEntityError
     result = []
     runs = store.runs()
     for role in store.listing():
@@ -91,7 +92,15 @@ def choices():
                         'Only separately selected approved observations provide analysis content.')
                 parts.append(('analysis-' + run['id'], 'Analysis · ' + run.get('created_at', ''),
                               text, 'Analysis history', None))
-        for entry in linked_evidence(role):
+        try:
+            evidence = linked_evidence(role)
+        except UnavailableEntityError:
+            # Keep the owner's other excerpts available, without dropping the
+            # entity filter and accidentally offering unrelated corpus content.
+            evidence = ()
+            if warnings is not None:
+                warnings.append(f"{role['name']}: linked activity is unavailable because an entity was merged or removed. Update its linked entities in Manage facets.")
+        for entry in evidence:
             digest = hashlib.sha256((entry.id + entry.text).encode()).hexdigest()[:24]
             parts.append(('activity-' + digest, entry.moment or entry.header or 'Linked activity',
                           f"{entry.header}\nSource: {entry.source}\n\n{entry.text}", 'Linked entity activity', None))

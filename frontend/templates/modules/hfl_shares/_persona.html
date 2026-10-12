@@ -2,6 +2,9 @@
 {% set selected = personal.get('items', []) %}
 {% set selected_ids = selected|map(attribute='id')|list %}
 {% set available_ids = persona_choices|map(attribute='id')|list %}
+{% for warning in persona_warnings|default([]) %}
+<p class="message" role="status">{{ warning }} <a href="/roles">Manage facets</a></p>
+{% endfor %}
 <details class="expand-panel mb-4">
   <summary>
     <span>Personal context · Facets and soul</span>

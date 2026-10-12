@@ -569,6 +569,8 @@ def _owner_context_sync(
     )
     from modules.hfl_shares.date_filters import date_presets, resolve_date_preset
     from modules.roles.sharing import choices as persona_choices
+    persona_warnings = []
+    personal_choices = persona_choices(warnings=persona_warnings)
     if configuration:
         configuration = resolve_date_preset(configuration)
     return page_context(
@@ -576,7 +578,8 @@ def _owner_context_sync(
         user,
         "sharing",
         date_presets=date_presets(),
-        persona_choices=persona_choices(),
+        persona_choices=personal_choices,
+        persona_warnings=persona_warnings,
         configurations=tuple(
             {
                 "configuration": item,

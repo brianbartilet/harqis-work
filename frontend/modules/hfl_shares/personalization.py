@@ -6,6 +6,10 @@ import httpx
 from config import get_settings
 
 
+class UnavailableEntityError(ValueError):
+    """A saved entity selection no longer exists in the current catalog."""
+
+
 def entity_catalog():
     settings = get_settings()
     try:
@@ -43,7 +47,7 @@ def bind(configuration):
         return configuration
     catalog = {row['id']:row for row in entity_catalog()}
     if any(identity not in catalog for identity in identities):
-        raise ValueError('An entity is unavailable or was merged. Search and select its current identity.')
+        raise UnavailableEntityError('An entity is unavailable or was merged. Search and select its current identity.')
     entities = tuple({key:catalog[identity][key] for key in ('id','label','kind')} for identity in identities)
     first = entities[0]
     # Old single-entity records retain canonical recipient binding until edited.

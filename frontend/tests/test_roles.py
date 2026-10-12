@@ -23,11 +23,50 @@ def isolated_roles(monkeypatch, tmp_path):
 
 
 def role(**changes):
-    return store.save(None, 0, dict(name='Programmer', color='#38bdf8', soul='## Public\nBuilt test tools.\n\n## Private\nPersonal phone 123.', workspace_ids=[], entity_ids=[], archived=False, **changes))
+    return store.save(None, 0, dict(name='Programmer', color='#38bdf8', soul='## Public\nBuilt test tools.\n\n## Private\nPersonal phone 123.', workspace_ids=[], entity_ids=[], archived=False) | changes)
 
 
 def config(persona):
     return ShareConfiguration(id='recipe', name='Interview', recipient='Hiring manager', sources=('__all__',), persona=persona)
+
+
+def test_sharing_page_survives_stale_facet_entity(authenticated_client, sharing_corpus, monkeypatch):
+    from modules.hfl_shares import personalization
+    monkeypatch.setattr(personalization, 'entity_catalog', lambda: [])
+    owner = role(entity_ids=['entity:merged'], soul='Still available owner context')
+    warnings = []
+    options = sharing.choices(warnings=warnings)
+    assert any(item['text'] == 'Still available owner context' for item in options)
+    assert not any(item['origin'] == 'Linked entity activity' for item in options)
+    assert len(warnings) == 1 and 'Programmer' in warnings[0]
+    assert store.get(owner['id'])['entity_ids'] == ['entity:merged']
+    response = authenticated_client.get('/sharing')
+    assert response.status_code == 200
+    assert 'an entity was merged or removed' in response.text
+    assert 'Still available owner context' in response.text
+    # Explicit recipient binding must still fail closed.
+    with pytest.raises(personalization.UnavailableEntityError):
+        build_snapshot(replace(config({}), entity_ids=('entity:merged',)), (sharing_corpus,))
+
+
+def test_stale_facet_does_not_hide_healthy_facet_evidence(monkeypatch):
+    from modules.hfl_shares.personalization import UnavailableEntityError
+    from modules.hfl_shares.models import SnapshotEntry
+    stale = role(entity_ids=['entity:merged'])
+    healthy = role(name='Healthy', entity_ids=['entity:current'])
+    entry = SnapshotEntry('linked', 'S1', '', '', '', '', '', 'notes', (), 'Current linked evidence')
+    def evidence(owner):
+        if owner['id'] == stale['id']:
+            raise UnavailableEntityError('Stale entity')
+        return (entry,)
+    monkeypatch.setattr(sharing, 'linked_evidence', evidence)
+    warnings = []
+    options = sharing.choices(warnings=warnings)
+    assert len(warnings) == 1
+    assert any(item['role_id'] == healthy['id'] and item['origin'] == 'Linked entity activity' for item in options)
+    monkeypatch.setattr(sharing, 'linked_evidence', lambda owner: (_ for _ in ()).throw(ValueError('Unrelated failure')))
+    with pytest.raises(ValueError, match='Unrelated failure'):
+        sharing.choices()
 
 
 def test_selected_sections_are_citable_and_frozen():
