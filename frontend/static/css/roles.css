@@ -22,3 +22,6 @@
 #role-upload-status:empty{display:none}
 
 #role-file-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}#role-file-list>.role-file{min-width:0;margin:0;overflow-wrap:anywhere}#role-file-list>.role-help{grid-column:1/-1}
+
+.role-file-status,.role-file-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px}.role-run-result>button{margin-top:12px}.role-revision{border-bottom:1px solid #334155;padding:4px 0 12px}.role-revision-content{padding:0 12px 12px;font-size:13px;line-height:1.6}.role-revision-content pre{white-space:pre-wrap;overflow-wrap:anywhere}.role-revision-content p+p{margin-top:12px}.role-revision-content ul{list-style:disc;padding-left:20px}
+@media(max-width:600px){#role-file-list{grid-template-columns:minmax(0,1fr)}}

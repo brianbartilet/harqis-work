@@ -383,6 +383,7 @@ def test_recipe_defaults_exclusions_and_graph_preferences(editor_page, context, 
     page.get_by_role('tab', name='Settings', exact=True).click()
     page.locator('summary').filter(has_text='Tags, dates, and topic').click()
     expect(page.locator('#topic-help')).to_be_visible()
+    page.get_by_role('tab', name='Agent', exact=True).click()
     expect(page.locator('#context-prompt-help')).to_be_visible()
     expect(page.locator('[data-field-help]')).to_have_count(0)
     panel = page.locator('[data-excluded-panel]')

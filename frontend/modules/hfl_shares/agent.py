@@ -51,6 +51,14 @@ def _context(
     ranked_entries = (
         entries if entries is not None else _retrieval_entries(snapshot, query)
     )
+    # Roles are explicitly approved background, not independent search hits.
+    # Keep all selected excerpts together even when retrieval returns only one
+    # part of a CV. Never expand from the owner's unshared role/file store.
+    persona_ids = {entry.id for entry in snapshot.persona_entries}
+    ranked_entries = snapshot.persona_entries + tuple(
+        entry for entry in ranked_entries if entry.id not in persona_ids
+    )
+    omitted = False
     # Relations come from the approved projection, including legacy snapshots.
     # Attach them to their source evidence so the agent can cite the object.
     graph = snapshot.activity.get('connections', {})
@@ -75,10 +83,18 @@ def _context(
             "</entry>"
         )
         if used + len(chunk) > limit:
-            break
+            omitted = True
+            continue
         chunks.append(chunk)
         used += len(chunk)
-    return "\n\n".join(chunks)
+    context = "\n\n".join(chunks)
+    if omitted:
+        context += (
+            '\n\n<context_notice>Some selected evidence was omitted because of '
+            'the context size limit. Do not claim omitted information is absent '
+            'from the shared snapshot or original document.</context_notice>'
+        )
+    return context
 
 
 def _validated_answer(text: str, snapshot: ScopeSnapshot) -> str:

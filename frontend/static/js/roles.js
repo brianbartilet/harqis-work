@@ -49,7 +49,7 @@
     controls?.destroy();
     controls=window.RoleControls($('#role-form'), current, data, api, status);
     $('#role-archive').textContent=current.archived?'Restore facet':'Archive facet'; $('#role-archive').disabled=!current.id;
-    $('#role-file-list').innerHTML=current.files.map(f=>`<article class="role-file"><strong><a href="/roles/data/${encodeURIComponent(current.id)}/attachments/${encodeURIComponent(f.id)}">${esc(f.name)}</a></strong><p>${esc(f.status)}${f.truncated?' · extraction truncated':''}</p>${f.error?`<p>${esc(f.error)}</p>`:''}<button type="button" data-preview-attachment="${esc(f.id)}" aria-label="Preview ${esc(f.name)}">Preview</button><button type="button" data-detach="${esc(f.id)}">Detach</button></article>`).join('');
+    $('#role-file-list').innerHTML=current.files.map(f=>`<article class="role-file"><strong><a href="/roles/data/${encodeURIComponent(current.id)}/attachments/${encodeURIComponent(f.id)}">${esc(f.name)}</a></strong><div class="role-file-status"><span class="role-run-badge ${f.status==='ready'?'complete':f.status==='failed'?'failed':'queued'}">${esc(f.status==='ready'?'Ready':f.status==='failed'?'Failed':f.status||'Unknown')}</span>${f.truncated?'<span class="role-run-badge queued">Extraction truncated</span>':''}</div>${f.error?`<p>${esc(f.error)}</p>`:''}<div class="role-file-actions"><button type="button" data-preview-attachment="${esc(f.id)}" aria-label="Preview ${esc(f.name)}">Preview</button><button type="button" data-detach="${esc(f.id)}">Detach</button></div></article>`).join('');
     $('#role-journal').innerHTML=current.journal.map(n=>`<article class="role-observation"><small>${esc(n.created_at)} · ${esc(n.status)} · Agent inference</small><p>${esc(n.text)}</p><details><summary>Evidence</summary>${(n.evidence||[]).map(e=>`<p>${e.path?`<a href="/hfl-corpus/document/${esc(e.path.split('/').map(encodeURIComponent).join('/'))}#${encodeURIComponent(e.anchor||'')}" target="_blank" rel="noopener">${esc(e.title||e.id)}</a>`:esc(e.title||e.id)}</p>`).join('')}</details>${['approved','rejected','pending'].map(s=>`<button type="button" data-note="${esc(n.id)}" data-review="${s}">${s==='approved'?'Approve':s==='rejected'?'Reject':'Reset review'}</button>`).join('')}</article>`).join('')||'<p class="role-help">No observations yet. Link a Space, save, then run an analysis.</p>';
     root.querySelectorAll('[data-panel]').forEach(p=>p.hidden=p.dataset.panel!==pane);
     $('#role-files').addEventListener('change', updateUpload);
@@ -57,6 +57,26 @@
     $('#role-clear-files').onclick=()=>{$('#role-files').value='';updateUpload();};
     updateUpload();
     if(!current.files.length)$('#role-file-list').innerHTML='<p class="role-help">No attachments yet. Choose files above to add supporting context.</p>';
+  }
+  async function loadHistory() {
+    const identity=current.id, target=$('#role-history');
+    if(!identity){target.textContent='Save this facet to start its revision history.';return;}
+    target.textContent='Loading revisions…';
+    try {
+      const result=await api('/data/'+encodeURIComponent(identity)+'/history');
+      const ids=[...new Set(result.history.flatMap(r=>r.entity_ids||[]))];
+      const catalog=ids.length?await api('/entities?'+new URLSearchParams({selected:ids.join(','),kind:''})):{selected:[]};
+      if(current.id!==identity || !target.isConnected)return;
+      const names=new Map(catalog.selected.map(e=>[e.id,e.label]));
+      const spaces=new Map(data.spaces.map(s=>[s.id,s.name]));
+      target.innerHTML=result.history.map(r=>`<details class="role-revision"><summary>Revision ${r.revision} · ${esc(r.updated_at)}</summary>
+        <div class="role-revision-content"><p><strong>${esc(r.name)}</strong> · ${r.archived?'Archived':'Active'}</p>
+        <h3>Soul</h3><pre>${esc(r.soul||'No Soul text saved in this revision.')}</pre>
+        <h3>Attachments</h3><ul>${(r.files||[]).map(f=>`<li>${esc(f.name)} · ${esc(f.status)}${f.truncated?' · extraction truncated':''}</li>`).join('')||'<li>No attachments.</li>'}</ul>
+        <h3>Linked Spaces</h3><p>${esc((r.workspace_ids||[]).map(id=>spaces.get(id)||'Unavailable Space').join(', ')||'None')}</p>
+        <h3>Linked entities</h3><p>${esc((r.entity_ids||[]).map(id=>names.get(id)||'Unavailable entity').join(', ')||'None')}</p>
+        <h3>Agent journal</h3>${(r.journal||[]).map(n=>`<p><strong>${esc(n.status)} · Agent inference</strong><br>${esc(n.text)}</p>`).join('')||'<p>No observations.</p>'}</div></details>`).join('')||'No revisions recorded.';
+    } catch(error) {if(current.id===identity && target.isConnected)target.textContent=error.message+' Reopen History to retry.';}
   }
   function updateUpload() {
     const files=[...$('#role-files').files];
@@ -116,7 +136,7 @@
     if(b.hasAttribute('data-preview-attachment'))await previewFile(null,current.files.find(f=>f.id===b.dataset.previewAttachment));
     if(b.dataset.role) open(data.roles.find(r=>r.id===b.dataset.role));
     if(b.id==='role-new') open();
-    if(b.dataset.pane){root.querySelectorAll('[data-panel]').forEach(p=>p.hidden=p.dataset.panel!==b.dataset.pane); if(b.dataset.pane==='history'&&current.id){const h=await api('/data/'+current.id+'/history');$('#role-history').innerHTML=h.history.map(r=>`<details><summary>Revision ${r.revision} · ${esc(r.updated_at)}</summary><pre style="white-space:pre-wrap">${esc(r.soul)}</pre></details>`).join('');}}
+    if(b.dataset.pane){root.querySelectorAll('[data-panel]').forEach(p=>p.hidden=p.dataset.panel!==b.dataset.pane); if(b.dataset.pane==='history')await loadHistory();}
     if(b.id==='role-archive'){current.archived=!current.archived;await save();}
     if(b.id==='role-upload'){
       const files=[...$('#role-files').files];if(!files.length){updateUpload();return;}

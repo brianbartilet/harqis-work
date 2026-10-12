@@ -14,6 +14,7 @@ from modules.hfl_shares.security import make_csrf_token
 from test_action_editing import editor_page
 from test_hfl_ideas import ideas
 from test_hfl_shares import sharing_corpus
+from test_workspace_sharing import context
 
 
 @pytest.fixture(autouse=True)
@@ -53,6 +54,145 @@ def test_stale_selection_and_role_edits_fail_closed():
         store.save(owner['id'], 1, {'soul': 'Lost update'})
     assert error.value.status_code == 409
     assert len(store.history(owner['id'])) == 2
+
+
+def test_revision_and_analysis_context_are_explicit_and_frozen():
+    owner = role()
+    owner = store.save(owner['id'], 1, {'soul': '', 'journal': [
+        {'id': 'private', 'status': 'pending', 'text': 'Unapproved inference'},
+        {'id': 'approved', 'status': 'approved', 'text': 'Built Python test tooling'},
+    ]})
+    store.record_run({'id': 'run', 'created_at': '2026-10-11', 'status': 'complete',
+        'roles': [{'id': owner['id'], 'selected': 62, 'observations': 12, 'coverage': '651 deferred'}]})
+    options = sharing.choices()
+    assert 'Unapproved inference' not in json.dumps(options)
+    selected = sharing.from_form(FormData([('persona_ids', item['id']) for item in options
+        if item['origin'] in {'Revision history', 'Analysis history', 'Agent observation, owner-approved'}]))
+    snapshot = build_snapshot(config(selected), ())
+    from modules.hfl_shares.agent import _context
+    text = _context(snapshot, entries=())
+    assert 'Built test tools' in text and 'Built Python test tooling' in text
+    assert '62 new or changed sources' in text and '651 deferred' in text
+    store.save(owner['id'], 2, {'soul': 'New unshared revision'})
+    assert build_snapshot(config(selected), ()).persona_entries == snapshot.persona_entries
+    assert not build_snapshot(config({}), ()).persona_entries
+
+
+def test_owner_agent_can_read_revisions_with_bearer_auth(authenticated_client):
+    owner = role()
+    store.save(owner['id'], 1, {'soul': 'Updated Soul'})
+    url = f"/api/hfl/roles/{owner['id']}/history"
+    assert authenticated_client.get(url).status_code == 401
+    result = authenticated_client.get(url, headers={'Authorization': 'Bearer frontend-test-hfl-api-token'})
+    assert result.status_code == 200
+    assert [item['revision'] for item in result.json()['history']] == [2, 1]
+    assert result.json()['history'][1]['soul'].startswith('## Public')
+
+
+def test_linked_entity_activity_becomes_selected_share_evidence(monkeypatch, context, sharing_corpus):
+    from modules.hfl_shares import activity, personalization, router
+    python = {'id': 'tool:python', 'label': 'Python', 'kind': 'tools', 'count': 1}
+    monkeypatch.setattr(personalization, 'entity_catalog', lambda: [python])
+    monkeypatch.setattr(router, '_sharing_documents', lambda *args: (sharing_corpus,))
+    monkeypatch.setattr(activity, 'mentions_for_documents', lambda docs: [
+        {'id': 'hfl-share-test', 'mentions': [python]}])
+    owner = role()
+    store.save(owner['id'], 1, {'entity_ids': ['tool:python']})
+    options = [item for item in sharing.choices() if item['origin'] == 'Linked entity activity']
+    assert len(options) == 1
+    assert 'Linked entities: Python' in options[0]['text']
+    assert 'private-host' not in options[0]['text']
+    assert 'Secret-backed action' not in str(options)
+    selected = sharing.from_form(FormData([('persona_ids', options[0]['id'])]))
+    snapshot = build_snapshot(config(selected), ())
+    from modules.hfl_shares.agent import _context
+    assert 'Booked Kyoto accommodation' in _context(snapshot, 'Python', entries=())
+    assert 'Python' in _context(snapshot, 'Python', entries=())
+    assert not snapshot.persona_entries[0].references
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_role_history_and_attachment_layout(editor_page, monkeypatch, width, tmp_path):
+    from playwright.sync_api import expect
+    from modules.hfl_shares import personalization
+    monkeypatch.setattr(personalization, 'entity_catalog', lambda: [])
+    owner = role()
+    owner = store.save(owner['id'], 1, {'soul': '', 'files': [
+        {'id': 'cv', 'name': 'Career history.pdf', 'status': 'ready', 'text': 'Career', 'digest': 'test'}]})
+    store.record_run({'id': 'run', 'created_at': '2026-10-11T01:00:00Z', 'status': 'complete',
+        'roles': [{'id': owner['id'], 'name': owner['name'], 'selected': 62, 'observations': 12,
+                   'coverage': '90-day entries; 651 sources deferred'}]})
+    page, client = editor_page
+    page.set_viewport_size({'width': width, 'height': 1000})
+    page.goto('https://editing.test/roles')
+    page.locator(f'#roles-list [data-role="{owner["id"]}"]').click()
+    page.locator('[data-pane=history]').click()
+    revision = page.locator('#role-history details').first
+    revision.locator('summary').click()
+    expect(revision).to_contain_text('No Soul text saved in this revision.')
+    expect(revision).to_contain_text('Career history.pdf')
+    expect(revision).to_contain_text('Linked entities')
+    page.screenshot(path=str(tmp_path / f'roles-revisions-{width}.png'), full_page=True)
+    page.locator('[data-pane=files]').click()
+    expect(page.locator('.role-file-status .role-run-badge')).to_have_text('Ready')
+    a, b = [button.bounding_box() for button in page.locator('.role-file-actions button').all()]
+    assert b['x'] >= a['x'] + a['width'] + 7
+    page.locator('aside summary').filter(has_text='Analysis history').click()
+    page.get_by_text('Run details', exact=True).click()
+    coverage = page.locator('.role-run-result .role-help').bounding_box()
+    journal = page.locator('.role-run-result button').bounding_box()
+    assert journal['y'] >= coverage['y'] + coverage['height'] + 11
+    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    page.screenshot(path=str(tmp_path / f'roles-spacing-{width}.png'), full_page=True)
+
+
+def test_chat_includes_all_approved_cv_excerpts_beyond_retrieval_limit(monkeypatch):
+    import asyncio
+    from modules.hfl_shares import agent
+
+    owner = role()
+    # More excerpts than the normal eight search results; early career is last.
+    text = ''.join(f'Employment period {i}.'.ljust(3000, ' ') for i in range(10))
+    store.save(owner['id'], 1, {'files': [
+        {'id': 'cv', 'name': 'cv.txt', 'digest': 'digest', 'status': 'ready',
+         'text': text + 'Private unselected details.'},
+    ]})
+    options = [item for item in sharing.choices() if item.get('file')]
+    selected = sharing.from_form(FormData([
+        ('persona_ids', item['id']) for item in options[:10]
+    ]))
+    snapshot = build_snapshot(config(selected), ())
+    captured = {}
+
+    async def answer(**kwargs):
+        captured.update(kwargs)
+        return 'Career includes [[Employment period 9|S10]].'
+
+    monkeypatch.setattr(agent, 'get_settings', lambda: SimpleNamespace(
+        hfl_share_provider='hermes', hfl_share_max_context_chars=120000))
+    monkeypatch.setattr(agent, 'retrieve_entries', lambda *args, **kwargs: snapshot.persona_entries[:1])
+    monkeypatch.setattr(agent, '_answer_with_hermes', answer)
+    result = asyncio.run(agent.answer_question(snapshot, 'Describe the full employment history'))
+    assert 'Employment period 9' in result
+    for i in range(10):
+        assert f'Employment period {i}.' in captured['user']
+    assert captured['user'].count('citation="[S1]"') == 1
+    assert 'Private unselected details' not in captured['user']
+    assert 'Personal phone' not in captured['user']
+
+
+def test_chat_context_reports_omissions_and_keeps_smaller_entries(monkeypatch):
+    from modules.hfl_shares import agent
+    from modules.hfl_shares.models import SnapshotEntry
+
+    large = SnapshotEntry('large', 'S1', '', '', '', '', '', 'persona', (), 'x' * 6000)
+    small = replace(large, id='small', citation='S2', text='Earlier employment history')
+    snapshot = ScopeSnapshot((), 'now', (), {}, {}, {}, persona_entries=(large, small))
+    monkeypatch.setattr(agent, 'get_settings', lambda: SimpleNamespace(hfl_share_max_context_chars=5000))
+    context = agent._context(snapshot, entries=(large,))
+    assert 'Earlier employment history' in context
+    assert 'context size limit' in context
+    assert 'citation="[S1]"' not in context
 
 
 def test_journal_and_archive_are_private_by_default():

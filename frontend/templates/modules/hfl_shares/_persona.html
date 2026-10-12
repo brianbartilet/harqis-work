@@ -9,6 +9,7 @@
   </summary>
   <div class="p-4">
     <p class="field-help">Choose exactly what this recipient may learn. These excerpts are frozen when published. Nothing is selected automatically. <a href="/roles" target="_blank" rel="noopener">Manage facets</a></p>
+    <p class="field-help">Select linked entity activity for questions about tools, companies, or people associated with a facet. Revision history and analysis summaries are separate context choices. Journal observations must be approved before they can be selected. Review your selections, then update or generate the share.</p>
     <div class="persona-card-grid">
     {% macro excerpt(item) %}
       <div class="persona-excerpt-row">
@@ -37,7 +38,7 @@
       {% endfor %}
       {% for origin, chunks in items|rejectattr('file')|groupby('origin') %}
       <section class="persona-file-group" data-persona-group>
-        <label class="persona-card-choice"><input type="checkbox" data-persona-select-all data-preview-filter><strong>{{ 'Soul' if origin == 'Owner-authored' else 'Approved observations' }}</strong></label>
+        <label class="persona-card-choice"><input type="checkbox" data-persona-select-all data-preview-filter><strong>{{ 'Soul' if origin == 'Owner-authored' else 'Approved observations' if origin == 'Agent observation, owner-approved' else origin }}</strong></label>
         <p class="persona-card-meta" data-persona-count></p>
         <details class="persona-excerpt"><summary>Choose sections ({{ chunks|length }})</summary>{% for item in chunks %}{{ excerpt(item) }}{% endfor %}</details>
       </section>

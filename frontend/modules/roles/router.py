@@ -100,6 +100,11 @@ def history(request: Request, identity: str):
     return {'history': store.history(identity)}
 
 
+@api.get('/{identity}/history')
+def api_history(identity: str):
+    return {'history': store.history(identity)}
+
+
 @router.get('/entities')
 def entities(request: Request, q: str = "", kind: str = "people", selected: str = ""):
     authorize(request)

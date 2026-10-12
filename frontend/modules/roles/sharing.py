@@ -11,8 +11,54 @@ def sections(text):
     return [part.strip() for part in re.split(r'(?m)(?=^#{1,6} )', text) if part.strip()]
 
 
+def linked_evidence(role):
+    """Use the existing entity projection, including its secret filtering."""
+    if not role.get('entity_ids'):
+        return ()
+    from modules.hfl_shares.router import _sharing_documents
+    from modules.hfl_shares.models import ShareConfiguration, ALL_SOURCES
+    from modules.hfl_shares.scope import build_snapshot
+    from modules.hfl_corpus.secrets import normalize_secret_tags
+    from modules.profile.store import get_profile_store
+    configuration = ShareConfiguration(
+        id='facet-entities', name=role['name'], sources=(ALL_SOURCES,),
+        entity_ids=tuple(role['entity_ids']), references_enabled=False,
+        activity={'sections': ['entries', 'actions', 'ideas', 'graph'], 'include_completed': True},
+    )
+    snapshot = build_snapshot(configuration, _sharing_documents((ALL_SOURCES,)),
+        secret_tags=normalize_secret_tags(get_profile_store().get().secret_tags))
+    graph = snapshot.activity.get('connections', {})
+    labels = {node['id']: node['label'] for node in graph.get('nodes', [])
+              if node['id'] in role['entity_ids']}
+    related = {}
+    for edge in graph.get('edges', []):
+        for origin, target in ((edge['source'], edge['target']), (edge['target'], edge['source'])):
+            if target in labels:
+                related.setdefault(origin, set()).add(labels[target])
+    return tuple(replace(entry, text=entry.text + (
+        '\n\nLinked entities: ' + ', '.join(sorted(names)) if
+        (names := related.get(entry.id, related.get('entry:' + entry.id, set()))) else ''
+    )) for entry in snapshot.all_entries)
+
+
+def history_text(revision):
+    """A reviewable historical record; never include private journal drafts."""
+    lines = [f"Facet revision {revision['revision']} · {revision.get('updated_at', '')}",
+             f"Name: {revision['name']}",
+             'Historical record, not necessarily the current state.',
+             f"Linked Spaces: {len(revision.get('workspace_ids', []))}",
+             f"Linked entities: {len(revision.get('entity_ids', []))}",
+             'Soul:\n' + (revision.get('soul') or 'No Soul text saved.')]
+    lines.extend('Attachment: ' + item['name'] + ' · ' + item.get('status', 'unknown')
+                 for item in revision.get('files', []))
+    lines.extend('Approved agent observation (inference): ' + item['text']
+                 for item in revision.get('journal', []) if item.get('status') == 'approved')
+    return '\n\n'.join(lines)
+
+
 def choices():
     result = []
+    runs = store.runs()
     for role in store.listing():
         if role.get('archived'):
             continue
@@ -28,6 +74,27 @@ def choices():
             if item.get('status') == 'approved':
                 # Private evidence links are not carried into the public projection.
                 parts.append(('journal-' + item['id'], 'Approved observation', item['text'], 'Agent observation, owner-approved', None))
+        for revision in store.history(role['id']):
+            if revision['revision'] == role['revision']:
+                continue
+            parts.append((f"revision-{revision['revision']}", f"Revision {revision['revision']}",
+                          history_text(revision), 'Revision history', None))
+        for run in runs:
+            for summary in run.get('roles', []):
+                if summary['id'] != role['id']:
+                    continue
+                text = (f"Analysis on {run.get('created_at', '')}: {run.get('status', 'unknown')}\n"
+                        f"Facet: {role['name']}\n{summary.get('selected', 0)} new or changed sources checked; "
+                        f"{summary.get('observations', 0)} new observations.\n"
+                        f"Coverage: {summary.get('coverage', 'Not recorded')}\n"
+                        'Analysis metadata is not proof of skills or achievements. '
+                        'Only separately selected approved observations provide analysis content.')
+                parts.append(('analysis-' + run['id'], 'Analysis · ' + run.get('created_at', ''),
+                              text, 'Analysis history', None))
+        for entry in linked_evidence(role):
+            digest = hashlib.sha256((entry.id + entry.text).encode()).hexdigest()[:24]
+            parts.append(('activity-' + digest, entry.moment or entry.header or 'Linked activity',
+                          f"{entry.header}\nSource: {entry.source}\n\n{entry.text}", 'Linked entity activity', None))
         for key, title, text, origin, file in parts:
             token = f"{role['id']}:{role['revision']}:{key}"
             result.append({'id': token, 'role_id': role['id'], 'revision': role['revision'], 'role': role['name'],

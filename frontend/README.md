@@ -1062,11 +1062,12 @@ by `npm run build:knowledge-graph`, including `share-graphs.jsx`.
 
 **Organize → Facets** opens `/roles`: name/color, Markdown Soul,
 attachments with extraction preview, Space/entity links, revision history, and a
-private agent journal. Share recipes explicitly select personal excerpts and
+private agent journal. Share recipes explicitly select personal excerpts, linked
+entity activity, revision history, analysis summaries, and
 optional original downloads; existing shares retain their publication-time persona
 revision even when activity refreshes. Opportunity fields tailor presentation
-without adding unsupported qualifications. **About the sharer** exposes the same
-approved evidence to guests and chat citations.
+without adding unsupported qualifications. Approved facet evidence informs chat
+without a recipient-facing excerpt catalogue.
 
 See [Facets and Spaces](../docs/info/ROLES-AND-SPACES.md) for selection, refresh,
 archive/revocation, file limits, API ownership, and the weekly `persona-audit` job.
@@ -1078,6 +1079,7 @@ archive/revocation, file limits, API ownership, and the weekly `persona-audit` j
 | PUT | `/roles/data/{id}` | Version-checked edits, archive, and restore. |
 | POST | `/roles/analyze` | Queue a manual persona audit. |
 | GET/POST/PUT | `/api/hfl/roles[/{id}]` | Bearer-protected role operations. |
+| GET | `/api/hfl/roles/{id}/history` | Bearer-protected full revision history for owner agents. |
 | POST | `/api/hfl/roles/audit/run` | Idempotent worker-to-owner analysis command. |
 
 The Spaces management route is `/spaces`; it reuses the existing authenticated

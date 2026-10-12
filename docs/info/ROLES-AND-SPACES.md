@@ -10,14 +10,23 @@ routes, query parameters, and database names remain compatible.
 
 Open a share recipe and expand **Personal context · Facets and Soul**. Space links
 suggest relevant facets; they do not grant access. Select individual Soul heading
-sections, attachment excerpts, or owner-approved journal observations. Review the
+sections, attachment excerpts, owner-approved journal observations, revision
+history, linked entity activity, or analysis summaries. Entity activity uses the
+existing non-secret sharing projection for entries, actions, and ideas linked to
+the facet's entities; selecting an entity in the facet alone does not publish it.
+Analysis summaries describe coverage and deferred sources, not proof of skills.
+Pending or rejected observations remain private. Review the
 exact text in the Agent tab before generating a share. Attachment excerpts are split
 into bounded chunks; selecting an excerpt does not enable its original download.
 The separate original-download checkbox grants access to the **entire file**.
 
 Selected personal context is available to the share agent, without a recipient-facing
 About page or excerpt catalogue. The agent uses the published personal context in its answers without exposing
-excerpt links or popups. Activity citations still open their shared sources. Private journal evidence paths, unselected sections, and role metadata
+excerpt links or popups. All approved facet excerpts are supplied ahead of ranked
+activity, independently of the search result count, within the chat context size
+limit. If evidence exceeds that limit, the prompt records the omission rather
+than treating it as absent from the original document.
+Activity citations still open their shared sources. Private journal evidence paths, unselected sections, and unselected role metadata
 are excluded. Company, role, job description, audience, tone, and optional
 icebreaker guidance influence presentation; they are not evidence of qualifications.
 Treat all guidance as potentially visible through answers.
@@ -52,7 +61,10 @@ Manual **Analyze now** dispatches the same task with a unique run ID.
 `HFL_PERSONA_AUDIT_MINUTE` optionally override the weekly timing (Singapore time).
 
 The owner frontend stores roles with its profile database and exposes bearer-
-authenticated `/api/hfl/roles` and `/api/hfl/roles/audit/run`. Set
+authenticated `/api/hfl/roles`, `/api/hfl/roles/{id}/history`, and
+`/api/hfl/roles/audit/run`. The owner History tab displays Soul, attachments,
+linked Spaces/entities, and journal entries for each revision, including revisions
+with no Soul text. Set
 `HFL_PERSONA_API_URL` on the worker to this **same frontend**, especially if its
 profile/Spaces live on a different host from the corpus. It defaults to
 `HFL_CORPUS_API_URL`. `HFL_CORPUS_API_TOKEN` authenticates the call. The manual
