@@ -38,12 +38,12 @@ def deliver(run_id):
             delivery.pop('error', None)
             save(run)
             return delivery
-        counts = {}
+        groups = {}
         for pair in run['pairs'].values():
-            counts.setdefault(pair['kind'], {'merged': 0, 'deferred': 0})
-            counts[pair['kind']]['merged' if pair['state']=='merged' else 'deferred'] += 1
+            groups.setdefault(pair['kind'], []).append(pair)
+        from workflows.hfl.entity_consolidation import merged_group_count
         text = 'Daily entity consolidation — ' + run_id + '\n'
-        text += '\n'.join(f"{kind}: {c['merged']} merged groups, {c['deferred']} kept separate/deferred" for kind, c in sorted(counts.items())) or 'No changes.'
+        text += '\n'.join(f"{kind}: {merged_group_count(pairs)} merged groups, {sum(p['state'] != 'merged' for p in pairs)} kept separate/deferred/stale" for kind, pairs in sorted(groups.items())) or 'No changes.'
         text = text[:3000] + '\nHFL: ' + delivery['url']
         delivery['telegram_state'] = 'sending'
         save(run)

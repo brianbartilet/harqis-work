@@ -3,7 +3,7 @@ import json
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
@@ -243,18 +243,36 @@ class ConsolidationBatch(BaseModel):
     decisions: dict[str, ConsolidationDecision] = Field(min_length=1, max_length=20)
 
 
-@router.post('/consolidation/begin')
-async def consolidation_begin(request: Request):
+class ConsolidationGroup(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    anchor_id: str = Field(min_length=1, max_length=500)
+    decisions: dict[str, ConsolidationDecision] = Field(min_length=2, max_length=20)
+    # Required: the assessor must explicitly check for cross-member conflicts.
+    contradictions: list[str] = Field(max_length=20)
+
+
+@router.post('/consolidation/{run_id}/groups')
+async def consolidation_group(request: Request, run_id: str, payload: ConsolidationGroup):
     owner(request)
-    from workflows.hfl.entity_consolidation import begin
-    return await call(begin)
+    from workflows.hfl.entity_consolidation import merge_group
+    return await call(merge_group, run_id, payload.model_dump())
+
+
+@router.post('/consolidation/begin')
+async def consolidation_begin(request: Request, compact: bool = False):
+    owner(request)
+    from workflows.hfl.entity_consolidation import begin, compact_view
+    result = await call(begin)
+    return compact_view(result) if compact else result
 
 
 @router.get('/consolidation/{run_id}')
-async def consolidation_status(request: Request, run_id: str):
+async def consolidation_status(request: Request, run_id: str, compact: bool = False,
+                               limit: int = Query(20, ge=1, le=20)):
     owner(request)
-    from workflows.hfl.entity_consolidation import load, view
-    return view(await call(load, run_id))
+    from workflows.hfl.entity_consolidation import load, view, compact_view
+    result = await call(lambda: view(load(run_id), limit=limit))
+    return compact_view(result) if compact else result
 
 
 @router.post('/consolidation/{run_id}/decisions/{pair_id}')
