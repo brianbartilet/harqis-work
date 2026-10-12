@@ -89,7 +89,7 @@
       if(!matching.length)section.append(node('p','No actions','agenda-description'));
       lanes.append(section);section.scrollTop=scroll.get(state)||0;
       sorters.push(new Sortable(section,{
-        group:'hfl-actions',draggable:'.agenda-card',filter:'.bulk-selecting,button:not(.action-drag-handle),a,input,summary,textarea,select,label',preventOnFilter:false,
+        group:'hfl-actions',draggable:'.agenda-card',filter:'.bulk-selecting,button:not(.action-drag-handle),a,input,summary,textarea,select,label,pre,code,table',preventOnFilter:false,
         forceFallback:true,fallbackOnBody:false,fallbackTolerance:4,
         animation:150,delay:180,delayOnTouchOnly:true,touchStartThreshold:5,ghostClass:'followups-drag-placeholder',
         onMove:()=>!savingCards&&!moving&&!bulk.busy&&!bulk.selecting('action'),
