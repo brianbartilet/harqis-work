@@ -23,6 +23,10 @@
   const node = (tag, text, className) => {const el=document.createElement(tag);if(text!=null)el.textContent=text;if(className)el.className=className;return el;};
   const bulk=window.HflBulkActions({root:dialog,signal:listeners.signal,refresh:async()=>{await refresh(true);actions.load();},canStart:()=>!moving&&!dragging&&!savingCards});
   bulk.mount($('[data-board-bulk]'),'action');
+  const counts=node('span',null,'board-selection-summary'), separator=node('span','•');
+  separator.setAttribute('aria-hidden','true');
+  counts.append($('[data-board-bulk] [data-bulk-count]'),separator,status);
+  $('[data-board-bulk]').append(counts);
   function context() {
     if(page){
       $('[data-board-context]').textContent='';
@@ -76,7 +80,7 @@
         card.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
         card.title='Drag to reorder or change status. Alt+Up/Down reorders within this column.';
         card.addEventListener('keydown',event=>{
-          if(![card,grip].includes(event.target)||!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key)||moving||bulk.busy||bulk.selecting('action'))return;
+          if(![card,grip].includes(event.target)||!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key)||moving||bulk.busy)return;
           event.preventDefault();
           const lane=card.parentElement, cards=[...lane.querySelectorAll('[data-followup-id]')], index=cards.indexOf(card), next=index+(event.key==='ArrowUp'?-1:1);
           if(next<0||next>=cards.length)return;
@@ -89,10 +93,10 @@
       if(!matching.length)section.append(node('p','No actions','agenda-description'));
       lanes.append(section);section.scrollTop=scroll.get(state)||0;
       sorters.push(new Sortable(section,{
-        group:'hfl-actions',draggable:'.agenda-card',filter:'.bulk-selecting,button:not(.action-drag-handle),a,input,summary,textarea,select,label,pre,code,table',preventOnFilter:false,
+        group:'hfl-actions',draggable:'.agenda-card',filter:'button:not(.action-drag-handle),a,input,summary,textarea,select,label,pre,code,table',preventOnFilter:false,
         forceFallback:true,fallbackOnBody:false,fallbackTolerance:4,
         animation:150,delay:180,delayOnTouchOnly:true,touchStartThreshold:5,ghostClass:'followups-drag-placeholder',
-        onMove:()=>!savingCards&&!moving&&!bulk.busy&&!bulk.selecting('action'),
+        onMove:()=>!savingCards&&!moving&&!bulk.busy,
         onStart:event=>{dragging=event.item.dataset.followupId;dialog.dataset.busy='true';},
         onEnd:event=>{
           if(event.item.dataset.ideaId){dragging=null;pointerHeld=false;delete dialog.dataset.busy;event.from.append(event.item);window.HflIdeas.convert(event.item.dataset.ideaId);return;}
@@ -160,8 +164,8 @@
         const anchor=ideaAnchors.find(item=>cards.has(item.id));
         if(anchor)section.scrollTop+=cards.get(anchor.id).getBoundingClientRect().top-section.getBoundingClientRect().top-anchor.offset;
       }
-      sorters.push(new Sortable(section,{group:{name:'hfl-actions',pull:true,put:false},draggable:'.agenda-card',handle:'.action-drag-handle',filter:'.bulk-selecting',preventOnFilter:false,forceFallback:true,animation:150,
-        onMove:()=>!bulk.busy&&!bulk.selecting('idea'),
+      sorters.push(new Sortable(section,{group:{name:'hfl-actions',pull:true,put:false},draggable:'.agenda-card',handle:'.action-drag-handle',filter:'input,label',preventOnFilter:false,forceFallback:true,animation:150,
+        onMove:()=>!bulk.busy,
         onStart:()=>{dragging='idea';backdrop.style.pointerEvents='none';},onEnd:event=>{backdrop.style.pointerEvents='';dragging=null;pointerHeld=false;if(event.to!==event.from){event.from.append(event.item);window.HflIdeas.convert(event.item.dataset.ideaId);}}}));
     }
     if(focusId){

@@ -22,7 +22,8 @@
         if(!check){
           check=node('input');check.type='checkbox';check.dataset.bulkCheck='';check.className='bulk-card-check';
           check.addEventListener('change',()=>{check.checked?group.selected.add(id):group.selected.delete(id);update(kind);});
-          card.prepend(check);
+          const clone=card.querySelector('.action-clone-handle');
+          if(clone)clone.before(check);else card.prepend(check);
         }
         check.setAttribute('aria-label','Select '+(group.rows.get(id)?.title||'card'));
         check.hidden=!group.enabled;check.disabled=busy;check.checked=group.selected.has(id);
@@ -59,7 +60,7 @@
     function mount(host,kind) {
       host.className='bulk-controls';host.dataset.bulkKind=kind;
       const toggle=node('button');toggle.type='button';toggle.dataset.bulkToggle='';
-      toggle.innerHTML=icon('M9 6h12M9 12h12M9 18h12M3 6l1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2');
+      toggle.innerHTML=icon('M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033zM21 11V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6');
       toggle.title='Select '+(kind==='action'?'actions':'ideas');toggle.setAttribute('aria-label',toggle.title);
       toggle.onclick=()=>{groups[kind].enabled=!groups[kind].enabled;if(!groups[kind].enabled)groups[kind].selected.clear();update(kind);};
       const wrapper=node('div',null,'bulk-menu'), menu=node('button'), options=node('div',null,'board-create-options');
@@ -68,7 +69,7 @@
       options.dataset.bulkOptions='';options.id='bulk-options-'+kind;options.hidden=true;
       menu.setAttribute('aria-controls',options.id);menu.setAttribute('aria-expanded','false');
       menu.onclick=()=>{options.hidden=!options.hidden;menu.setAttribute('aria-expanded',String(!options.hidden));};
-      for(const [operation,title] of [['status','Move to status'],['workspace_ids','Add to Space'],['board_ids','Add to board'],['dismiss','Dismiss']]){
+      for(const [operation,title] of [['status','Move to status'],['workspace_ids','Add to space'],['board_ids','Add to board'],['dismiss','Dismiss']]){
         const button=node('button',title);button.type='button';button.onclick=()=>{closeMenu(host);open(kind,operation,title,menu);};options.append(button);
       }
       wrapper.append(menu,options);

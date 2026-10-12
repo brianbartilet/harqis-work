@@ -1135,6 +1135,7 @@ def test_kanban_bulk_actions(agenda, authenticated_client, monkeypatch, tmp_path
     new_board = ideas.save_map({'request_id': str(uuid4()), 'name': 'Target board', 'members': []})
     first = agenda.create(payload(title='First bulk action', workspace_ids=['existing'], board_ids=[old_board['id']]), actor='test')[0]
     second = agenda.create(payload(title='Second bulk action'), actor='test')[0]
+    agenda.reorder_board('open', [{'id': first['id'], 'version': 1}, {'id': second['id'], 'version': 1}])
     idea = ideas.save_idea({'request_id': str(uuid4()), 'title': 'Bulk idea', 'workspace_ids': ['existing'], 'board_ids': [old_board['id']]}, 'test')
     with playwright.sync_playwright() as driver:
         browser = driver.chromium.launch(channel='chrome', headless=True)
@@ -1187,6 +1188,34 @@ def test_kanban_bulk_actions(agenda, authenticated_client, monkeypatch, tmp_path
         page.locator('[data-board-refresh]').click()
         playwright.expect(first_card.locator('[data-bulk-check]')).to_be_checked()
 
+        # Selection mode keeps the grip usable and replaces only the clone control.
+        grip = second_card.locator('.action-drag-handle')
+        playwright.expect(grip).to_be_visible()
+        check_box = second_card.locator('[data-bulk-check]').bounding_box()
+        grip_box = grip.bounding_box()
+        assert check_box['x'] + check_box['width'] < grip_box['x']
+        if width == 1440:
+            grip.scroll_into_view_if_needed()
+            start = grip.bounding_box()
+            end = first_card.bounding_box()
+            page.mouse.move(start['x'] + start['width']/2, start['y'] + start['height']/2)
+            page.mouse.down()
+            page.mouse.move(start['x'] + start['width']/2 + 8, start['y'] + start['height']/2, steps=3)
+            page.wait_for_timeout(80)
+            page.mouse.move(end['x'] + end['width']/2, end['y'] + end['height']/3, steps=15)
+            page.wait_for_timeout(350)
+            page.mouse.up()
+        else:
+            grip.press('Alt+ArrowUp')
+        lane = page.locator('[data-status="open"].followups-lane')
+        playwright.expect(lane.locator('[data-followup-id]').first).to_have_attribute('data-followup-id', second['id'])
+        playwright.expect(page.locator('[data-board-status]')).to_contain_text('2 actions')
+        assert agenda.board_order()[second['id']] < agenda.board_order()[first['id']]
+        playwright.expect(second_card.locator('[data-bulk-check]')).to_be_checked()
+        page.locator('[data-board-refresh]').click()
+        playwright.expect(lane.locator('[data-followup-id]').first).to_have_attribute('data-followup-id', second['id'])
+        writes.clear()
+
         def open_bulk(operation, kind='action'):
             area = page.locator(f'[data-bulk-kind={kind}]')
             area.locator('[data-bulk-menu]').click()
@@ -1228,13 +1257,13 @@ def test_kanban_bulk_actions(agenda, authenticated_client, monkeypatch, tmp_path
         first_card.locator('[data-bulk-check]').check()
         for state, expected in [('failed', 'Unavailable'), ('empty', 'No destinations available')]:
             destinations['state'] = state
-            modal = open_bulk('Add to Space')
+            modal = open_bulk('Add to space')
             playwright.expect(modal.locator('select option')).to_have_text(expected)
             playwright.expect(modal.get_by_role('button', name='Add', exact=True)).to_be_disabled()
             modal.get_by_role('button', name='Cancel', exact=True).click()
         destinations['state'] = 'ready'
 
-        for operation, target, field in [('Add to Space', 'target', 'workspace_ids'), ('Add to board', new_board['id'], 'board_ids'), ('Add to board', new_board['id'], 'board_ids')]:
+        for operation, target, field in [('Add to space', 'target', 'workspace_ids'), ('Add to board', new_board['id'], 'board_ids'), ('Add to board', new_board['id'], 'board_ids')]:
             first_card.locator('[data-bulk-check]').check()
             modal = open_bulk(operation)
             playwright.expect(modal.get_by_role('combobox')).to_be_enabled()
@@ -1267,7 +1296,7 @@ def test_kanban_bulk_actions(agenda, authenticated_client, monkeypatch, tmp_path
         playwright.expect(idea_card.locator('[data-bulk-check]')).to_be_checked()
         idea_select_all.uncheck()
         playwright.expect(idea_card.locator('[data-bulk-check]')).not_to_be_checked()
-        for operation, target, field in [('Add to Space', 'target', 'workspace_ids'), ('Add to board', new_board['id'], 'board_ids')]:
+        for operation, target, field in [('Add to space', 'target', 'workspace_ids'), ('Add to board', new_board['id'], 'board_ids')]:
             idea_card.locator('[data-bulk-check]').check()
             modal = open_bulk(operation, 'idea')
             playwright.expect(modal.get_by_role('combobox')).to_be_enabled()

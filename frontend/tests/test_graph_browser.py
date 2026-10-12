@@ -479,11 +479,18 @@ def test_graph_fullscreen_preserves_state_and_selection(authenticated_client, mo
                 const host=document.querySelector('#kg-canvas'), z=host.querySelector('canvas').__zoom;
                 return {x:(host.clientWidth/2-z.x)/z.k,y:(host.clientHeight/2-z.y)/z.k,zoom:z.k};
             }'''
+            page.click('#kg-out')
+            page.click('#kg-out')
+            page.wait_for_timeout(1200)
             camera = page.evaluate(camera_script)
             page.click('#kg-fullscreen')
             playwright.expect(page.locator('.kg-shell')).to_have_class(re.compile('kg-fullscreen'))
-            page.wait_for_timeout(250)
-            assert page.evaluate(camera_script) == pytest.approx(camera, abs=0.1)
+            page.wait_for_timeout(1200)
+            fitted = page.evaluate(camera_script)
+            assert fitted['zoom'] > camera['zoom']
+            page.keyboard.press('p')
+            page.wait_for_timeout(1200)
+            assert page.evaluate(camera_script) == pytest.approx(fitted, abs=0.1)
             assert page.locator('.kg-shell').bounding_box() == dict(x=0, y=0, width=width, height=height)
             playwright.expect(page.locator('.kg-inspector')).to_be_visible()
             playwright.expect(page.locator('.kg-boards')).not_to_be_visible()
@@ -501,6 +508,11 @@ def test_graph_fullscreen_preserves_state_and_selection(authenticated_client, mo
             playwright.expect(page.locator('#kg-fullscreen')).to_be_focused()
             playwright.expect(page.locator('.kg-main-toolbar')).to_be_visible()
             playwright.expect(page.locator('#kg-search')).to_have_value('Alex')
+            page.wait_for_timeout(1200)
+            exited = page.evaluate(camera_script)
+            page.click('#kg-fit')
+            page.wait_for_timeout(1200)
+            assert page.evaluate(camera_script) == pytest.approx(exited, abs=0.1)
             page.click('#kg-fullscreen')
             page.keyboard.press('Escape')
             playwright.expect(page.locator('#kg-exit-fullscreen')).not_to_be_visible()

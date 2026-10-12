@@ -85,7 +85,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   document.addEventListener('visibilitychange',()=>{if(document.hidden)saveGraphState();});
 
   const shell=document.querySelector('.kg-shell');
-  let fullscreen=false, fullscreenScroll={x:0,y:0}, previousOverflow='', fullscreenCamera=null;
+  let fullscreen=false, fullscreenScroll={x:0,y:0}, previousOverflow='', fullscreenFitPending=false;
   function updateFullscreen() {
     if(readOnly)return;
     shell.classList.toggle('kg-has-selection',!!selected);
@@ -104,7 +104,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   }
   function setFullscreen(value) {
     if(readOnly||fullscreen===value)return;
-    if(graphApi)fullscreenCamera={...graphApi.screen2GraphCoords(host.clientWidth/2,host.clientHeight/2),zoom:graphApi.zoom()};
+    fullscreenFitPending=true;
     fullscreen=value;
     if(value){fullscreenScroll={x:scrollX,y:scrollY};previousOverflow=document.body.style.overflow;document.body.style.overflow='hidden';}
     else document.body.style.overflow=previousOverflow;
@@ -373,9 +373,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     }
     const [size,setSize]=useState({width:host.clientWidth,height:host.clientHeight});
     useEffect(()=>{
-      if(!fullscreenCamera||!graphApi)return;
-      const camera=fullscreenCamera;fullscreenCamera=null;
-      graphApi.zoom(camera.zoom,0);graphApi.centerAt(camera.x,camera.y,0);
+      if(!fullscreenFitPending||!graphApi)return;
+      // Fit the current node positions after the resized canvas has committed.
+      const frame=requestAnimationFrame(()=>{fullscreenFitPending=false;fitTargets(true,true);});
+      return()=>cancelAnimationFrame(frame);
     },[size]);
     useEffect(()=>{
       const observer=new ResizeObserver(()=>setSize({width:host.clientWidth,height:host.clientHeight}));
