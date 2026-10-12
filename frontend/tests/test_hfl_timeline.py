@@ -1123,6 +1123,182 @@ def test_card_markdown_optional_sections_and_checklist_collapse(agenda, authenti
         browser.close()
 
 
+@pytest.mark.parametrize('width', [390, 1440])
+def test_kanban_bulk_actions(agenda, authenticated_client, monkeypatch, tmp_path, width):
+    """Exercise real versioned writes through the browser, using isolated stores."""
+    import json
+    from urllib.parse import urlparse
+    from workflows.hfl.ideas_store import IdeasStore
+    playwright = pytest.importorskip('playwright.sync_api')
+    ideas = IdeasStore(agenda)
+    old_board = ideas.save_map({'request_id': str(uuid4()), 'name': 'Existing board', 'members': []})
+    new_board = ideas.save_map({'request_id': str(uuid4()), 'name': 'Target board', 'members': []})
+    first = agenda.create(payload(title='First bulk action', workspace_ids=['existing'], board_ids=[old_board['id']]), actor='test')[0]
+    second = agenda.create(payload(title='Second bulk action'), actor='test')[0]
+    idea = ideas.save_idea({'request_id': str(uuid4()), 'title': 'Bulk idea', 'workspace_ids': ['existing'], 'board_ids': [old_board['id']]}, 'test')
+    with playwright.sync_playwright() as driver:
+        browser = driver.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page(viewport={'width': width, 'height': 1000})
+        errors, writes = [], []
+        destinations = {'state': 'ready'}
+        page.on('pageerror', lambda error: errors.append(str(error)))
+
+        def route(intercept):
+            request = intercept.request
+            url = urlparse(request.url)
+            if url.hostname != 'bulk.test':
+                intercept.abort(); return
+            if url.path == '/hfl-corpus/workspace-views' and request.method == 'GET':
+                if destinations['state'] == 'failed':
+                    intercept.fulfill(status=503, json={'detail': 'Unavailable'}); return
+                if destinations['state'] == 'empty':
+                    intercept.fulfill(json={'views': []}); return
+                intercept.fulfill(json={'views': [{'id': 'existing', 'name': 'Existing Space'}, {'id': 'target', 'name': 'Target Space'}]}); return
+            if request.method == 'PATCH':
+                writes.append((url.path, json.loads(request.post_data)))
+            response = authenticated_client.request(request.method, url.path + ('?' + url.query if url.query else ''),
+                content=request.post_data, headers={k: v for k, v in request.headers.items() if k.lower() in {'content-type', 'x-csrf-token'}})
+            intercept.fulfill(status=response.status_code, body=response.content, content_type=response.headers.get('content-type', 'text/html'))
+
+        page.route('**/*', route)
+        page.goto('https://bulk.test/hfl-corpus/actions?all=1')
+        controls = page.locator('[data-bulk-kind=action]')
+        first_card = page.locator(f'[data-followup-id="{first["id"]}"]')
+        second_card = page.locator(f'[data-followup-id="{second["id"]}"]')
+        playwright.expect(first_card).to_be_visible()
+        playwright.expect(controls.locator('[data-bulk-toggle]')).to_have_attribute('aria-pressed', 'false')
+        playwright.expect(controls.locator('[data-bulk-menu]')).to_be_disabled()
+        playwright.expect(first_card.locator('[data-bulk-check]')).to_be_hidden()
+        controls.locator('[data-bulk-toggle]').click()
+        playwright.expect(controls.locator('[data-bulk-menu]')).to_be_disabled()
+        first_card.locator('[data-bulk-check]').check()
+        second_card.locator('[data-bulk-check]').check()
+        playwright.expect(first_card.locator('.action-clone-handle')).to_be_hidden()
+        page.locator('[data-board-refresh]').click()
+        playwright.expect(first_card.locator('[data-bulk-check]')).to_be_checked()
+
+        def open_bulk(operation, kind='action'):
+            area = page.locator(f'[data-bulk-kind={kind}]')
+            area.locator('[data-bulk-menu]').click()
+            area.get_by_role('button', name=operation, exact=True).click()
+            modal = page.locator('.bulk-dialog')
+            playwright.expect(modal).to_be_visible()
+            return modal
+
+        modal = open_bulk('Move to status')
+        playwright.expect(modal.locator('select option')).to_have_text(['In Review', 'Ready', 'In Progress', 'Incomplete', 'Done', 'Dismissed'])
+        modal.get_by_role('button', name='Cancel', exact=True).click()
+        assert not writes
+        # Change a selected card after the displayed version was captured.
+        modal = open_bulk('Move to status')
+        agenda.update(second['id'], {'version': second['version'], 'notes': 'Concurrent edit'}, actor='other')
+        modal.get_by_role('combobox').select_option('incomplete')
+        modal.get_by_role('button', name='Move', exact=True).click()
+        playwright.expect(modal.get_by_role('status')).to_have_text('1 updated · 1 failed.')
+        assert agenda.get(first['id'])['status'] == 'incomplete'
+        assert agenda.get(second['id'])['status'] == 'open'
+        modal.get_by_role('button', name='Close', exact=True).click()
+        playwright.expect(second_card.locator('[data-bulk-check]')).to_be_checked()
+        playwright.expect(first_card.locator('[data-bulk-check]')).not_to_be_checked()
+        modal = open_bulk('Move to status')
+        modal.get_by_role('combobox').select_option('incomplete')
+        modal.get_by_role('button', name='Move', exact=True).click()
+        playwright.expect(modal.get_by_role('status')).to_have_text('1 updated · 0 failed.')
+        modal.get_by_role('button', name='Close', exact=True).click()
+        assert agenda.get(second['id'])['notes'] == 'Concurrent edit'
+
+        # Ordinary keyboard reordering still works after leaving selection mode.
+        controls.locator('[data-bulk-toggle]').click()
+        second_card.focus()
+        second_card.press('Alt+ArrowUp')
+        playwright.expect(page.locator('[data-status=incomplete] [data-followup-id]').first).to_have_attribute('data-followup-id', second['id'])
+        page.locator('[data-board-refresh]').click()
+        playwright.expect(page.locator('[data-status=incomplete] [data-followup-id]').first).to_have_attribute('data-followup-id', second['id'])
+        controls.locator('[data-bulk-toggle]').click()
+        first_card.locator('[data-bulk-check]').check()
+        for state, expected in [('failed', 'Unavailable'), ('empty', 'No destinations available')]:
+            destinations['state'] = state
+            modal = open_bulk('Add to Space')
+            playwright.expect(modal.locator('select option')).to_have_text(expected)
+            playwright.expect(modal.get_by_role('button', name='Add', exact=True)).to_be_disabled()
+            modal.get_by_role('button', name='Cancel', exact=True).click()
+        destinations['state'] = 'ready'
+
+        for operation, target, field in [('Add to Space', 'target', 'workspace_ids'), ('Add to board', new_board['id'], 'board_ids'), ('Add to board', new_board['id'], 'board_ids')]:
+            first_card.locator('[data-bulk-check]').check()
+            modal = open_bulk(operation)
+            playwright.expect(modal.get_by_role('combobox')).to_be_enabled()
+            modal.get_by_role('combobox').select_option(target)
+            modal.get_by_role('button', name='Add', exact=True).click()
+            playwright.expect(modal.get_by_role('status')).to_have_text('1 updated · 0 failed.')
+            modal.get_by_role('button', name='Close', exact=True).click()
+            assert set(agenda.get(first['id'])[field]) == ({'existing', 'target'} if field == 'workspace_ids' else {old_board['id'], new_board['id']})
+
+        first_card.locator('[data-bulk-check]').check()
+        controls.locator('[data-bulk-menu]').click()
+        controls.locator('[data-bulk-menu]').press('Escape')
+        playwright.expect(controls.locator('[data-bulk-options]')).to_be_hidden()
+        controls.locator('[data-bulk-toggle]').click()
+        playwright.expect(first_card.locator('.action-clone-handle')).to_be_visible()
+        controls.locator('[data-bulk-toggle]').click()
+        playwright.expect(first_card.locator('[data-bulk-check]')).not_to_be_checked()
+        first_card.locator('[data-bulk-check]').check()
+        page.screenshot(path=str(tmp_path / f'bulk-actions-{width}.png'))
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+
+        page.get_by_role('button', name='Show ideas', exact=True).click()
+        idea_card = page.locator(f'[data-idea-id="{idea["id"]}"]')
+        idea_controls = page.locator('[data-bulk-kind=idea]')
+        playwright.expect(idea_card).to_be_visible()
+        playwright.expect(idea_controls.locator('[data-bulk-menu]')).to_be_disabled()
+        idea_controls.locator('[data-bulk-toggle]').click()
+        for operation, target, field in [('Add to Space', 'target', 'workspace_ids'), ('Add to board', new_board['id'], 'board_ids')]:
+            idea_card.locator('[data-bulk-check]').check()
+            modal = open_bulk(operation, 'idea')
+            playwright.expect(modal.get_by_role('combobox')).to_be_enabled()
+            modal.get_by_role('combobox').select_option(target)
+            modal.get_by_role('button', name='Add', exact=True).click()
+            playwright.expect(modal.get_by_role('status')).to_have_text('1 updated · 0 failed.')
+            modal.get_by_role('button', name='Close', exact=True).click()
+            assert set(ideas.idea(idea['id'])[field]) == ({'existing', 'target'} if field == 'workspace_ids' else {old_board['id'], new_board['id']})
+        idea_card.locator('[data-bulk-check]').check()
+        modal = open_bulk('Move to status', 'idea')
+        playwright.expect(modal.locator('select option')).to_have_text(['Open', 'Has actions', 'Dismissed'])
+        modal.get_by_role('combobox').select_option('adopted')
+        page.screenshot(path=str(tmp_path / f'bulk-ideas-dialog-{width}.png'))
+        modal.get_by_role('button', name='Move', exact=True).click()
+        playwright.expect(modal.get_by_role('status')).to_have_text('1 updated · 0 failed.')
+        modal.get_by_role('button', name='Close', exact=True).click()
+        playwright.expect(idea_card).to_have_count(0)
+        assert ideas.idea(idea['id'])['status'] == 'adopted'
+        assert len(agenda.list()) + len(agenda.list(closed=True)) == 2
+        dismissed_idea = ideas.save_idea({'request_id': str(uuid4()), 'title': 'Dismiss this idea'}, 'test')
+        page.locator('.ideas-bulk-toolbar').get_by_role('button', name='Refresh', exact=True).click()
+        page.locator(f'[data-idea-id="{dismissed_idea["id"]}"] [data-bulk-check]').check()
+        idea_controls.locator('[data-bulk-menu]').click()
+        page.screenshot(path=str(tmp_path / f'bulk-ideas-menu-{width}.png'))
+        options_box = idea_controls.locator('[data-bulk-options]').bounding_box()
+        assert options_box['x'] >= 0 and options_box['x'] + options_box['width'] <= width
+        idea_controls.get_by_role('button', name='Dismiss', exact=True).click()
+        modal = page.locator('.bulk-dialog')
+        modal.get_by_role('button', name='Dismiss', exact=True).click()
+        playwright.expect(modal.get_by_role('status')).to_have_text('1 updated · 0 failed.')
+        modal.get_by_role('button', name='Close', exact=True).click()
+        assert ideas.idea(dismissed_idea['id'])['status'] == 'dismissed'
+        page.get_by_role('button', name='Close ideas drawer', exact=True).click()
+        playwright.expect(first_card.locator('[data-bulk-check]')).to_be_checked()
+        modal = open_bulk('Dismiss')
+        modal.get_by_role('button', name='Dismiss', exact=True).click()
+        playwright.expect(modal.get_by_role('status')).to_have_text('1 updated · 0 failed.')
+        modal.get_by_role('button', name='Close', exact=True).click()
+        assert agenda.get(first['id'])['status'] == 'dismissed'
+        second_card.locator('[data-bulk-check]').check()
+        page.evaluate("window.dispatchEvent(new CustomEvent('hfl:workspace-context',{detail:{names:[]}}))")
+        playwright.expect(second_card.locator('[data-bulk-check]')).not_to_be_checked()
+        assert not errors
+        browser.close()
+
+
 def test_board_order_preserves_filtered_cards_and_rejects_stale_moves(agenda, authenticated_client):
     rows = [agenda.create(payload(title=title),actor='test')[0] for title in ['A','Hidden','B']]
     url='/hfl-corpus/timeline/items/order'

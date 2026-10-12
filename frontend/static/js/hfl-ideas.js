@@ -1010,7 +1010,7 @@ window.HflObjectDescription = (item = {}) => {
     if(editingParams.get('edit_kind')==='idea') editIdea(editingParams.get('edit'));
     else if(!document.getElementById('followup-agenda')) openAction(editingParams.get('edit'));
   }
-  window.HflIdeas = {cloneObject, editList, chooseIdeaForBoard, addToBoard, createChecklistAction, openAction, openEditor, editIdea, convert, inspect, maps, api};
+  window.HflIdeas = {dialog, cloneObject, editList, chooseIdeaForBoard, addToBoard, createChecklistAction, openAction, openEditor, editIdea, convert, inspect, maps, api};
   document.addEventListener('click', async event => {
     document.querySelectorAll('.idea-add-menu').forEach(menu => {
       if (!menu.contains(event.target)) { menu.querySelector('.idea-add-options').hidden = true; menu.querySelector('.idea-add-toggle').setAttribute('aria-expanded', 'false'); }

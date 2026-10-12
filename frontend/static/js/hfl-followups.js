@@ -21,6 +21,8 @@
   window.addEventListener('pointercancel',()=>{pointerHeld=false;},{signal:listeners.signal});
   window.addEventListener('hfl:action-saving',event=>{savingCards+=event.detail.saving?1:-1;},{signal:listeners.signal});
   const node = (tag, text, className) => {const el=document.createElement(tag);if(text!=null)el.textContent=text;if(className)el.className=className;return el;};
+  const bulk=window.HflBulkActions({root:dialog,signal:listeners.signal,refresh:async()=>{await refresh(true);actions.load();},canStart:()=>!moving&&!dragging&&!savingCards});
+  bulk.mount($('[data-board-bulk]'),'action');
   function context() {
     if(page){
       $('[data-board-context]').textContent='';
@@ -53,6 +55,7 @@
       .filter(card=>card.getBoundingClientRect().top>=drawerTop)
       .map(card=>({id:card.dataset.ideaId,offset:card.getBoundingClientRect().top-drawerTop}));
     const focused=document.activeElement;
+    const focusedIdea=focused?.matches('[data-bulk-check]')?focused.closest('[data-idea-id]')?.dataset.ideaId:null;
     const focusId=focused?.closest('[data-followup-id]')?.dataset.followupId, focusText=focused?.textContent;
     const oldItems=items, oldCards=new Map([...lanes.querySelectorAll('[data-followup-id]')].map(el=>[el.dataset.followupId,el]));
     items=new Map(rows.map(item=>[item.id,item]));
@@ -73,7 +76,7 @@
         card.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
         card.title='Drag to reorder or change status. Alt+Up/Down reorders within this column.';
         card.addEventListener('keydown',event=>{
-          if(![card,grip].includes(event.target)||!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key)||moving)return;
+          if(![card,grip].includes(event.target)||!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key)||moving||bulk.busy||bulk.selecting('action'))return;
           event.preventDefault();
           const lane=card.parentElement, cards=[...lane.querySelectorAll('[data-followup-id]')], index=cards.indexOf(card), next=index+(event.key==='ArrowUp'?-1:1);
           if(next<0||next>=cards.length)return;
@@ -86,10 +89,10 @@
       if(!matching.length)section.append(node('p','No actions','agenda-description'));
       lanes.append(section);section.scrollTop=scroll.get(state)||0;
       sorters.push(new Sortable(section,{
-        group:'hfl-actions',draggable:'.agenda-card',filter:'button:not(.action-drag-handle),a,input,summary,textarea,select,label',preventOnFilter:false,
+        group:'hfl-actions',draggable:'.agenda-card',filter:'.bulk-selecting,button:not(.action-drag-handle),a,input,summary,textarea,select,label',preventOnFilter:false,
         forceFallback:true,fallbackOnBody:false,fallbackTolerance:4,
         animation:150,delay:180,delayOnTouchOnly:true,touchStartThreshold:5,ghostClass:'followups-drag-placeholder',
-        onMove:()=>!savingCards&&!moving,
+        onMove:()=>!savingCards&&!moving&&!bulk.busy&&!bulk.selecting('action'),
         onStart:event=>{dragging=event.item.dataset.followupId;dialog.dataset.busy='true';},
         onEnd:event=>{
           if(event.item.dataset.ideaId){dragging=null;pointerHeld=false;delete dialog.dataset.busy;event.from.append(event.item);window.HflIdeas.convert(event.item.dataset.ideaId);return;}
@@ -103,6 +106,8 @@
       const section=node('section',null,'followups-lane ideas-drawer');section.id='board-ideas-drawer';section.dataset.status='ideas';section.setAttribute('aria-label','Ideas');
       const header=node('div',null,'ideas-drawer-header');header.append(node('h3','Ideas · '+ideaRows.length));
       section.append(header);
+      const ideaToolbar=node('div',null,'ideas-bulk-toolbar'),ideaBulk=node('div'),ideaRefresh=node('button','Refresh');
+      ideaRefresh.type='button';ideaRefresh.onclick=()=>refresh(true);ideaToolbar.append(ideaBulk,ideaRefresh);section.append(ideaToolbar);
       const newestIdeas=[...ideaRows].sort((a,b)=>(Date.parse(b.created_at)||0)-(Date.parse(a.created_at)||0));
       for(const item of newestIdeas){
         const oldCard=oldIdeaCards.get(item.id), itemSignature=JSON.stringify(item);
@@ -148,24 +153,32 @@
       backdrop.onclick=()=>closeIdeasDrawer();
       const close=node('button','×','ideas-drawer-close');close.type='button';close.setAttribute('aria-label','Close ideas drawer');close.onclick=()=>closeIdeasDrawer();header.append(close);
       overlay.append(backdrop,section);dialog.append(overlay);
+      bulk.mount(ideaBulk,'idea');
       section.scrollTop=ideaScroll;
       if(ideaScroll>0){
         const cards=new Map([...section.querySelectorAll('[data-idea-id]')].map(card=>[card.dataset.ideaId,card]));
         const anchor=ideaAnchors.find(item=>cards.has(item.id));
         if(anchor)section.scrollTop+=cards.get(anchor.id).getBoundingClientRect().top-section.getBoundingClientRect().top-anchor.offset;
       }
-      sorters.push(new Sortable(section,{group:{name:'hfl-actions',pull:true,put:false},draggable:'.agenda-card',handle:'.action-drag-handle',forceFallback:true,animation:150,
+      sorters.push(new Sortable(section,{group:{name:'hfl-actions',pull:true,put:false},draggable:'.agenda-card',handle:'.action-drag-handle',filter:'.bulk-selecting',preventOnFilter:false,forceFallback:true,animation:150,
+        onMove:()=>!bulk.busy&&!bulk.selecting('idea'),
         onStart:()=>{dragging='idea';backdrop.style.pointerEvents='none';},onEnd:event=>{backdrop.style.pointerEvents='';dragging=null;pointerHeld=false;if(event.to!==event.from){event.from.append(event.item);window.HflIdeas.convert(event.item.dataset.ideaId);}}}));
     }
     if(focusId){
       const card=[...lanes.querySelectorAll('[data-followup-id]')].find(el=>el.dataset.followupId===focusId);
       if(focused?.matches('[data-followup-id]'))card?.focus({preventScroll:true});
+      else if(focused?.matches('[data-bulk-check]'))card?.querySelector('[data-bulk-check]')?.focus({preventScroll:true});
       else card?.querySelectorAll('button,summary,a').forEach(el=>{if(el.textContent===focusText)el.focus({preventScroll:true});});
     }
     rendered=signature;
+    bulk.sync('action',rows);bulk.sync('idea',ideaRows);
+    if(focused?.matches('[data-bulk-check]')){
+      const card=[...dialog.querySelectorAll(focusedIdea?'[data-idea-id]':'[data-followup-id]')].find(el=>(focusedIdea?el.dataset.ideaId:el.dataset.followupId)===(focusedIdea||focusId));
+      card?.querySelector('[data-bulk-check]')?.focus({preventScroll:true});
+    }
   }
   async function refresh(force=false) {
-    if(!dialog.open || disposed || moving || dragging || pointerHeld || savingCards || (pending&&!force))return;
+    if(!dialog.open || disposed || moving || dragging || pointerHeld || savingCards || bulk.busy || (bulk.editing&&!force) || (pending&&!force))return;
     const ticket=++sequence;pending=true;context();if(force||!rendered)status.textContent='Refreshing follow-ups…';lanes.setAttribute('aria-busy','true');
     try{
       const params=all.checked?new URLSearchParams():new URLSearchParams(location.search);
@@ -178,7 +191,7 @@
         rows.push(...data.items);total=data.total;
         if(!data.items.length)break;
       }while(rows.length<total);
-      if(dragging||moving||pointerHeld||savingCards)return;
+      if(dragging||moving||pointerHeld||savingCards||bulk.busy||bulk.editing&&!force)return;
       if(ideasOpen){
         const ideaParams=new URLSearchParams(params);ideaParams.delete('offset');ideaParams.set('dismissed','0');
         ideaRows=(await window.HflIdeas.api('/reuse/board-ideas?'+ideaParams)).items.filter(item=>item.status!=='adopted'&&!item.promoted_to&&!item.followup_id);
@@ -218,7 +231,7 @@
   if(document.querySelector('[data-workspace-menu]')){
     const data=JSON.parse(document.querySelector('[data-workspace-data]').textContent),params=new URLSearchParams(location.search),ids=(params.get('views')||params.get('workspace')||params.get('workspace_ids')||'').split(',').filter(Boolean);
     workspaceNames=ids.map(id=>data.views.find(view=>view.id===id)?.name||'Unavailable Space');workspaceLoadState='loaded';
-    window.addEventListener('hfl:workspace-context',event=>{workspaceNames=event.detail.names;all.checked=false;context();},{signal:listeners.signal});
+    window.addEventListener('hfl:workspace-context',event=>{bulk.clear();workspaceNames=event.detail.names;all.checked=false;context();},{signal:listeners.signal});
   }else{
   const workspaceFilter=node('details',null,'board-workspace-filter'),workspaceTitle=node('summary','Space'),workspacePanel=node('div',null,'workspace-menu-panel');
   workspacePanel.append(node('p','Focus on'));workspaceFilter.append(workspaceTitle,workspacePanel);$('[data-board-context]').after(workspaceFilter);
@@ -228,6 +241,7 @@
     onload:views=>{workspaceLoadState='loaded';const current=new URLSearchParams(location.search),ids=(current.get('views')||current.get('workspace')||current.get('workspace_ids')||'').split(',').filter(Boolean);workspaceNames=views.filter(v=>ids.includes(v.id)).map(v=>v.name);context();},
     onerror:()=>{workspaceLoadState='error';context();},
     onapply:(ids,views)=>{
+      bulk.clear();
       const url=new URL(location.href);url.search='';all.checked=!ids.length;
       if(ids.length){url.searchParams.set('views',ids.join(','));url.searchParams.set('scope',JSON.stringify({any:views.filter(v=>ids.includes(v.id)).map(v=>v.state)}));}else url.searchParams.set('all','1');
       workspaceNames=views.filter(v=>ids.includes(v.id)).map(v=>v.name);history.replaceState(null,'',url);refresh(true);
@@ -246,7 +260,7 @@
   window.addEventListener('hfl:action-error',async event=>{if(dialog.open){await refresh(true);error.textContent=event.detail;error.hidden=false;}},{signal:listeners.signal});
   window.addEventListener('hfl:view-replacing',()=>{
     try{if(dialog.open)sessionStorage.setItem('hfl:followups-restore',JSON.stringify({all:all.checked}));}catch(_){}
-    disposed=true;++sequence;clearInterval(timer);listeners.abort();sorters.forEach(sorter=>sorter.destroy());
+    disposed=true;++sequence;clearInterval(timer);bulk.dispose();listeners.abort();sorters.forEach(sorter=>sorter.destroy());
   },{signal:listeners.signal});
   function closeIdeasDrawer(){
     ideasOpen=false;dialog.querySelector('.ideas-drawer-toggle')?.setAttribute('aria-expanded','false');render([...items.values()]);dialog.querySelector('.ideas-drawer-toggle')?.focus();

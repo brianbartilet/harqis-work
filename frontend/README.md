@@ -473,6 +473,16 @@ and display save errors without overwriting newer server versions. New objects
 require Create. Closing with unsaved edits offers Save and close, Discard unsaved
 changes, or Keep editing; already saved edits cannot be discarded.
 
+Kanban and its Ideas drawer offer separate multiselect toggles and bulk menus
+before Refresh. Select cards to move status, add a Space or board, or dismiss
+them after confirmation. Add operations preserve existing memberships; adding
+an action to a new board returns it to In Review, as with individual updates.
+Updates use each card's version and report partial failures, retaining failed
+cards for review and retry. Selection survives refresh for cards still present
+and clears when selection mode is turned off or the Space changes. Setting an
+idea to Has actions changes its status without creating an action and removes
+it from the drawer.
+
 Checklists support moving items between lists by dragging or the move icon,
 reordering whole lists, and one-time A–Z/Z–A sorting. Card covers show completed
 items last without changing editor order. New actions have an empty Agent
