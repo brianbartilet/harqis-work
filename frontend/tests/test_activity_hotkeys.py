@@ -140,3 +140,42 @@ def test_dialog_backdrop_dismissal(editor_page, path):
     page.locator('#dynamic-test-dialog').evaluate("d=>d.dataset.saving='false'")
     page.mouse.click(2,2)
     expect(page.locator('#dynamic-test-dialog')).not_to_be_visible()
+
+
+@pytest.mark.parametrize('retry_fails', [False, True])
+def test_share_preview_automatically_limits_dates(editor_page, retry_fails):
+    import json
+    import re
+    from datetime import date, timedelta
+    page, _ = editor_page
+    states=[]
+    def preview(route):
+        body=route.request.post_data
+        states.append(json.loads(re.search(r'name="state"\r\n\r\n(.*?)\r\n',body).group(1)))
+        failed=len(states)==1 or retry_fails
+        route.fulfill(status=422 if failed else 200,content_type='text/html',body=(
+            '<div data-preview-error data-preview-size-limit>Selected activity exceeds the snapshot size limit.</div>'
+            if failed else '<section data-preview-ready>Preview ready</section>'))
+    page.route('**/sharing/from-corpus?mode=preview',preview)
+    page.goto('https://editing.test/hfl-corpus/actions?all=1')
+    page.locator('[data-corpus-share-preview]').evaluate('(el)=>el.click()')
+    warning=page.locator('[data-preview-warning]')
+    expect(warning).to_contain_text('last 15 days')
+    assert len(states)==2
+    assert states[1]['date_from']==(date.today()-timedelta(days=14)).isoformat()
+    assert states[1]['date_to']==date.today().isoformat()
+    assert states[1]['rolling']==0
+    expect(page.get_by_role('button',name='Use last 15 days')).to_have_count(0)
+    if retry_fails:
+        expect(page.locator('[data-preview-error]')).to_be_visible()
+    else:
+        expect(page.locator('[data-preview-ready]')).to_be_visible()
+        transfers=[]
+        def recipe(route):
+            from urllib.parse import parse_qs
+            transfers.append(json.loads(parse_qs(route.request.post_data)['state'][0]))
+            route.fulfill(content_type='text/html',body='<h1>Recipe draft</h1>')
+        page.route('**/sharing/from-corpus',recipe)
+        page.locator('[data-corpus-share-dialog] [data-corpus-share-generate]').click()
+        expect(page.get_by_role('heading',name='Recipe draft')).to_be_visible()
+        assert transfers==[states[1]]

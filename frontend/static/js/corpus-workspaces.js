@@ -487,6 +487,7 @@
   const shareStatus = $('[data-corpus-share-status]');
   let previewKey = '', previewState = null, disabledReferences = [], shareController = null;
   let shareOpener = null;
+  let previewWarning = '';
   const contextKey = () => JSON.stringify(snapshot());
   function captureReferences() {
     if (shareContent.querySelector('[data-preview-ready]')) {
@@ -504,7 +505,7 @@
     disabledReferences.forEach(id => data.append('disabled_reference_ids', id));
     return data;
   }
-  async function loadSharePreview() {
+  async function loadSharePreview(retryAllowed=true) {
     shareController?.abort();
     const controller = new AbortController();
     shareController = controller;
@@ -521,10 +522,23 @@
       if (controller.signal.aborted) return;
       if (!response.ok && response.status !== 422) throw Error('The preview could not load. Please try again.');
       shareContent.innerHTML = html;
+      if(retryAllowed&&shareContent.querySelector('[data-preview-size-limit]')){
+        const end=new Date(),start=new Date(end);
+        start.setDate(start.getDate()-14);
+        const iso=value=>[value.getFullYear(),String(value.getMonth()+1).padStart(2,'0'),String(value.getDate()).padStart(2,'0')].join('-');
+        previewState={...(previewState||snapshot()),date_from:iso(start),date_to:iso(end),rolling:0};
+        previewWarning=`The full selection exceeded the preview size limit. Preview and recipe dates have been limited to the last 15 days (${previewState.date_from} to ${previewState.date_to}). Other filters are unchanged.`;
+        shareContent.replaceChildren();
+        await loadSharePreview(false);
+        return;
+      }
+      if(previewWarning){
+        const warning=document.createElement('p');warning.className='message';warning.setAttribute('role','alert');warning.dataset.previewWarning='';warning.textContent=previewWarning;shareContent.prepend(warning);
+      }
       window.refreshShareActivity?.();
       shareStatus.textContent = '';
     } catch (error) {
-      if (error.name !== 'AbortError') shareStatus.textContent = error.message;
+      if (error.name !== 'AbortError') shareStatus.textContent = [previewWarning,error.message].filter(Boolean).join(' ');
     } finally {
       if (shareController === controller) shareContent.removeAttribute('aria-busy');
     }
@@ -533,7 +547,7 @@
     shareOpener = event.currentTarget;
     const key = contextKey();
     if (key !== previewKey) {
-      previewKey = key; previewState = snapshot(); disabledReferences = [];
+      previewKey = key; previewState = snapshot(); disabledReferences = []; previewWarning = '';
       // Resolve rolling ranges once for this preview and its subsequent handoff.
       if (previewState.rolling) {
         const end = new Date(), start = new Date(end);
@@ -546,7 +560,7 @@
     menu.open = false;
     shareDialog.showModal();
     document.getElementById('corpus-share-title').focus();
-    loadSharePreview();
+    loadSharePreview(!previewWarning);
   };
   $('[data-corpus-share-close]').onclick = () => shareDialog.close();
   shareDialog.addEventListener('close', () => {
