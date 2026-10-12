@@ -193,7 +193,7 @@ window.HflObjectDescription = (item = {}) => {
       files = attachmentEditor(attachmentsSection, kind === 'idea' ? 'idea' : 'actionable', current?.id);
       checklists.updateConversion();
       for (const event of ['input', 'change', 'click']) d.form.addEventListener(event, () => queueMicrotask(() => checklists.updateConversion()));
-      save = el('button', current ? 'Save now' : editingBoard ? 'Add to current board' : 'Create'); save.type = 'submit'; d.footer.append(save);
+      save = el('button', current ? 'Save now' : conversion ? 'Promote' : editingBoard ? 'Add to current board' : 'Create'); save.type = 'submit'; d.footer.append(save);
       save.hidden = kind === 'idea' && !!current;
       let linked = !!current, copiedLoaded = false, attachToCurrent = true;
       const persistEditor = async () => {
@@ -259,7 +259,7 @@ window.HflObjectDescription = (item = {}) => {
       if(current)window.HflEditorLocation(kind,current.id);
       d.form.onsubmit=async event=>{event.preventDefault();try{await state.submit();checklists.updateConversion();}catch(e){d.error.textContent=e.message;}};
       const otherBoard=button(editingBoard?'Add to another board':'Add to board',async()=>{otherBoard.disabled=true;try{attachToCurrent=false;await state.flush();await addToBoard(kind,current,null,null,editingBoard);}catch(e){d.error.textContent=e.message;}finally{attachToCurrent=true;otherBoard.disabled=false;}});
-      d.footer.append(otherBoard);
+      d.footer.insertBefore(otherBoard, save);
     } catch (error) { d.error.textContent = error.message; }
   }
   async function cloneObject(kind, id) {
