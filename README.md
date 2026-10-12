@@ -247,10 +247,12 @@ python -m tools schema trello create_trello_card
 
 The CLI and both MCP surfaces share `tools/catalog.py`; existing MCP names remain compatible.
 
-The `hfl_corpus` adapter covers all 110 canonical frontend API operations,
-including entities, timeline, ideas, maps and goals. The
-[frontend MCP coverage report](docs/info/FRONTEND_MCP_COVERAGE.md) maps all routes
-and identifies remaining session/protocol work. CI checks the reviewed endpoint
+The `hfl_corpus` adapter covers 125 canonical frontend API operations,
+including entities, timeline, ideas, maps, goals and facets. Internal sharing
+inputs remain protocol-only, not general MCP tools. The
+[endpoint manifest](frontend/mcp_coverage.json) maps all current routes; the
+[frontend MCP coverage report](docs/info/FRONTEND_MCP_COVERAGE.md) explains
+coverage and remaining session/protocol work. CI checks the reviewed endpoint
 manifest with `python -m tools.frontend_coverage --check`.
 
 ---
@@ -289,7 +291,7 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 | `hud` | Active | 24 | Calendar, forex, TCG orders, AI log analysis, YNAB budgets, Rainmeter skins, host fallbacks, and manual compatibility tasks |
 | `purchases` | Active | 8 | MTG card resale pipeline: Scryfall bulk → card matching → listings → pricing → audit |
 | `desktop` | Active | 8 | Git pulls, window management, file sync, activity capture, daily/weekly summaries |
-| `hfl` | Active | 37 | Homework-for-Life capture/ingest → canonical Activity Corpus + Elasticsearch, including granular note changes, durable outbox replay, and an evidence-grounded activity watchdog |
+| `hfl` | Active | 39 | Homework-for-Life capture/ingest → canonical Activity Corpus + Elasticsearch, including granular note changes, durable outbox replay, and an evidence-grounded activity watchdog |
 | `files` | Opt-in | 3 | Source discovery, versioned Drive package publication, and expiry; enabled with `FILES_ENABLED=1` |
 | `git_forks` | Active | 1 | Weekly hybrid discovery and drift analysis for harqis-work forks, with one HFL entry per fork instance plus a fleet summary |
 | `notes` | Active | 2 | Repository-backed note sync: editing-machine push → canonical host fast-forward pull; HFL performs the downstream ingest |
@@ -314,11 +316,11 @@ Declared in `workflows/queues.py` (`WorkflowQueue` enum) and registered with Rab
 |-------|---------|
 | `default` | Catch-all / unrouted tasks; fallback when a task has no `options.queue` |
 | `files` | Catalog scans, package publishing and expiry on the catalog server only |
-| `hud` | All `workflows.hud.tasks.*` (auto-routed via `task_routes`) — calendar, TCG orders, YNAB, AI logs |
+| `hud` | Default route for `workflows.hud.tasks.*` — calendar, TCG orders, YNAB, AI logs; broadcast tasks and `hud_data_only.*` use more-specific routes |
 | `peon` | Work-context HUD tasks (Jira boards, calendar focus, etc.) |
 | `tcg` | TCG marketplace pipeline — Scryfall bulk, card matching, listings, pricing |
 | `adhoc` | One-off / manual triggers (no schedule) |
-| `host` | Tasks that must run on the host (Docker, broker access) |
+| `host` | Tasks that must run on the host (Docker, broker access), including `workflows.hud.tasks.hud_data_only.*` and `workflows.second_brain.tasks.*` |
 | `agent` | AI agent task dispatch (Kanban / Hermes worker invocations) |
 | `worker` | Generic background worker pool (cross-app jobs) |
 | `n8n` | n8n container ops (backup / restore / deploy) — pinned to `harqis-server` |
@@ -459,7 +461,7 @@ harqis-work/
 │   │   ├── profiles/               # YAML agent profile schema + registry
 │   │   │   └── examples/           # base, agent:code, agent:write profiles
 │   │   ├── security/               # SecretStore, OutputSanitizer, AuditLogger
-│   │   └── tests/                  # 290 unit + 2 integration tests
+│   │   └── tests/                  # Unit and integration tests
 │   └── prompts/                    # Shared AI prompt templates (.md files)
 │
 ├── apps/                           # App integrations (one folder per service)
@@ -485,9 +487,11 @@ harqis-work/
 │   ├── google_drive/               # Google Drive upload/download/export
 │   ├── grok/                       # xAI Grok LLM (chat, web search, X search, embeddings)
 │   ├── hfl_corpus/                 # HFL Activity Corpus REST client + OpenAPI contract
+│   ├── investagrams/               # Philippine stock analytics (web scraping)
 │   ├── jira/                       # Jira project management
 │   ├── justtcg/                    # Multi-game TCG pricing analytics API
 │   ├── linkedin/                   # LinkedIn API
+│   ├── moo/                        # Futu/Moo trading stub
 │   ├── mpc/                        # MakePlayingCards.com proxy-card autofill (Playwright)
 │   ├── notion/                     # Notion pages, databases, blocks
 │   ├── oanda/                      # Forex trading
