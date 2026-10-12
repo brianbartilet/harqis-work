@@ -3189,6 +3189,56 @@
         "update_hfl_corpus_role"
       ],
       "reason": "Session-authenticated editor counterpart of the canonical facet API."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/consolidation/{run_id}/claims",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entity_consolidation_claim"
+      ],
+      "reason": "Claim a disjoint anchor packet. Destructive: writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity_consolidation_claim"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/consolidation/{run_id}/claims/{token}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_consolidation_claim"
+      ],
+      "reason": "Renew or release a review lease. Destructive: writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_consolidation_claim"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/consolidation/{run_id}/checkpoint",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_consolidation_checkpoint"
+      ],
+      "reason": "Checkpoint partial progress and discover changed inputs. Destructive: writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_consolidation_checkpoint"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/consolidation/{run_id}/evidence",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_consolidation_evidence"
+      ],
+      "reason": "Cache bounded original-entry context across pending pairs. Destructive: writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_consolidation_evidence"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/consolidation/{run_id}/groups",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entity_consolidation_group"
+      ],
+      "reason": "Commit independently corroborated anchor pairs atomically. Destructive: writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity_consolidation_group"
     }
   ]
 }

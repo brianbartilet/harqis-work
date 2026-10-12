@@ -4,6 +4,20 @@ Summary verified against source revision `0acc1e6`. This is a source and test-ba
 availability still depends on configuration, `MCP_ENABLED_APPS`, API revision,
 and reconnecting the MCP client.
 
+Entity-consolidation backlog processing additionally exposes five dedicated
+CLI/MCP operations: `create_hfl_corpus_entity_consolidation_claim`,
+`update_hfl_corpus_entity_consolidation_claim`,
+`update_hfl_corpus_entity_consolidation_checkpoint`,
+`update_hfl_corpus_entity_consolidation_evidence`, and
+`create_hfl_corpus_entity_consolidation_group`. They wrap the canonical
+`/api/hfl/entities/consolidation/{run_id}` claims, checkpoint, evidence and groups
+endpoints with owner authentication and write classification. Existing begin/status
+tools accept compact evidence options, and batch submission accepts a claim token.
+See the [workflow contract](../../workflows/hfl/README.md#deliver_entity_consolidation-daily-hermes-entity-consolidation).
+The historical counts below precede these additions; the manifest/checker is the
+current source of truth. The unrelated role-history route still has an inherited
+coverage gap (`GET /api/hfl/roles/{identity}/history`).
+
 ## Implemented coverage
 
 **125 canonical `/api/hfl` method/path endpoints** have dedicated MCP

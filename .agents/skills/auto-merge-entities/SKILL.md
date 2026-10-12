@@ -43,6 +43,11 @@ on Windows, `.venv/bin/python` elsewhere):
 ```text
 <python> .agents/skills/auto-merge-entities/scripts/consolidate.py begin --compact
 <python> .agents/skills/auto-merge-entities/scripts/consolidate.py status RUN_ID --compact --limit 12
+<python> .agents/skills/auto-merge-entities/scripts/consolidate.py claim RUN_ID --worker REVIEWER_ID --max-pairs 8
+<python> .agents/skills/auto-merge-entities/scripts/consolidate.py evidence RUN_ID --file EVIDENCE.json --claim-token TOKEN
+<python> .agents/skills/auto-merge-entities/scripts/consolidate.py renew RUN_ID --claim-token TOKEN
+<python> .agents/skills/auto-merge-entities/scripts/consolidate.py release RUN_ID --claim-token TOKEN
+<python> .agents/skills/auto-merge-entities/scripts/consolidate.py checkpoint RUN_ID
 <python> .agents/skills/auto-merge-entities/scripts/consolidate.py group RUN_ID --file GROUP.json
 <python> .agents/skills/auto-merge-entities/scripts/consolidate.py batch RUN_ID --file BATCH.json
 <python> .agents/skills/auto-merge-entities/scripts/consolidate.py decide RUN_ID PAIR_ID --file DECISION.json
@@ -60,12 +65,33 @@ without the new flags and independent `batch` decisions; report the capability g
 Never silently send overlapping pair merges or use manual merging as a fallback.
 Publishing this skill does not deploy its server/helper dependencies.
 
+When `claimed-anchor-packets-v1` is advertised, use `claim` for review work rather
+than status pages. A stable reviewer ID recovers its unexpired packet after a lost
+response. Claims select an anchor's available neighborhood before the pair/byte
+limits, reconcile stale work, discover changed inputs and checkpoint progress.
+`remaining_for_anchor` counts additional available edges; it is not proof of
+exhaustive alias discovery. `max_bytes` bounds UTF-8 `entities`/`pairs` evidence,
+not transport metadata or model tokens. An oversized first pair returns
+`required_bytes` without a claim: increase the budget explicitly, never truncate
+identifying facts. A null claim with `waiting: true` means other reviewers hold work.
+
+Separate reviewers may assess disjoint claimed groups when the caller has enabled
+parallel review. Each uses its own worker ID. Submit the claim token with `batch`
+or `group` via `--claim-token TOKEN`; the service serializes commits and rechecks
+freshness. Renew before expiry (15 minutes by default, up to one hour), release
+when abandoning work, and reclaim/review after expiry. An expired claim cannot
+authorize a new merge; identical committed payloads still recover their receipts.
+These APIs coordinate workers; they do not launch additional agents or change cron.
+
 1. Fetch a bounded page (maximum 20 pairs; start with 12 for status). Each evidence
    entity appears once, with explicit `left_id` and `right_id` references. Preserve
    this orientation in fact quotes even when the anchor is on the right.
 2. Assess a small anchor packet with evidence shared once. Start with 3–8 candidate
    aliases per reasoning batch; lower the page size if evidence is large. Do not
-   truncate facts to meet a prompt budget. Fetch more entry context only for ambiguity.
+   truncate facts to meet a prompt budget. For ambiguity, `evidence` accepts
+   `{"entity_id":"ID","entry_ids":["ENTRY_ID"]}` (1–4 entries) and returns bounded
+   original context, cached across this entity's pending comparisons. Use the
+   returned context for new decisions; source hashes and claim ownership are checked.
 3. Record `review`/`separate` decisions, especially known leaf-to-leaf contradictions,
    before committing a conflicting group. Do not mark unseen work reviewed merely
    to clear the queue. Different coworkers, parent/subsidiary organizations, related
@@ -74,20 +100,29 @@ Publishing this skill does not deploy its server/helper dependencies.
    corroborated pairs become one reversible 3–21-member operation. Exclude uncertain
    members. For one approved pair or independent pairs, use `batch` (up to 20 decisions,
    `{"decisions":{"PAIR_ID":DECISION}}`). Never submit overlapping merge decisions
-   through `batch`: its pair commits are sequential, not a multi-entity transaction.
+   through `batch`: its pair commits remain separate reversible operations. The
+   `consolidation-batch-v2` service shares one lock/load/save across the batch and
+   returns per-item outcomes. A partial error makes the CLI exit unsuccessfully.
 5. Read the receipt and next status after writes. Inspect every batch result; one
    failure does not imply other decisions failed. Group failures make no partial
    member merges; a lost response is an unknown outcome requiring identical replay.
-   Other pending comparisons touching a committed group become stale; their approvals
+   Other pending comparisons touching any committed merge become stale; their approvals
    must not be transplanted to the new identity. Fetch fresh state before more work.
 6. Repeat while execution budget permits. A page is not the complete run. Persist
    exact payloads and run/group/pair IDs for recovery, not verbose reasoning traces.
+   Claims checkpoint automatically. Use `checkpoint` at a bounded execution-window
+   boundary or on resume to refresh changed inputs and record partial counts without
+   closing the run. Releasing a claim does not discard its pending comparisons.
 
 ## Evidence and decisions
 
 Aliases, partial strings, repeated mentions, generated aliases and model confidence
 are not independent corroboration. Ordinary matches need two specific independent
-facts supported on both sides. Strong name/alias or identifier matches with sparse
+facts from distinct source origins on both sides. Include `left_entry_id` and
+`right_entry_id` in each fact when available; the server checks the quoted entry.
+Directory captures appear in `excluded_activity` and cannot corroborate a merge.
+Exact copied snippets share an origin unless upstream lineage is provided; source
+diversity and automatic checks still do not establish semantic identity. Strong name/alias or identifier matches with sparse
 activity may use one substantial contextual fact on both sides. For spelling/OCR
 variants, require a specific shared event, role plus identifying details, or identifier;
 spelling alone is insufficient. Use `review` for uncertainty. Never fabricate quotes.
@@ -131,6 +166,8 @@ on Telegram. `sending` is uncertain: reconcile, do not blindly resend. Calling
 Do not send extra Telegram messages or per-merge HFL entries; undo/audit are per operation.
 
 The existing finish/report gate still requires the entire pending queue to be resolved.
+Partial checkpoint counts and timings are available through status; they are not
+completion reports. Fresh discovery can now proceed inside an unfinished run.
 If stopped with pending work or unconfirmed reporting, report **partial/incomplete**,
 not success. A cron output for incomplete/failed work must start with `[CRON_FAILURE]`
 and retain run ID, verified progress, pending count and the blocker. Never fabricate

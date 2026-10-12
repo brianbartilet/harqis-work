@@ -836,14 +836,39 @@ keep-separate decisions, external IDs and curated profiles before commit. Matchi
 names or transitive candidate links never auto-approve a group.
 
 Use the skill's `group` command for shared-anchor merges; the existing `batch`
-command is sequential and is only suitable for non-overlapping merge decisions.
+command holds one lock and loads/saves the run once, with individual commit
+receipts and per-item results. It is suitable for non-overlapping merge decisions.
 Exact retries recover receipts after a lost response or run save. Other pending
 comparisons touching consumed IDs become stale. `merged_groups` counts unique
 operations, while `counts.merged` counts approved comparisons. See
 [the algorithm and cost protocol](../../.agents/skills/auto-merge-entities/references/alias-first-batching.md).
-Deploy the API/helper together before using new flags or group commands; skill
-publication alone does not deploy them. Candidate caps, whole-run JSON rewrites,
-and the full-backlog finish/report gate remain unchanged.
+**Backlog review:** `claimed-anchor-packets-v1` adds `POST /consolidation/{run}/claims`
+for disjoint, expiring review leases. It selects an anchor neighborhood before
+packet limits, expands bounded candidates and exposes remaining edges. Reviewers
+may run concurrently; commits remain serialized and freshness-checked. A stable
+worker ID recovers its claim; batch/group requests pass `claim_token`. Unclaimed
+writes cannot bypass another reviewer's lease. Renew/release through
+`POST /consolidation/{run}/claims/{token}`. The API does not spawn worker processes.
+
+Evidence includes source/date/locator/origin metadata. Recognized directory captures
+remain excluded provenance; distinct quotes from one origin are not independent
+facts. `POST /consolidation/{run}/evidence` hydrates 1–4 selected original entries
+and reuses their bounded context across pending comparisons after source-hash checks.
+Claims automatically checkpoint and discover changed inputs during unfinished runs;
+`POST /consolidation/{run}/checkpoint` explicitly records partial counts without
+marking pending work reviewed or finalizing reporting. Run metrics and save logs
+separate service costs; model timings/tokens remain caller telemetry.
+
+Deploy the API/helper together before using new flags or commands; skill publication
+alone does not deploy them. Candidate caps, whole-run JSON rewrites and the full-backlog
+HFL/Telegram finish gate remain. There is no new model router or schedule.
+
+**Automation Runtime Decision:** hybrid, high confidence. Hermes owns scheduling and
+adaptive evidence review; the canonical API owns lease/persistence/merge operations;
+Celery owns durable final report delivery. Controls are owner authentication, stable
+run/operation IDs, skill hash, expiring claims, source/snapshot validation and reversible
+receipts. Review artifacts are checkpoint counts, timing logs, operation audits and the
+final grouped HFL report. No runtime ownership questions remain for this change.
 
 **Queue / OS:** `HARQIS_ENTITIES_QUEUE` (default `hfl`), cross-platform. The API
 and delivery worker must share `HARQIS_ENTITIES_DB` on the canonical host.

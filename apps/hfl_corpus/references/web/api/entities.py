@@ -225,18 +225,23 @@ class ApiServiceHflCorpusEntities(ApiServiceHflCorpusExtended):
         """
         return self._json('POST', 'entities/merges/batch', payload={'groups': groups})
 
-    def create_entity_consolidation(self) -> dict:
+    def create_entity_consolidation(self, compact: bool = False) -> dict:
         """Begin or resume an entity consolidation run. Destructive: writes remote state.
-        """
-        return self._json('POST', 'entities/consolidation/begin')
 
-    def get_entity_consolidation(self, run_id: str) -> dict:
+        Args:
+            compact: Deduplicate entity evidence in the response.
+        """
+        return self._json('POST', 'entities/consolidation/begin', params={'compact': compact})
+
+    def get_entity_consolidation(self, run_id: str, compact: bool = False, limit: int = 20) -> dict:
         """Read a consolidation run and its candidate decisions.
 
         Args:
             run_id: Run ID returned by create_hfl_corpus_entity_consolidation.
+            compact: Deduplicate entity evidence in the response.
+            limit: Maximum returned pairs, 1-20.
         """
-        return self._json('GET', f'entities/consolidation/{self._segment(run_id)}')
+        return self._json('GET', f'entities/consolidation/{self._segment(run_id)}', params={'compact': compact, 'limit': limit})
 
     def update_entity_consolidation_decision(self, run_id: str, pair_id: str, decision: dict) -> dict:
         """Record a decision and apply an eligible merge. Destructive: writes remote state.
@@ -248,14 +253,45 @@ class ApiServiceHflCorpusEntities(ApiServiceHflCorpusExtended):
         """
         return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/decisions/{self._segment(pair_id)}', payload=decision)
 
-    def update_entity_consolidation_decisions(self, run_id: str, decisions: dict) -> dict:
+    def update_entity_consolidation_decisions(self, run_id: str, decisions: dict, claim_token: str | None = None) -> dict:
         """Submit up to 20 pair decisions; results report each success or error. Destructive: writes remote state.
 
         Args:
             run_id: Consolidation run ID.
             decisions: Pair IDs mapped to decision objects, as in update_hfl_corpus_entity_consolidation_decision.
+            claim_token: Active review lease token, if claimed.
         """
-        return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/decisions', payload={'decisions': decisions})
+        payload = {'decisions': decisions}
+        if claim_token is not None:
+            payload['claim_token'] = claim_token
+        return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/decisions', payload=payload)
+
+    def create_entity_consolidation_claim(self, run_id: str, worker_id: str, max_pairs: int = 8,
+                                          max_bytes: int = 100000, lease_seconds: int = 900) -> dict:
+        """Claim a disjoint anchor packet. Destructive: writes remote state."""
+        return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/claims',
+            payload=dict(worker_id=worker_id, max_pairs=max_pairs, max_bytes=max_bytes, lease_seconds=lease_seconds))
+
+    def update_entity_consolidation_claim(self, run_id: str, token: str, action: str, lease_seconds: int = 900) -> dict:
+        """Renew or release a review lease. Destructive: writes remote state."""
+        return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/claims/{self._segment(token)}',
+                          payload=dict(action=action, lease_seconds=lease_seconds))
+
+    def update_entity_consolidation_checkpoint(self, run_id: str) -> dict:
+        """Checkpoint partial progress and discover changed inputs. Destructive: writes remote state."""
+        return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/checkpoint')
+
+    def update_entity_consolidation_evidence(self, run_id: str, entity_id: str, entry_ids: list[str],
+                                            claim_token: str | None = None) -> dict:
+        """Cache bounded original-entry context across pending pairs. Destructive: writes remote state."""
+        return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/evidence',
+                          payload=dict(entity_id=entity_id, entry_ids=entry_ids, claim_token=claim_token))
+
+    def create_entity_consolidation_group(self, run_id: str, anchor_id: str, decisions: dict,
+                                         contradictions: list[str], claim_token: str | None = None) -> dict:
+        """Commit independently corroborated anchor pairs atomically. Destructive: writes remote state."""
+        return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/groups',
+            payload=dict(anchor_id=anchor_id, decisions=decisions, contradictions=contradictions, claim_token=claim_token))
 
     def update_entity_consolidation_finish(self, run_id: str) -> dict:
         """Finish a decided run and dispatch its reports. Destructive: writes remote state.

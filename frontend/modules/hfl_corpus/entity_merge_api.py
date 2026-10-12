@@ -224,6 +224,8 @@ async def dismiss_match(request: Request, identity: str):
 
 class ConsolidationFact(BaseModel):
     model_config = ConfigDict(extra='forbid')
+    left_entry_id: str | None = Field(default=None, max_length=500)
+    right_entry_id: str | None = Field(default=None, max_length=500)
     left_quote: str = Field(max_length=2000)
     right_quote: str = Field(max_length=2000)
     explanation: str = Field(min_length=1, max_length=2000)
@@ -241,6 +243,7 @@ class ConsolidationDecision(BaseModel):
 
 class ConsolidationBatch(BaseModel):
     decisions: dict[str, ConsolidationDecision] = Field(min_length=1, max_length=20)
+    claim_token: str | None = Field(default=None, max_length=100)
 
 
 class ConsolidationGroup(BaseModel):
@@ -249,13 +252,63 @@ class ConsolidationGroup(BaseModel):
     decisions: dict[str, ConsolidationDecision] = Field(min_length=2, max_length=20)
     # Required: the assessor must explicitly check for cross-member conflicts.
     contradictions: list[str] = Field(max_length=20)
+    claim_token: str | None = Field(default=None, max_length=100)
 
 
 @router.post('/consolidation/{run_id}/groups')
 async def consolidation_group(request: Request, run_id: str, payload: ConsolidationGroup):
     owner(request)
     from workflows.hfl.entity_consolidation import merge_group
-    return await call(merge_group, run_id, payload.model_dump())
+    return await call(merge_group, run_id, payload.model_dump(exclude={'claim_token'}, exclude_none=True), payload.claim_token)
+
+
+class ConsolidationClaim(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    worker_id: str = Field(min_length=1, max_length=100)
+    max_pairs: int = Field(default=8, ge=1, le=20)
+    max_bytes: int = Field(default=100000, ge=4096, le=1000000)
+    lease_seconds: int = Field(default=900, ge=60, le=3600)
+
+
+class ConsolidationClaimUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    action: Literal['renew', 'release']
+    lease_seconds: int = Field(default=900, ge=60, le=3600)
+
+
+class ConsolidationEvidence(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    entity_id: str = Field(min_length=1, max_length=500)
+    entry_ids: list[str] = Field(min_length=1, max_length=4)
+    claim_token: str | None = Field(default=None, max_length=100)
+
+
+@router.post('/consolidation/{run_id}/evidence')
+async def consolidation_evidence(request: Request, run_id: str, payload: ConsolidationEvidence):
+    owner(request)
+    from workflows.hfl.entity_consolidation_work import expand_evidence
+    return await call(expand_evidence, run_id, payload.entity_id, payload.entry_ids, payload.claim_token)
+
+
+@router.post('/consolidation/{run_id}/claims')
+async def consolidation_claim(request: Request, run_id: str, payload: ConsolidationClaim):
+    owner(request)
+    from workflows.hfl.entity_consolidation_work import claim_work
+    return await call(claim_work, run_id, payload.model_dump())
+
+
+@router.post('/consolidation/{run_id}/claims/{token}')
+async def consolidation_claim_update(request: Request, run_id: str, token: str, payload: ConsolidationClaimUpdate):
+    owner(request)
+    from workflows.hfl.entity_consolidation_work import update_claim
+    return await call(update_claim, run_id, token, payload.action, payload.lease_seconds)
+
+
+@router.post('/consolidation/{run_id}/checkpoint')
+async def consolidation_checkpoint(request: Request, run_id: str):
+    owner(request)
+    from workflows.hfl.entity_consolidation_work import checkpoint
+    return await call(checkpoint, run_id)
 
 
 @router.post('/consolidation/begin')
@@ -279,21 +332,16 @@ async def consolidation_status(request: Request, run_id: str, compact: bool = Fa
 async def consolidation_decide(request: Request, run_id: str, pair_id: str, payload: ConsolidationDecision):
     owner(request)
     from workflows.hfl.entity_consolidation import decide
-    return await call(decide, run_id, pair_id, payload.model_dump())
+    return await call(decide, run_id, pair_id, payload.model_dump(exclude_none=True))
 
 
 @router.post('/consolidation/{run_id}/decisions')
 async def consolidation_batch(request: Request, run_id: str, payload: ConsolidationBatch):
     owner(request)
-    from workflows.hfl.entity_consolidation import decide
-    results = []
-    for pair_id, decision in payload.decisions.items():
-        try:
-            pair = await call(decide, run_id, pair_id, decision.model_dump())
-            results.append({'id': pair_id, 'state': pair['state'], 'operation': pair.get('operation'), 'note': pair.get('note')})
-        except HTTPException as exc:
-            results.append({'id': pair_id, 'error': exc.detail})
-    return {'results': results}
+    from workflows.hfl.entity_consolidation import decide_batch
+    return await call(decide_batch, run_id,
+                      {key: value.model_dump(exclude_none=True) for key, value in payload.decisions.items()},
+                      payload.claim_token)
 
 
 @router.post('/consolidation/{run_id}/finish')

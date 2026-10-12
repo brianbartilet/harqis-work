@@ -39,6 +39,48 @@
    plus receipt recovers commit-before-run-save interruptions without a second merge.
    Report unique operation IDs as merged groups, separately from comparison counts.
 
+## Claimed review packets
+
+Servers advertising `claimed-anchor-packets-v1` expose `POST /consolidation/{run}/claims`
+with `worker_id`, `max_pairs` (1–20, default 8), `max_bytes` (4,096–1,000,000,
+default 100,000), and `lease_seconds` (60–3,600, default 900). Prefer this path to
+the legacy page-local grouping in steps 3–4 above. It reconciles stale endpoints,
+checks changed-input fingerprints, discovers new work, then chooses an anchor
+from the complete available ledger. Targeted anchor expansion reuses the indexed
+50-candidate discovery pool and selects up to 20 candidates per anchor. Existing
+ledger edges also participate. This increases bounded coverage without claiming
+exhaustive discovery or treating graph connectivity as identity proof.
+
+Packet size is applied after selecting the neighborhood. Evidence appears once per
+entity; `claim.remaining_for_anchor` makes unissued edges visible. The byte budget
+counts serialized UTF-8 entities and pairs; `evidence_bytes` is not token usage.
+No excerpt is silently shortened to fit. An oversized first edge returns
+`required_bytes` without reserving work. Other workers cannot claim overlapping IDs.
+The same worker ID retrieves its active packet; use a distinct ID for each reviewer.
+`POST /claims/{token}` renews or releases a claim. Expired leases are reclaimable.
+
+Supply `claim_token` separately from identity decisions in batch/group requests.
+It is deliberately excluded from merge fingerprints so recovery of an already
+committed operation works after lease expiry. A token never bypasses snapshots,
+curated profiles, contradictions, blocks, or source checks. The legacy writer path
+cannot bypass a currently active claim. Commits still serialize under the matching
+lock; review concurrency is owned by the calling agent runtime.
+
+`POST /consolidation/{run}/evidence` takes `entity_id`, 1–4 `entry_ids` and optional
+`claim_token`. It verifies source content hashes and membership, then caches up to
+6,000 characters around the stored mention across the entity's pending comparisons.
+Hydrated packets retain at most 12 active snippets and eight excluded snippets;
+`truncated` flags bounded original context. Original-entry locators remain available.
+Facts may specify `left_entry_id`/`right_entry_id`. Ordinary two-fact approval needs
+two distinct origins on each side, not two excerpts of the same capture. Recognized
+HARQIS directory captures are retained as excluded provenance. Classification is
+conservative and depends on available source/title/context, not a universal detector.
+
+Claims automatically reconcile/checkpoint; explicit `POST /checkpoint` also records
+partial counts and discovers changed inputs without closing the run. No pending
+comparison is marked reviewed by checkpointing. New candidate versions retain old
+decisions for audit. A same-run retry does not rediscover unchanged deferred work.
+
 ## Group payload
 
 `group RUN_ID --file GROUP.json` submits `POST /consolidation/{run_id}/groups`.
@@ -80,6 +122,11 @@ Implemented now:
 - One reversible commit for a high-confidence star, avoiding repeated collection
   reconstruction, stale-anchor failures and redundant write round trips per leaf.
 - Compact CLI JSON without pretty-print whitespace; one structured batch response.
+- One matching lock, run load and run save for ordinary batches, retaining per-item
+  errors and transaction receipts. Every merge invalidates consumed endpoints.
+- Run timings for load, index construction, lock wait, batch and claim operations;
+  logs measure actual save duration without rewriting the run solely for timing.
+  These measurements exclude agent/model time, which must come from the caller.
 
 Operator strategy (not a new scheduler/model router):
 - Start with 3–8 candidate aliases per reasoning packet. Use a smaller status page
@@ -101,12 +148,15 @@ Operator strategy (not a new scheduler/model router):
 
 ## Limits and rollout
 
-Strict priority can starve lower-priority types until higher tiers clear. Unfinished
-runs currently block fresh discovery, and finish/reporting still waits for no pending
-comparisons. This change does not implement fairness quotas, bounded-run finalization,
-incremental progress reports, cross-run caching or a new runtime/model selector.
+Strict priority can starve lower-priority types until higher tiers clear. Claims and
+checkpoints permit fresh discovery during unfinished runs and expose partial counts.
+Final HFL/Telegram reporting still waits for no pending comparisons. This change does
+not implement fairness quotas, bounded-run finalization, partial HFL delivery,
+cross-run caching, worker process supervision or a new runtime/model selector.
 
-Compact packets do not remove server-side full-run JSON storage/rewrite costs. They
+Compact packets and shared batch persistence reduce repetition but do not remove
+server-side full-run JSON storage/rewrite costs. A normalized ledger remains future
+work requiring its own migration and performance evidence. These changes
 also do not promise exhaustive alias discovery: existing candidate caps/incremental
 seed rules remain. API/CLI/skill must be deployed compatibly before live execution;
 status advertises `atomic-anchor-groups-v1`, compact output `anchor-packets-v1`.
