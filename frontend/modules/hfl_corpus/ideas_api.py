@@ -346,7 +346,8 @@ def item_connection_options(request: Request, query: str = '', offset: int = 0):
         raise HTTPException(422, 'Use a valid search and offset.')
     data = permitted_snapshot(include_promoted=True)
     nodes = [{'id': prefix + item['id'], 'object_id': item['id'], 'label': item['title'],
-              'kind': kind, 'status': item.get('status', '')}
+              'kind': kind, 'status': item.get('status', ''),
+              'description': (item.get('body') or item.get('description') or item.get('expected_outcome') or '')[:600]}
              for kind, prefix in [('ideas', 'idea:'), ('actions', 'action:')]
              for item in data[kind] if query in (item['id'] + ' ' + item['title']).casefold()]
     nodes.sort(key=lambda item: (item['label'].casefold(), item['id']))

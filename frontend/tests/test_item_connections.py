@@ -91,6 +91,7 @@ def test_editor_connections_sidebar_add_edit_remove(ideas, authenticated_client,
     playwright = pytest.importorskip('playwright.sync_api')
     monkeypatch.setattr(router.corpus_index,'documents',lambda:())
     idea = ideas.save_idea(payload(title='A reading room'), 'owner')
+    ideas.save_idea(payload(title='Compare reading room layouts with quiet areas and accessible shelves', description='', body='Explore comfortable layouts and lighting. ' * 30), 'owner')
     action = ideas.followups.create({'request_id':str(uuid4()),'title':'Read books'},actor='owner')[0]
     with playwright.sync_playwright() as driver:
         browser = driver.chromium.launch(channel='chrome',headless=True)
@@ -114,11 +115,23 @@ def test_editor_connections_sidebar_add_edit_remove(ideas, authenticated_client,
         playwright.expect(editor).to_be_visible()
         sidebar=editor.locator('.item-connections-sidebar')
         assert sidebar.locator('details').get_attribute('open') is None
-        sidebar.locator('summary').click()
-        playwright.expect(sidebar.locator('canvas')).to_be_visible()
-        playwright.expect(sidebar.locator('.connections-details h3')).to_have_text('Read books' if kind=='action' else 'A reading room')
-        sidebar.get_by_role('button',name='Add connection',exact=True).click()
+        sidebar.locator('summary').get_by_role('button',name='Add',exact=True).click()
         picker=page.locator('.connection-picker-dialog')
+        playwright.expect(picker).to_be_visible()
+        assert sidebar.locator('details').get_attribute('open') is not None
+        playwright.expect(picker.locator('.idea-attach-choice').first).to_be_visible()
+        cards=picker.locator('.idea-attach-choice')
+        assert cards.first.locator('.connection-type-pill').count() == 1
+        assert cards.first.locator('.connection-status-pill').count() == 1
+        assert cards.first.locator('.connection-card-description').count() == 1
+        assert cards.count() >= 2
+        assert abs(cards.nth(0).bounding_box()['height']-cards.nth(1).bounding_box()['height']) < 1
+        assert picker.evaluate('(el)=>el.scrollWidth <= el.clientWidth+1')
+        search=picker.get_by_label('Search ideas and actions').bounding_box()
+        select=picker.get_by_label('Connection type').bounding_box()
+        assert abs(search['y']-select['y']) < 2
+        assert search['x']+search['width'] < select['x']
+        page.screenshot(path=str(tmp_path/f'picker-{width}.png'),full_page=True)
         picker.get_by_label('Search ideas and actions').fill(idea['id'] if kind=='action' else 'Read books')
         picker.get_by_role('button',name='A reading room' if kind=='action' else 'Read books',exact=False).click()
         picker.get_by_label('Search ideas and actions').fill('no matching item here')

@@ -13,14 +13,44 @@ dialog.agenda-dialog.has-connections-sidebar { width:min(1100px,calc(100vw - 24p
 .item-connections-sidebar summary::after { content:''; position:absolute; right:.25rem; top:50%; width:20px; height:20px; transform:translateY(-50%); pointer-events:none; background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='m5 7.5 5 5 5-5' fill='none' stroke='%2367e8f9' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/20px no-repeat; }
 .item-connections-sidebar details[open] > summary::after { transform:translateY(-50%) rotate(180deg); }
 .item-connections-sidebar .connections-footnote { padding:.5rem; }
-.connection-picker-dialog { padding:1rem; width:min(600px,calc(100vw - 24px)); }
+dialog.idea-dialog.agenda-dialog.connection-picker-dialog { padding:24px; width:min(720px,calc(100vw - 24px)); box-sizing:border-box; }
+.item-connections-sidebar summary { display:flex; align-items:center; justify-content:space-between; gap:.75rem; }
+.item-connections-sidebar summary > button { margin:0 0 0 auto; padding:.3rem .65rem; font-size:.78rem; }
+.item-connections-sidebar summary::after { position:static; flex:0 0 20px; transform:none; }
+.item-connections-sidebar details[open] > summary::after { transform:rotate(180deg); }
+.connections-loading { min-height:300px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.65rem; padding:1.5rem; text-align:center; color:#94a3b8; font-size:.8rem; }
+.connections-loading strong { color:#dbeafe; font-size:.9rem; }
+.connections-loading-spinner { width:26px; height:26px; border:2px solid #243448; border-top-color:#7dd3fc; border-radius:50%; animation:connections-spin 1s linear infinite; }
+@keyframes connections-spin { to { transform:rotate(360deg); } }
+@media(prefers-reduced-motion:reduce) { .connections-loading-spinner { animation:none; } }
+.connection-picker .connection-picker-fields { display:grid; grid-template-columns:minmax(0,1fr) 190px; gap:16px; align-items:end; }
+.connection-picker .connection-picker-fields > label { min-width:0; margin:0; }
+.connection-picker .connection-selected { margin:16px 0 12px; }
+.connection-picker .connection-pagination { display:flex; gap:.5rem; padding-top:16px; }
+.connection-picker .connection-pagination:empty { display:none; }
+.connection-picker footer { padding-top:16px; border-top:1px solid #243448; }
 .connection-picker .idea-choices { max-height:38dvh; overflow:auto; }
-.connection-picker .idea-attach-choice { display:flex; flex-direction:column; align-items:start; width:calc(100% - 8px); text-align:left; }
+.connection-picker .idea-choices { display:flex; flex-direction:column; gap:10px; padding:3px 8px 3px 3px; }
+.connection-picker .idea-choices .idea-attach-choice { display:grid; grid-template-rows:22px 40px 38px 16px; gap:6px; flex:0 0 160px; height:160px; min-height:160px; box-sizing:border-box; padding:12px; margin:0; width:100%; text-align:left; }
+.connection-picker .idea-attach-title,.connection-card-description { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; overflow-wrap:anywhere; white-space:normal; }
+.connection-picker .idea-attach-title { line-height:20px; font-weight:600; font-size:.85rem; }
+.connection-card-description { line-height:19px; font-size:.78rem; color:#a9b8cc; }
+.connection-picker .idea-attach-choice > small { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:.65rem; line-height:16px; min-width:0; }
+.connection-card-pills { display:flex; align-items:center; gap:6px; }
+.connection-type-pill,.connection-status-pill { display:inline-flex; align-items:center; padding:2px 8px; border-radius:999px; border:1px solid #475569; font-size:.65rem; line-height:16px; background:#1e293b; color:#cbd5e1; }
+.connection-type-pill[data-kind=actions] { color:#fda4af; border-color:#854356; background:#391d2c; }
+.connection-type-pill[data-kind=ideas] { color:#fde68a; border-color:#78622c; background:#342c19; }
+.connection-status-pill:is([data-status=open],[data-status=suggested]) { color:#fde68a; border-color:#78622c; background:#342c19; }
+.connection-status-pill:is([data-status=active],[data-status=in_progress]) { color:#7dd3fc; border-color:#155e75; background:#082f49; }
+.connection-status-pill:is([data-status=done],[data-status=adopted]) { color:#a7f3d0; border-color:#065f46; background:#052e25; }
 .connection-picker .idea-attach-choice[aria-pressed=true] { border-color:#38bdf8; background:#082f49; }
 .connection-picker small,.connection-selected { overflow-wrap:anywhere; color:#94a3b8; }
 .connection-picker footer { display:flex; flex-wrap:wrap; gap:.5rem; }
 .connection-picker select { appearance:none; padding-right:2rem; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cpath d='m5 7.5 5 5 5-5' fill='none' stroke='%2367e8f9' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right .6rem center; }
 @media(max-width:760px) {
+  dialog.idea-dialog.agenda-dialog.connection-picker-dialog { padding:16px; }
+  .connection-picker .connection-picker-fields { grid-template-columns:minmax(0,1fr) 130px; gap:10px; }
+  .connection-picker .connection-picker-fields > label { font-size:.75rem; }
   .agenda-dialog.has-connections-sidebar > form { display:block; }
   .item-connections-sidebar { border-left:0; border-top:1px solid #243448; }
   .item-connections-sidebar .connections-canvas { height:260px; }

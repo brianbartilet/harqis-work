@@ -61,17 +61,21 @@ function ConnectionPicker({item, edge, initialLabel, close}) {
     } catch(e) {setError(e.message);} finally {setBusy(false);}
   }
   return <div className="connection-picker">
+    <div className="connection-picker-fields">
     <label>Search ideas and actions<input type="search" autoFocus value={query} maxLength={200} placeholder="Title or item ID" onChange={e=>{setQuery(e.target.value);setOffset(0);}}/></label>
     <label>Connection type<select value={choice} onChange={e=>setChoice(Number(e.target.value))}>{relationChoices.map(([,label],i)=><option key={i} value={i}>{label}</option>)}</select></label>
+    </div>
     <p className="connection-selected" role="status">{target ? 'Selected: ' + targetLabel : 'Select an idea or action.'}</p>
     <div className="idea-choices" aria-label="Connection search results">
       {!data && !error && <p role="status">Loading…</p>}
       {data?.nodes.filter(n=>n.id !== root).map(node=><button type="button" className="idea-attach-choice" key={node.id} aria-pressed={target===node.id} disabled={busy} onClick={()=>{setTarget(node.id);setTargetLabel(node.label);}}>
-        <span className="idea-attach-title">{node.label}</span><span className="idea-attach-entity">{node.kind==='ideas'?'Idea':'Action'} · {statusLabel(node.status)}</span><small>{node.object_id}</small>
+        <span className="connection-card-pills"><span className="connection-type-pill" data-kind={node.kind}>{node.kind==='ideas'?'Idea':'Action'}</span><span className="connection-status-pill" data-status={node.status}>{statusLabel(node.status)}</span></span>
+        <span className="idea-attach-title">{node.label}</span>
+        <span className="connection-card-description">{node.description || 'No description yet.'}</span><small title={node.object_id}>{node.object_id}</small>
       </button>)}
       {data && !data.nodes.some(n=>n.id!==root) && <p>No matching ideas or actions.</p>}
     </div>
-    <div>{offset>0 && <button type="button" disabled={busy} onClick={()=>setOffset(offset-50)}>Previous</button>}{data?.has_more && <button type="button" disabled={busy} onClick={()=>setOffset(offset+50)}>Next</button>}</div>
+    <nav className="connection-pagination" aria-label="Connection results pages">{offset>0 && <button type="button" disabled={busy} onClick={()=>setOffset(offset-50)}>Previous</button>}{data?.has_more && <button type="button" disabled={busy} onClick={()=>setOffset(offset+50)}>Next</button>}</nav>
     {error && <p role="alert">{error} <button type="button" onClick={()=>setAttempt(a=>a+1)}>Retry search</button></p>}
     <footer><button type="button" disabled={busy} onClick={close}>Cancel</button>{edge && <button type="button" disabled={busy} onClick={()=>save('remove')}>Remove connection</button>}<button type="button" disabled={busy || !target} onClick={()=>save(edge?'update':'create')}>{busy?'Saving…':'Save connection'}</button></footer>
   </div>;
@@ -128,7 +132,7 @@ function Preview({item, editable=false}) {
   }, []);
   const fit = () => graph.current?.zoomToFit(250, 65, () => true);
   if (error) return <div className="connections-state" role="alert"><p>{error}</p><button type="button" onClick={() => setAttempt(a => a + 1)}>Retry</button></div>;
-  if (!data) return <p className="connections-state" role="status">Loading connections…</p>;
+  if (!data) return <div className="connections-loading" role="status" aria-live="polite" aria-busy="true"><span className="connections-loading-spinner" aria-hidden="true"/><strong>Finding related items</strong><span>Your connections graph will appear here.</span></div>;
   if (!data.links.length && !editable) return <div className="connections-state connections-empty" role="status">
     <h3>No connections yet</h3>
     <p>{item.kind === 'daily' ? 'Related activity will appear here when it is connected to this date.' : `Add this ${item.kind === 'idea' ? 'idea' : 'action'} to a board to organize it alongside related ideas, thoughts, and actions.`}</p>
@@ -224,8 +228,8 @@ function Sidebar({getItem}) {
   const [expanded,setExpanded]=useState(false), [,refresh]=useState(0);
   useEffect(()=>{const update=()=>refresh(n=>n+1);window.addEventListener('hfl:ideas-updated',update);window.addEventListener('hfl:actions-updated',update);return()=>{window.removeEventListener('hfl:ideas-updated',update);window.removeEventListener('hfl:actions-updated',update);};},[]);
   const item=getItem();
-  return <details className="action-triage" onToggle={event=>setExpanded(event.currentTarget.open)}><summary>Connections</summary>
-    {expanded && (item?.id ? <><button type="button" onClick={event=>openConnectionPicker(item,null,event.currentTarget)}>Add connection</button><Preview item={item} editable/></> : <p>Save this item to add connections.</p>)}
+  return <details className="action-triage" open={expanded} onToggle={event=>setExpanded(event.currentTarget.open)}><summary><span>Connections</span><button type="button" disabled={!item?.id} title={item?.id?'Add a connection':'Save this item to add connections'} onClick={event=>{event.preventDefault();event.stopPropagation();setExpanded(true);openConnectionPicker(item,null,event.currentTarget);}}>Add</button></summary>
+    {expanded && (item?.id ? <Preview item={item} editable/> : <p>Save this item to add connections.</p>)}
   </details>;
 }
 window.HflActionConnections = {attach(dialog,getItem) {
