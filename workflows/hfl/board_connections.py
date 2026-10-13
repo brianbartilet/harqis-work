@@ -5,7 +5,8 @@ import uuid
 from workflows.hfl.timeline_store import FollowUpConflict, isoformat
 
 
-RELATIONS = {'related-to', 'supports', 'alternative', 'depends-on', 'develops-into', 'source-date', 'context'}
+RELATIONS = {'related-to', 'supports', 'alternative', 'depends-on', 'develops-into', 'source-date', 'context',
+             'blocked-by', 'cloned-from', 'promoted-from', 'created-from'}
 
 
 def connection_key(edge):

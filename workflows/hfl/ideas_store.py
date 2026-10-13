@@ -107,7 +107,7 @@ class IdeasStore(BoardStoreMixin):
             from datetime import date
             date.fromisoformat(item['source_date'])
         if not identity:
-            identity = 'idea-' + str(uuid.UUID(raw['request_id']))
+            identity = 'item-' + str(uuid.UUID(raw['request_id']))
         item.update(id=identity, title=item['title'].strip(), version=previous.get('version', 0) + 1,
                     created_at=previous.get('created_at', isoformat()), updated_at=isoformat(),
                     status=item.get('status', 'suggested'), origin=previous.get('origin', 'manual' if not previous else 'generated'))
@@ -116,6 +116,11 @@ class IdeasStore(BoardStoreMixin):
         with (nullcontext(connection) if connection is not None else self.followups.connect()) as db:
             if connection is None:
                 db.execute('BEGIN IMMEDIATE')
+            if not previous and 'request_id' in raw:
+                legacy = 'idea-' + str(uuid.UUID(raw['request_id']))
+                if db.execute('SELECT 1 FROM idea_edits WHERE id=?', (legacy,)).fetchone():
+                    identity = legacy
+                    item['id'] = legacy
             found = db.execute('SELECT * FROM idea_edits WHERE id=?', (identity,)).fetchone()
             if not previous and found:
                 existing = json.loads(found['payload'])
@@ -148,7 +153,8 @@ class IdeasStore(BoardStoreMixin):
             return [dict(row) for row in db.execute("SELECT l.*, COALESCE(m.direction, 'forward') AS direction, COALESCE(m.revision, l.created_at) AS revision FROM idea_links l LEFT JOIN idea_link_metadata m USING(source,target,relation)")]
 
     def link(self, source, target, relation='related-to', remove=False):
-        if source == target or relation not in {'related-to', 'develops-into', 'source-date', 'context', 'supports', 'depends-on', 'alternative'}:
+        from workflows.hfl.board_connections import RELATIONS
+        if source == target or relation not in RELATIONS:
             raise ValueError('Choose two different objects and a supported relationship.')
         with self.followups.connect() as db:
             if remove:
@@ -156,6 +162,54 @@ class IdeasStore(BoardStoreMixin):
                 db.execute('DELETE FROM idea_link_metadata WHERE source=? AND target=? AND relation=?', (source, target, relation))
             else:
                 db.execute('INSERT OR IGNORE INTO idea_links VALUES (?,?,?,?)', (source, target, relation, isoformat()))
+
+    def edit_item_connection(self, raw):
+        """Atomically mutate a shared manual link, retaining optimistic concurrency."""
+        relations = {'related-to', 'depends-on', 'blocked-by', 'cloned-from', 'promoted-from', 'created-from'}
+        operation = raw.get('operation')
+        if operation not in {'create', 'update', 'remove'}:
+            raise ValueError('Choose a connection operation.')
+        def edge(value):
+            if not isinstance(value, dict):
+                raise ValueError('Choose a connection.')
+            source, target, relation = (value.get(k) for k in ('source', 'target', 'relation'))
+            if (not all(isinstance(i, str) and i.startswith(('idea:', 'action:')) for i in (source, target))
+                    or source == target or relation not in relations):
+                raise ValueError('Choose two different ideas or actions and a supported relationship.')
+            return source, target, relation
+        old = edge(raw.get('edge'))
+        new = edge(raw.get('replacement')) if operation == 'update' else old
+        with self.followups.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            found = db.execute("SELECT l.*, COALESCE(m.revision,l.created_at) AS revision FROM idea_links l LEFT JOIN idea_link_metadata m USING(source,target,relation) WHERE source=? AND target=? AND relation=?", old).fetchone()
+            if operation != 'create' and (not found or found['revision'] != raw.get('revision')):
+                raise FollowUpConflict('This connection changed. Refresh before retrying.')
+            if operation != 'remove':
+                duplicate = db.execute('SELECT source,target,relation FROM idea_links WHERE source=? AND target=? AND relation=?', new).fetchone()
+                reverse = db.execute('SELECT source,target,relation FROM idea_links WHERE source=? AND target=? AND relation=?', (new[1],new[0],new[2])).fetchone() if new[2] == 'related-to' else None
+                if any(row and (operation == 'create' or tuple(row) != old) for row in (duplicate, reverse)):
+                    raise ValueError('This connection already exists.')
+            if operation != 'create':
+                db.execute('DELETE FROM idea_links WHERE source=? AND target=? AND relation=?', old)
+            if operation != 'remove':
+                db.execute('INSERT INTO idea_links VALUES (?,?,?,?)', (*new, found['created_at'] if found else isoformat()))
+                db.execute('INSERT INTO idea_link_metadata VALUES (?,?,?,?,?)', (*new, 'none' if new[2] == 'related-to' else 'forward', str(uuid.uuid4())))
+            # Preserve board presentation settings when a shared edge is edited.
+            from workflows.hfl.board_connections import connection_key
+            old_key = connection_key(dict(zip(('source', 'target', 'relation'), old)))
+            new_key = connection_key(dict(zip(('source', 'target', 'relation'), new)))
+            if operation != 'create':
+                for row in db.execute('SELECT id,payload FROM idea_maps').fetchall():
+                    board = json.loads(row['payload'])
+                    widths = board.get('edge_widths', {})
+                    if old_key in widths:
+                        width = widths.pop(old_key)
+                        if operation == 'update':
+                            widths[new_key] = width
+                        board['version'] = board.get('version', 0) + 1
+                        board['updated_at'] = isoformat()
+                        db.execute('UPDATE idea_maps SET version=?,payload=? WHERE id=?', (board['version'], json.dumps(board), row['id']))
+        return {'saved': True}
 
     def maps(self):
         with self.followups.connect() as db:

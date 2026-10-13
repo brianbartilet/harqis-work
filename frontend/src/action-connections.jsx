@@ -13,7 +13,79 @@ const statusLabel = status => ({open:'In Review',active:'Ready',suggested:'Avail
 const tooltip = text => {const span = document.createElement('span'); span.textContent = text; return span;};
 let activeDialog;
 
-function Preview({item}) {
+const relationChoices = [
+  ['depends-on','depends on',false], ['depends-on','dependency for',true],
+  ['related-to','relates to',false], ['blocked-by','blocked by',false], ['blocked-by','blocks',true],
+  ['cloned-from','cloned from',false], ['cloned-from','cloned to',true],
+  ['promoted-from','promoted from',false], ['promoted-from','promoted to',true],
+  ['created-from','created from',false], ['created-from','created to',true],
+];
+const editableRelations = new Set(relationChoices.map(([relation]) => relation));
+const connectionLabel = (edge, from) => relationChoices.find(([relation,,reverse]) => relation === edge.relation && (relation === 'related-to' || reverse === (edge.target === from)))?.[1] || edge.relation;
+const changed = () => {
+  window.dispatchEvent(new CustomEvent('hfl:ideas-updated', {detail:{refreshShared:true}}));
+  window.dispatchEvent(new Event('hfl:actions-updated'));
+};
+async function connectionRequest(path, body, signal) {
+  const response = await fetch('/hfl-corpus/timeline/ideas/' + path, {
+    method:body ? 'POST' : 'GET', signal:signal ? AbortSignal.any([signal,AbortSignal.timeout(45000)]) : AbortSignal.timeout(45000), cache:'no-store',
+    headers:body ? {'Content-Type':'application/json', 'X-CSRF-Token':document.querySelector('[data-input-editor]')?.dataset.csrf || ''} : {},
+    ...(body ? {body:JSON.stringify(body)} : {}),
+  });
+  const data = await response.json();
+  if (!response.ok) throw Error(typeof data.detail === 'string' ? data.detail : 'Connection could not be saved. Please try again.');
+  return data;
+}
+
+function ConnectionPicker({item, edge, initialLabel, close}) {
+  const root = (item.kind === 'idea' ? 'idea:' : 'action:') + item.id;
+  const [query,setQuery] = useState(''), [offset,setOffset] = useState(0), [data,setData] = useState(null);
+  const [target,setTarget] = useState(edge ? (edge.source === root ? edge.target : edge.source) : '');
+  const [targetLabel,setTargetLabel] = useState(initialLabel || '');
+  const [choice,setChoice] = useState(Math.max(0, relationChoices.findIndex(([r,,reverse]) => edge && r === edge.relation && (r === 'related-to' || reverse === (edge.target === root)))));
+  const [error,setError] = useState(''), [busy,setBusy] = useState(false), [attempt,setAttempt] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController(); let live = true;
+    setData(null); setError('');
+    const timer = setTimeout(() => connectionRequest('item-connection-options?' + new URLSearchParams({query,offset}), null, controller.signal)
+      .then(result => {if(live)setData(result);}).catch(e => {if(live && e.name !== 'AbortError')setError(e.message);}), 250);
+    return () => {live=false;clearTimeout(timer);controller.abort();};
+  }, [query,offset,attempt]);
+  async function save(operation) {
+    setBusy(true); setError('');
+    const [relation,,reverse] = relationChoices[choice];
+    const replacement = {source:reverse ? target : root, target:reverse ? root : target, relation};
+    try {
+      await connectionRequest('item-connections', {operation, edge:edge || replacement, ...(edge ? {revision:edge.revision,replacement} : {})});
+      changed(); close();
+    } catch(e) {setError(e.message);} finally {setBusy(false);}
+  }
+  return <div className="connection-picker">
+    <label>Search ideas and actions<input type="search" autoFocus value={query} maxLength={200} placeholder="Title or item ID" onChange={e=>{setQuery(e.target.value);setOffset(0);}}/></label>
+    <label>Connection type<select value={choice} onChange={e=>setChoice(Number(e.target.value))}>{relationChoices.map(([,label],i)=><option key={i} value={i}>{label}</option>)}</select></label>
+    <p className="connection-selected" role="status">{target ? 'Selected: ' + targetLabel : 'Select an idea or action.'}</p>
+    <div className="idea-choices" aria-label="Connection search results">
+      {!data && !error && <p role="status">Loading…</p>}
+      {data?.nodes.filter(n=>n.id !== root).map(node=><button type="button" className="idea-attach-choice" key={node.id} aria-pressed={target===node.id} disabled={busy} onClick={()=>{setTarget(node.id);setTargetLabel(node.label);}}>
+        <span className="idea-attach-title">{node.label}</span><span className="idea-attach-entity">{node.kind==='ideas'?'Idea':'Action'} · {statusLabel(node.status)}</span><small>{node.object_id}</small>
+      </button>)}
+      {data && !data.nodes.some(n=>n.id!==root) && <p>No matching ideas or actions.</p>}
+    </div>
+    <div>{offset>0 && <button type="button" disabled={busy} onClick={()=>setOffset(offset-50)}>Previous</button>}{data?.has_more && <button type="button" disabled={busy} onClick={()=>setOffset(offset+50)}>Next</button>}</div>
+    {error && <p role="alert">{error} <button type="button" onClick={()=>setAttempt(a=>a+1)}>Retry search</button></p>}
+    <footer><button type="button" disabled={busy} onClick={close}>Cancel</button>{edge && <button type="button" disabled={busy} onClick={()=>save('remove')}>Remove connection</button>}<button type="button" disabled={busy || !target} onClick={()=>save(edge?'update':'create')}>{busy?'Saving…':'Save connection'}</button></footer>
+  </div>;
+}
+
+function openConnectionPicker(item, edge, trigger, initialLabel='') {
+  const dialog=document.createElement('dialog'); dialog.className='idea-dialog agenda-dialog connection-picker-dialog';
+  const title=document.createElement('h2');title.id='connection-title-'+crypto.randomUUID();title.textContent=edge?'Edit connection':'Add connection';dialog.setAttribute('aria-labelledby',title.id);
+  const host=document.createElement('div');dialog.append(title,host);document.body.append(dialog);
+  const root=createRoot(host);dialog.addEventListener('close',()=>{root.unmount();dialog.remove();trigger?.focus();},{once:true});
+  dialog.showModal();root.render(<ConnectionPicker item={item} edge={edge} initialLabel={initialLabel} close={()=>dialog.close()}/>);
+}
+
+function Preview({item, editable=false}) {
   const [data, setData] = useState(null), [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0), [selected, setSelected] = useState(null);
   const [size, setSize] = useState({width:480, height:360});
@@ -55,9 +127,9 @@ function Preview({item}) {
     return () => window.removeEventListener('hfl:ideas-updated', refresh);
   }, []);
   const fit = () => graph.current?.zoomToFit(250, 65, () => true);
-  if (error) return <div className="connections-state" role="alert"><p>{error}</p><button onClick={() => setAttempt(a => a + 1)}>Retry</button></div>;
+  if (error) return <div className="connections-state" role="alert"><p>{error}</p><button type="button" onClick={() => setAttempt(a => a + 1)}>Retry</button></div>;
   if (!data) return <p className="connections-state" role="status">Loading connections…</p>;
-  if (!data.links.length) return <div className="connections-state connections-empty" role="status">
+  if (!data.links.length && !editable) return <div className="connections-state connections-empty" role="status">
     <h3>No connections yet</h3>
     <p>{item.kind === 'daily' ? 'Related activity will appear here when it is connected to this date.' : `Add this ${item.kind === 'idea' ? 'idea' : 'action'} to a board to organize it alongside related ideas, thoughts, and actions.`}</p>
   </div>;
@@ -73,9 +145,9 @@ function Preview({item}) {
           setSelected(data.nodes[(index + (event.key === 'ArrowRight' ? 1 : data.nodes.length - 1)) % data.nodes.length]);
         }}>
         <div className="connections-tools" role="group" aria-label="Graph controls">
-          <button onClick={() => graph.current?.zoom(graph.current.zoom() * 1.3, 150)} aria-label="Zoom in" title="Zoom in"><GraphIcon name="plus"/></button>
-          <button onClick={() => graph.current?.zoom(graph.current.zoom() / 1.3, 150)} aria-label="Zoom out" title="Zoom out"><GraphIcon name="minus"/></button>
-          <button onClick={fit} aria-label="Fit" title="Fit graph"><GraphIcon name="fit"/></button>
+          <button type="button" onClick={() => graph.current?.zoom(graph.current.zoom() * 1.3, 150)} aria-label="Zoom in" title="Zoom in"><GraphIcon name="plus"/></button>
+          <button type="button" onClick={() => graph.current?.zoom(graph.current.zoom() / 1.3, 150)} aria-label="Zoom out" title="Zoom out"><GraphIcon name="minus"/></button>
+          <button type="button" onClick={fit} aria-label="Fit" title="Fit graph"><GraphIcon name="fit"/></button>
         </div>
         <ForceGraph2D ref={graph} width={size.width} height={size.height} graphData={data} maxZoom={2.5}
           backgroundColor="#0b1728" nodeId="id" nodeLabel={node => tooltip(`${node.label} · ${kindName(node.kind)}${node.boards.length ? ' · ' + node.boards.map(b => b.name).join(', ') : ''}`)}
@@ -138,8 +210,9 @@ function Preview({item}) {
           {(selected.body || selected.description) && <div className="connections-body markdown-body" dangerouslySetInnerHTML={{__html:selected.body_html}}/>}
           {selected.checklists?.map((list, index) => <div key={list.id || index}><h4>{list.title || 'Checklist'}</h4><ul>{list.items.map((entry, i) => <li key={entry.id || i}>{entry.done ? '☑' : '☐'} {entry.text}</li>)}</ul></div>)}
           <h4>Connections</h4><ul className="connections-relations">{relations.map((edge, index) => <li key={index}>
-            <span>{label(edge.source)} {edge.direction === 'none' ? '—' : edge.direction === 'both' ? '↔' : '→'} {label(edge.target)}</span>
-            <small>{edge.relation} · {edge.board ? 'Board: ' + edge.board.name : 'Activity Graph'}</small>
+            <span>{editableRelations.has(edge.relation) ? `${label(selected.id)} ${connectionLabel(edge,selected.id)} ${label(edge.source === selected.id ? edge.target : edge.source)}` : <>{label(edge.source)} {edge.direction === 'none' ? '—' : edge.direction === 'both' ? '↔' : '→'} {label(edge.target)}</>}</span>
+            <small>{connectionLabel(edge,selected.id)} · {edge.board ? 'Board: ' + edge.board.name : 'Activity Graph'}</small>
+            {editable && edge.manual && edge.scope==='shared' && editableRelations.has(edge.relation) && [edge.source,edge.target].includes(data.root) && <button type="button" onClick={event=>openConnectionPicker(item,edge,event.currentTarget,label(edge.source===data.root?edge.target:edge.source))}>Edit connection</button>}
           </li>)}</ul></> : <p>Select an orb to read its details.</p>}
       </aside>
     </div>
@@ -147,7 +220,24 @@ function Preview({item}) {
   </>;
 }
 
-window.HflActionConnections = {open(item, trigger) {
+function Sidebar({getItem}) {
+  const [expanded,setExpanded]=useState(false), [,refresh]=useState(0);
+  useEffect(()=>{const update=()=>refresh(n=>n+1);window.addEventListener('hfl:ideas-updated',update);window.addEventListener('hfl:actions-updated',update);return()=>{window.removeEventListener('hfl:ideas-updated',update);window.removeEventListener('hfl:actions-updated',update);};},[]);
+  const item=getItem();
+  return <details className="action-triage" onToggle={event=>setExpanded(event.currentTarget.open)}><summary>Connections</summary>
+    {expanded && (item?.id ? <><button type="button" onClick={event=>openConnectionPicker(item,null,event.currentTarget)}>Add connection</button><Preview item={item} editable/></> : <p>Save this item to add connections.</p>)}
+  </details>;
+}
+window.HflActionConnections = {attach(dialog,getItem) {
+  dialog._connectionsCleanup?.();
+  const form=dialog.querySelector('form'), body=form.querySelector('.agenda-form-body');
+  if(!body)return;
+  dialog.classList.add('has-connections-sidebar');
+  const aside=document.createElement('aside');aside.className='item-connections-sidebar';aside.setAttribute('aria-label','Item integrations');body.after(aside);
+  const root=createRoot(aside);root.render(<Sidebar getItem={getItem}/>);
+  const cleanup=()=>{root.unmount();aside.remove();dialog.removeEventListener('close',cleanup);delete dialog._connectionsCleanup;};
+  dialog._connectionsCleanup=cleanup;dialog.addEventListener('close',cleanup,{once:true});
+}, open(item, trigger) {
   activeDialog?.close();
   const dialog = document.createElement('dialog');
   dialog.className = 'agenda-dialog action-connections-dialog';

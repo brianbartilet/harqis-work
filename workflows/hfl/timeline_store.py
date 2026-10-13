@@ -365,7 +365,9 @@ class FollowUpStore:
             db.execute("DELETE FROM timeline_suggestion_periods WHERE start_date=? AND end_date=?", (start,end))
             for item in suggestions:
                 identity = json.dumps([item["category"], item["title"].strip().casefold(), sorted(ref["entry_id"] for ref in item["evidence"])])
-                sid = "suggestion-" + hashlib.sha256(identity.encode()).hexdigest()[:24]
+                digest = hashlib.sha256(identity.encode()).hexdigest()[:24]
+                legacy = 'suggestion-' + digest
+                sid = legacy if db.execute('SELECT 1 FROM timeline_suggestions WHERE id=?', (legacy,)).fetchone() else 'item-' + digest
                 previous = db.execute('SELECT payload,updated_at FROM timeline_suggestions WHERE id=?', (sid,)).fetchone()
                 created_at = json.loads(previous['payload']).get('created_at', previous['updated_at']) if previous else isoformat()
                 item = {**item, "id": sid, "created_at": created_at, "analysis_status": item.get("status", "uncertain")}

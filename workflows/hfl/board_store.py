@@ -215,7 +215,9 @@ class BoardStoreMixin(ConnectionStoreMixin):
             if not row:
                 raise KeyError(identity)
             board = normalize_board(json.loads(row['payload']))
-            shared_id = 'idea-' + str(uuid.uuid5(uuid.NAMESPACE_URL, identity + ':' + draft_id))
+            suffix = str(uuid.uuid5(uuid.NAMESPACE_URL, identity + ':' + draft_id))
+            legacy = 'idea-' + suffix
+            shared_id = legacy if 'idea:' + legacy in board['members'] else 'item-' + suffix
             shared_node = 'idea:' + shared_id
             draft = next((d for d in board['drafts'] if d['id'] == draft_id), None)
             receipt = db.execute('SELECT idea_id FROM board_promotions WHERE board_id=? AND draft_id=?', (identity, draft_id)).fetchone()

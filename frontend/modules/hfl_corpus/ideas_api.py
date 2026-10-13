@@ -338,6 +338,33 @@ async def link(request: Request):
     return {'saved': True}
 
 
+@router.get('/item-connection-options')
+def item_connection_options(request: Request, query: str = '', offset: int = 0):
+    timeline.owner(request)
+    query = query.strip().casefold()
+    if offset < 0 or len(query) > 200:
+        raise HTTPException(422, 'Use a valid search and offset.')
+    data = permitted_snapshot(include_promoted=True)
+    nodes = [{'id': prefix + item['id'], 'object_id': item['id'], 'label': item['title'],
+              'kind': kind, 'status': item.get('status', '')}
+             for kind, prefix in [('ideas', 'idea:'), ('actions', 'action:')]
+             for item in data[kind] if query in (item['id'] + ' ' + item['title']).casefold()]
+    nodes.sort(key=lambda item: (item['label'].casefold(), item['id']))
+    return {'nodes': nodes[offset:offset + 50], 'has_more': offset + 50 < len(nodes), 'total': len(nodes)}
+
+
+@router.post('/item-connections')
+async def edit_item_connection(request: Request):
+    timeline.owner(request)
+    raw = await timeline.body(request)
+    data = permitted_snapshot(include_promoted=True)
+    available = {prefix + item['id'] for kind, prefix in [('ideas', 'idea:'), ('actions', 'action:')] for item in data[kind]}
+    for edge in [raw.get('edge'), *([raw.get('replacement')] if raw.get('operation') == 'update' else [])]:
+        if not isinstance(edge, dict) or any(not isinstance(edge.get(side), str) or edge[side] not in available for side in ('source', 'target')):
+            raise HTTPException(404, 'Idea or action unavailable or protected.')
+    return call(store().edit_item_connection, raw)
+
+
 @router.post('/maps')
 @router.patch('/maps/{identity}')
 async def save_map(request: Request, identity: str | None = None):
@@ -594,8 +621,10 @@ def save_proposal(identity, raw, actor):
     existing = next((d for d in board['drafts'] if d['id'] == node), None)
     if existing:
         return {'item': existing}
-    promoted = 'idea:idea-' + str(uuid.uuid5(uuid.NAMESPACE_URL, identity + ':' + node))
-    if promoted in board['members'] or canonical.promoted_idea(identity, node):
+    suffix = str(uuid.uuid5(uuid.NAMESPACE_URL, identity + ':' + node))
+    receipt = canonical.promoted_idea(identity, node)
+    promoted = 'idea:' + (receipt or ('idea-' + suffix if 'idea:idea-' + suffix in board['members'] else 'item-' + suffix))
+    if promoted in board['members'] or receipt:
         return {'item': {'id': promoted, 'title': values.get('title', '')}}
     from workflows.hfl.object_content import consolidated_description
     draft = {'id': node, 'title': values.get('title'), 'body': consolidated_description(values)}

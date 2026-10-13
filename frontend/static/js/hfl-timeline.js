@@ -55,6 +55,7 @@
     document.getElementById('followup-state-label').hidden = !item;
     document.getElementById('followup-editor-title').textContent = item ? (desiredStatus === 'done' ? 'Complete action' : 'Edit action') : 'New action';
     showEvidence(); stateFields(); error('followup-save-error'); editor.showModal();
+    window.HflActionConnections?.attach(editor, () => editing && ({...editing, kind:'action'}));
     editorState = window.HflBindEditor(editor, form, {
       creationLabel: 'Action',
       snapshot: () => JSON.stringify({fields:window.HflIntentValues(form),checklists:window.hflActionChecklists.value,files:attachments.pending.map(f=>[f.name,f.size,f.lastModified]),removed:[...attachments.removed]}),

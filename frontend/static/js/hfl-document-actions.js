@@ -37,6 +37,7 @@
     evidence.hidden = false; evidence.textContent = 'Loading entry…';
     save.disabled = true;
     dialog.showModal();
+    window.HflActionConnections?.attach(dialog, () => savedAction && ({...savedAction, kind:'action'}));
     try {
       const data = await api('/source?' + new URLSearchParams({path: params.get('source_path'), entry_id: params.get('source_entry')}));
       if (ticket !== sequence || !dialog.open) return;

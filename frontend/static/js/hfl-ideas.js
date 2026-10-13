@@ -257,6 +257,7 @@ window.HflObjectDescription = (item = {}) => {
         settled:()=>checklists.updateConversion(),
       });
       if(current)window.HflEditorLocation(kind,current.id);
+      window.HflActionConnections?.attach(d.node, () => current && ({...current, kind:kind === 'idea' ? 'idea' : 'action'}));
       d.form.onsubmit=async event=>{event.preventDefault();try{await state.submit();checklists.updateConversion();}catch(e){d.error.textContent=e.message;}};
       const otherBoard=button(editingBoard?'Add to another board':'Add to board',async()=>{otherBoard.disabled=true;try{attachToCurrent=false;await state.flush();await addToBoard(kind,current,null,null,editingBoard);}catch(e){d.error.textContent=e.message;}finally{attachToCurrent=true;otherBoard.disabled=false;}});
       d.footer.insertBefore(otherBoard, save);
