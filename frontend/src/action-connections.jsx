@@ -238,8 +238,10 @@ window.HflActionConnections = {attach(dialog,getItem) {
   if(!body)return;
   dialog.classList.add('has-connections-sidebar');
   const aside=document.createElement('aside');aside.className='item-connections-sidebar';aside.setAttribute('aria-label','Item integrations');body.after(aside);
-  const root=createRoot(aside);root.render(<Sidebar getItem={getItem}/>);
-  const cleanup=()=>{root.unmount();aside.remove();dialog.removeEventListener('close',cleanup);delete dialog._connectionsCleanup;};
+  const connections=document.createElement('div');aside.append(connections);
+  const cleanupGithub=window.HarqisIntegrations?.attachGithub(aside,getItem);
+  const root=createRoot(connections);root.render(<Sidebar getItem={getItem}/>);
+  const cleanup=()=>{cleanupGithub?.();root.unmount();aside.remove();dialog.removeEventListener('close',cleanup);delete dialog._connectionsCleanup;};
   dialog._connectionsCleanup=cleanup;dialog.addEventListener('close',cleanup,{once:true});
 }, open(item, trigger) {
   activeDialog?.close();

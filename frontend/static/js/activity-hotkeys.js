@@ -21,7 +21,7 @@
     const board=query('[data-actions-page]'), graph=query('.kg-shell'), corpus=query('[data-corpus-index]');
     if((!board&&!graph&&!corpus)||graph?.dataset.readonly==='true')return;
     const pageKeys=board?[['i','Ideas drawer'],['a','Create action'],['d','Create idea'],['m','Multiselect'],['Space','Refresh']]:graph?[['a','Explore activity graph'],['e','Entities'],['f','Filters'],['b','Board guide'],['r','Refresh'],['Space','Reapply preset and refresh'],['p','Fit view'],['[','Zoom in'],[']','Zoom out'],['\\','Toggle fullscreen']]:[['e','Create entry'],['a','Create action'],['d','Create idea'],['x','Secrets'],['t','Tags'],['m','Expand/collapse memory signal'],['c','Manage categories'],['Space','Go to today']];
-    const contextKeys=board?[['e','Edit'],['o','Move to done'],['a','Agents'],['i','Dismiss'],['c','Connections'],['h','History'],['x','Expand/collapse card sections']]:graph?[['t','Add thought'],['c','Connect on this board'],['n','Clone'],['d','Dismiss'],['r','Promote'],['e','Edit'],['u','Use as starting point'],['o','Board connections'],['x','Clear selection'],['f','Focus connection'],['Delete','Remove selected from board'],['↑ / ↓','+/- orb size']]:[];
+    const contextKeys=board?[['e','Edit'],['o','Move to done'],['a','Agents'],['i','Dismiss'],['h','History'],['x','Expand/collapse card sections']]:graph?[['t','Add thought'],['c','Connect on this board'],['n','Clone'],['d','Dismiss'],['r','Promote'],['e','Edit'],['u','Use as starting point'],['o','Board connections'],['x','Clear selection'],['f','Focus connection'],['Delete','Remove selected from board'],['↑ / ↓','+/- orb size']]:[];
     const dialog=document.createElement('dialog');dialog.className='context-help';dialog.id='activity-hotkey-help';dialog.setAttribute('aria-labelledby','activity-hotkey-title');
     const header=document.createElement('header');header.className='context-help-header';
     const title=document.createElement('h2');title.id='activity-hotkey-title';title.textContent='Keyboard shortcuts';
@@ -53,7 +53,7 @@
       if(key==='k'){event.preventDefault();help.click();return;}
       if(board){
         const card=document.activeElement?.closest('[data-followup-id]')||query('[data-board-lanes] [data-followup-id]:hover');
-        const labels={e:'Edit',o:'Done',a:'Agents',i:'Dismiss',c:'Connections',h:'History'};
+        const labels={e:'Edit',o:'Done',a:'Agents',i:'Dismiss',h:'History'};
         if(card&&(labels[key]||key==='x')){event.preventDefault();if(key==='x'){const sections=[...card.querySelectorAll('details')],toggles=[...card.querySelectorAll('.checklist-cover-toggle')],open=sections.some(el=>!el.open)||toggles.some(el=>el.getAttribute('aria-expanded')==='false');sections.forEach(el=>el.open=open);toggles.forEach(el=>{if((el.getAttribute('aria-expanded')==='true')!==open)click(el);});}else{const button=named(card,new RegExp('^'+labels[key]+'$'));if(key==='o'||key==='i')confirmCommand(button,labels[key]+' this action');else click(button);}return;}
         const selectors={i:'.ideas-drawer-toggle',a:'[data-board-create-action]',d:'[data-board-create-idea]',' ':'[data-board-refresh]',m:`[data-bulk-kind="${query('.ideas-drawer')?'idea':'action'}"] [data-bulk-toggle]`};
         if(selectors[key]){event.preventDefault();click(query(selectors[key]));return;}

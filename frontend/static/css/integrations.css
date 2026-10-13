@@ -27,9 +27,23 @@
 
 .integration-section-heading p{margin:.125rem 0 0;line-height:1.25rem}
 
-.connector-header-controls{display:flex;align-items:center;gap:.25rem;flex-shrink:0}
-.connector-card .connector-connect{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;padding:0;color:#94a3b8;background:transparent;border-color:transparent}
-.connector-card .connector-connect:hover{color:#93c5fd;background:#1e293b;border-color:#334155}
+.connector-header-controls{display:flex;align-items:center;gap:.125rem;flex-shrink:0}
+.connector-header-controls .connector-switch{margin-left:.25rem}
+.connector-card .connector-connect,.connector-card .connector-disconnect{display:inline-flex;align-items:center;justify-content:center;width:1.5rem;height:2rem;padding:0;color:#94a3b8;background:transparent;border-color:transparent}
+.connector-card .connector-connect:hover,.connector-card .connector-disconnect:hover:enabled{color:#93c5fd;background:#1e293b;border-color:#334155}
+.connector-card .connector-disconnect:disabled{opacity:.35;cursor:not-allowed}
+.connector-card ul:last-child{margin-bottom:0}
+
+.item-connections-sidebar .github-action-section{margin-bottom:1rem}
+.github-action-controls{min-width:0;padding-top:.5rem}
+.github-action-controls label{display:block;margin:.75rem 0;color:#cbd5e1;font-size:.875rem}
+.github-action-controls input,.github-action-controls select,.github-action-controls textarea{display:block;width:100%;box-sizing:border-box;min-width:0;margin-top:.35rem;padding:.6rem;border:1px solid #475569;border-radius:.5rem;background:#020617;color:#f1f5f9}
+.github-action-controls select{appearance:none;padding-right:2rem;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%2393c5fd' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .6rem center;background-size:1rem}
+.github-action-controls a{color:#93c5fd;text-decoration:underline;overflow-wrap:anywhere}
+.github-action-controls p{font-size:.875rem;color:#94a3b8;overflow-wrap:anywhere}
+.github-action-controls [role=alert]{color:#fda4af}
+.github-action-controls :focus-visible{outline:2px solid #60a5fa;outline-offset:3px}
+.github-action-controls button:disabled{opacity:.5;cursor:wait}
 
 .connector-title{display:flex;align-items:center;gap:.5rem}
 .connector-logo{display:block;width:1.25rem;height:1.25rem;object-fit:contain;flex-shrink:0}

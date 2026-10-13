@@ -8,7 +8,7 @@
     let result;try{result=await response.json();}catch(_){throw new Error('The integration service is unavailable. Refresh before retrying.');}
     if(!response.ok)throw new Error(typeof result.detail==='string'?result.detail:'Check the fields and try again.');return result;
   }
-  function button(parent,label,run){const b=el('button',label);b.type='button';parent.append(b);b.onclick=async()=>{b.disabled=true;try{await run();}catch(e){const alert=[...document.querySelectorAll('.integration-dialog[open] [role=alert]')].at(-1)||parent.closest('dialog')?.querySelector('[role=alert]')||document.querySelector('[data-integration-error]')||parent.appendChild(el('p'));alert.setAttribute('role','alert');alert.textContent=e.message;}finally{if(!b.hasAttribute('data-managed-disabled'))b.disabled=false;}};return b;}
+  function button(parent,label,run){const b=el('button',label);b.type='button';parent.append(b);b.onclick=async()=>{b.disabled=true;try{await run();}catch(e){const alert=parent.closest('.github-action-controls')?.querySelector('[role=alert]')||[...document.querySelectorAll('.integration-dialog[open] [role=alert]')].at(-1)||parent.closest('dialog')?.querySelector('[role=alert]')||document.querySelector('[data-integration-error]')||parent.appendChild(el('p'));alert.setAttribute('role','alert');alert.textContent=e.message;}finally{if(!b.hasAttribute('data-managed-disabled'))b.disabled=false;}};return b;}
   function field(parent,label,type='text',value=''){const l=el('label',label),input=el(type==='textarea'?'textarea':type==='select'?'select':'input');if(input.tagName==='INPUT')input.type=type;input.value=value;input.setAttribute('aria-label',label);l.append(input);parent.append(l);return input;}
   function link(parent,label,url){const a=el('a',label);a.href=url;a.target='_blank';a.rel='noopener noreferrer';parent.append(a);return a;}
   function dialog(title){const opener=document.activeElement,d=el('dialog',undefined,'integration-dialog'),h=el('header');d.setAttribute('aria-label',title);const heading=el('h2',title);heading.tabIndex=-1;h.append(heading);const close=button(h,'',()=>d.close());close.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>';close.classList.add('integration-dialog-close');close.setAttribute('aria-label','Close');close.title='Close';d.append(h);const body=el('div'),error=el('p');error.setAttribute('role','alert');d.append(body,error);document.body.append(d);d.addEventListener('close',()=>{d.remove();if(opener?.isConnected)opener.focus();},{once:true});d.showModal();heading.focus();return {d,body,error};}
@@ -27,6 +27,9 @@
       const connectLabel=item.status==='Connected'?'Reconnect / test':'Connect';
       const connect=button(headerControls,'',()=>setup(item));connect.classList.add('connector-connect');connect.setAttribute('aria-label',connectLabel);connect.title=connectLabel;
       connect.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z"/></svg>';
+      const disconnect=button(headerControls,'',async()=>{const confirm=dialog('Disconnect '+item.name);confirm.body.append(el('p','Remove this connection’s saved credentials? Imported cards and links remain; reconnect the same account to use them again.'));button(controls(confirm.body),'Disconnect account',async()=>{await api('/connectors/'+item.provider+'/disconnect',{});confirm.d.close();await load();});});
+      disconnect.classList.add('connector-disconnect');disconnect.setAttribute('aria-label','Disconnect '+item.name);disconnect.title='Disconnect '+item.name;disconnect.disabled=item.status!=='Connected';
+      disconnect.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 5 3-3M2 22l3-3M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4ZM7.5 13.5 10 11m.5 5.5L13 14M18 12l2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0L12 6Z"/></svg>';
       const toggle=el('button',undefined,'connector-switch');toggle.type='button';toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked',String(item.enabled));toggle.setAttribute('aria-label','Enable '+item.name);
       const track=el('span',undefined,'connector-switch-track');track.setAttribute('aria-hidden','true');toggle.append(track);headerControls.append(toggle);card.append(header);
       toggle.onclick=async()=>{toggle.disabled=true;try{if(!item.enabled&&item.status!=='Connected'){setup(item);}else{await api('/connectors/'+item.provider+'/toggle',{enabled:!item.enabled});await load();}}catch(e){document.querySelector('[data-integration-error]').textContent=e.message;}finally{toggle.disabled=false;}};
@@ -34,15 +37,10 @@
       if(item.account)card.append(el('p',item.account+' · '+item.auth_method),el('p','Connected since '+new Date(item.connected_since).toLocaleDateString()+' · Expiry: '+item.expiry));
       if(item.error)card.append(el('p',item.error));
       const capabilities=el('ul');item.capabilities.forEach(c=>capabilities.append(el('li',c)));card.append(capabilities);
-      const footer=el('footer',undefined,'connector-footer');card.append(footer);
-      if(item.enabled){const actions=controls(footer);if(item.provider==='jira')button(actions,'Import assigned issues',jiraImport);else button(actions,'Explore branches and PRs',githubIdeas);}
-      const row=controls(footer);row.classList.add('connector-connection-controls');
-      if(item.status!=='Not connected')button(row,'Disconnect',async()=>{const confirm=dialog('Disconnect '+item.name);confirm.body.append(el('p','Remove this connection’s saved credentials? Imported cards and links remain; reconnect the same account to use them again.'));button(controls(confirm.body),'Disconnect account',async()=>{await api('/connectors/'+item.provider+'/disconnect',{});confirm.d.close();await load();});});
-      if(!row.children.length)row.remove();
-      if(!footer.children.length)footer.remove();
+      if(item.enabled&&item.provider==='jira'){const footer=el('footer',undefined,'connector-footer');card.append(footer);button(controls(footer),'Import assigned issues',jiraImport);}
       root.append(card);
     }}
-    document.querySelectorAll('[data-connector-action]').forEach(b=>{b.hidden=!current.some(c=>c.enabled);badges(b.parentElement,b.dataset.connectorAction);});
+    document.querySelectorAll('[data-connector-action]').forEach(b=>{b.hidden=!current.some(c=>c.provider==='jira'&&c.enabled);badges(b.parentElement,b.dataset.connectorAction);});
     window.dispatchEvent(new CustomEvent('integrations:changed',{detail:current}));
   }
   function setup(item){
@@ -114,22 +112,48 @@
       if(!result.branches.length&&!result.pulls.length)list.append(el('p','No branches or open pull requests.','integration-empty'));
     }
   }
-  async function actionDialog(item){
-    const {d,body}=dialog('Integrations · '+item.title);const links=await api('/actions/'+encodeURIComponent(item.id));
-    if(!d.open)return;
-    if('github' in links){
-      body.append(el('h3','GitHub'));const repo=await repoPicker(body),branch=field(body,'Branch'),base=field(body,'Base branch','text','main');
+  async function githubControls(body,item,refresh){
+    const repo=await repoPicker(body),branch=field(body,'Branch'),base=field(body,'Base branch','text','main');
       repo.onchange=()=>{base.value=repo.selectedOptions[0]?.dataset.base||'main';};
       const options=el('div');body.append(options);
       button(controls(body),'Browse repository branches / PRs',async()=>{options.replaceChildren();const result=await api('/github/resources?'+new URLSearchParams({repository_name:repo.value}));const pick=field(options,'Existing branch','select');pick.append(new Option('Choose a branch',''));result.branches.forEach(b=>pick.append(new Option(b,b)));pick.onchange=()=>{branch.value=pick.value;};result.pulls.forEach(p=>options.append(el('p','#'+p.number+' · '+p.title+' · '+p.branch)));options.append(el('p','You can also enter any branch name or PR number directly.'));});
-      const row=controls(body);for(const [label,operation] of [['Link branch','link-branch'],['Create branch','create-branch']])button(row,label,async()=>{await api('/actions/'+item.id+'/github/branch',{repository:repo.value,branch:branch.value,base:base.value,operation});await load();d.close();await actionDialog(item);});
+      const row=controls(body);for(const [label,operation] of [['Link branch','link-branch'],['Create branch','create-branch']])button(row,label,async()=>{await api('/actions/'+item.id+'/github/branch',{repository:repo.value,branch:branch.value,base:base.value,operation});await load();await refresh();});
       const refreshed=await api('/actions/'+item.id+'/github');
       for(const branchLink of refreshed.items){const section=el('section',undefined,'connector-link');body.append(section);link(section,branchLink.repository+' · '+branchLink.branch,branchLink.url);
         if(branchLink.pr_number){section.append(el('p',(branchLink.draft?'Draft · ':'')+branchLink.pr_state));link(section,'PR #'+branchLink.pr_number,branchLink.pr_url);}
         const number=field(section,'Existing PR number (optional)','number'),description=field(section,'PR description','textarea');
-        button(controls(section),'Link PR / create draft PR',async()=>{await api('/actions/'+item.id+'/github/pr',{resource:branchLink.resource,number:number.value||null,body:description.value});await load();d.close();await actionDialog(item);});
+        button(controls(section),'Link PR / create draft PR',async()=>{await api('/actions/'+item.id+'/github/pr',{resource:branchLink.resource,number:number.value||null,body:description.value});await load();await refresh();});
       }
+  }
+  function attachGithub(parent,getItem){
+    const section=el('details',undefined,'action-triage github-action-section');
+    section.append(el('summary','GitHub'));
+    const body=el('div',undefined,'github-action-controls');section.append(body);parent.prepend(section);
+    let loadedId=null,sequence=0,disposed=false;
+    const eligible=()=>current.some(c=>c.provider==='github'&&c.enabled&&c.status==='Connected')&&getItem()?.kind==='action';
+    async function render(){
+      const item=getItem(),ticket=++sequence;
+      loadedId=item?.id||null;body.replaceChildren();
+      if(!item?.id){body.append(el('p','Save this action to link GitHub work.'));return;}
+      const content=el('div');body.append(content);
+      const error=el('p');error.setAttribute('role','alert');content.append(error);
+      try{await githubControls(content,item,async()=>{if(!disposed&&ticket===sequence)await render();});}
+      catch(e){if(!disposed&&ticket===sequence){error.textContent=e.message;button(controls(content),'Retry',render);}}
     }
+    function update(){
+      if(disposed)return;
+      section.hidden=!eligible();
+      if(section.hidden){section.open=false;sequence++;loadedId=null;body.replaceChildren();}
+      else if(section.open&&loadedId!==getItem()?.id)render();
+    }
+    section.addEventListener('toggle',()=>{if(section.open&&!section.hidden&&!body.children.length)render();});
+    for(const event of ['integrations:changed','hfl:actions-updated'])window.addEventListener(event,update);
+    update();
+    return ()=>{disposed=true;sequence++;for(const event of ['integrations:changed','hfl:actions-updated'])window.removeEventListener(event,update);section.remove();};
+  }
+  async function actionDialog(item){
+    const {d,body}=dialog('Integrations · '+item.title);const links=await api('/actions/'+encodeURIComponent(item.id));
+    if(!d.open)return;
     if(links.jira?.length){
       body.append(el('h3','Jira'));const data=await api('/actions/'+item.id+'/jira');link(body,data.link.issue_key+' · '+data.link.jira_status,data.link.url);
       const transition=field(body,'Jira transition','select');transition.append(new Option('Choose a transition',''));for(const t of data.transitions)transition.append(new Option(t.name+' → '+t.to.name,t.id));
@@ -203,6 +227,6 @@
     window.addEventListener('pagehide',clearPreview);
   }
   const app=document.querySelector('[data-application-agent]');if(app)app.querySelector('[data-open-application-agent]').onclick=async event=>{event.target.disabled=true;const feedback=app.querySelector('[data-agent-feedback]');try{await prepareAgent({name:app.dataset.applicationAgent,agent:app.querySelector('[data-agent-choice]').value},feedback);}catch(e){feedback.textContent=e.message;}finally{event.target.disabled=false;}};
-  window.HarqisIntegrations={actionButton(parent,item){const b=button(parent,'Integrations',()=>actionDialog(item));b.dataset.connectorAction=item.id;b.hidden=!current.some(c=>c.enabled);badges(parent,item.id);return b;},refresh:load};
+  window.HarqisIntegrations={attachGithub,actionButton(parent,item){const b=button(parent,'Integrations',()=>actionDialog(item));b.dataset.connectorAction=item.id;b.hidden=!current.some(c=>c.provider==='jira'&&c.enabled);badges(parent,item.id);return b;},refresh:load};
   load().catch(e=>{const error=document.querySelector('[data-integration-error]');if(error)error.textContent=e.message;});
 })();

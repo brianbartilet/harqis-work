@@ -164,9 +164,6 @@
     const resultsButton = button('Agents',()=>window.hflAgentBridge.open('actionable',item.id,item.title));
     resultsButton.className = 'action-results-button';
     views.append(resultsButton);
-    const connections = button('Connections', () => window.HflActionConnections.open(item, connections));
-    connections.className = 'action-connections-button';
-    views.append(connections);
     window.HarqisIntegrations?.actionButton(views,item);
     el.append(actions);return el;
   }

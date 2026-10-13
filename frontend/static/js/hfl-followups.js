@@ -149,8 +149,7 @@
         }
         const controls=node('div',null,'agenda-card-actions action-controls'),views=node('div',null,'action-view-controls');
         management.className='action-management-controls';
-        const connections=node('button','Connections','action-connections-button');connections.type='button';connections.onclick=()=>window.HflActionConnections.open({...item,kind:'idea'},connections);
-        views.append(connections);controls.append(management,views);card.append(controls);section.append(card);
+        controls.append(management,views);card.append(controls);section.append(card);
       }
       const overlay=node('div',null,'ideas-drawer-overlay'), backdrop=node('div',null,'ideas-drawer-backdrop');
       backdrop.onclick=()=>closeIdeasDrawer();

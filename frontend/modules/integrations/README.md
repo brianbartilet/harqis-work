@@ -29,14 +29,15 @@ OAuth are future authentication adapters, not implemented login options.
 
 ## Card operations
 
-Enable GitHub, then open **Integrations** on an action card. Select a repository,
+Enable GitHub, edit an action, then expand **GitHub** above **Connections** in the
+editor sidebar. The section starts collapsed and loads repositories when opened. Select a repository,
 base, and branch. Link an existing branch or create one. Link a PR by number or
 create a draft PR from the linked head/base; GitHub requires actual differing
 commits before it can create a PR. Existing head/base PRs are reconciled before
 creation, including closed PRs. This flow never merges or pushes code.
 
-**Explore branches and PRs** previews an idea before saving it. Repository and
-resource lists offer pagination. Empty states and provider errors remain visible.
+Connector cards keep connect, disconnect, and enable controls in the header.
+Disconnect is always visible and disabled when the account is not connected.
 
 Enable Jira and choose **Import assigned issues**, a project, and optionally a
 board. Imports process 50 issues at a time and expose a continuation button. Stable
