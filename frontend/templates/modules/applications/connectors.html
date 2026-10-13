@@ -1,8 +1,11 @@
 <link rel="stylesheet" href="{{ static_asset('css/integrations.css') }}">
 <script type="application/json" data-integration-csrf>{{ integration_csrf | tojson }}</script>
 <script defer src="{{ static_asset('js/integrations.js') }}"></script>
-<nav class="integration-tabs" aria-label="Integration groups"><a href="#connector-integrations">Connectors</a><a href="#workflow-integrations">Workflows</a></nav>
-<section id="connector-integrations" aria-labelledby="connector-integrations-title">
+<nav class="integration-tabs" role="tablist" aria-label="Integration groups">
+  <button id="connectors-tab" type="button" role="tab" aria-controls="connector-integrations" aria-selected="true" tabindex="0">Connectors <span class="integration-tab-count">2</span></button>
+  <button id="workflows-tab" type="button" role="tab" aria-controls="workflow-integrations" aria-selected="false" tabindex="-1">Workflows <span class="integration-tab-count">{{ applications | length }}</span></button>
+</nav>
+<section id="connector-integrations" role="tabpanel" aria-labelledby="connectors-tab">
   <div class="integration-section-heading"><div><h2 id="connector-integrations-title">Connectors</h2><p>Your accounts, connected to your cards. Separate from workflow credentials.</p></div></div>
   <div class="connector-grid" data-connector-cards><p role="status">Loading connections…</p></div>
   <p data-integration-error role="alert"></p>

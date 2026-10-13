@@ -107,6 +107,28 @@
   }
   async function prepareAgent(raw,feedback){const data=await api('/agents/prepare',raw);if(feedback)feedback.textContent='Workspace prepared. Opening Hermes…';location.href=data.workspace_url;}
   document.querySelector('[data-add-application]')?.addEventListener('click',()=>{const {body}=dialog('Add workflow application');body.append(el('p','Prepare a development action and Hermes workspace. No files are created until you start the agent.'));const name=field(body,'App name'),description=field(body,'Initial README description','textarea');description.maxLength=3000;button(controls(body),'Prepare Hermes workspace',()=>prepareAgent({name:name.value,description:description.value,agent:'hermes',create:true}));});
+  const tabs=[...document.querySelectorAll('.integration-tabs [role="tab"]')];
+  if(tabs.length){
+    function selectTab(tab,updateUrl=false){
+      for(const candidate of tabs){
+        const selected=candidate===tab;
+        candidate.setAttribute('aria-selected',String(selected));
+        candidate.tabIndex=selected?0:-1;
+        document.getElementById(candidate.getAttribute('aria-controls')).hidden=!selected;
+      }
+      if(updateUrl)history.replaceState(history.state,'','#'+tab.getAttribute('aria-controls'));
+    }
+    function selectFromHash(){selectTab(tabs.find(tab=>'#'+tab.getAttribute('aria-controls')===location.hash)||tabs[0]);}
+    tabs.forEach((tab,index)=>{
+      tab.addEventListener('click',()=>selectTab(tab,true));
+      tab.addEventListener('keydown',event=>{
+        const next={ArrowRight:(index+1)%tabs.length,ArrowLeft:(index+tabs.length-1)%tabs.length,Home:0,End:tabs.length-1}[event.key];
+        if(next===undefined)return;
+        event.preventDefault();selectTab(tabs[next],true);tabs[next].focus();
+      });
+    });
+    window.addEventListener('hashchange',selectFromHash);selectFromHash();
+  }
   const search=document.getElementById('integration-search');
   if(search){let limit=24;const more=document.querySelector('[data-inventory-more]');function filter(){const query=search.value.trim().toLowerCase();let total=0;for(const card of document.querySelectorAll('[data-app-key]')){const match=card.textContent.toLowerCase().includes(query);card.hidden=!match||total>=limit;if(match)total++;}document.querySelector('[data-inventory-count]').textContent=Math.min(limit,total)+' of '+total+' matching applications';more.hidden=total<=limit;}search.oninput=()=>{limit=24;filter();};more.onclick=()=>{limit+=24;filter();};filter();}
   const app=document.querySelector('[data-application-agent]');if(app)app.querySelector('[data-open-application-agent]').onclick=async event=>{event.target.disabled=true;const feedback=app.querySelector('[data-agent-feedback]');try{await prepareAgent({name:app.dataset.applicationAgent,agent:app.querySelector('[data-agent-choice]').value},feedback);}catch(e){feedback.textContent=e.message;}finally{event.target.disabled=false;}};

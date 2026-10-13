@@ -23,7 +23,7 @@
   </div>
 
   {% include 'modules/applications/connectors.html' %}
-  <section id="workflow-integrations" aria-labelledby="workflow-integrations-title">
+  <section id="workflow-integrations" role="tabpanel" aria-labelledby="workflows-tab" hidden>
   <div class="integration-section-heading"><div><h2 id="workflow-integrations-title">Workflows</h2><p>{{ applications | length }} applications · Host-configured integrations for your workflows.</p></div><button type="button" data-add-application>Add application</button></div>
   <label class="integration-search" for="integration-search">Find a workflow integration<input id="integration-search" type="search" placeholder="Search applications" autocomplete="off"></label>
   <p data-inventory-count role="status" class="text-sm text-slate-400 mb-4"></p>
