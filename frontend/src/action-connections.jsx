@@ -228,7 +228,7 @@ function Sidebar({getItem}) {
   const [expanded,setExpanded]=useState(false), [,refresh]=useState(0);
   useEffect(()=>{const update=()=>refresh(n=>n+1);window.addEventListener('hfl:ideas-updated',update);window.addEventListener('hfl:actions-updated',update);return()=>{window.removeEventListener('hfl:ideas-updated',update);window.removeEventListener('hfl:actions-updated',update);};},[]);
   const item=getItem();
-  return <details className="action-triage" open={expanded} onToggle={event=>setExpanded(event.currentTarget.open)}><summary><span>Connections</span><button type="button" disabled={!item?.id} title={item?.id?'Add a connection':'Save this item to add connections'} onClick={event=>{event.preventDefault();event.stopPropagation();setExpanded(true);openConnectionPicker(item,null,event.currentTarget);}}>Add</button></summary>
+  return <details className="action-triage" open={expanded} onToggle={event=>setExpanded(event.currentTarget.open)}><summary><span>Connections</span><button type="button" disabled={!item?.id} title={item?.id?'Add a connection':'Save this item to add connections'} onClick={event=>{event.preventDefault();event.stopPropagation();openConnectionPicker(item,null,event.currentTarget);}}>Add</button></summary>
     {expanded && (item?.id ? <Preview item={item} editable/> : <p>Save this item to add connections.</p>)}
   </details>;
 }

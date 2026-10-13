@@ -118,7 +118,7 @@ def test_editor_connections_sidebar_add_edit_remove(ideas, authenticated_client,
         sidebar.locator('summary').get_by_role('button',name='Add',exact=True).click()
         picker=page.locator('.connection-picker-dialog')
         playwright.expect(picker).to_be_visible()
-        assert sidebar.locator('details').get_attribute('open') is not None
+        assert sidebar.locator('details').get_attribute('open') is None
         playwright.expect(picker.locator('.idea-attach-choice').first).to_be_visible()
         cards=picker.locator('.idea-attach-choice')
         assert cards.first.locator('.connection-type-pill').count() == 1
@@ -140,7 +140,13 @@ def test_editor_connections_sidebar_add_edit_remove(ideas, authenticated_client,
         picker.get_by_label('Connection type').select_option(label='depends on')
         picker.get_by_role('button',name='Save connection').click()
         playwright.expect(picker).to_have_count(0)
+        assert sidebar.locator('details').get_attribute('open') is None
+        sidebar.locator('summary > span').click()
         playwright.expect(sidebar.get_by_role('button',name='Edit connection')).to_have_count(1)
+        sidebar.get_by_role('button',name='Add',exact=True).click()
+        playwright.expect(picker).to_be_visible()
+        assert sidebar.locator('details').get_attribute('open') is not None
+        picker.get_by_role('button',name='Cancel',exact=True).click()
         sidebar.get_by_role('button',name='Edit connection').click()
         picker.get_by_label('Connection type').select_option(label='blocks')
         picker.get_by_role('button',name='Save connection').click()
