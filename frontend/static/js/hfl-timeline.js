@@ -107,6 +107,11 @@
     const meta=node('div',null,'agenda-card-meta');const status=node('span',statusLabel(item.status),'action-status');status.dataset.status=item.status;meta.append(status);
     const matrix=node('span',item.matrix ? item.matrix+(item.matrix_confidence ? ' · '+item.matrix_confidence+' confidence' : '') : 'Matrix unclassified','action-matrix');matrix.title=item.matrix_reason||'Put first things first';meta.append(matrix);
     if(item.creation_mode==='automatic'){const badge=node('span','Automatic','action-event');badge.title=item.automatic_basis||'Created from a high-confidence idea after review';meta.append(badge);}
+    for(const ideaId of item.origin_idea_ids || (item.suggestion_id?[item.suggestion_id]:[])){
+      const promoted=node('button','Promoted','action-promoted');promoted.type='button';
+      promoted.title='Open original idea';promoted.setAttribute('aria-label','Promoted from idea — open original idea');
+      promoted.onclick=()=>window.HflIdeas.editIdea(ideaId);meta.append(promoted);
+    }
     if(item.review_date)meta.append(node('span','Review '+item.review_date));if(item.due_date)meta.append(node('span','Complete by '+item.due_date));
     if(item.events){
       const labels={source:'Source',planned:'Planned'};

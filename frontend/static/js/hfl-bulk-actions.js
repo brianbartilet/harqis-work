@@ -43,8 +43,9 @@
             });
             update(kind);
           });
-          label.append(check,node('span','Select all'));
-          lane.firstElementChild.append(label);
+          label.append(node('span','Select all'),check);
+          const header=lane.firstElementChild,close=header.querySelector('.ideas-drawer-close');
+          if(close)close.before(label);else header.append(label);
         }
         const ids=[...lane.querySelectorAll(selector(kind))].map(card=>kind==='action'?card.dataset.followupId:card.dataset.ideaId);
         const count=ids.filter(id=>group.selected.has(id)).length,check=label.querySelector('input');
@@ -135,6 +136,12 @@
         try{await refresh();}finally{root.inert=false;d.body.inert=false;}
         for(const name of Object.keys(groups))update(name);
         summary.textContent=`${succeeded} updated · ${failures.length} failed.`;
+        d.node.querySelector('h2').textContent=failures.length?'Bulk update finished with errors':'Bulk update complete';
+        d.body.replaceChildren(summary);
+        if(!failures.length){
+          const result=operation==='dismiss'?'All selected cards were moved to Dismissed.':operation==='status'?`All selected cards were moved to ${select.selectedOptions[0].textContent}.`:`All selected cards were added to ${operation==='board_ids'?'board':'Space'} “${select.selectedOptions[0].textContent}”.`;
+          d.body.append(node('p',result));
+        }
         if(failures.length){
           d.error.textContent='Failed cards remain selected. Close this dialog, review them, and retry the bulk action.';
           const list=node('ul',null,'bulk-failures');failures.forEach(failure=>list.append(node('li',`${failure.title}: ${failure.message}`)));d.body.append(list);

@@ -99,7 +99,6 @@
         onMove:()=>!savingCards&&!moving&&!bulk.busy,
         onStart:event=>{dragging=event.item.dataset.followupId;dialog.dataset.busy='true';},
         onEnd:event=>{
-          if(event.item.dataset.ideaId){dragging=null;pointerHeld=false;delete dialog.dataset.busy;event.from.append(event.item);window.HflIdeas.convert(event.item.dataset.ideaId);return;}
           const id=event.item.dataset.followupId;dragging=null;pointerHeld=false;
           if(event.from===event.to&&event.oldIndex===event.newIndex){delete dialog.dataset.busy;return;}
           move(id,event.to.dataset.status,[...event.to.querySelectorAll('[data-followup-id]')].map(el=>el.dataset.followupId));
@@ -155,8 +154,13 @@
       }
       const overlay=node('div',null,'ideas-drawer-overlay'), backdrop=node('div',null,'ideas-drawer-backdrop');
       backdrop.onclick=()=>closeIdeasDrawer();
+      const promotion=node('div',null,'idea-promotion-dropzone');promotion.hidden=true;
+      promotion.setAttribute('aria-label','Promote idea to action');
+      const promotionHint=node('div',null,'idea-promotion-hint');promotionHint.setAttribute('role','status');
+      promotionHint.append(node('strong','Promote idea to action'),node('p','Drop here to create an action in In Review.'));
+      promotion.append(promotionHint);
       const close=node('button','×','ideas-drawer-close');close.type='button';close.setAttribute('aria-label','Close ideas drawer');close.onclick=()=>closeIdeasDrawer();header.append(close);
-      overlay.append(backdrop,section);dialog.append(overlay);
+      overlay.append(backdrop,section,promotion);dialog.append(overlay);
       bulk.mount(ideaBulk,'idea');
       section.scrollTop=ideaScroll;
       if(ideaScroll>0){
@@ -164,9 +168,17 @@
         const anchor=ideaAnchors.find(item=>cards.has(item.id));
         if(anchor)section.scrollTop+=cards.get(anchor.id).getBoundingClientRect().top-section.getBoundingClientRect().top-anchor.offset;
       }
-      sorters.push(new Sortable(section,{group:{name:'hfl-actions',pull:true,put:false},draggable:'.agenda-card',handle:'.action-drag-handle',filter:'input,label',preventOnFilter:false,forceFallback:true,animation:150,
-        onMove:()=>!bulk.busy,
-        onStart:()=>{dragging='idea';backdrop.style.pointerEvents='none';},onEnd:event=>{backdrop.style.pointerEvents='';dragging=null;pointerHeld=false;if(event.to!==event.from){event.from.append(event.item);window.HflIdeas.convert(event.item.dataset.ideaId);}}}));
+      sorters.push(new Sortable(promotion,{group:{name:'hfl-idea-promotion',pull:false,put:['hfl-idea-promotion']},draggable:'.agenda-card',sort:false}));
+      let originalNext=null;
+      sorters.push(new Sortable(section,{group:{name:'hfl-idea-promotion',pull:true,put:false},draggable:'.agenda-card',handle:'.action-drag-handle',filter:'input,label',preventOnFilter:false,forceFallback:true,fallbackOnBody:true,fallbackClass:'idea-drag-preview',animation:150,
+        onMove:event=>{promotion.classList.toggle('is-over',event.to===promotion);return !bulk.busy;},
+        onStart:event=>{dragging='idea';originalNext=event.item.nextSibling;promotion.style.setProperty('--drawer-right',section.getBoundingClientRect().right+'px');promotion.hidden=false;},
+        onEnd:event=>{
+          const promote=event.to===promotion;
+          event.from.insertBefore(event.item,originalNext?.parentNode===event.from?originalNext:null);
+          promotion.hidden=true;promotion.classList.remove('is-over');dragging=null;pointerHeld=false;
+          if(promote)window.HflIdeas.convert(event.item.dataset.ideaId);
+        }}));
     }
     if(focusId){
       const card=[...lanes.querySelectorAll('[data-followup-id]')].find(el=>el.dataset.followupId===focusId);

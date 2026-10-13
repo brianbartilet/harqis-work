@@ -55,6 +55,18 @@
 .ideas-drawer-header h3 { flex:1; margin:0; font-size:.85rem; font-weight:600; }
 .ideas-drawer-header button { flex-shrink:0; }
 .ideas-drawer-header .ideas-drawer-close { float:none; padding:.25rem .5rem; }
+.idea-promotion-dropzone { position:absolute; inset:16px 16px 16px calc(var(--drawer-right,340px) + 16px); display:grid; place-items:center; padding:24px; border:2px dashed #60a5fa; border-radius:1rem; background:#0b172ded; color:#e2e8f0; pointer-events:auto; }
+.idea-promotion-dropzone[hidden] { display:none; }
+.idea-promotion-dropzone.is-over { border-style:solid; border-color:#7dd3fc; background:#123052f5; box-shadow:inset 0 0 0 3px #7dd3fc33; }
+.idea-promotion-hint { text-align:center; pointer-events:none; }
+.idea-promotion-hint strong { display:block; font-size:1.35rem; }
+.idea-promotion-hint p { margin:.75rem 0 0; color:#cbd5e1; font-size:.9rem; }
+.idea-promotion-dropzone > .agenda-card { display:none; }
+.idea-drag-preview { z-index:110!important; pointer-events:none; }
+.agenda-card .agenda-card-meta .action-promoted { display:inline-flex; align-items:center; margin:0; padding:.15rem .4rem; min-height:0; border:1px solid #0e7490; border-radius:.25rem; background:#083344; color:#a5f3fc; font:inherit; font-size:.65rem; line-height:1.4; cursor:pointer; }
+.agenda-card .agenda-card-meta .action-promoted:hover { background:#164e63; color:#ecfeff; }
+.agenda-card .agenda-card-meta .action-promoted:focus-visible { outline:2px solid #7dd3fc; outline-offset:2px; }
+@media(max-width:600px) { .idea-promotion-dropzone { inset:auto 12px 12px; min-height:150px; padding:20px; } .idea-promotion-hint strong { font-size:1.1rem; } }
 .followups-board .followups-lane .agenda-card > :is(.action-clone-handle,.action-drag-handle) { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; width:32px; height:32px; min-height:32px; padding:0; border:1px solid #334155; border-radius:.6rem; font-size:.85rem; line-height:1; background:transparent; }
 
 .idea-dialog.agenda-dialog.idea-copy-dialog { height:90dvh; max-height:90dvh; overflow:hidden; box-sizing:border-box; }
@@ -121,6 +133,7 @@
 .followups-board .bulk-list-select[hidden] { display:none; }
 .followups-board .bulk-list-select input { width:16px; height:16px; margin:0; accent-color:#2563eb; cursor:pointer; }
 .followups-board .agenda-card > .bulk-card-check[hidden] { display:none; }
+.idea-dialog.agenda-dialog.bulk-dialog { width:min(420px,calc(100% - 24px)); }
 .bulk-dialog .bulk-failures { margin:1rem 0; padding-left:1.25rem; overflow-wrap:anywhere; }
 .bulk-dialog .agenda-form-body select { appearance:none; padding-right:2.5rem; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2360a5fa' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 8 4 4 4-4'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right .6rem center; background-size:20px 20px; }
 @media(max-width:700px) { .bulk-menu .board-create-options { left:auto; right:0; } }

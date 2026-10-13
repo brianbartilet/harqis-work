@@ -55,6 +55,8 @@ def test_conversion_copies_files_atomically_and_supports_multiple_actions(ideas,
     assert result.status_code == 200, result.text
     action = result.json()['item']
     assert action['status'] == 'open' and action['agent_enabled'] is False
+    assert ideas.followups.get(action['id'])['origin_idea_ids'] == [item['id']]
+    assert ideas.followups.list()[0]['origin_idea_ids'] == [item['id']]
     assert client.post(uri + '/convert', json=raw).json()['item']['id'] == action['id']
     assert client.post(uri + '/convert', json={**raw, 'item': {**raw['item'], 'title': 'Changed retry'}}).status_code == 409
     from modules.hfl_corpus.attachments import source_store

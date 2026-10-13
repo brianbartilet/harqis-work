@@ -327,12 +327,41 @@ class FollowUpStore:
             result["state"] = "interrupted"
         return result
 
-    def save_suggestions(self, start, end, run_id, suggestions, result, *, state="complete"):
+    @staticmethod
+    def _idea_generation_snapshot(db):
+        rows = [dict(row) for row in db.execute('SELECT id,status,payload FROM timeline_suggestions ORDER BY id')]
+        has_edits = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='idea_edits'").fetchone()
+        edits = [dict(row) for row in db.execute('SELECT id,payload FROM idea_edits ORDER BY id')] if has_edits else []
+        actions = [dict(row) for row in db.execute('SELECT id,payload FROM followups ORDER BY id')]
+        digest = hashlib.sha256(json.dumps([rows, edits, actions], sort_keys=True).encode()).hexdigest()
+        ideas = {row['id']: {**json.loads(row['payload']), 'id': row['id'], 'status': row['status']} for row in rows}
+        for row in edits:
+            previous = ideas.get(row['id'])
+            ideas[row['id']] = {**(previous or {}), **json.loads(row['payload']), 'id': row['id']}
+            if previous:
+                ideas[row['id']]['status'] = previous['status']
+        records = []
+        for kind, items in [('idea', ideas.values()), ('action', [json.loads(row['payload']) for row in actions])]:
+            for item in items:
+                records.append({'id': kind + ':' + item['id'], 'status': item.get('status'),
+                    'title': item.get('title', ''),
+                    'outcome': item.get('expected_outcome') or item.get('recommendation', ''),
+                    'context': (item.get('body') or item.get('description') or '')[:2000]})
+        return {'records': records, 'digest': digest}
+
+    def idea_generation_snapshot(self):
+        with self.connect() as db:
+            db.execute('BEGIN')
+            return self._idea_generation_snapshot(db)
+
+    def save_suggestions(self, start, end, run_id, suggestions, result, *, state="complete", expected_idea_digest=None):
         with self.connect() as db:
             db.execute("BEGIN IMMEDIATE")
             run = db.execute("SELECT run_id FROM timeline_runs WHERE period_key=?", (f"{start}:{end}",)).fetchone()
             if not run or run["run_id"] != run_id:
                 return False
+            if expected_idea_digest is not None and self._idea_generation_snapshot(db)['digest'] != expected_idea_digest:
+                raise FollowUpConflict('Ideas or actions changed during duplicate review. Retry exploration.')
             db.execute("DELETE FROM timeline_suggestion_periods WHERE start_date=? AND end_date=?", (start,end))
             for item in suggestions:
                 identity = json.dumps([item["category"], item["title"].strip().casefold(), sorted(ref["entry_id"] for ref in item["evidence"])])

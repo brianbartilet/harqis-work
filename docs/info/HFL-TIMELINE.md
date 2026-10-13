@@ -22,6 +22,10 @@ Browsing reads SQLite only and never dispatches analysis. **Explore** explicitly
 
 High-confidence ideas can automatically become action records after a second completion and semantic duplicate review. No action prompts execute automatically. No reminders, messages, external calendar events, or Trello cards are sent.
 
+Before generating ideas, analysis now receives existing ideas (including owner edits and dismissals) and actions across all dates. It omits proposals with an already represented outcome. Before saving, one additional semantic review compares the proposed batch against those records and against itself, filtering paraphrases even when source entries or dates differ. Distinct outcomes on the same topic remain eligible; dismissed or completed work requires a material change or genuinely new occurrence. The run reports `duplicate_ideas_suppressed` for proposals removed by this final check. No review call is needed for an empty batch or a single proposal with no existing records.
+
+This comparison remains a model judgment, not a guarantee of perfect semantic matching. It adds bounded input context and a review call rather than guaranteeing lower total token cost. Existing-record context is limited to 200,000 characters (with at most 2,000 body/description characters per record); final review is limited to 250,000 characters. Exceeding either limit or receiving an invalid review fails the run and preserves cached ideas. A transactional snapshot check also rejects saving if ideas or actions changed during review. Existing duplicate cards are not deleted or merged.
+
 ## Persistence and deployment
 
 The canonical frontend/API and HOST worker must share `HFL_TIMELINE_STORE_PATH`, defaulting to `<HARQIS_DATA_ROOT or repository/.harqis-data>/runtime/hfl-timeline.sqlite3`. Back up this database with the corpus. Owner routes `/hfl-corpus/timeline/*` proxy to the configured canonical `/api/hfl/timeline/*` API. Owner sessions protect browser routes; the existing HFL API bearer token protects canonical routes.

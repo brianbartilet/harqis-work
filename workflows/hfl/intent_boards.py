@@ -58,8 +58,20 @@ def memberships(db, node):
 
 def project(db, items, prefix):
     available = boards(db)
-    return [{**item, 'board_ids': sorted(b['id'] for b in available if prefix + item['id'] in b.get('members', []))}
-            for item in items]
+    origins = {}
+    if prefix == 'action:' and db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='idea_links'").fetchone():
+        for row in db.execute("SELECT source,target FROM idea_links WHERE relation='develops-into' AND source LIKE 'idea:%' AND target LIKE 'action:%'"):
+            origins.setdefault(row['target'][7:], set()).add(row['source'][5:])
+    result = []
+    for item in items:
+        value = {**item, 'board_ids': sorted(b['id'] for b in available if prefix + item['id'] in b.get('members', []))}
+        if prefix == 'action:':
+            source_ids = origins.get(item['id'], set()).copy()
+            if item.get('suggestion_id'):
+                source_ids.add(item['suggestion_id'])
+            value['origin_idea_ids'] = sorted(source_ids)
+        result.append(value)
+    return result
 
 
 def associate(db, node, proposed):

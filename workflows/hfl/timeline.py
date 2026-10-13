@@ -119,14 +119,51 @@ def model_json(prompt, system, field):
     raise TimelineModelError(reason + ' Both attempts failed; cached suggestions were preserved. Retry Explore.')
 
 
-def synthesize(evidence, *, start, end):
+def synthesize(evidence, *, start, end, existing_intents=()):
     from workflows.hfl.prompts import load_prompt
     from apps.hfl_corpus.config import CONFIG
     from apps.hfl_corpus.references.web.api.ideas import ApiServiceHflCorpusIdeas
     from workflows.hfl.tasks.activity_radar import redact_secrets
     boards = ApiServiceHflCorpusIdeas(CONFIG).get_board_context()['boards']
-    return model_json(redact_secrets(json.dumps({"period":{"start":start,"end":end},"evidence":evidence,"available_boards":boards})),
+    return model_json(redact_secrets(json.dumps({"period":{"start":start,"end":end},"evidence":evidence,"available_boards":boards,"existing_intents":existing_intents})),
                       load_prompt("timeline_suggestions"), 'findings')
+
+
+def review_ideas(candidates, existing):
+    """Reject semantic repeats before they become reviewable cards."""
+    if not candidates or (not existing and len(candidates) == 1):
+        return candidates, 0
+    from workflows.hfl.prompts import load_prompt
+    from workflows.hfl.tasks.activity_radar import redact_secrets
+    compact = [{'id': f'candidate:{index}', 'title': item['title'],
+                'outcome': item.get('expected_outcome', ''),
+                'observation': item.get('observation', ''),
+                'resolution_check': item.get('resolution_check', '')}
+               for index, item in enumerate(candidates)]
+    payload = redact_secrets(json.dumps({'candidates': compact, 'existing_intents': existing}, ensure_ascii=False))
+    if len(payload) > 250000:
+        raise TimelineModelError('Idea duplicate-check context exceeds the review limit; cached ideas were preserved.')
+    decisions = model_json(payload, load_prompt('timeline_idea_review'), 'decisions')['decisions']
+    expected = {item['id'] for item in compact}
+    if len(decisions) != len(expected) or any(not isinstance(d, dict) or not isinstance(d.get('id'), str) for d in decisions):
+        raise TimelineModelError('Incomplete idea duplicate review; cached ideas were preserved.')
+    by_id = {d['id']: d for d in decisions}
+    if set(by_id) != expected:
+        raise TimelineModelError('Invalid idea duplicate review; cached ideas were preserved.')
+    targets = {item['id'] for item in existing}
+    kept = []
+    for index, candidate in enumerate(candidates):
+        identity = f'candidate:{index}'
+        decision = by_id[identity]
+        if 'duplicate_of' not in decision:
+            raise TimelineModelError('Missing idea duplicate decision; cached ideas were preserved.')
+        duplicate = decision['duplicate_of']
+        if duplicate is None:
+            kept.append(candidate)
+            targets.add(identity)
+        elif not isinstance(duplicate, str) or duplicate not in targets:
+            raise TimelineModelError('Invalid idea duplicate target; cached ideas were preserved.')
+    return kept, len(candidates) - len(kept)
 
 
 def review_actions(candidates, snapshot, evidence):
@@ -165,7 +202,7 @@ def create_automatic_actions(start,end,canonical,evidence,*,review=review_action
     return result
 
 
-def explore_period(start, end, *, run_id=None, store=None, collect=collect_period, related=collect_related, analyze=synthesize, auto_review=review_actions):
+def explore_period(start, end, *, run_id=None, store=None, collect=collect_period, related=collect_related, analyze=synthesize, auto_review=review_actions, idea_review=review_ideas):
     from workflows.hfl.tasks.activity_radar import _evidence_rows, validate_findings
     canonical = store or FollowUpStore(store_path())
     first, last = period(start,end)
@@ -177,11 +214,14 @@ def explore_period(start, end, *, run_id=None, store=None, collect=collect_perio
     try:
         rows, coverage = collect(start,end)
         history = related(rows,start) if rows else []
+        snapshot = canonical.idea_generation_snapshot()
+        if len(json.dumps(snapshot['records'], ensure_ascii=False)) > 200000:
+            raise TimelineModelError('Existing idea context exceeds the review limit; cached ideas were preserved.')
         suggestions = []
         for offset in range(0,len(rows),40):
             batch = rows[offset:offset+40]
             compact, lookup = _evidence_rows(batch,history)
-            findings = validate_findings(analyze(compact,start=start,end=end),set(lookup),lookup=lookup,include_matrix=True,include_boards=True)
+            findings = validate_findings(analyze(compact,start=start,end=end,existing_intents=snapshot['records']),set(lookup),lookup=lookup,include_matrix=True,include_boards=True)
             for finding in findings[:8]:
                 ids = finding["evidence"]
                 primary_ids = [eid for eid in ids if eid.startswith("N")]
@@ -192,8 +232,9 @@ def explore_period(start, end, *, run_id=None, store=None, collect=collect_perio
                 refs = [{"entry_id":lookup[eid]["entry_id"],"path":lookup[eid]["path"],"title":lookup[eid]["moment"],"date":str(lookup[eid]["when"])[:10]} for eid in ids]
                 primary = lookup[primary_ids[0]]
                 suggestions.append({**finding,"evidence":refs,"source":{"entry_id":primary["entry_id"],"path":primary["path"],"title":primary["moment"],"date":str(primary["when"])[:10]},"expected_outcome":finding["recommendation"],"generated_at":datetime.now(SGT).isoformat()})
-        result = {**coverage,"suggestions":len(suggestions),"related_entries":len(history),"model":"claude-haiku-4-5-20251001","analysis":"bounded evidence review; absence of evidence is not proof of non-completion"}
-        if not canonical.save_suggestions(start,end,run_id,suggestions,result,state="running"):
+        suggestions, duplicates = idea_review(suggestions, snapshot['records'])
+        result = {**coverage,"suggestions":len(suggestions),"duplicate_ideas_suppressed":duplicates,"related_entries":len(history),"model":"claude-haiku-4-5-20251001","analysis":"bounded evidence review; absence of evidence is not proof of non-completion"}
+        if not canonical.save_suggestions(start,end,run_id,suggestions,result,state="running",expected_idea_digest=snapshot['digest']):
             return {'state':'superseded'}
         compact,_ = _evidence_rows(rows,history)
         try:
