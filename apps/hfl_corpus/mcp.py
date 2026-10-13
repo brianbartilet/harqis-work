@@ -31,6 +31,48 @@ def _dict_result(result) -> dict:
 def register_hfl_corpus_tools(mcp: FastMCP):
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def get_hfl_corpus_role_history(identity: str) -> dict:
+        """Read revision history for a private facet.
+
+        Args:
+            identity: Facet ID returned by list_hfl_corpus_roles.
+        """
+        logger.info("Tool called: get_hfl_corpus_role_history")
+        result = ApiServiceHflCorpusRoles(CONFIG).get_role_history(identity)
+        logger.info("get_hfl_corpus_role_history done")
+        return _dict_result(result)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def list_hfl_corpus_item_connection_options(query: str = '', offset: int = 0) -> dict:
+        """Search visible ideas/actions available for manual linking, 50 per page.
+
+        Args:
+            query: Optional title or ID search, at most 200 characters.
+            offset: Nonnegative number of matching items to skip.
+        """
+        logger.info("Tool called: list_hfl_corpus_item_connection_options")
+        result = ApiServiceHflCorpusIdeas(CONFIG).list_item_connection_options(query, offset)
+        logger.info("list_hfl_corpus_item_connection_options done")
+        return _dict_result(result)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_item_connection(payload: dict) -> dict:
+        """Create, update or remove a shared manual link. Destructive remote write.
+
+        Args:
+            payload: operation (create/update/remove) and edge with source, target,
+                relation. IDs use idea: or action: prefixes. Relations are related-to,
+                depends-on, blocked-by, cloned-from, promoted-from or created-from.
+                Update/remove require the current revision; update also requires a
+                replacement edge. Stale revisions fail with 409. Server validates
+                visibility and duplicates; no automatic retries.
+        """
+        logger.info("Tool called: update_hfl_corpus_item_connection")
+        result = ApiServiceHflCorpusIdeas(CONFIG).update_item_connection(payload)
+        logger.info("update_hfl_corpus_item_connection done")
+        return _dict_result(result)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
     def list_hfl_corpus_roles() -> dict:
         """List private facets, linked Spaces, analysis runs, and palette."""
         return ApiServiceHflCorpusRoles(CONFIG).list_roles()

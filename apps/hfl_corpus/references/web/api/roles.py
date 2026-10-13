@@ -5,6 +5,10 @@ from apps.hfl_corpus.references.web.api.extended import ApiServiceHflCorpusExten
 
 
 class ApiServiceHflCorpusRoles(ApiServiceHflCorpusExtended):
+    def get_role_history(self, identity: str) -> dict:
+        """Read the revision history of a private facet."""
+        return self._json('GET', f'roles/{self._segment(identity)}/history')
+
     def list_roles(self) -> dict:
         """List private facets, linked Spaces, analysis runs, and palette."""
         return self._json('GET', 'roles')

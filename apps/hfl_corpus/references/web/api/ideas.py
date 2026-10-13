@@ -6,6 +6,15 @@ from apps.hfl_corpus.references.web.api.extended import ApiServiceHflCorpusExten
 
 class ApiServiceHflCorpusIdeas(ApiServiceHflCorpusExtended):
 
+    def list_item_connection_options(self, query: str = '', offset: int = 0) -> dict:
+        """Search visible ideas/actions available for linking, in pages of 50."""
+        return self._json('GET', 'timeline/ideas/item-connection-options',
+                          params=dict(query=query, offset=offset))
+
+    def update_item_connection(self, payload: dict) -> dict:
+        """Create, update or remove a shared manual link (remote write)."""
+        return self._json('POST', 'timeline/ideas/item-connections', payload=payload)
+
     def get_ideas_snapshot(self) -> dict:
         """Read ideas, maps, links, goals and visible graph context.
         """

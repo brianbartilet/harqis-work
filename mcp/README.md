@@ -340,6 +340,9 @@ session/protocol surfaces. Writes are marked below; file downloads write locally
 | `update_hfl_corpus_entity_consolidation_checkpoint` | Checkpoint partial progress and discover changed inputs. Destructive: writes remote state. |
 | `update_hfl_corpus_entity_consolidation_evidence` | Cache bounded original-entry context across pending pairs. Destructive: writes remote state. |
 | `create_hfl_corpus_entity_consolidation_group` | Commit independently corroborated anchor pairs atomically. Destructive: writes remote state. |
+| `get_hfl_corpus_role_history` | Read private facet revision history. |
+| `list_hfl_corpus_item_connection_options` | Search visible ideas/actions available for manual linking, with query and offset pagination. |
+| `update_hfl_corpus_item_connection` | Create, update or remove a shared manual link; update/remove require the current revision (destructive remote write). |
 | `get_hfl_corpus_board_context` | Read active boards and permitted member objects and connections. |
 | `get_hfl_corpus_idea_connections` | Read an idea's graph connections. |
 | `list_hfl_corpus_reuse_options` | Search actions and ideas available for independent copying. |

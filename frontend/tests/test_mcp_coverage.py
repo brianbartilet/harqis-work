@@ -240,6 +240,21 @@ def canonical_api(monkeypatch, tmp_path):
     client.close()
 
 
+def test_item_connection_search_and_revision_payloads(recording_api):
+    origin, records = recording_api
+    api = service('apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas', origin)
+    api.list_item_connection_options(query='plan + review', offset=50)
+    assert parse_qs(urlsplit(records[-1][1]).query) == {'query': ['plan + review'], 'offset': ['50']}
+    payload = {
+        'operation': 'update', 'revision': 'current-revision',
+        'edge': {'source': 'idea:one', 'target': 'action:two', 'relation': 'related-to'},
+        'replacement': {'source': 'idea:one', 'target': 'action:two', 'relation': 'depends-on'},
+    }
+    api.update_item_connection(payload)
+    assert records[-1][:2] == ('POST', '/api/hfl/timeline/ideas/item-connections')
+    assert json.loads(records[-1][3]) == payload
+
+
 def test_consolidation_decision_payloads(recording_api):
     origin, records = recording_api
     api = service('apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities', origin)

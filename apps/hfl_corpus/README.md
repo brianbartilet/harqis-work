@@ -107,6 +107,12 @@ upsert. Inspect `indexed` and `doc_id`; the request can succeed with
 
 ## MCP Tools
 
+| Tool | Description |
+| --- | --- |
+| `get_hfl_corpus_role_history` | Read private facet revision history. |
+| `list_hfl_corpus_item_connection_options` | Search visible ideas/actions available for manual linking, with query and offset pagination. |
+| `update_hfl_corpus_item_connection` | Create, update or remove a shared manual link; update/remove require the current revision (destructive remote write). |
+
 The existing `hfl_corpus` catalog entry covers every
 canonical `/api/hfl` method/path in the frontend. CLI, standalone MCP and the
 Kanban bridge consume the same adapter; existing tool names remain compatible.
