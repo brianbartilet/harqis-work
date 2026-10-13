@@ -3622,6 +3622,227 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
       security:
       - HTTPBearer: []
+  /api/hfl/entities/consolidation/{run_id}/checkpoint:
+    post:
+      summary: Consolidation Checkpoint
+      operationId: consolidation_checkpoint_api_hfl_entities_consolidation__run_id__checkpoint_post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/consolidation/{run_id}/claims:
+    post:
+      summary: Consolidation Claim
+      operationId: consolidation_claim_api_hfl_entities_consolidation__run_id__claims_post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsolidationClaim'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/consolidation/{run_id}/claims/{token}:
+    post:
+      summary: Consolidation Claim Update
+      operationId: consolidation_claim_update_api_hfl_entities_consolidation__run_id__claims__token__post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsolidationClaimUpdate'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/consolidation/{run_id}/evidence:
+    post:
+      summary: Consolidation Evidence
+      operationId: consolidation_evidence_api_hfl_entities_consolidation__run_id__evidence_post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsolidationEvidence'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/consolidation/{run_id}/groups:
+    post:
+      summary: Consolidation Group
+      operationId: consolidation_group_api_hfl_entities_consolidation__run_id__groups_post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsolidationGroup'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/roles/{identity}/history:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Api History
+      operationId: api_history_api_hfl_roles__identity__history_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/item-connection-options:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Item Connection Options
+      operationId: item_connection_options_api_hfl_timeline_ideas_item_connection_options_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: query
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Query
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 0
+          title: Offset
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/timeline/ideas/item-connections:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Edit Item Connection
+      operationId: edit_item_connection_api_hfl_timeline_ideas_item_connections_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
 components:
   schemas:
     AuditRequest:
@@ -4736,6 +4957,114 @@ components:
       - right_quote
       - explanation
       title: ConsolidationFact
+    ConsolidationClaim:
+      properties:
+        worker_id:
+          type: string
+          maxLength: 100
+          minLength: 1
+          title: Worker Id
+        max_pairs:
+          type: integer
+          maximum: 20.0
+          minimum: 1.0
+          title: Max Pairs
+          default: 8
+        max_bytes:
+          type: integer
+          maximum: 1000000.0
+          minimum: 4096.0
+          title: Max Bytes
+          default: 100000
+        lease_seconds:
+          type: integer
+          maximum: 3600.0
+          minimum: 60.0
+          title: Lease Seconds
+          default: 900
+      additionalProperties: false
+      type: object
+      required:
+      - worker_id
+      title: ConsolidationClaim
+    ConsolidationClaimUpdate:
+      properties:
+        action:
+          type: string
+          enum:
+          - renew
+          - release
+          title: Action
+        lease_seconds:
+          type: integer
+          maximum: 3600.0
+          minimum: 60.0
+          title: Lease Seconds
+          default: 900
+      additionalProperties: false
+      type: object
+      required:
+      - action
+      title: ConsolidationClaimUpdate
+    ConsolidationEvidence:
+      properties:
+        entity_id:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Entity Id
+        entry_ids:
+          items:
+            type: string
+          type: array
+          maxItems: 4
+          minItems: 1
+          title: Entry Ids
+        claim_token:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Claim Token
+      additionalProperties: false
+      type: object
+      required:
+      - entity_id
+      - entry_ids
+      title: ConsolidationEvidence
+    ConsolidationGroup:
+      properties:
+        anchor_id:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Anchor Id
+        decisions:
+          additionalProperties:
+            $ref: '#/components/schemas/ConsolidationDecision'
+          type: object
+          maxProperties: 20
+          minProperties: 2
+          title: Decisions
+        contradictions:
+          items:
+            type: string
+          type: array
+          maxItems: 20
+          title: Contradictions
+        claim_token:
+          anyOf:
+          - type: string
+            maxLength: 100
+          - type: 'null'
+          title: Claim Token
+      additionalProperties: false
+      type: object
+      required:
+      - anchor_id
+      - decisions
+      - contradictions
+      title: ConsolidationGroup
   securitySchemes:
     HTTPBearer:
       type: http

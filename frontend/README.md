@@ -267,7 +267,13 @@ For every application the frontend discovers:
 Apps without documentation or tests remain visible and show an explicit empty
 state.
 
-The Apps inventory supports browser-local drag-and-drop ordering through
+Build → Integrations groups user-scoped GitHub/Jira **Connectors** and the existing
+**Workflows** application catalogue. Connector credentials are independent of
+host workflow configuration. The catalogue includes search, README descriptions,
+authentication hints, and Hermes-assisted integration development. See the
+[connector operations and security guide](modules/integrations/README.md).
+
+The workflow inventory supports browser-local drag-and-drop ordering through
 **Edit Layout**. Card order is persisted in the `harqis_app_order`
 `localStorage` key and can be reset without changing repository data.
 

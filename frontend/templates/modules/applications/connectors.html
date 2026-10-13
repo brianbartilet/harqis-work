@@ -1,0 +1,12 @@
+<link rel="stylesheet" href="{{ static_asset('css/integrations.css') }}">
+<script type="application/json" data-integration-csrf>{{ integration_csrf | tojson }}</script>
+<script defer src="{{ static_asset('js/integrations.js') }}"></script>
+<nav class="integration-tabs" role="tablist" aria-label="Integration groups">
+  <button id="connectors-tab" type="button" role="tab" aria-controls="connector-integrations" aria-selected="true" tabindex="0">Connectors <span class="integration-tab-count">2</span></button>
+  <button id="workflows-tab" type="button" role="tab" aria-controls="workflow-integrations" aria-selected="false" tabindex="-1">Workflows <span class="integration-tab-count">{{ applications | length }}</span></button>
+</nav>
+<section id="connector-integrations" role="tabpanel" aria-labelledby="connectors-tab">
+  <div class="integration-section-heading"><div><h2 id="connector-integrations-title">Connectors</h2><p>Connect your accounts to enable features and actions across HARQIS, from working with cards to interactions and triggers in the frontend and other integrations. Each connector provides its own supported capabilities. Connections belong to your user account and are managed separately from host-configured workflow credentials.</p></div></div>
+  <div class="connector-grid" data-connector-cards data-github-logo="{{ static_asset('img/connectors/github.svg') }}" data-jira-logo="{{ static_asset('img/connectors/jira.svg') }}"><p role="status">Loading connections…</p></div>
+  <p data-integration-error role="alert"></p>
+</section>

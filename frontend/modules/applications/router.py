@@ -1,6 +1,10 @@
 """Routes for application inventory, documentation, and pytest runs."""
 
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import Response
+from modules.hfl_corpus.agent_bridge import owner_auth
+from modules.applications import display_settings
+from web import static_asset
 from fastapi.responses import HTMLResponse
 from fastapi.responses import RedirectResponse
 
@@ -14,6 +18,8 @@ from modules.applications.inventory import (
 from modules.applications.test_runner import test_runs
 from services.markdown import render_markdown
 from web import page_context, require_user, templates
+from modules.hfl_shares.security import make_csrf_token
+from modules.integrations.agents import AGENTS
 
 
 router = APIRouter(prefix="/applications")
@@ -24,7 +30,7 @@ async def applications_page(request: Request):
     user, redirect = require_user(request)
     if redirect:
         return redirect
-    applications = discover_applications()
+    applications = display_settings.decorate(discover_applications())
     return templates.TemplateResponse(
         request,
         "modules/applications/index.html",
@@ -33,6 +39,7 @@ async def applications_page(request: Request):
             user,
             "applications",
             applications=applications,
+            integration_csrf=make_csrf_token(user),
             latest={app.key: test_runs.latest_for_app(app.key, 1) for app in applications},
         ),
     )
@@ -62,7 +69,9 @@ async def application_detail(request: Request, app_key: str):
             request,
             user,
             "applications",
-            application=application,
+            application=display_settings.decorate((application,))[0],
+            integration_csrf=make_csrf_token(user),
+            integration_agents=AGENTS,
             runs=test_runs.latest_for_app(app_key),
         ),
     )
@@ -88,7 +97,7 @@ async def application_document(request: Request, app_key: str, doc_path: str):
             request,
             user,
             "applications",
-            application=application,
+            application=display_settings.decorate((application,))[0],
             document_path=document.relative_to(application.path).as_posix(),
             rendered=rendered,
         ),
@@ -161,3 +170,50 @@ async def cancel_test_run(request: Request, run_id: str):
         "modules/applications/test_run.html",
         {"run": run},
     )
+
+
+def display_payload(application):
+    shown = display_settings.decorate((application,))[0]
+    return {'display_name': shown.label, 'icon_url': ('/applications/'+application.key+'/icon?v='+shown.icon_version) if shown.icon_version else static_asset('img/connectors/application.svg')}
+
+
+@router.get('/{app_key}/icon', dependencies=[Depends(owner_auth)])
+def application_icon(app_key: str):
+    if not get_application(app_key):
+        raise HTTPException(404, 'Application not found.')
+    data = display_settings.icon(app_key)
+    if not data:
+        return RedirectResponse(static_asset('img/connectors/application.svg'), status_code=307)
+    return Response(data, media_type='image/webp', headers={'Cache-Control': 'private, no-cache', 'X-Content-Type-Options': 'nosniff'})
+
+
+@router.post('/{app_key}/settings', dependencies=[Depends(owner_auth)])
+async def save_application_settings(request: Request, app_key: str):
+    application = get_application(app_key)
+    if not application:
+        raise HTTPException(404, 'Application not found.')
+    form = await request.form()
+    upload = form.get('icon')
+    try:
+        image = None
+        if upload and getattr(upload, 'filename', ''):
+            image = display_settings.normalize_image(await upload.read(display_settings.MAX_IMAGE_BYTES + 1))
+        name = form.get('display_name')
+        if not isinstance(name, str):
+            raise ValueError('Enter a display name.')
+        display_settings.save(app_key, name, image)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+    finally:
+        if upload and hasattr(upload, 'close'):
+            await upload.close()
+    return display_payload(application)
+
+
+@router.post('/{app_key}/settings/reset', dependencies=[Depends(owner_auth)])
+def reset_application_settings(app_key: str):
+    application = get_application(app_key)
+    if not application:
+        raise HTTPException(404, 'Application not found.')
+    display_settings.reset(app_key)
+    return display_payload(application)

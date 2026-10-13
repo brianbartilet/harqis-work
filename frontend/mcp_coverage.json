@@ -3089,9 +3089,11 @@
     {
       "method": "GET",
       "path": "/roles/data/{identity}/history",
-      "status": "deferred",
-      "tools": [],
-      "reason": "Session-authenticated facet editor operation; no equivalent canonical machine-facing operation yet."
+      "status": "alias",
+      "tools": [
+        "get_hfl_corpus_role_history"
+      ],
+      "reason": "Browser-session alias of the canonical bearer-authenticated facet history operation."
     },
     {
       "method": "GET",
@@ -3239,6 +3241,222 @@
       ],
       "reason": "Commit independently corroborated anchor pairs atomically. Destructive: writes remote state.",
       "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity_consolidation_group"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/roles/{identity}/history",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_role_history"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.roles.ApiServiceHflCorpusRoles.get_role_history"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/timeline/ideas/item-connection-options",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_item_connection_options"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.list_item_connection_options"
+    },
+    {
+      "method": "GET",
+      "path": "/applications/{app_key}/icon",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation: integration inventory redirect or application icon asset."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/timeline/ideas/item-connection-options",
+      "status": "alias",
+      "tools": [
+        "list_hfl_corpus_item_connection_options"
+      ],
+      "reason": "Browser-session alias of the canonical bearer-authenticated HFL operation."
+    },
+    {
+      "method": "GET",
+      "path": "/integrations",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser presentation: integration inventory redirect or application icon asset."
+    },
+    {
+      "method": "GET",
+      "path": "/integrations/api/actions/{identity}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration operation using personal connector accounts and local action/board context; host-configured GitHub/Jira tools are not equivalent. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/integrations/api/actions/{identity}/github",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration operation using personal connector accounts and local action/board context; host-configured GitHub/Jira tools are not equivalent. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/integrations/api/actions/{identity}/jira",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration operation using personal connector accounts and local action/board context; host-configured GitHub/Jira tools are not equivalent. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/integrations/api/boards",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration operation using personal connector accounts and local action/board context; host-configured GitHub/Jira tools are not equivalent. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/integrations/api/connectors",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Personal connector credentials and connection lifecycle use owner-session authentication and encrypted per-user storage; a machine-facing credential-management contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/integrations/api/github/repositories",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration operation using personal connector accounts and local action/board context; host-configured GitHub/Jira tools are not equivalent. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/integrations/api/github/resources",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration operation using personal connector accounts and local action/board context; host-configured GitHub/Jira tools are not equivalent. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/integrations/api/jira/projects",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration operation using personal connector accounts and local action/board context; host-configured GitHub/Jira tools are not equivalent. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/timeline/ideas/item-connections",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_item_connection"
+      ],
+      "reason": "Dedicated canonical HTTP service and MCP tool; uses HFL bearer authentication.",
+      "service": "apps.hfl_corpus.references.web.api.ideas.ApiServiceHflCorpusIdeas.update_item_connection"
+    },
+    {
+      "method": "POST",
+      "path": "/applications/{app_key}/settings",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session application display name/icon settings; machine-facing settings service and authentication contract are deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/applications/{app_key}/settings/reset",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session application display name/icon settings; machine-facing settings service and authentication contract are deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/timeline/ideas/item-connections",
+      "status": "alias",
+      "tools": [
+        "update_hfl_corpus_item_connection"
+      ],
+      "reason": "Browser-session alias of the canonical bearer-authenticated HFL operation."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/actions/{identity}/github/branch",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration operation using personal connector accounts and local action/board context; host-configured GitHub/Jira tools are not equivalent. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/actions/{identity}/github/pr",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration operation using personal connector accounts and local action/board context; host-configured GitHub/Jira tools are not equivalent. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/actions/{identity}/jira/refresh",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration operation using personal connector accounts and local action/board context; host-configured GitHub/Jira tools are not equivalent. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/actions/{identity}/jira/transition",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration operation using personal connector accounts and local action/board context; host-configured GitHub/Jira tools are not equivalent. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/agents/prepare",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session preparation of an isolated agent workspace and development action; machine-facing preparation/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/connectors/{provider}/connect",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Personal connector credentials and connection lifecycle use owner-session authentication and encrypted per-user storage; a machine-facing credential-management contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/connectors/{provider}/disconnect",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Personal connector credentials and connection lifecycle use owner-session authentication and encrypted per-user storage; a machine-facing credential-management contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/connectors/{provider}/save",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Personal connector credentials and connection lifecycle use owner-session authentication and encrypted per-user storage; a machine-facing credential-management contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/connectors/{provider}/test",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Personal connector credentials and connection lifecycle use owner-session authentication and encrypted per-user storage; a machine-facing credential-management contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/connectors/{provider}/toggle",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Personal connector credentials and connection lifecycle use owner-session authentication and encrypted per-user storage; a machine-facing credential-management contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/github/ideas",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration operation using personal connector accounts and local action/board context; host-configured GitHub/Jira tools are not equivalent. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/jira/import",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration operation using personal connector accounts and local action/board context; host-configured GitHub/Jira tools are not equivalent. Dedicated machine-facing service/auth contract is deferred."
     }
   ]
 }
