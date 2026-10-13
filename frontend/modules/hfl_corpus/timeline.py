@@ -29,6 +29,9 @@ class TimelineRoute(APIRoute):
                 raise HTTPException(403, 'Sharing context is available only to the authenticated sharing service.')
             if request.url.path.startswith('/hfl-corpus/'):
                 owner(request)
+                if request.method == 'PATCH' and re.fullmatch(r'/hfl-corpus/timeline/items/[^/]+', request.url.path):
+                    from modules.integrations.service import guard_status
+                    await asyncio.to_thread(guard_status, get_current_user(request), request.url.path.rsplit('/', 1)[-1], await request.json())
                 settings = get_settings()
                 if settings.hfl_corpus_api_url and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') != '1':
                     target = settings.hfl_corpus_api_url.rstrip('/') + '/api/hfl/timeline' + request.url.path.split('/timeline', 1)[1]

@@ -573,7 +573,7 @@ def test_home_renders_dedicated_manifesto_section_outside_platform_modules(
     assert "Manifesto" not in desktop_nav
     assert "Manifesto" not in mobile_nav
     assert "Workflows" in response.text
-    assert "Apps" in response.text
+    assert "Integrations" in response.text
     assert "Activity Corpus" in response.text
     assert "Turn lived activity into useful knowledge and deliberate action." in response.text
     assert 'aria-label="HARQIS home"' in response.text

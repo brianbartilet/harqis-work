@@ -56,6 +56,8 @@
     document.getElementById('followup-editor-title').textContent = item ? (desiredStatus === 'done' ? 'Complete action' : 'Edit action') : 'New action';
     showEvidence(); stateFields(); error('followup-save-error'); editor.showModal();
     window.HflActionConnections?.attach(editor, () => editing && ({...editing, kind:'action'}));
+    editor.querySelector('[data-connector-action]')?.remove();
+    if(item)window.HarqisIntegrations?.actionButton(editor.querySelector('.agenda-dialog-header'),item);
     editorState = window.HflBindEditor(editor, form, {
       creationLabel: 'Action',
       snapshot: () => JSON.stringify({fields:window.HflIntentValues(form),checklists:window.hflActionChecklists.value,files:attachments.pending.map(f=>[f.name,f.size,f.lastModified]),removed:[...attachments.removed]}),
@@ -165,6 +167,7 @@
     const connections = button('Connections', () => window.HflActionConnections.open(item, connections));
     connections.className = 'action-connections-button';
     views.append(connections);
+    window.HarqisIntegrations?.actionButton(views,item);
     el.append(actions);return el;
   }
   async function load() {
@@ -346,6 +349,8 @@
   }
   form.addEventListener('submit',async e=>{e.preventDefault();try{await editorState.submit();}catch(err){error('followup-save-error',err.message);}});
   window.hflActions = {card, openEditor, load};
+  const applicationAgent = new URLSearchParams(location.search).get('integration_agent');
+  if(applicationAgent)api('/'+encodeURIComponent(applicationAgent)).then(data=>window.hflAgentBridge.open('actionable',data.item.id,data.item.title)).catch(e=>error('agenda-error',e.message));
   timelineApi('/markers').then(data=>{markerDays=data.days;paintMarkers();}).catch(()=>{});
   window.addEventListener('hfl:timeline-close',()=>{clearTimeout(pollTimer);++sequence;});
   const params=new URLSearchParams(location.search);

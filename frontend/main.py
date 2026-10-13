@@ -50,6 +50,7 @@ from auth import (
 )
 from config import get_settings, warn_insecure_defaults
 from modules.applications.router import router as applications_router
+from modules.integrations.router import router as integrations_router
 from modules.hfl_corpus.api import router as hfl_corpus_api_router
 from modules.hfl_corpus.entities_api import router as entities_router
 from modules.hfl_corpus.corpus import corpus_index
@@ -270,6 +271,7 @@ app.include_router(file_guest_router)
 app.include_router(manifesto_router)
 app.include_router(workflows_router)
 app.include_router(applications_router)
+app.include_router(integrations_router)
 app.include_router(hfl_corpus_api_router)
 app.include_router(entities_router)
 app.include_router(hfl_corpus_router)

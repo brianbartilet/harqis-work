@@ -14,6 +14,8 @@ from modules.applications.inventory import (
 from modules.applications.test_runner import test_runs
 from services.markdown import render_markdown
 from web import page_context, require_user, templates
+from modules.hfl_shares.security import make_csrf_token
+from modules.integrations.agents import AGENTS
 
 
 router = APIRouter(prefix="/applications")
@@ -33,6 +35,7 @@ async def applications_page(request: Request):
             user,
             "applications",
             applications=applications,
+            integration_csrf=make_csrf_token(user),
             latest={app.key: test_runs.latest_for_app(app.key, 1) for app in applications},
         ),
     )
@@ -63,6 +66,8 @@ async def application_detail(request: Request, app_key: str):
             user,
             "applications",
             application=application,
+            integration_csrf=make_csrf_token(user),
+            integration_agents=AGENTS,
             runs=test_runs.latest_for_app(app_key),
         ),
     )

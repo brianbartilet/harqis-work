@@ -64,7 +64,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
     ),
     ModuleDefinition(
         key="applications",
-        label="Apps",
+        label="Integrations",
         route="/applications",
         description="App integrations connected to HARQIS Work.",
         detail="Browse integration documentation and run controlled pytest checks using this host's active configuration.",

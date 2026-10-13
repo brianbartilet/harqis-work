@@ -36,7 +36,7 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
             build.click()
             assert page.url == 'http://navigation.test/home'
             playwright.expect(tools).to_be_visible()
-            assert tools.locator('a').all_text_contents() == ['Apps', 'Workflows', 'Git Forks']
+            assert tools.locator('a').all_text_contents() == ['Integrations', 'Workflows', 'Git Forks']
             assert tools.locator('a').evaluate_all('(links) => links.map(a => a.getAttribute("href"))') == ['/applications', '/workflows', '/git-forks']
             build.press('Escape')
             playwright.expect(tools).to_be_hidden()
@@ -44,8 +44,8 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
             playwright.expect(tools).to_be_visible()
             build.press('Escape')
             build.press('ArrowDown')
-            playwright.expect(tools.get_by_role('link', name='Apps', exact=True)).to_be_focused()
-            tools.get_by_role('link', name='Apps', exact=True).press('Escape')
+            playwright.expect(tools.get_by_role('link', name='Integrations', exact=True)).to_be_focused()
+            tools.get_by_role('link', name='Integrations', exact=True).press('Escape')
             assert nav.get_by_role('link', name='Distill', exact=True).get_attribute('href') == '/distill'
             toggle = nav.get_by_role('link', name='Distill', exact=True)
             menu = nav.get_by_role('navigation', name='Distill views', include_hidden=True)
@@ -105,8 +105,7 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
                 menu.get_by_role('link', name=label).click()
                 page.wait_for_url('**' + destination + '**')
                 query = parse_qs(urlsplit(page.url).query)
-                if label == 'Activity Graph':
-                    query = parse_qs(query['context'][0])
+                # Graph navigation carries the filters directly (activity-modals.js).
                 assert query['source'] == ['notes']
                 assert query['q'] == ['launch']
         finally:

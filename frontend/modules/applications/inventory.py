@@ -43,6 +43,8 @@ class Application:
     documents: tuple[AppDocument, ...]
     tests: tuple[AppTest, ...]
     safe_paths: tuple[str, ...]
+    description: str = ''
+    connection_method: str = 'See setup documentation'
 
 
 def _label(key: str) -> str:
@@ -120,9 +122,33 @@ def _discover_applications() -> tuple[Application, ...]:
                 documents=tuple(docs),
                 tests=tuple(tests),
                 safe_paths=safe_paths,
+                description=_description(app_dir),
+                connection_method=_connection_method(app_dir),
             )
         )
     return tuple(applications)
+
+
+def _readme(app_dir):
+    try:
+        return (app_dir / 'README.md').read_text(encoding='utf-8')[:20000]
+    except (OSError, UnicodeError):
+        return ''
+
+
+def _description(app_dir):
+    for line in _readme(app_dir).splitlines():
+        text = line.strip()
+        if text and not text.startswith(('#', '|', '```', '>', '-', '[')):
+            return re.sub(r'[*`]', '', text)[:240]
+    return 'Application integration documentation and checks.'
+
+
+def _connection_method(app_dir):
+    text = _readme(app_dir).lower()
+    methods = [label for patterns, label in [(['oauth'], 'OAuth'), (['api key','api_key','api token','api_token'], 'API token'), (['basic auth'], 'Basic authentication')]
+               if any(pattern in text for pattern in patterns)]
+    return ' / '.join(methods) or 'See setup documentation'
 
 
 def clear_application_cache() -> None:
