@@ -24,7 +24,7 @@
 
   {% include 'modules/applications/connectors.html' %}
   <section id="workflow-integrations" role="tabpanel" aria-labelledby="workflows-tab" hidden>
-  <div class="integration-section-heading"><div><h2 id="workflow-integrations-title">Workflows</h2><p>{{ applications | length }} applications · Host-configured integrations for your workflows.</p></div><button type="button" data-add-application>Add application</button></div>
+  <div class="integration-section-heading"><div><h2 id="workflow-integrations-title">Workflows</h2><p>Browse {{ applications | length }} application integrations that HARQIS workflows can use to read data, perform actions, and automate tasks. Their settings and credentials are managed on the host running HARQIS, separately from your personal connector accounts. Open an application to explore its available operations and configuration.</p></div><button type="button" class="shrink-0 whitespace-nowrap" data-add-application>Add application</button></div>
   <label class="integration-search" for="integration-search">Find a workflow integration<input id="integration-search" type="search" placeholder="Search applications" autocomplete="off"></label>
   <p data-inventory-count role="status" class="text-sm text-slate-400 mb-4"></p>
   <div x-show="customize" x-cloak
