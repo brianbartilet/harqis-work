@@ -31,15 +31,20 @@ def connectors(user=Depends(owner_auth)):
     return {'items':items, 'links':links}
 
 
+@api.post('/connectors/{provider}/test')
+def test_connection(provider: str, raw: dict, user=Depends(owner_auth)):
+    provider_name(provider)
+    identity = Provider(provider, credentials(provider, raw)).test()
+    return {'status': 'Test passed', **identity}
+
+
+@api.post('/connectors/{provider}/save')
 @api.post('/connectors/{provider}/connect')
 def connect(provider: str, raw: dict, user=Depends(owner_auth)):
     provider_name(provider)
     clean = credentials(provider, raw)
-    try:
-        identity = Provider(provider, clean).test()
-    except HTTPException as exc:
-        store.save(user, provider, {'status':'Connection failure', 'enabled':False, 'error':exc.detail}, {})
-        raise
+    # Revalidate before saving; a failed replacement must preserve the saved account.
+    identity = Provider(provider, clean).test()
     previous = store.get(user, provider)
     metadata = {**identity, 'status':'Connected', 'enabled':False, 'connected_since':store.now(),
                 'auth_method':('Fine-grained personal access token' if clean['token'].startswith('github_pat_') else 'Personal access token') if provider == 'github' else 'Email and API token',

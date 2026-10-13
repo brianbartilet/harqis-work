@@ -4,11 +4,17 @@
 {% block content %}
 <main class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 space-y-8">
   <section>
-    <a href="/applications#workflow-integrations" class="text-xs text-slate-500 hover:text-white">← Integrations · Workflows</a>
+    <nav class="integration-breadcrumbs" aria-label="Breadcrumb">
+      <ol>
+        <li><a href="/applications">Integrations</a></li>
+        <li><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m8 5 5 5-5 5"/></svg><a href="/applications#workflow-integrations">Workflows</a></li>
+        <li><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m8 5 5 5-5 5"/></svg><span aria-current="page" data-application-display-name>{{ application.label }}</span></li>
+      </ol>
+    </nav>
     <div class="mt-3 flex flex-wrap items-end justify-between gap-4">
       <div>
         <p class="text-xs uppercase tracking-[0.22em] text-blue-400">Application integration</p>
-        <h1 class="mt-2 text-2xl font-semibold text-white">{{ application.label }}</h1>
+        <h1 class="mt-2 text-2xl font-semibold text-white application-display-title"><img class="connector-logo" data-application-icon src="{{ '/applications/' ~ application.key ~ '/icon?v=' ~ application.icon_version if application.icon_version else static_asset('img/connectors/application.svg') }}" alt="" width="20" height="20"><span data-application-display-name>{{ application.label }}</span></h1>
         <p class="operator-meta mt-1 font-mono text-xs">apps/{{ application.key }}</p>
       </div>
       <div class="flex flex-wrap gap-2">
@@ -32,20 +38,32 @@
     </div>
   </section>
 
-  <section id="current-test-run" aria-live="polite" aria-label="Current test run"></section>
   <link rel="stylesheet" href="{{ static_asset('css/integrations.css') }}">
   <script type="application/json" data-integration-csrf>{{ integration_csrf | tojson }}</script>
   <script defer src="{{ static_asset('js/integrations.js') }}"></script>
-  <section class="connector-card" aria-label="Agent CLI interface" data-application-agent="{{ application.key }}">
-    <h2>Agent CLI interface</h2><p>Work on this integration with an agent in an isolated checkout. Preparing a session saves a development action; start it when ready.</p>
-    <label>Agent<select data-agent-choice>{% for agent in integration_agents %}<option value="{{ agent.id }}" {% if not agent.available %}disabled{% endif %}>{{ agent.name }}{% if not agent.available %} — coming soon{% endif %}</option>{% endfor %}</select></label>
-    <p>Skills: create-new-service-app · create-new-mcp · create-new-workflow · create-new-n8n-workflow</p>
-    <button type="button" data-open-application-agent>Open Hermes workspace</button>
-    <p data-agent-feedback role="status"></p>
-  </section>
-
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <section class="rounded-xl bg-slate-900 ring-1 ring-slate-800 overflow-hidden">
+  <div class="application-test-layout">
+    <div class="application-detail-column">
+<section class="connector-card application-display-settings" aria-labelledby="application-settings-title">
+      <h2 id="application-settings-title">Settings</h2>
+      <p>Customize how this application appears for everyone on this host.</p>
+      <form data-application-settings="{{ application.key }}">
+        <fieldset disabled data-settings-fields>
+        <label for="application-display-name">Display name<input id="application-display-name" name="display_name" value="{{ application.label }}" maxlength="80" required></label>
+        <div class="application-icon-upload">
+          <img data-icon-preview src="{{ '/applications/' ~ application.key ~ '/icon?v=' ~ application.icon_version if application.icon_version else static_asset('img/connectors/application.svg') }}" width="48" height="48" alt="Application icon preview">
+          <div class="application-icon-picker">
+            <input id="application-icon-upload" aria-label="Icon image" name="icon" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="application-icon-hint" hidden>
+            <div class="application-icon-picker-controls"><button type="button" data-upload-application-icon>Upload icon</button><span data-icon-filename>No file selected</span></div>
+          </div>
+        </div>
+        <p id="application-icon-hint">PNG, JPEG, or WebP, up to 2 MB. Proportions and transparency are preserved.</p>
+        <div class="integration-controls"><button type="submit">Save</button><button type="button" data-reset-application-settings>Reset to defaults</button></div>
+        <p data-settings-feedback role="status" aria-live="polite"></p>
+        <p data-settings-error role="alert"></p>
+        </fieldset>
+      </form>
+    </section>
+    <section class="application-documentation rounded-xl bg-slate-900 ring-1 ring-slate-800 overflow-hidden">
       <div class="border-b border-slate-800 px-5 py-4">
         <h2 class="font-semibold text-white">Documentation</h2>
         <p class="operator-meta mt-1 text-xs">Guides and references included with this integration.</p>
@@ -63,12 +81,22 @@
       <p class="px-5 py-6 text-sm text-slate-400">No documentation is included with this integration yet.</p>
       {% endif %}
     </section>
-
-    <section class="rounded-xl bg-slate-900 ring-1 ring-slate-800 overflow-hidden">
-      <div class="border-b border-slate-800 px-5 py-4">
+    <section class="connector-card" aria-label="Agent CLI interface" data-application-agent="{{ application.key }}">
+    <h2>Agent CLI interface</h2><p>Work on this integration with an agent in an isolated checkout. Preparing a session saves a development action; start it when ready.</p>
+    <div class="application-agent-controls"><label>Agent<select data-agent-choice>{% for agent in integration_agents %}<option value="{{ agent.id }}" {% if not agent.available %}disabled{% endif %}>{{ agent.name }}{% if not agent.available %} — coming soon{% endif %}</option>{% endfor %}</select></label><button type="button" data-open-application-agent>Open workspace</button></div>
+    <p>Skills: create-new-service-app · create-new-mcp · create-new-workflow · create-new-n8n-workflow</p>
+    <p data-agent-feedback role="status"></p>
+  </section>
+    </div>
+    <div class="application-detail-column">
+    <details class="application-tests rounded-xl bg-slate-900 ring-1 ring-slate-800 overflow-hidden">
+      <summary class="application-tests-summary">
+        <div>
         <h2 class="font-semibold text-white">Tests</h2>
         <p class="operator-meta mt-1 text-xs">Checks that may contact live services ask before they run.</p>
-      </div>
+        </div>
+        <span class="application-tests-arrow-shell" aria-hidden="true"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"/></svg></span>
+      </summary>
       {% if application.tests %}
       <div class="divide-y divide-slate-800/70 max-h-[32rem] overflow-y-auto">
         {% for test in application.tests %}
@@ -89,16 +117,18 @@
       {% else %}
       <p class="px-5 py-6 text-sm text-slate-400">No automated checks are included with this integration yet.</p>
       {% endif %}
-    </section>
-  </div>
+    </details>
+  <section id="current-test-run" aria-live="polite" aria-label="Current test run"></section>
 
   {% if runs %}
-  <section>
-    <h2 class="mb-3 font-semibold text-white">Recent test runs</h2>
+  <section class="application-test-history">
+    <h2 class="mb-3 font-semibold text-white">Recent runs</h2>
     <div class="space-y-3">
       {% for run in runs %}{% include "modules/applications/test_run.html" %}{% endfor %}
     </div>
   </section>
   {% endif %}
+    </div>
+  </div>
 </main>
 {% endblock %}

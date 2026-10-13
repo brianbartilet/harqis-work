@@ -104,3 +104,22 @@ API references: [GitHub refs](https://docs.github.com/en/rest/git/refs),
 [GitHub PRs](https://docs.github.com/en/rest/pulls/pulls),
 [Jira transitions](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/),
 [Jira search](https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-search/).
+
+
+## Workflow application display settings
+
+The application detail page has a Settings panel above Documentation. Display
+names and optional icons are shared by all signed-in users on the host. Overrides
+live in the `application_display_settings` table in the existing profile database;
+include that database in backups. Application keys, source files, documentation,
+test targets, and agent preparation identifiers remain unchanged.
+
+Save accepts a 1–80 character display name and optional PNG, JPEG, or WebP icon
+up to 2 MB and 25 million pixels. Icons are normalized to WebP within 256×256,
+without cropping, preserving aspect ratio and transparency. Saving a name without
+an upload preserves the icon. Reset to defaults removes both overrides. Default
+cards retain their existing name and show the generic application icon.
+
+Settings writes require authentication and CSRF protection. Uploaded icons are
+served through authenticated routes; no additional packages or configuration are
+required. Tests are in `frontend/tests/test_application_display_settings.py`.

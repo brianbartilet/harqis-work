@@ -95,7 +95,7 @@ def test_connection_encryption_isolation_disable_and_disconnect(connectors,authe
 def test_failed_connection_cannot_be_enabled(connectors,authenticated_client):
     connectors['fail']=True
     assert post(authenticated_client,'/connectors/github/connect',{'token':'test'}).status_code==401
-    assert store.get(USER,'github')['status']=='Connection failure'
+    assert store.get(USER,'github')['status']=='Not connected'
     assert post(authenticated_client,'/connectors/github/toggle',{'enabled':True}).status_code==409
 
 
@@ -185,7 +185,15 @@ def test_connector_setup_and_github_flow_in_browser(connectors,authenticated_cli
             github=page.locator('.connector-card').filter(has=page.get_by_role('heading',name='GitHub',exact=True))
             github.get_by_role('button',name='Connect',exact=True).click()
             setup=page.locator('.integration-dialog[open]');setup.get_by_label('API token',exact=True).fill('test-token')
-            setup.get_by_role('button',name='Test and connect').click()
+            playwright.expect(setup.get_by_role('button',name='Save',exact=True)).to_be_disabled()
+            setup.get_by_role('button',name='Test',exact=True).click()
+            playwright.expect(setup.get_by_role('status')).to_have_text('Test passed · Not saved')
+            assert store.get(USER,'github')['status']=='Not connected'
+            setup.get_by_label('API token',exact=True).fill('changed-token')
+            playwright.expect(setup.get_by_role('button',name='Save',exact=True)).to_be_disabled()
+            setup.get_by_role('button',name='Test',exact=True).click()
+            setup.get_by_role('button',name='Save',exact=True).click()
+            playwright.expect(setup.get_by_role('status')).to_have_text('Saved · Connected')
             setup.get_by_role('button',name='Enable connector').click()
             playwright.expect(github.get_by_role('switch',name='Enable GitHub')).to_be_checked()
             github.get_by_role('switch',name='Enable GitHub').press('Space')
@@ -200,7 +208,7 @@ def test_connector_setup_and_github_flow_in_browser(connectors,authenticated_cli
             playwright.expect(page.locator('#connector-integrations')).to_be_hidden()
             page.get_by_label('Find a workflow integration').fill('github')
             playwright.expect(page.locator('[data-app-key="github"]')).to_be_visible()
-            assert all('github' in text.lower() for text in page.locator('[data-app-key]:visible').all_text_contents())
+            assert page.locator('[data-app-key]:visible').evaluate_all("cards=>cards.every(card=>(card.textContent+' '+card.dataset.appDescription).toLowerCase().includes('github'))")
             assert page.locator('[data-app-key][hidden]').count()>0
             workflow_tab.press('Home')
             playwright.expect(connector_tab).to_be_focused()
@@ -282,3 +290,18 @@ def test_jira_read_is_non_mutating_and_refresh_requires_csrf(connectors,authenti
     assert service.action(item['id'])['status']=='active'
     assert c.post(BASE+root+'/refresh',json={}).status_code==403
     assert post(c,root+'/refresh').json()['item']['status']=='done'
+
+
+@pytest.mark.parametrize('provider',['github','jira'])
+def test_credential_test_does_not_save_and_failed_save_preserves_connection(connectors,authenticated_client,provider):
+    raw={'token':'test','site':'https://example.atlassian.net','email':'a@b.com'}
+    assert post(authenticated_client,'/connectors/'+provider+'/test',raw).status_code==200
+    assert store.get(USER,provider,private=True)['credentials']=={}
+    connect(authenticated_client,provider)
+    before=store.get(USER,provider,private=True)
+    assert post(authenticated_client,'/connectors/'+provider+'/test',raw).status_code==200
+    assert store.get(USER,provider,private=True)==before
+    connectors['fail']=True
+    for operation in ['test','save']:
+        assert post(authenticated_client,'/connectors/'+provider+'/'+operation,raw).status_code==401
+        assert store.get(USER,provider,private=True)==before

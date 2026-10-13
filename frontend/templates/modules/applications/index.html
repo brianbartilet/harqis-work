@@ -24,9 +24,12 @@
 
   {% include 'modules/applications/connectors.html' %}
   <section id="workflow-integrations" role="tabpanel" aria-labelledby="workflows-tab" hidden>
-  <div class="integration-section-heading"><div><h2 id="workflow-integrations-title">Workflows</h2><p>Browse application integrations that HARQIS workflows can use to read data, perform actions, and automate tasks. Their settings and credentials are managed on the host running HARQIS, separately from your personal connector accounts. Open an application to explore its available operations and configuration.</p></div><button type="button" class="shrink-0 whitespace-nowrap" data-add-application>Add application</button></div>
-  <label class="integration-search" for="integration-search">Find a workflow integration<input id="integration-search" type="search" placeholder="Search applications" autocomplete="off"></label>
-  <p data-inventory-count role="status" class="text-sm text-slate-400 mb-4"></p>
+  <div class="integration-section-heading"><div><h2 id="workflow-integrations-title">Workflows</h2><p>Browse application integrations that HARQIS workflows can use to read data, perform actions, and automate tasks. Their settings and credentials are managed on the host running HARQIS, separately from your personal connector accounts. Open an application to explore its available operations and configuration.</p></div></div>
+  <div class="integration-workflow-toolbar">
+    <label class="integration-search" for="integration-search">Find a workflow integration<input id="integration-search" type="search" placeholder="Search applications" autocomplete="off"></label>
+    <p data-inventory-count role="status" class="integration-inventory-count"></p>
+    <div class="integration-controls"><button type="button" data-add-application>Add application</button></div>
+  </div>
   <div x-show="customize" x-cloak
        class="mb-5 rounded-lg border border-amber-900/50 bg-amber-950/30 px-4 py-2.5 text-center text-xs text-amber-400/80">
     Drag application cards to arrange them. The layout is saved in this browser.
@@ -35,8 +38,8 @@
 
   <div id="integration-workflow-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-sortable-apps>
     {% for application in applications %}
-    <article data-app-key="{{ application.key }}"
-             class="group relative rounded-xl bg-slate-900 ring-1 ring-slate-800 hover:ring-blue-500/40 transition"
+    <article data-app-key="{{ application.key }}" data-app-description="{{ application.description }}"
+             class="workflow-integration-card group relative rounded-xl bg-slate-900 ring-1 ring-slate-800 hover:ring-blue-500/40 transition"
              :class="customize ? 'ring-amber-900/60' : ''">
       <button x-show="customize" x-cloak type="button" data-app-reorder
               aria-label="Reorder {{ application.label }}. Use arrow keys to move it."
@@ -48,10 +51,10 @@
       </button>
       <a href="/applications/{{ application.key }}"
          @click="if (customize) $event.preventDefault()"
-         class="block p-5" :class="customize ? 'pl-10 cursor-default' : ''">
+         class="workflow-integration-card-body" :class="customize ? 'pl-10 cursor-default' : ''">
         <div class="flex items-start justify-between gap-3">
           <div>
-            <h2 class="font-semibold text-white group-hover:text-blue-300 transition">{{ application.label }}</h2>
+            <h2 class="connector-title font-semibold text-white group-hover:text-blue-300 transition"><img class="connector-logo" src="{{ '/applications/' ~ application.key ~ '/icon?v=' ~ application.icon_version if application.icon_version else static_asset('img/connectors/application.svg') }}" alt="" width="20" height="20" loading="lazy">{{ application.label }}</h2>
             <p class="operator-meta mt-1 font-mono text-xs">apps/{{ application.key }}</p>
           </div>
           {% if latest[application.key] %}
@@ -59,16 +62,15 @@
             <span class="rounded-full px-2 py-0.5 text-xs
               {% if run.state == 'passed' %}bg-emerald-950 text-emerald-300
               {% elif run.state in ['failed', 'error', 'timed_out'] %}bg-red-950 text-red-300
-              {% else %}bg-slate-800 text-slate-400{% endif %}">{{ run.state }}</span>
+              {% else %}bg-slate-800 text-slate-400{% endif %}">{{ {'passed': 'Passed', 'failed': 'Fail'}.get(run.state, run.state | replace('_', ' ') | capitalize) }}</span>
           {% endif %}
         </div>
-        <div class="mt-5 flex gap-4 text-xs text-slate-500">
+        <div class="mt-3 flex gap-4 text-xs text-slate-500">
           <span>{{ application.documents | length }} docs</span>
           <span>{{ application.tests | length }} test files</span>
           <span>{{ application.safe_paths | length }} safe</span>
         </div>
-        <p class="mt-3 text-sm text-slate-400">{{ application.description }}</p>
-        <p class="mt-3 text-xs text-slate-500">{{ application.connection_method }} · {% if not latest[application.key] %}Not tested{% endif %}</p>
+        <p class="workflow-integration-connection text-xs text-slate-500">{{ application.connection_method }} · {% if not latest[application.key] %}Not tested{% endif %}</p>
       </a>
     </article>
     {% endfor %}

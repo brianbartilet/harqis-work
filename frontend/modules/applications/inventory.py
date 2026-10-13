@@ -45,6 +45,7 @@ class Application:
     safe_paths: tuple[str, ...]
     description: str = ''
     connection_method: str = 'See setup documentation'
+    icon_version: str = ''
 
 
 def _label(key: str) -> str:

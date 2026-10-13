@@ -30,3 +30,82 @@
 .connector-header-controls{display:flex;align-items:center;gap:.25rem;flex-shrink:0}
 .connector-card .connector-connect{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;padding:0;color:#94a3b8;background:transparent;border-color:transparent}
 .connector-card .connector-connect:hover{color:#93c5fd;background:#1e293b;border-color:#334155}
+
+.connector-title{display:flex;align-items:center;gap:.5rem}
+.connector-logo{display:block;width:1.25rem;height:1.25rem;object-fit:contain;flex-shrink:0}
+
+.integration-dialog .connector-status{display:inline-flex;margin-top:.5rem}
+.connector-status[data-tone=success]{background:#022c22;color:#6ee7b7}
+.connector-status[data-tone=error]{background:#450a0a;color:#fca5a5}
+.connector-status[data-tone=pending]{background:#422006;color:#fde68a}
+
+.integration-dialog button.integration-dialog-close{display:inline-flex;align-items:center;justify-content:center;flex:none;width:40px;height:40px;padding:9px;border:0;border-radius:8px;background:transparent;box-shadow:none;color:#94a3b8;cursor:pointer}
+.integration-dialog button.integration-dialog-close:hover{background:#1e293b;color:#7dd3fc}
+.integration-dialog-close svg{width:20px;height:20px}
+.integration-dialog button.integration-dialog-close:focus-visible{outline:2px solid #38bdf8;outline-offset:3px}
+.integration-dialog h2[tabindex="-1"]:focus{outline:none}
+
+.integration-workflow-toolbar{display:flex;align-items:flex-end;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap}
+.integration-workflow-toolbar .integration-search{flex:1 1 18rem;max-width:32rem;margin:0}
+.integration-workflow-toolbar .integration-search input{width:100%}
+.integration-inventory-count{margin:0;padding-bottom:.75rem;font-size:.875rem;line-height:1.25rem;color:#94a3b8}
+.integration-workflow-toolbar .integration-controls{margin:0 0 .125rem auto;flex-shrink:0}
+@media(max-width:639px){.integration-workflow-toolbar .integration-search{flex-basis:100%;max-width:none}.integration-inventory-count{font-size:.75rem;padding-bottom:.65rem}}
+
+/* Keep the catalogue width stable when switching between short and long tabs. */
+html:has(.integration-tabs){scrollbar-gutter:stable}
+@supports not (scrollbar-gutter:stable){html:has(.integration-tabs){overflow-y:scroll}}
+
+.workflow-integration-card-body{display:flex;flex-direction:column;padding:1rem;min-height:12.25rem;height:100%;overflow-wrap:anywhere}
+.workflow-integration-card-body h2{font-size:1rem;line-height:1.75rem}
+.workflow-integration-connection{margin-top:auto;padding-top:.75rem}
+
+.integration-breadcrumbs{margin-bottom:1rem;font-size:.875rem;line-height:1.25rem}
+.integration-breadcrumbs ol{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;list-style:none;margin:0;padding:0}
+.integration-breadcrumbs li{display:flex;align-items:center;gap:.5rem;min-width:0}
+.integration-breadcrumbs a{color:#94a3b8;border-radius:.25rem}
+.integration-breadcrumbs a:hover{color:#93c5fd;text-decoration:underline;text-underline-offset:3px}
+.integration-breadcrumbs a:focus-visible{outline:2px solid #38bdf8;outline-offset:3px}
+.integration-breadcrumbs svg{width:1rem;height:1rem;color:#64748b;flex-shrink:0}
+.integration-breadcrumbs [aria-current=page]{color:#e2e8f0;font-weight:500;overflow-wrap:anywhere}
+
+.application-test-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:1.5rem;align-items:start}
+.application-test-layout>*{min-width:0}
+.application-test-layout #current-test-run:empty{display:none}
+@media(min-width:1024px){.application-test-layout{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.application-detail-column{display:flex;flex-direction:column;gap:1.5rem;min-width:0}
+.application-detail-column>*{min-width:0}
+.application-agent-controls{display:flex;align-items:flex-end;gap:.75rem;margin:.75rem 0;flex-wrap:wrap}
+.application-agent-controls label{flex:1 1 10rem;margin:0}
+.application-agent-controls button{flex:0 0 auto;min-height:2.65rem}
+
+.application-tests-summary{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:1.25rem;cursor:pointer;list-style:none}
+.application-tests-summary::-webkit-details-marker{display:none}
+.application-tests-summary::marker{content:""}
+.application-tests{border:1px solid #1e293b;border-radius:1rem;box-shadow:none}
+.application-tests-summary svg{width:1rem;height:1rem;transition:transform .15s}
+.application-tests[open]>.application-tests-summary{border-bottom:1px solid #1e293b}
+.application-tests[open]>.application-tests-summary svg{transform:rotate(180deg)}
+
+.application-tests-arrow-shell{display:inline-flex;width:1.75rem;height:1.75rem;flex:0 0 auto;align-items:center;justify-content:center;border:1px solid #334155;border-radius:9999px;background:rgba(15,23,42,.85);color:#67e8f9;transition:border-color .15s ease,background-color .15s ease,color .15s ease}
+.application-tests-summary:hover .application-tests-arrow-shell{border-color:#0e7490;background:#164e63;color:#cffafe}
+
+.application-display-title{display:flex;align-items:center;gap:.5rem}
+.application-display-settings input:not([type=file]){display:block;width:100%;border:1px solid #475569;border-radius:.5rem;background:#020617;color:#f1f5f9;padding:.6rem;margin-top:.35rem}
+.application-icon-upload{display:flex;align-items:center;gap:1rem;min-width:0}
+.application-icon-upload img{width:48px;height:48px;object-fit:contain;flex-shrink:0}
+.application-icon-upload label{flex:1;min-width:0}
+.application-icon-upload input{display:block;width:100%;margin-top:.35rem;font-size:.75rem;color:#94a3b8}
+.application-display-settings [data-settings-error]{color:#fda4af}
+.application-display-settings [data-settings-feedback]{color:#6ee7b7}
+
+.application-display-title>span{min-width:0;overflow-wrap:anywhere}
+
+.application-icon-upload input[hidden]{display:none}
+.application-icon-picker{flex:1;min-width:0}
+.application-icon-picker label{margin:0 0 .35rem}
+.application-icon-picker-controls{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}
+.application-icon-picker-controls span{color:#94a3b8;font-size:.75rem;overflow-wrap:anywhere;min-width:0}
+
+.application-display-settings button[data-upload-application-icon]{border:0;background:transparent;padding:0;border-radius:.125rem;color:#93c5fd;text-decoration:underline;text-underline-offset:3px}
+.application-display-settings button[data-upload-application-icon]:hover{color:#bfdbfe}
