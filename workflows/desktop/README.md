@@ -14,7 +14,7 @@ Tasks are routed per-entry in `tasks_config.py`. See the `Queue` column below.
 
 | Task | Schedule | Queue | OS | Description |
 |------|----------|-------|----|-------------|
-| `git_pull_on_paths` | 00:00 and 12:00 daily | `default_broadcast` (fanout) | any | Pull latest commits on the repo root (resolved from `REPO_ROOT`). Fanout queue → every subscribed worker pulls its own working tree. |
+| `git_pull_on_paths` | 00:00 and 12:00 daily | `default_broadcast` (fanout) | any | Fast-forward the repo root (`REPO_ROOT`) with Git hooks disabled for this invocation only; no deployment or restart. Every subscribed worker refreshes its own working tree. |
 | `git_auto_push_paths` | Daily at 02:00 | `default_broadcast` (fanout) | any | Generic Git backup for repositories listed under that machine's `git_autopush.paths`; clean and non-Git paths are no-ops, and rejected pushes retry through rebase/autostash with conflict abort. Notes repositories use the separate `workflows/notes` chain and must not be duplicated here. |
 | `run_n8n_sequence` | Daily at midnight | `n8n` | windows / macos / linux | Backup → restore via `.bat` (Windows) or `.sh` (macOS / Linux) in `workflows/n8n/deploy/` |
 | `set_desktop_hud_to_back` | Every 30 min | `hud` | windows | Send desktop HUD windows to background (Rainmeter) |
@@ -22,6 +22,38 @@ Tasks are routed per-entry in `tasks_config.py`. See the `Queue` column below.
 | `run_capture_logging` | Every 5 min | `capture` | windows | Supervise one lock/idle-aware desktop activity reader |
 | `generate_daily_desktop_summary` | Daily at 23:55 | `peon` | any | AI summary of today's desktop activity |
 | `generate_weekly_desktop_summary` | Sundays at 23:58 | `peon` | any | AI summary of the week's activity |
+
+## Repository refresh is not deployment
+
+`git_pull_on_paths` runs `git -c core.hooksPath=/dev/null pull --ff-only`
+against its existing upstream. The command-scoped override suppresses hooks
+(including `post-merge`) without deleting them or changing persistent Git
+configuration. A post-merge hook that restarts services can otherwise stop the
+very Celery worker executing the pull and interrupt its own recovery.
+
+Divergent branches are refused instead of merged or rebased. Git errors still
+use the existing stderr logging path; the task retains its repository-path
+return value, so task success alone is **not** proof that the pull succeeded.
+Inspect the Git output. This does not change `git_auto_push_paths` or other Git
+callers, and it is not a deployment lock or an atomic code/dependency rollout.
+
+Dependency synchronization, service reloads and readiness checks belong to an
+operator or the existing externally supervised maintenance process, outside the
+worker process tree. Hosts previously relying on post-merge deployment need
+that external owner; do not replace the hook with a background restart spawned
+by this task or introduce another competing scheduler.
+
+**Rollout:** publishing or pulling this patch does not change code already
+imported by a running worker, and it does not alter any installed local hook.
+Use a separately authorized external deployment with hook-suppressed Git
+refresh, then supervised worker reload and readiness verification. Until the
+worker loads the fixed task, its existing scheduled invocation can still take
+the unsafe path. This code change alone does not repair an unloaded service.
+
+Offline safety regressions are in
+`scripts/tests/test_desktop_git_pull_safety.py` (outside the auto-importing
+`workflows.desktop` package). They use isolated local repositories and inert
+marker hooks, never live service restarts.
 
 ## Task Files
 

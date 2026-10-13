@@ -22,7 +22,8 @@ def git_pull_on_paths() -> str:
 
     def git_pull_all(paths: list[str]) -> dict:
         """
-        Runs `git pull` for each path in the list.
+        Fast-forward each repository without running local Git hooks.
+        Deployment and service restarts must be owned outside the worker.
 
         Args:
             paths (list[str]): List of local git repo directories.
@@ -38,9 +39,10 @@ def git_pull_on_paths() -> str:
                 continue
 
             try:
-                # Run git pull inside the directory
+                # A worker must not invoke hooks that can restart its own services.
+                # Deployment/restarts belong to an external supervisor, not this task.
                 result = subprocess.run(
-                    ["git", "pull"],
+                    ["git", "-c", "core.hooksPath=/dev/null", "pull", "--ff-only"],
                     cwd=path,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
