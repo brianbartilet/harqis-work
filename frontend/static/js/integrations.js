@@ -21,7 +21,7 @@
     if(root){root.replaceChildren();for(const item of current){
       const card=el('article',undefined,'connector-card'),header=el('header');header.append(el('h2',item.name));
       const toggle=el('button',undefined,'connector-switch');toggle.type='button';toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked',String(item.enabled));toggle.setAttribute('aria-label','Enable '+item.name);
-      const track=el('span',undefined,'connector-switch-track');track.setAttribute('aria-hidden','true');toggle.append(track,el('span',item.enabled?'On':'Off'));header.append(toggle);card.append(header);
+      const track=el('span',undefined,'connector-switch-track');track.setAttribute('aria-hidden','true');toggle.append(track);header.append(toggle);card.append(header);
       toggle.onclick=async()=>{toggle.disabled=true;try{if(!item.enabled&&item.status!=='Connected'){setup(item);}else{await api('/connectors/'+item.provider+'/toggle',{enabled:!item.enabled});await load();}}catch(e){document.querySelector('[data-integration-error]').textContent=e.message;}finally{toggle.disabled=false;}};
       const status=el('span',item.status,'connector-status');status.dataset.connected=String(item.status==='Connected');status.dataset.error=String(Boolean(item.error));status.setAttribute('role','status');card.append(status);
       if(item.account)card.append(el('p',item.account+' · '+item.auth_method),el('p','Connected since '+new Date(item.connected_since).toLocaleDateString()+' · Expiry: '+item.expiry));
