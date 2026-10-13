@@ -191,6 +191,7 @@ def test_lifecycle_persists_completion_and_reopen_history(agenda, authenticated_
 def test_creation_retry_after_completion_does_not_duplicate_or_reopen(agenda, authenticated_client):
     data = payload()
     first = authenticated_client.post("/hfl-corpus/timeline/items", json=data).json()["item"]
+    assert first['id'].startswith('item-')
     authenticated_client.patch(f"/hfl-corpus/timeline/items/{first['id']}", json={"version": 1, "status": "done"})
     retry = authenticated_client.post("/hfl-corpus/timeline/items", json=data)
     assert retry.status_code == 200
@@ -198,6 +199,42 @@ def test_creation_retry_after_completion_does_not_duplicate_or_reopen(agenda, au
     assert retry.json()["item"]["status"] == "done"
     assert len(agenda.history(first["id"])) == 2
     assert authenticated_client.post("/hfl-corpus/timeline/items", json={**data, "title": "Different"}).status_code == 409
+
+
+def test_legacy_action_id_survives_reopen_retry_and_edit(agenda, authenticated_client):
+    import json
+    from workflows.hfl.timeline_store import FollowUpStore, isoformat
+
+    data = payload()
+    legacy_id = 'followup-' + uuid4().hex
+    now = isoformat()
+    item = agenda.validate({key: value for key, value in data.items() if key != 'request_id'})
+    item.update(id=legacy_id, version=1, created_at=now, updated_at=now,
+                completed_at='', source=None, timezone='Asia/Singapore', board_ids=[])
+    encoded = json.dumps(item)
+    # Seed the persisted shape from before the prefix change.
+    with agenda.connect() as db:
+        db.execute('INSERT INTO followups VALUES (?,?,?,?,?,?)',
+                   (legacy_id, data['request_id'], 1, 'open', now, encoded))
+        db.execute('INSERT INTO followup_history VALUES (?,?,?,?,?)',
+                   (legacy_id, 1, 'owner', now, encoded))
+        db.execute('INSERT INTO followup_board_order VALUES (?,?)', (legacy_id, 0))
+
+    reopened = FollowUpStore(agenda.path)
+    assert reopened.get(legacy_id)['id'] == legacy_id
+    assert legacy_id in reopened.board_order()
+    retry = authenticated_client.post('/hfl-corpus/timeline/items', json=data)
+    assert retry.status_code == 200
+    assert retry.json()['duplicate'] is True
+    assert retry.json()['item']['id'] == legacy_id
+    url = f'/hfl-corpus/timeline/items/{legacy_id}'
+    assert authenticated_client.patch(url, json={'version': 1, 'status': 'done'}).status_code == 200
+    assert reopened.get(legacy_id)['status'] == 'done'
+    assert len(reopened.history(legacy_id)) == 2
+    assert reopened.receipts()[0]['followup_id'] == legacy_id
+    fresh = authenticated_client.post('/hfl-corpus/timeline/items', json=payload())
+    assert fresh.status_code == 201
+    assert fresh.json()['item']['id'].startswith('item-')
 
 
 def test_stale_edit_cannot_overwrite_completion(agenda, authenticated_client):
@@ -623,6 +660,7 @@ def test_high_confidence_auto_action_leaves_deadline_for_manual_review(agenda):
     result=create_automatic_actions('2026-09-09','2026-09-09',agenda,[],today=date(2026,9,12),review=lambda *args:[create_decision(item)])
     assert result['created']==1
     action=agenda.list()[0]
+    assert action['id'].startswith('item-')
     assert action['review_date']=='2026-09-12'
     assert action['due_date']==''
     assert action['status']=='open'

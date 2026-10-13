@@ -159,7 +159,7 @@ class FollowUpStore:
         if item["status"] != "open":
             raise ValueError("New follow-ups start In Review.")
         now = isoformat()
-        item.update(id=f"followup-{uuid.uuid4().hex}", version=1, created_at=now,
+        item.update(id=f"item-{uuid.uuid4().hex}", version=1, created_at=now,
                     updated_at=now, completed_at="", source=source, timezone="Asia/Singapore")
         from contextlib import nullcontext
         with (nullcontext(connection) if connection is not None else self.connect()) as db:
@@ -462,7 +462,7 @@ class FollowUpStore:
                 raw.update(validate_matrix(candidate))
                 item=self.validate(raw)
                 now=isoformat()
-                item.update(id='followup-'+uuid.uuid4().hex,version=1,created_at=now,updated_at=now,completed_at='',
+                item.update(id='item-'+uuid.uuid4().hex,version=1,created_at=now,updated_at=now,completed_at='',
                             source=candidate['source'],timezone='Asia/Singapore',suggestion_id=sid,
                             creation_mode='automatic',automatic_basis=str(decision['reason'])[:3000])
                 from workflows.hfl.intent_boards import associate, memberships
