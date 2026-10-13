@@ -20,15 +20,17 @@
     const root=document.querySelector('[data-connector-cards]');
     if(root){root.replaceChildren();for(const item of current){
       const card=el('article',undefined,'connector-card'),header=el('header');header.append(el('h2',item.name));
-      const toggleLabel=el('label','Enabled','connector-switch'),toggle=el('input');toggle.type='checkbox';toggle.checked=item.enabled;toggle.setAttribute('aria-label','Enable '+item.name);toggleLabel.prepend(toggle);header.append(toggleLabel);card.append(header);
+      const toggleLabel=el('label','Toggle','connector-switch'),toggle=el('input');toggle.type='checkbox';toggle.checked=item.enabled;toggle.setAttribute('aria-label','Enable '+item.name);toggleLabel.prepend(toggle);header.append(toggleLabel);card.append(header);
       toggle.onchange=async()=>{toggle.disabled=true;try{if(toggle.checked&&item.status!=='Connected'){toggle.checked=false;setup(item);}else{await api('/connectors/'+item.provider+'/toggle',{enabled:toggle.checked});await load();}}catch(e){toggle.checked=item.enabled;document.querySelector('[data-integration-error]').textContent=e.message;}finally{toggle.disabled=false;}};
-      const status=el('p',item.status,'connector-status');status.dataset.connected=String(item.status==='Connected');status.setAttribute('role','status');card.append(status);
+      const status=el('span',item.status,'connector-status');status.dataset.connected=String(item.status==='Connected');status.dataset.error=String(Boolean(item.error));status.setAttribute('role','status');card.append(status);
       if(item.account)card.append(el('p',item.account+' · '+item.auth_method),el('p','Connected since '+new Date(item.connected_since).toLocaleDateString()+' · Expiry: '+item.expiry));
       if(item.error)card.append(el('p',item.error));
       const capabilities=el('ul');item.capabilities.forEach(c=>capabilities.append(el('li',c)));card.append(capabilities);
-      const row=controls(card);button(row,item.status==='Connected'?'Reconnect / test':'Connect',()=>setup(item));
+      const footer=el('footer',undefined,'connector-footer');card.append(footer);
+      if(item.enabled){const actions=controls(footer);if(item.provider==='jira')button(actions,'Import assigned issues',jiraImport);else button(actions,'Explore branches and PRs',githubIdeas);}
+      const row=controls(footer);row.classList.add('connector-connection-controls');
       if(item.status!=='Not connected')button(row,'Disconnect',async()=>{const confirm=dialog('Disconnect '+item.name);confirm.body.append(el('p','Remove this connection’s saved credentials? Imported cards and links remain; reconnect the same account to use them again.'));button(controls(confirm.body),'Disconnect account',async()=>{await api('/connectors/'+item.provider+'/disconnect',{});confirm.d.close();await load();});});
-      if(item.enabled){if(item.provider==='jira')button(row,'Import assigned issues',jiraImport);else button(row,'Explore branches and PRs',githubIdeas);}
+      button(row,item.status==='Connected'?'Reconnect / test':'Connect',()=>setup(item)).classList.add('connector-connect');
       root.append(card);
     }}
     document.querySelectorAll('[data-connector-action]').forEach(b=>{b.hidden=!current.some(c=>c.enabled);badges(b.parentElement,b.dataset.connectorAction);});
