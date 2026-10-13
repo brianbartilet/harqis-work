@@ -27,6 +27,6 @@
 
 .integration-section-heading p{margin:.125rem 0 0;line-height:1.25rem}
 
-.connector-header-controls{display:flex;align-items:center;gap:.75rem;flex-shrink:0}
+.connector-header-controls{display:flex;align-items:center;gap:.25rem;flex-shrink:0}
 .connector-card .connector-connect{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;padding:0;color:#94a3b8;background:transparent;border-color:transparent}
 .connector-card .connector-connect:hover{color:#93c5fd;background:#1e293b;border-color:#334155}
