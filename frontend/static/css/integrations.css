@@ -16,7 +16,7 @@
 .connector-footer .integration-controls{justify-content:flex-end;gap:.5rem;margin:0}
 .connector-footer .integration-controls + .integration-controls{margin-top:.5rem}
 .connector-footer button{font-size:.75rem;padding:.375rem .625rem;flex:0 1 auto}
-.connector-connection-controls .connector-connect{margin-left:auto}
+
 
 .connector-card button.connector-switch{display:inline-flex;align-items:center;gap:.5rem;border:0;background:transparent;padding:0;color:#94a3b8;font-size:.75rem}
 .connector-switch-track{position:relative;display:block;width:2.25rem;height:1.25rem;border:1px solid #475569;border-radius:9999px;background:#334155;transition:background .15s,border-color .15s}
@@ -26,3 +26,7 @@
 .connector-switch[aria-checked=true] .connector-switch-track::after{background:#fff;transform:translateX(1rem)}
 
 .integration-section-heading p{margin:.125rem 0 0;line-height:1.25rem}
+
+.connector-header-controls{display:flex;align-items:center;gap:.75rem;flex-shrink:0}
+.connector-card .connector-connect{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;padding:0;color:#94a3b8;background:transparent;border-color:transparent}
+.connector-card .connector-connect:hover{color:#93c5fd;background:#1e293b;border-color:#334155}

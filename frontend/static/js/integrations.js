@@ -20,8 +20,12 @@
     const root=document.querySelector('[data-connector-cards]');
     if(root){root.replaceChildren();for(const item of current){
       const card=el('article',undefined,'connector-card'),header=el('header');header.append(el('h2',item.name));
+      const headerControls=el('div',undefined,'connector-header-controls');header.append(headerControls);
+      const connectLabel=item.status==='Connected'?'Reconnect / test':'Connect';
+      const connect=button(headerControls,'',()=>setup(item));connect.classList.add('connector-connect');connect.setAttribute('aria-label',connectLabel);connect.title=connectLabel;
+      connect.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7 .1l3-3a5 5 0 0 0-7-7l-1.7 1.7M14 11a5 5 0 0 0-7-.1l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>';
       const toggle=el('button',undefined,'connector-switch');toggle.type='button';toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked',String(item.enabled));toggle.setAttribute('aria-label','Enable '+item.name);
-      const track=el('span',undefined,'connector-switch-track');track.setAttribute('aria-hidden','true');toggle.append(track);header.append(toggle);card.append(header);
+      const track=el('span',undefined,'connector-switch-track');track.setAttribute('aria-hidden','true');toggle.append(track);headerControls.append(toggle);card.append(header);
       toggle.onclick=async()=>{toggle.disabled=true;try{if(!item.enabled&&item.status!=='Connected'){setup(item);}else{await api('/connectors/'+item.provider+'/toggle',{enabled:!item.enabled});await load();}}catch(e){document.querySelector('[data-integration-error]').textContent=e.message;}finally{toggle.disabled=false;}};
       const status=el('span',item.status,'connector-status');status.dataset.connected=String(item.status==='Connected');status.dataset.error=String(Boolean(item.error));status.setAttribute('role','status');card.append(status);
       if(item.account)card.append(el('p',item.account+' · '+item.auth_method),el('p','Connected since '+new Date(item.connected_since).toLocaleDateString()+' · Expiry: '+item.expiry));
@@ -31,7 +35,8 @@
       if(item.enabled){const actions=controls(footer);if(item.provider==='jira')button(actions,'Import assigned issues',jiraImport);else button(actions,'Explore branches and PRs',githubIdeas);}
       const row=controls(footer);row.classList.add('connector-connection-controls');
       if(item.status!=='Not connected')button(row,'Disconnect',async()=>{const confirm=dialog('Disconnect '+item.name);confirm.body.append(el('p','Remove this connection’s saved credentials? Imported cards and links remain; reconnect the same account to use them again.'));button(controls(confirm.body),'Disconnect account',async()=>{await api('/connectors/'+item.provider+'/disconnect',{});confirm.d.close();await load();});});
-      button(row,item.status==='Connected'?'Reconnect / test':'Connect',()=>setup(item)).classList.add('connector-connect');
+      if(!row.children.length)row.remove();
+      if(!footer.children.length)footer.remove();
       root.append(card);
     }}
     document.querySelectorAll('[data-connector-action]').forEach(b=>{b.hidden=!current.some(c=>c.enabled);badges(b.parentElement,b.dataset.connectorAction);});
