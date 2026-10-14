@@ -38,6 +38,20 @@
 .github-action-controls{min-width:0;padding-top:.5rem}
 .github-action-controls > .integration-controls{margin:.25rem 0}
 .github-settings-dialog{box-sizing:border-box}
+.github-settings-dialog fieldset{border:0;padding:0;margin:1rem 0;min-width:0}
+.github-settings-dialog fieldset:disabled{opacity:.5}
+.github-settings-dialog legend{font-weight:600;font-size:.875rem}
+.github-settings-dialog details{border:1px solid #334155;border-radius:.65rem;padding:.85rem;margin-top:1rem}
+.github-settings-dialog summary{display:flex;align-items:center;justify-content:space-between;gap:.75rem;cursor:pointer;list-style:none;font-weight:600;font-size:.875rem}
+.github-settings-dialog summary::-webkit-details-marker{display:none}
+.github-settings-dialog summary::after{content:'';flex:0 0 20px;height:20px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='m5 7.5 5 5 5-5' fill='none' stroke='%2393c5fd' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/20px no-repeat}
+.github-settings-dialog details[open]>summary::after{transform:rotate(180deg)}
+.github-settings-dialog .github-branch-card{border:1px solid #334155;border-radius:.65rem;padding:1rem;overflow-wrap:anywhere}
+.github-settings-dialog .github-repository-name{margin:0 0 .25rem;font-size:.75rem}
+.github-settings-dialog .github-branch-target{font-size:.75rem}
+.github-settings-dialog .integration-controls{align-items:center}
+.github-settings-reset{border-top:1px solid #334155;margin-top:1.25rem;padding-top:.25rem}
+.github-settings-reset p{font-size:.75rem}
 .github-action-controls label{display:block;margin:.75rem 0;color:#cbd5e1;font-size:.875rem}
 .github-action-controls input,.github-action-controls select,.github-action-controls textarea{display:block;width:100%;box-sizing:border-box;min-width:0;margin-top:.35rem;padding:.6rem;border:1px solid #475569;border-radius:.5rem;background:#020617;color:#f1f5f9}
 .github-action-controls select{appearance:none;padding-right:2rem;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%2393c5fd' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .6rem center;background-size:1rem}

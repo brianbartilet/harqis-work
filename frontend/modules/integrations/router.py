@@ -128,6 +128,13 @@ def github_refresh(identity: str, user=Depends(owner_auth)):
     return {'items':service.refresh_github(user, identity)}
 
 
+@api.post('/actions/{identity}/github/clear')
+def github_clear(identity: str, user=Depends(owner_auth)):
+    service.action(identity)
+    data, _ = service.connected(user, 'github')
+    return {'removed':store.clear_action_links(user, 'github', identity, service.account_key(data))}
+
+
 @api.get('/jira/projects')
 def projects(start: int = 0, user=Depends(owner_auth)):
     _, client = service.connected(user, 'jira')

@@ -81,3 +81,15 @@ def link(user, provider, resource, payload):
     with connection() as db:
         db.execute('INSERT INTO connector_links VALUES (?,?,?,?) ON CONFLICT(user,provider,resource) DO UPDATE SET payload=excluded.payload',
                    (user, provider, resource, json.dumps({**payload, 'resource': resource, 'provider': provider})))
+
+
+def clear_action_links(user, provider, identity, account):
+    """Remove only this action's associations for the connected account."""
+    with connection() as db:
+        result = db.execute(
+            "DELETE FROM connector_links WHERE user=? AND provider=? "
+            "AND json_extract(payload, '$.action_id')=? "
+            "AND json_extract(payload, '$.account_key')=?",
+            (user, provider, identity, account),
+        )
+        return result.rowcount

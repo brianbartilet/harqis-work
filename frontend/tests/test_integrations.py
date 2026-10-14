@@ -117,6 +117,36 @@ def test_github_branch_pr_reconciliation_and_user_links(connectors,authenticated
     assert c.get(BASE+'/actions/'+item['id']).json()=={}
 
 
+def test_clear_github_settings_is_scoped_and_keeps_remote_resources(connectors,authenticated_client):
+    c=authenticated_client;connect(c,'github');item=card(c)
+    root='/actions/'+item['id']+'/github'
+    branch={'repository':'alice/demo','branch':'feature/clear','base':'main','operation':'create-branch'}
+    assert post(c,root+'/branch',branch).status_code==200
+    linked=c.get(BASE+root).json()['items'][0]
+    assert post(c,root+'/pr',{'resource':linked['resource']}).status_code==200
+    assert post(c,root+'/branch',{**branch,'branch':'feature/second'}).status_code==200
+    account=service.account_key(store.get(USER,'github'))
+    preserved=[(USER,'github','other-action',{'action_id':'other','account_key':account}),
+               (USER,'jira','jira-link',{'action_id':item['id'],'account_key':account}),
+               ('another-user','github','another-user-link',{'action_id':item['id'],'account_key':account}),
+               (USER,'github','other-account',{'action_id':item['id'],'account_key':'other-account'})]
+    for user,provider,resource,payload in preserved:store.link(user,provider,resource,payload)
+    credentials=store.get(USER,'github',private=True)
+    calls=list(connectors['calls'])
+    assert c.post(BASE+root+'/clear',json={}).status_code==403
+    assert post(c,'/actions/missing/github/clear').status_code==404
+    assert len(service.visible_links(USER,'github'))==3
+    result=post(c,root+'/clear')
+    assert result.status_code==200 and result.json()=={'removed':2}
+    assert post(c,root+'/clear').json()=={'removed':0}
+    assert connectors['calls']==calls
+    assert 'feature/clear' in connectors['branches'] and len(connectors['pulls'])==1
+    assert store.get(USER,'github',private=True)==credentials
+    for user,provider,resource,_ in preserved:
+        assert resource in {link['resource'] for link in store.links(user,provider)}
+    assert c.get(BASE+root).json()=={'items':[]}
+
+
 def test_jira_import_transition_and_generic_status_guard(connectors,authenticated_client):
     c=authenticated_client;connect(c,'jira')
     first=post(c,'/jira/import',{'project':'TEST'}).json()['items'][0]
@@ -235,11 +265,22 @@ def test_connector_setup_and_github_flow_in_browser(connectors,authenticated_cli
             assert settings.locator('input,select,textarea').count()==0
             settings.get_by_role('button',name='Github settings',exact=True).click()
             modal=page.get_by_role('dialog',name='Github settings',exact=True)
+            playwright.expect(modal.get_by_label('Branch',exact=True)).to_be_disabled()
             modal.get_by_label('Repository',exact=True).select_option('alice/demo')
+            modal.get_by_label('Branch action',exact=True).select_option('create-branch')
             modal.get_by_label('Branch',exact=True).fill('feature/browser')
-            modal.get_by_role('button',name='Create branch',exact=True).click()
-            modal.get_by_role('button',name='Link PR / create draft PR',exact=True).click()
+            modal.get_by_role('button',name='Create and link branch',exact=True).click()
+            playwright.expect(modal.get_by_label('PR description',exact=True)).not_to_be_visible()
+            modal.get_by_text('Add a pull request',exact=True).click()
+            modal.get_by_label('Pull request action',exact=True).select_option('link')
+            playwright.expect(modal.get_by_label('PR description',exact=True)).not_to_be_visible()
+            modal.get_by_role('button',name='Link existing PR',exact=True).click()
+            assert connectors['pulls']==[]
+            modal.get_by_label('Pull request action',exact=True).select_option('create')
+            modal.get_by_label('PR description',exact=True).fill('Browser test draft')
+            modal.get_by_role('button',name='Create draft PR',exact=True).click()
             playwright.expect(modal.get_by_role('link',name='PR #1',exact=True)).to_be_visible()
+            playwright.expect(modal.get_by_role('link',name='Review and publish on GitHub')).to_have_attribute('href','https://github.com/alice/demo/pull/1')
             assert connectors['pulls'][0]['draft']
             assert editor.locator('[data-connector-summary]').count()==0
             assert action.locator('[data-connector-summary]').count()==0
@@ -249,6 +290,29 @@ def test_connector_setup_and_github_flow_in_browser(connectors,authenticated_cli
             playwright.expect(settings.get_by_role('button',name='Github settings')).to_be_focused()
             settings.get_by_role('button',name='Github settings').click()
             playwright.expect(modal.get_by_role('link',name='PR #1',exact=True)).to_be_visible()
+            modal.get_by_text('Link another branch',exact=True).click()
+            modal.get_by_label('Repository',exact=True).select_option('alice/demo')
+            modal.get_by_label('Branch',exact=True).fill('unsaved-branch')
+            modal.get_by_role('button',name='Clear all settings',exact=True).click()
+            playwright.expect(modal.get_by_role('status')).to_have_text('GitHub settings cleared for this action.')
+            playwright.expect(modal.get_by_text('No branches linked yet.',exact=True)).to_be_visible()
+            playwright.expect(modal.get_by_label('Repository',exact=True)).to_have_value('')
+            playwright.expect(modal.get_by_label('Branch',exact=True)).to_have_value('')
+            playwright.expect(modal.get_by_label('Base branch',exact=True)).to_have_value('main')
+            assert modal.locator('.connector-link').count()==0
+            modal.get_by_role('button',name='Close',exact=True).click()
+            settings.get_by_role('button',name='Github settings').click()
+            playwright.expect(modal.get_by_text('No branches linked yet.',exact=True)).to_be_visible()
+            modal.get_by_label('Repository',exact=True).select_option('alice/demo')
+            modal.get_by_role('button',name='Browse branches',exact=True).click()
+            modal.get_by_label('Existing branch',exact=True).select_option('feature/browser')
+            modal.get_by_role('button',name='Link branch',exact=True).click()
+            modal.get_by_text('Add a pull request',exact=True).click()
+            modal.get_by_label('Pull request action',exact=True).select_option('link')
+            modal.get_by_label('PR number',exact=True).fill('1')
+            modal.get_by_role('button',name='Link existing PR',exact=True).click()
+            playwright.expect(modal.get_by_role('link',name='PR #1',exact=True)).to_be_visible()
+            assert len(connectors['pulls'])==1
             modal.get_by_role('button',name='Close',exact=True).click()
             page.screenshot(path=str(tmp_path/f'repository-settings-{width}.png'))
             editor.get_by_role('button',name='Close',exact=True).click()
