@@ -88,6 +88,16 @@ def repositories(page: int = 1, user=Depends(owner_auth)):
     return {'items':[{'name':r['full_name'], 'default_branch':r['default_branch'], 'permissions':r.get('permissions',{})} for r in rows], 'more':len(rows)==50}
 
 
+@api.get('/github/branches')
+def branches(repository_name: str, page: int = 1, user=Depends(owner_auth)):
+    _, client = service.connected(user, 'github')
+    repo = repository(repository_name)
+    if not 1 <= page <= 1000:
+        raise HTTPException(422, 'Invalid page.')
+    rows = client.request('GET', '/repos/'+repo+'/branches', params={'per_page':50,'page':page})
+    return {'items':[row['name'] for row in rows], 'more':len(rows)==50}
+
+
 @api.get('/github/resources')
 def resources(repository_name: str, page: int = 1, user=Depends(owner_auth)):
     _, client = service.connected(user, 'github')

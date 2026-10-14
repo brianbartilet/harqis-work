@@ -116,42 +116,67 @@
     const refreshed=await api('/actions/'+item.id+'/github');
     body.append(el('p','Choose a repository → link a branch → open a pull request.','github-flow'));
     const add=el('details',undefined,'github-branch-picker');add.open=!refreshed.items.length;
-    add.append(el('summary',refreshed.items.length?'Link another branch':'1. Repository and branch'));body.append(add);
+    add.append(el('summary',refreshed.items.length?'Link another branch':'Repository and branch'));body.append(add);
     const form=el('div');add.append(form);
     const repo=await repoPicker(form);
     const fields=el('fieldset');fields.disabled=true;form.append(fields);
-    fields.append(el('legend','2. Link a branch to this action'));
+    fields.append(el('legend','Link a branch to this action'));
     const mode=field(fields,'Branch action','select');
     mode.append(new Option('Link an existing branch','link-branch'),new Option('Create a new branch','create-branch'));
     const branch=field(fields,'Branch');branch.placeholder='feature/my-change';
-    const browseArea=el('div');fields.append(browseArea);
-    const choices=el('div');browseArea.append(choices);
-    let revision=0;
-    button(controls(browseArea),'Browse branches',async()=>{
-      const ticket=++revision,repository=repo.value;choices.replaceChildren();
-      const result=await api('/github/resources?'+new URLSearchParams({repository_name:repository}));
-      if(ticket!==revision||repo.value!==repository||!body.isConnected)return;
-      const pick=field(choices,'Existing branch','select');pick.append(new Option('Choose a branch',''));
-      result.branches.forEach(name=>pick.append(new Option(name,name)));
-      pick.onchange=()=>{branch.value=pick.value;branch.setCustomValidity('');};
-      choices.append(el('p','Enter a branch name directly if it is not listed.'));
-    });
-    const base=field(fields,'Base branch','text','main');
+    const existing=field(fields,'Existing branch','select');
+    const base=field(fields,'Base branch','select');
+    const branchStatus=el('p');branchStatus.setAttribute('aria-live','polite');form.append(branchStatus);
+    const paging=controls(form);
+    let revision=0,page=1,hasMore=false;
+    const more=button(paging,'Load more branches',()=>readBranches(false));
+    const retry=button(paging,'Retry loading branches',()=>readBranches(false));
+    more.hidden=true;retry.hidden=true;
     const explanation=el('p');fields.append(explanation);
     const submit=button(controls(fields),'Link branch',async()=>{
-      if(!branch.value.trim()){branch.setCustomValidity('Enter a branch name.');branch.reportValidity();return;}
-      await api('/actions/'+item.id+'/github/branch',{repository:repo.value,branch:branch.value,base:base.value,operation:mode.value});
+      const create=mode.value==='create-branch',source=create?branch:existing;
+      if(!source.value.trim()){source.setCustomValidity(create?'Enter a new branch name.':'Choose a branch.');source.reportValidity();return;}
+      const target=create?base.value:repo.selectedOptions[0]?.dataset.base;
+      if(!target){base.setCustomValidity('Choose a base branch.');base.reportValidity();return;}
+      await api('/actions/'+item.id+'/github/branch',{repository:repo.value,branch:source.value,base:target,operation:mode.value});
       await load();await refresh();
     });
-    branch.oninput=()=>branch.setCustomValidity('');
+    for(const input of [branch,existing,base])input.oninput=()=>input.setCustomValidity('');
     function setMode(){
-      const create=mode.value==='create-branch';browseArea.hidden=create;revision++;choices.replaceChildren();
-      submit.textContent=create?'Create and link branch':'Link branch';
-      explanation.textContent=create?'Creates a branch from the base branch on GitHub and links it to this action.':'Links an existing GitHub branch to this action. The base branch is the target for a future pull request.';
+      const create=mode.value==='create-branch';branch.parentElement.hidden=!create;existing.parentElement.hidden=create;base.parentElement.hidden=!create;
+      submit.textContent=create?'Save':'Link branch';
+      explanation.textContent=create?'Creates a new branch from the selected base branch and links it to this action.':'Links the selected branch to this action.';
     }
-    mode.onchange=setMode;setMode();
-    repo.onchange=()=>{revision++;choices.replaceChildren();branch.value='';branch.setCustomValidity('');base.value=repo.selectedOptions[0]?.dataset.base||'main';fields.disabled=!repo.value;};
-    body.append(el('h3','3. Linked branches and pull requests'));
+    function resetBranches(){
+      existing.replaceChildren(new Option('Choose a branch',''));base.replaceChildren(new Option('Choose a base branch',''));
+      page=1;hasMore=false;more.hidden=true;retry.hidden=true;
+    }
+    async function readBranches(reset){
+      const ticket=++revision,repository=repo.value;
+      if(reset)resetBranches();
+      if(!repository){fields.disabled=true;branchStatus.textContent='';return;}
+      fields.disabled=!existing.options[1];more.disabled=true;retry.hidden=true;branchStatus.textContent='Loading branches…';
+      try{
+        const data=await api('/github/branches?'+new URLSearchParams({repository_name:repository,page}));
+        if(ticket!==revision||!body.isConnected)return;
+        for(const name of data.items){
+          if(![...existing.options].some(option=>option.value===name)){
+            existing.append(new Option(name,name));base.append(new Option(name,name));
+          }
+        }
+        const defaultBranch=repo.selectedOptions[0]?.dataset.base;
+        if(!base.value&&[...base.options].some(option=>option.value===defaultBranch))base.value=defaultBranch;
+        page++;hasMore=data.more;more.hidden=!hasMore;
+        fields.disabled=existing.options.length===1;
+        branchStatus.textContent=fields.disabled?'This repository has no branches. Create its first commit on GitHub to get started.':hasMore?'More branches are available. Load more if yours is missing.':'';
+      }catch(error){
+        if(ticket!==revision||!body.isConnected)return;
+        branchStatus.textContent=error.message;retry.hidden=false;
+      }finally{if(ticket===revision){more.disabled=false;}}
+    }
+    mode.onchange=setMode;setMode();resetBranches();
+    repo.onchange=()=>{branch.value='';for(const input of [branch,existing,base])input.setCustomValidity('');void readBranches(true);};
+    body.append(el('h3','Linked branches and pull requests'));
     if(!refreshed.items.length)body.append(el('p','No branches linked yet.','integration-empty'));
     for(const branchLink of refreshed.items){
       const section=el('section',undefined,'connector-link github-branch-card');body.append(section);
@@ -193,9 +218,13 @@
     const section=el('details',undefined,'action-triage github-action-section');
     section.append(el('summary','Repository settings'));
     const body=el('div',undefined,'github-action-controls');section.append(body);parent.append(section);
+    const provider=el('section',undefined,'repository-provider');provider.setAttribute('aria-label','Github');body.append(provider);
+    provider.append(el('h4','Github'));
+    const saved=el('div',undefined,'repository-provider-summary');saved.setAttribute('aria-live','polite');provider.append(saved);
+    const settingsControls=controls(provider);settingsControls.classList.add('repository-provider-settings');
     let active=null,disposed=false;
     const eligible=()=>current.some(c=>c.provider==='github'&&c.enabled&&c.status==='Connected')&&getItem()?.kind==='action';
-    const open=button(controls(body),'Github settings',async()=>{
+    const open=button(settingsControls,'Github settings',async()=>{
       const item=getItem();if(!item?.id)return;
       const modal=dialog('Github settings');active={...modal,id:item.id};
       modal.d.classList.add('github-settings-dialog');
@@ -219,10 +248,27 @@
       }
       await render();
     });
-    const hint=el('p','Save this action to link GitHub work.');body.append(hint);
+    function renderSummary(){
+      saved.replaceChildren();
+      const item=getItem();
+      if(!item?.id){saved.append(el('p','Save this action to link GitHub work.'));return;}
+      const links=cardLinks.filter(row=>row.provider==='github'&&row.action_id===item.id);
+      if(!links.length){saved.append(el('p','No GitHub repository or branch linked yet.'));return;}
+      for(const row of links){
+        const entry=el('div',undefined,'repository-summary-entry');saved.append(entry);
+        entry.append(el('strong',row.repository));
+        const branchLine=el('p');branchLine.append(document.createTextNode('Branch: '));link(branchLine,row.branch,row.url);entry.append(branchLine);
+        if(row.base)entry.append(el('p','Target: '+row.base));
+        const prLine=el('p');entry.append(prLine);
+        if(row.pr_number){
+          link(prLine,'PR #'+row.pr_number,row.pr_url);
+          prLine.append(document.createTextNode(' · '+(row.draft&&row.pr_state==='open'?'Draft':row.pr_state||'Linked')));
+        }else prLine.textContent='No pull request linked.';
+      }
+    }
     function update(){
       if(disposed)return;
-      section.hidden=!eligible();open.disabled=!getItem()?.id;hint.hidden=!!getItem()?.id;
+      section.hidden=!eligible();open.disabled=!getItem()?.id;renderSummary();
       if(section.hidden)section.open=false;
       if(active&&(section.hidden||active.id!==getItem()?.id))active.d.close();
     }

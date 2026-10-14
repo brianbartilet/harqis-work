@@ -37,7 +37,16 @@
 :is(#followup-editor,.idea-dialog) .item-connections-sidebar .github-action-section{margin:1.25rem 0 0}
 .github-action-controls{min-width:0;padding-top:.5rem}
 .github-action-controls > .integration-controls{margin:.25rem 0}
+.repository-provider{border:1px solid #334155;border-radius:.5rem;padding:.75rem;margin-top:.25rem;min-width:0}
+.repository-provider h4{margin:0 0 .65rem;font-size:.85rem;font-weight:600;color:#e2e8f0}
+.github-action-controls .repository-provider-summary p{margin:.35rem 0;font-size:.75rem;line-height:1.5}
+.repository-summary-entry{overflow-wrap:anywhere;font-size:.75rem}
+.repository-summary-entry + .repository-summary-entry{border-top:1px solid #334155;margin-top:.75rem;padding-top:.75rem}
+.repository-summary-entry strong{color:#cbd5e1;font-weight:600}
+.repository-provider .repository-provider-settings{justify-content:center;margin:.85rem 0 0}
+.repository-provider-settings > button{flex:0 1 auto}
 .github-settings-dialog{box-sizing:border-box}
+.github-settings-dialog [hidden]{display:none!important}
 .github-settings-dialog fieldset{border:0;padding:0;margin:1rem 0;min-width:0}
 .github-settings-dialog fieldset:disabled{opacity:.5}
 .github-settings-dialog legend{font-weight:600;font-size:.875rem}

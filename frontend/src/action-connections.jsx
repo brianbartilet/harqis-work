@@ -169,7 +169,7 @@ function Preview({item, editable=false}) {
             const candidates = data.nodes.map(node => ({...node, ...graph.current.graph2ScreenCoords(node.x, node.y),
               radius: node.radius, degree:0, preferred:true,
               emphasis:node.id === data.root || node.id === selected?.id}));
-            const obstacles = [{x:size.width-130,y:0,w:130,h:48}, ...candidates.map(n => ({x:n.x-n.radius,y:n.y-n.radius,w:n.radius*2,h:n.radius*2}))];
+            const obstacles = [{x:size.width-130,y:0,w:130,h:48}, ...(editable?[{x:0,y:0,w:85,h:48}]:[]), ...candidates.map(n => ({x:n.x-n.radius,y:n.y-n.radius,w:n.radius*2,h:n.radius*2}))];
             const labels = placeLabels(candidates, {...size, zoom:scale, obstacles}, (text, font) => {
               ctx.font = `${font}px system-ui`; return ctx.measureText(text).width;
             });
@@ -228,8 +228,8 @@ function Sidebar({getItem}) {
   const [expanded,setExpanded]=useState(false), [,refresh]=useState(0);
   useEffect(()=>{const update=()=>refresh(n=>n+1);window.addEventListener('hfl:ideas-updated',update);window.addEventListener('hfl:actions-updated',update);return()=>{window.removeEventListener('hfl:ideas-updated',update);window.removeEventListener('hfl:actions-updated',update);};},[]);
   const item=getItem();
-  return <details className="action-triage" open={expanded} onToggle={event=>setExpanded(event.currentTarget.open)}><summary><span>Connections</span><button type="button" disabled={!item?.id} title={item?.id?'Add a connection':'Save this item to add connections'} onClick={event=>{event.preventDefault();event.stopPropagation();openConnectionPicker(item,null,event.currentTarget);}}>Add</button></summary>
-    {expanded && (item?.id ? <Preview item={item} editable/> : <p>Save this item to add connections.</p>)}
+  return <details className="action-triage" open={expanded} onToggle={event=>setExpanded(event.currentTarget.open)}><summary><span>Connections</span></summary>
+    {expanded && (item?.id ? <div className="connections-sidebar-viewport"><button className="connections-add" type="button" title="Add a connection" onClick={event=>openConnectionPicker(item,null,event.currentTarget)}>Add</button><Preview item={item} editable/></div> : <p>Save this item to add connections.</p>)}
   </details>;
 }
 window.HflActionConnections = {attach(dialog,getItem) {
