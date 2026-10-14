@@ -3329,6 +3329,20 @@
     },
     {
       "method": "GET",
+      "path": "/integrations/api/github/branches",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session branch picker using the user's personal GitHub connector account; host-configured GitHub tools do not share this credential scope. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/integrations/api/github/pulls",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session pull request picker using the user's personal GitHub connector account; host-configured GitHub tools do not share this credential scope. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
       "path": "/integrations/api/github/resources",
       "status": "deferred",
       "tools": [],
@@ -3387,6 +3401,13 @@
       "status": "deferred",
       "tools": [],
       "reason": "Owner-session integration operation using personal connector accounts and local action/board context; host-configured GitHub/Jira tools are not equivalent. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/actions/{identity}/github/clear",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session removal of local action links scoped to the connected personal GitHub account; this does not delete remote branches or pull requests. Dedicated machine-facing service/auth contract is deferred."
     },
     {
       "method": "POST",

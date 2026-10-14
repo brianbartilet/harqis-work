@@ -5,7 +5,24 @@
 .space-title-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.space-title-row>div{min-width:0}.spaces-page .space-title-row [data-view-colors]{margin:4px 0 0;padding-top:6px;gap:6px}.space-title-row .view-color-label{display:block;margin:0;font-size:13px}@media(max-width:600px){.space-title-row{grid-template-columns:1fr}}
 
 .space-tags{border-top:1px solid #334155;margin:16px 0;padding-top:10px}
+.space-schedule-days{border:0;padding:0;margin:0 0 14px;min-width:0}
+.space-schedule-days legend{font-size:13px;color:#e2e8f0;margin-bottom:8px}
+.space-day-shortcuts{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}
+.spaces-page .space-day-shortcuts button{min-height:32px;padding:5px 12px;font-size:12px;border-radius:999px;background:transparent;color:#94a3b8;border:1px solid #334155}
+.spaces-page .space-day-shortcuts button[aria-pressed=true]{color:#f3f4f6;border-color:#6b7280;background:#374151}
+.spaces-page .space-schedule-days .workspace-day-options{display:flex;flex-wrap:wrap;gap:3px}
+.spaces-page .space-schedule-days label{position:relative;display:block;flex:0 0 84px;min-width:0;min-height:0;cursor:pointer}
+.spaces-page .space-schedule-days input{position:absolute;opacity:0;width:100%;height:100%;inset:0;cursor:pointer}
+.space-schedule-days label span{display:flex;align-items:center;justify-content:center;min-height:26px;padding:0 9px;border:1px solid #374151;border-radius:999px;background:#111827;color:#9ca3af;font-size:12px}
+.space-schedule-days input:checked+span{background:#4b5563;border-color:#6b7280;color:#fff}
+.space-schedule-days input:focus-visible+span,.spaces-page .space-day-shortcuts button:focus-visible{outline:2px solid #38bdf8;outline-offset:2px}
+.space-schedule-days input:disabled+span{opacity:.5;cursor:default}
 .space-tags summary{font-size:13px;color:#94a3b8}
+.space-tags>.role-help{margin:12px 0 14px;line-height:1.5}
+.space-tag-search-row{display:flex;align-items:center;gap:8px;margin-top:8px;margin-bottom:14px}
+.space-tags [data-space-tags-selected]{margin:0 0 16px}
+.spaces-page .space-tag-search-row input{flex:1;min-width:0;width:0;margin:0}
+.spaces-page .space-tag-search-row button{flex-shrink:0;white-space:nowrap;min-height:42px;padding:8px 12px;font-size:12px}
 .space-tags [data-space-tag-count]{margin-left:8px;color:#60a5fa}
 .space-tag-cloud{display:flex;flex-wrap:wrap;gap:8px;max-height:220px;overflow:auto;padding:4px;margin:8px 0}
 .space-tag-cloud[hidden]{display:none}

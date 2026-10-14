@@ -42,6 +42,10 @@
     $('[data-space-tags-empty]').hidden = !!visible.length;
   }
   queryInput.addEventListener('input', renderTags);
+  $('[data-space-tags-clear]').onclick = () => {
+    queryInput.value = queryInput.value.split(/\s+/).filter(token => token && !(token.startsWith('#') && token.length > 1)).join(' ');
+    queryInput.dispatchEvent(new Event('input', {bubbles:true}));
+  };
   $('[data-space-tag-search]').addEventListener('input', renderTags);
   $('[data-space-tag-search]').addEventListener('keydown', event => {
     if (event.key === 'Enter') event.preventDefault();
@@ -83,9 +87,18 @@
     editTarget=structuredClone(view||{name:'',state:defaults,schedule:[]});
     form.hidden=false;$('#space-empty').hidden=true;form.elements.name.value=editTarget.name;
     fillViewEditor(editTarget);dates();$('#space-remove').hidden=!editTarget.id;$('#space-error').textContent='';
+    $('#space-discard').disabled=busy||!editTarget.id;
     $('#space-editor-title').textContent=editTarget.id?'Edit Space':'New Space';baseline=JSON.stringify(payload());list();form.elements.name.focus();
   }
-  function lock(value) {busy=value;root.querySelectorAll('button').forEach(b=>b.disabled=value);form.querySelectorAll('input,select').forEach(e=>e.disabled=value);if(!value)dates();}
+  function lock(value) {busy=value;root.querySelectorAll('button').forEach(b=>b.disabled=value);form.querySelectorAll('input,select').forEach(e=>e.disabled=value);$('#space-discard').disabled=value||!editTarget?.id;if(!value)dates();}
+  $('#space-discard').onclick=()=>{
+    if(busy||!editTarget?.id)return;
+    const saved=views.find(view=>view.id===editTarget.id);
+    if(!saved)return;
+    open(saved);
+    announce('Changes discarded. Saved Space settings restored.');
+    $('#space-discard').focus();
+  };
   async function refresh() {viewData=await request();views=viewData.views;preferences=viewData.preferences;list();}
   $('#space-new').onclick=()=>{if(mayLeave())open();};$('#space-search').oninput=list;
   $('[data-edit-filter="rolling"]').onchange=dates;
@@ -179,12 +192,34 @@
   });
   function addBlock(block = {days:[0,1,2,3,4],start:'09:00',end:'17:00'}) {
     const box = document.createElement('div'); box.className = 'workspace-time-block';
+    const dayGroup = document.createElement('fieldset'); dayGroup.className = 'space-schedule-days';
+    const legend = document.createElement('legend'); legend.textContent = 'Repeat on';
+    const shortcuts = document.createElement('div'); shortcuts.className = 'space-day-shortcuts';
     const days = document.createElement('div'); days.className = 'workspace-day-options';
-    ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach((name, day) => {
+    const fullNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    fullNames.forEach((name, day) => {
       const label = document.createElement('label'), input = document.createElement('input');
       input.type = 'checkbox'; input.value = day; input.checked = block.days.includes(day);
-      label.append(input, name); days.append(label);
+      input.setAttribute('aria-label', fullNames[day]);
+      const text = document.createElement('span'); text.textContent = name;
+      label.append(input, text); days.append(label);
     });
+    function updateDays() {
+      const selected = [...days.querySelectorAll('input:checked')].map(input => Number(input.value));
+      days.querySelector('input').setCustomValidity(selected.length ? '' : 'Choose at least one day.');
+      shortcuts.querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.days === selected.join(','))));
+    }
+    for (const [name, selection] of [['Weekdays',[0,1,2,3,4]], ['Weekends',[5,6]], ['All week',[0,1,2,3,4,5,6]]]) {
+      const button = document.createElement('button'); button.type = 'button'; button.textContent = name;
+      button.dataset.days = selection.join(',');
+      button.onclick = () => {
+        days.querySelectorAll('input').forEach(input => input.checked = selection.includes(Number(input.value)));
+        days.querySelector('input').dispatchEvent(new Event('change', {bubbles:true}));
+      };
+      shortcuts.append(button);
+    }
+    days.addEventListener('change', updateDays);
+    updateDays(); dayGroup.append(legend, shortcuts, days);
     const times = document.createElement('div'); times.className = 'workspace-block-times';
     ['start','end'].forEach(key => {
       const label = document.createElement('label'), input = document.createElement('input');
@@ -192,7 +227,7 @@
       label.append(input); times.append(label);
     });
     const remove = document.createElement('button'); remove.type = 'button'; remove.dataset.removeBlock = ''; remove.textContent = 'Remove block'; remove.onclick = () => box.remove();
-    box.append(days, times, remove); $('[data-schedule-blocks]').append(box);
+    box.append(dayGroup, times, remove); $('[data-schedule-blocks]').append(box);
   }
   $('[data-add-block]').onclick = () => addBlock();
   function readSchedule() {
