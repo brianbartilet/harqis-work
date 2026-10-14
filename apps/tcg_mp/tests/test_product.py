@@ -31,10 +31,13 @@ def test_product(given):
 def test_product_listed(given):
     when_search = given.search_card('Underground River')
     card_id = when_search[0].id
-    then = given.verify.common
-    response = given.search_single_card_listings(card_id)
+    # Catalog membership does not imply offers for this printing/finish.
+    # Use the envelope-validating reader: API errors and incomplete responses
+    # must still fail even when a successful empty result is legitimate.
+    response = given.get_pricing_listings(card_id)
 
-    then.assert_that(len(response), greater_than(0))
+    assert isinstance(response, list)
+    assert all(isinstance(row, dict) for row in response)
 
 
 
