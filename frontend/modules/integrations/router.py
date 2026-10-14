@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from modules.hfl_corpus.agent_bridge import owner_auth
 from modules.integrations import store, service, agents
-from modules.integrations.providers import Provider, credentials, repository, segment
+from modules.integrations.providers import Provider, credentials, repository, segment, branch
 import uuid
 
 router = APIRouter(prefix='/integrations')
@@ -96,6 +96,22 @@ def branches(repository_name: str, page: int = 1, user=Depends(owner_auth)):
         raise HTTPException(422, 'Invalid page.')
     rows = client.request('GET', '/repos/'+repo+'/branches', params={'per_page':50,'page':page})
     return {'items':[row['name'] for row in rows], 'more':len(rows)==50}
+
+
+@api.get('/github/pulls')
+def pull_requests(repository_name: str, branch_name: str, page: int = 1, user=Depends(owner_auth)):
+    _, client = service.connected(user, 'github')
+    repo, head = repository(repository_name), branch(branch_name)
+    if not 1 <= page <= 1000:
+        raise HTTPException(422, 'Invalid page.')
+    rows = client.request('GET', '/repos/'+repo+'/pulls', params={
+        'state':'all', 'head':repo.split('/')[0]+':'+head, 'per_page':50, 'page':page,
+        'sort':'updated', 'direction':'desc',
+    })
+    return {'items':[{'number':p['number'], 'title':p['title'],
+                      'state':'merged' if p.get('merged_at') else p['state'], 'draft':p.get('draft',False)}
+                     for p in rows if p['head']['ref']==head and p['head'].get('repo',{}).get('full_name')==repo],
+            'more':len(rows)==50}
 
 
 @api.get('/github/resources')

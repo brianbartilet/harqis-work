@@ -45,8 +45,14 @@
 .repository-summary-entry strong{color:#cbd5e1;font-weight:600}
 .repository-provider .repository-provider-settings{justify-content:center;margin:.85rem 0 0}
 .repository-provider-settings > button{flex:0 1 auto}
-.github-settings-dialog{box-sizing:border-box}
+.github-settings-dialog{box-sizing:border-box;height:90dvh;scrollbar-gutter:stable}
 .github-settings-dialog [hidden]{display:none!important}
+.github-search-picker{position:relative}
+.github-search-picker input{padding-right:2rem;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='m5 7.5 5 5 5-5' fill='none' stroke='%2393c5fd' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .6rem center;background-size:1rem}
+.github-branch-options{position:absolute;top:100%;left:0;right:0;z-index:5;max-height:240px;overflow:auto;padding:.25rem;border:1px solid #475569;border-radius:.5rem;background:#0f172a;box-shadow:0 10px 25px #02061780}
+.integration-dialog .github-branch-options button{display:block;text-align:left;width:100%;border:0;background:transparent;overflow-wrap:anywhere}
+.integration-dialog .github-branch-options button:hover,.integration-dialog .github-branch-options button[aria-selected=true]{background:#1e3a5f}
+.github-branch-options p{padding:.5rem}
 .github-settings-dialog fieldset{border:0;padding:0;margin:1rem 0;min-width:0}
 .github-settings-dialog fieldset:disabled{opacity:.5}
 .github-settings-dialog legend{font-weight:600;font-size:.875rem}

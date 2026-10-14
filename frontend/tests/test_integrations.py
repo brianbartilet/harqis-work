@@ -113,6 +113,18 @@ def test_github_branch_picker_pagination(connectors,authenticated_client):
     assert not any('/pulls' in call[2] for call in connectors['calls'])
 
 
+def test_github_pull_request_picker_filters_source(connectors,authenticated_client):
+    c=authenticated_client;connect(c,'github')
+    def pull(number,repo,head):
+        return {'number':number,'title':'Change '+str(number),'state':'open','draft':True,
+                'head':{'ref':head,'repo':{'full_name':repo}}}
+    connectors['pulls']=[pull(1,'alice/demo','feature/test'),pull(2,'alice/demo','other'),pull(3,'fork/demo','feature/test')]
+    response=c.get(BASE+'/github/pulls',params={'repository_name':'alice/demo','branch_name':'feature/test'})
+    assert response.status_code==200
+    assert response.json()=={'items':[{'number':1,'title':'Change 1','state':'open','draft':True}],'more':False}
+    assert c.get(BASE+'/github/pulls',params={'repository_name':'alice/demo','branch_name':'feature/test','page':0}).status_code==422
+
+
 def test_github_branch_pr_reconciliation_and_user_links(connectors,authenticated_client):
     c=authenticated_client;connect(c,'github');item=card(c);root='/actions/'+item['id']+'/github'
     data={'repository':'alice/demo','branch':'feature/test','base':'main','operation':'create-branch'}
@@ -207,6 +219,7 @@ def test_connector_setup_and_github_flow_in_browser(connectors,authenticated_cli
     monkeypatch.setattr(router.corpus_index,'documents',lambda **kwargs:())
     playwright=pytest.importorskip('playwright.sync_api')
     item=card(authenticated_client)
+    connectors['branches'].update({f'feature/page-{i}':'abc' for i in range(55)})
     connectors['branches']['release/test']='release-sha'
     with playwright.sync_playwright() as engine:
         options={'headless':True}
@@ -299,11 +312,17 @@ def test_connector_setup_and_github_flow_in_browser(connectors,authenticated_cli
             playwright.expect(provider_summary.get_by_role('heading',name='Github',exact=True)).to_be_visible()
             playwright.expect(provider_summary).to_contain_text('No GitHub repository or branch linked yet.')
             group_bounds=provider_summary.bounding_box()
-            button_bounds=provider_summary.get_by_role('button',name='Github settings').bounding_box()
+            button_bounds=provider_summary.get_by_role('button',name='Settings').bounding_box()
             assert button_bounds['x']+button_bounds['width']/2==pytest.approx(group_bounds['x']+group_bounds['width']/2,abs=2)
             assert settings.locator('input,select,textarea').count()==0
-            settings.get_by_role('button',name='Github settings',exact=True).click()
+            settings.get_by_role('button',name='Settings',exact=True).click()
             modal=page.get_by_role('dialog',name='Github settings',exact=True)
+            initial_bounds=modal.bounding_box()
+            modal.locator('.github-branch-picker > summary').click()
+            collapsed_bounds=modal.bounding_box()
+            for dimension in ('x','y','width','height'):
+                assert collapsed_bounds[dimension]==pytest.approx(initial_bounds[dimension],abs=1)
+            modal.locator('.github-branch-picker > summary').click()
             playwright.expect(modal.get_by_label('Branch',exact=True)).to_be_disabled()
             modal.get_by_label('Repository',exact=True).select_option('alice/demo')
             playwright.expect(modal.get_by_label('Existing branch',exact=True)).to_be_visible()
@@ -315,20 +334,32 @@ def test_connector_setup_and_github_flow_in_browser(connectors,authenticated_cli
             playwright.expect(modal.get_by_label('Branch',exact=True)).to_be_visible()
             playwright.expect(modal.get_by_label('Base branch',exact=True)).to_be_visible()
             playwright.expect(modal.get_by_label('Base branch',exact=True)).to_have_value('main')
-            modal.get_by_label('Base branch',exact=True).select_option('release/test')
+            base_picker=modal.get_by_role('combobox',name='Base branch',exact=True)
+            base_picker.fill('no-such-branch')
+            playwright.expect(modal.get_by_text('No matching branches.',exact=True)).to_be_visible()
+            base_picker.press('Escape')
+            playwright.expect(base_picker).to_have_value('main')
+            playwright.expect(modal).to_be_visible()
+            base_picker.fill('release/')
+            playwright.expect(modal.get_by_role('option',name='release/test',exact=True)).to_be_visible()
+            base_picker.press('ArrowDown');base_picker.press('Enter')
+            playwright.expect(base_picker).to_have_value('release/test')
+            assert modal.get_by_role('button',name='Load more branches',exact=True).count()==0
+            assert modal.get_by_text('More branches are available. Load more if yours is missing.',exact=True).count()==0
             modal.get_by_label('Branch',exact=True).fill('feature/browser')
             page.screenshot(path=str(tmp_path/f'branch-selector-{width}.png'))
             modal.get_by_role('button',name='Save',exact=True).click()
             assert connectors['branches']['feature/browser']=='release-sha'
-            playwright.expect(modal.get_by_label('PR description',exact=True)).not_to_be_visible()
+            playwright.expect(modal.get_by_label('Description',exact=True)).not_to_be_visible()
             modal.get_by_text('Add a pull request',exact=True).click()
             modal.get_by_label('Pull request action',exact=True).select_option('link')
-            playwright.expect(modal.get_by_label('PR description',exact=True)).not_to_be_visible()
+            playwright.expect(modal.get_by_label('Description',exact=True)).not_to_be_visible()
+            playwright.expect(modal.get_by_text('No pull requests found for this branch.',exact=True)).to_be_visible()
             modal.get_by_role('button',name='Link existing PR',exact=True).click()
             assert connectors['pulls']==[]
             modal.get_by_label('Pull request action',exact=True).select_option('create')
-            modal.get_by_label('PR description',exact=True).fill('Browser test draft')
-            modal.get_by_role('button',name='Create draft PR',exact=True).click()
+            modal.get_by_label('Description',exact=True).fill('Browser test draft')
+            modal.get_by_role('button',name='Publish pull request',exact=True).click()
             playwright.expect(modal.get_by_role('link',name='PR #1',exact=True)).to_be_visible()
             playwright.expect(modal.get_by_role('link',name='Review and publish on GitHub')).to_have_attribute('href','https://github.com/alice/demo/pull/1')
             assert connectors['pulls'][0]['draft']
@@ -337,13 +368,13 @@ def test_connector_setup_and_github_flow_in_browser(connectors,authenticated_cli
             assert modal.evaluate('el=>el.scrollWidth<=el.clientWidth')
             page.screenshot(path=str(tmp_path/f'github-settings-{width}.png'))
             modal.press('Escape')
-            playwright.expect(settings.get_by_role('button',name='Github settings')).to_be_focused()
+            playwright.expect(settings.get_by_role('button',name='Settings')).to_be_focused()
             playwright.expect(provider_summary).to_contain_text('alice/demo')
             playwright.expect(provider_summary).to_contain_text('Target: release/test')
             playwright.expect(provider_summary.get_by_role('link',name='feature/browser',exact=True)).to_be_visible()
             playwright.expect(provider_summary.get_by_role('link',name='PR #1',exact=True)).to_be_visible()
             playwright.expect(provider_summary).to_contain_text('Draft')
-            settings.get_by_role('button',name='Github settings').click()
+            settings.get_by_role('button',name='Settings').click()
             playwright.expect(modal.get_by_role('link',name='PR #1',exact=True)).to_be_visible()
             modal.get_by_text('Link another branch',exact=True).click()
             modal.get_by_label('Repository',exact=True).select_option('alice/demo')
@@ -358,16 +389,27 @@ def test_connector_setup_and_github_flow_in_browser(connectors,authenticated_cli
             assert modal.locator('.connector-link').count()==0
             modal.get_by_role('button',name='Close',exact=True).click()
             playwright.expect(provider_summary).to_contain_text('No GitHub repository or branch linked yet.')
-            settings.get_by_role('button',name='Github settings').click()
+            settings.get_by_role('button',name='Settings').click()
             playwright.expect(modal.get_by_text('No branches linked yet.',exact=True)).to_be_visible()
             modal.get_by_label('Repository',exact=True).select_option('alice/demo')
-            modal.get_by_label('Existing branch',exact=True).select_option('feature/browser')
+            existing_picker=modal.get_by_role('combobox',name='Existing branch',exact=True)
+            existing_picker.fill('browser')
+            page.screenshot(path=str(tmp_path/f'branch-search-{width}.png'))
+            modal.get_by_role('option',name='feature/browser',exact=True).click()
+            playwright.expect(existing_picker).to_have_value('feature/browser')
+            existing_picker.click()
+            existing_picker.fill('unmatched-filter')
+            modal.get_by_role('heading',name='Linked branches and pull requests').click()
+            playwright.expect(existing_picker).to_have_value('feature/browser')
             playwright.expect(modal.get_by_label('Branch',exact=True)).not_to_be_visible()
             playwright.expect(modal.get_by_label('Base branch',exact=True)).not_to_be_visible()
-            modal.get_by_role('button',name='Link branch',exact=True).click()
+            modal.get_by_role('button',name='Link',exact=True).click()
             modal.get_by_text('Add a pull request',exact=True).click()
             modal.get_by_label('Pull request action',exact=True).select_option('link')
-            modal.get_by_label('PR number',exact=True).fill('1')
+            pr_picker=modal.get_by_role('combobox',name='Pull request',exact=True)
+            pr_picker.fill('Ship integration')
+            modal.get_by_role('option',name='#1 · Ship integration · Draft',exact=True).click()
+            playwright.expect(pr_picker).to_have_value('#1 · Ship integration · Draft')
             modal.get_by_role('button',name='Link existing PR',exact=True).click()
             playwright.expect(modal.get_by_role('link',name='PR #1',exact=True)).to_be_visible()
             assert len(connectors['pulls'])==1

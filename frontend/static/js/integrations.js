@@ -112,6 +112,41 @@
       if(!result.branches.length&&!result.pulls.length)list.append(el('p','No branches or open pull requests.','integration-empty'));
     }
   }
+  function searchableBranches(select,label,noun='branches'){
+    select.hidden=true;select.removeAttribute('aria-label');
+    const host=select.parentElement;host.classList.add('github-search-picker');
+    const input=el('input');input.type='text';input.autocomplete='off';input.placeholder='Search '+noun+'…';
+    input.setAttribute('role','combobox');input.setAttribute('aria-label',label);input.setAttribute('aria-autocomplete','list');input.setAttribute('aria-expanded','false');
+    const list=el('div',undefined,'github-branch-options');list.id='branch-options-'+crypto.randomUUID();list.setAttribute('role','listbox');list.setAttribute('aria-label',label+' results');list.hidden=true;
+    input.setAttribute('aria-controls',list.id);host.append(input,list);select.pickerInput=input;
+    let matches=[],active=-1;
+    function close(){list.hidden=true;input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');input.value=select.value?select.selectedOptions[0].text:'';}
+    function choose(value){select.value=value;select.setCustomValidity('');input.setCustomValidity('');close();input.focus();select.dispatchEvent(new Event('change',{bubbles:true}));}
+    function paint(){
+      list.replaceChildren();active=-1;input.removeAttribute('aria-activedescendant');
+      const query=input.value.toLocaleLowerCase();
+      const all=[...select.options].filter(option=>option.value&&option.text.toLocaleLowerCase().includes(query));matches=all.slice(0,100);
+      matches.forEach((option,index)=>{
+        const row=el('button',option.text);row.type='button';row.tabIndex=-1;row.id=list.id+'-'+index;row.setAttribute('role','option');row.setAttribute('aria-selected',String(option.value===select.value));
+        row.onpointerdown=event=>event.preventDefault();row.onclick=event=>{event.preventDefault();choose(option.value);};list.append(row);
+      });
+      if(!matches.length)list.append(el('p','No matching '+noun+'.'));
+      if(all.length>matches.length)list.append(el('p','Type more to narrow the results.'));
+      list.hidden=false;input.setAttribute('aria-expanded','true');
+    }
+    input.onfocus=()=>{input.value='';paint();};input.oninput=()=>{input.setCustomValidity('');paint();};input.onblur=close;
+    input.onclick=()=>{if(list.hidden){input.value='';paint();}};
+    input.onkeydown=event=>{
+      if(event.key==='Escape'&&!list.hidden){event.preventDefault();event.stopPropagation();close();return;}
+      if(event.key==='ArrowDown'||event.key==='ArrowUp'){
+        event.preventDefault();if(list.hidden)paint();if(!matches.length)return;
+        active=(active+(event.key==='ArrowDown'?1:-1)+matches.length)%matches.length;
+        const rows=[...list.querySelectorAll('[role=option]')];rows.forEach((row,i)=>row.setAttribute('aria-selected',String(i===active)));
+        input.setAttribute('aria-activedescendant',rows[active].id);rows[active].scrollIntoView({block:'nearest'});
+      }else if(event.key==='Enter'&&!list.hidden){event.preventDefault();if(active>=0)choose(matches[active].value);else if(matches.length===1)choose(matches[0].value);}
+    };
+    select.syncPicker=close;
+  }
   async function githubControls(body,item,refresh){
     const refreshed=await api('/actions/'+item.id+'/github');
     body.append(el('p','Choose a repository → link a branch → open a pull request.','github-flow'));
@@ -126,37 +161,39 @@
     const branch=field(fields,'Branch');branch.placeholder='feature/my-change';
     const existing=field(fields,'Existing branch','select');
     const base=field(fields,'Base branch','select');
+    searchableBranches(existing,'Existing branch');searchableBranches(base,'Base branch');
     const branchStatus=el('p');branchStatus.setAttribute('aria-live','polite');form.append(branchStatus);
-    const paging=controls(form);
-    let revision=0,page=1,hasMore=false;
-    const more=button(paging,'Load more branches',()=>readBranches(false));
+    const paging=controls(form);paging.hidden=true;
+    let revision=0,page=1;
     const retry=button(paging,'Retry loading branches',()=>readBranches(false));
-    more.hidden=true;retry.hidden=true;
     const explanation=el('p');fields.append(explanation);
-    const submit=button(controls(fields),'Link branch',async()=>{
+    const submit=button(controls(fields),'Link',async()=>{
       const create=mode.value==='create-branch',source=create?branch:existing;
-      if(!source.value.trim()){source.setCustomValidity(create?'Enter a new branch name.':'Choose a branch.');source.reportValidity();return;}
+      if(!source.value.trim()){const input=source.pickerInput||source;input.setCustomValidity(create?'Enter a new branch name.':'Choose a branch.');input.reportValidity();return;}
       const target=create?base.value:repo.selectedOptions[0]?.dataset.base;
-      if(!target){base.setCustomValidity('Choose a base branch.');base.reportValidity();return;}
+      if(!target){base.pickerInput.setCustomValidity('Choose a base branch.');base.pickerInput.reportValidity();return;}
       await api('/actions/'+item.id+'/github/branch',{repository:repo.value,branch:source.value,base:target,operation:mode.value});
       await load();await refresh();
     });
     for(const input of [branch,existing,base])input.oninput=()=>input.setCustomValidity('');
     function setMode(){
       const create=mode.value==='create-branch';branch.parentElement.hidden=!create;existing.parentElement.hidden=create;base.parentElement.hidden=!create;
-      submit.textContent=create?'Save':'Link branch';
+      submit.textContent=create?'Save':'Link';
       explanation.textContent=create?'Creates a new branch from the selected base branch and links it to this action.':'Links the selected branch to this action.';
     }
     function resetBranches(){
       existing.replaceChildren(new Option('Choose a branch',''));base.replaceChildren(new Option('Choose a base branch',''));
-      page=1;hasMore=false;more.hidden=true;retry.hidden=true;
+      existing.syncPicker();base.syncPicker();
+      page=1;paging.hidden=true;
     }
     async function readBranches(reset){
       const ticket=++revision,repository=repo.value;
       if(reset)resetBranches();
       if(!repository){fields.disabled=true;branchStatus.textContent='';return;}
-      fields.disabled=!existing.options[1];more.disabled=true;retry.hidden=true;branchStatus.textContent='Loading branches…';
+      fields.disabled=true;paging.hidden=true;branchStatus.textContent='Loading branches…';
       try{
+        let hasMore;
+        do{
         const data=await api('/github/branches?'+new URLSearchParams({repository_name:repository,page}));
         if(ticket!==revision||!body.isConnected)return;
         for(const name of data.items){
@@ -166,13 +203,15 @@
         }
         const defaultBranch=repo.selectedOptions[0]?.dataset.base;
         if(!base.value&&[...base.options].some(option=>option.value===defaultBranch))base.value=defaultBranch;
-        page++;hasMore=data.more;more.hidden=!hasMore;
+        existing.syncPicker();base.syncPicker();
+        page++;hasMore=data.more;
+        }while(hasMore);
         fields.disabled=existing.options.length===1;
-        branchStatus.textContent=fields.disabled?'This repository has no branches. Create its first commit on GitHub to get started.':hasMore?'More branches are available. Load more if yours is missing.':'';
+        branchStatus.textContent=fields.disabled?'This repository has no branches. Create its first commit on GitHub to get started.':'';
       }catch(error){
         if(ticket!==revision||!body.isConnected)return;
-        branchStatus.textContent=error.message;retry.hidden=false;
-      }finally{if(ticket===revision){more.disabled=false;}}
+        branchStatus.textContent=error.message;paging.hidden=false;
+      }
     }
     mode.onchange=setMode;setMode();resetBranches();
     repo.onchange=()=>{branch.value='';for(const input of [branch,existing,base])input.setCustomValidity('');void readBranches(true);};
@@ -195,21 +234,46 @@
       section.append(el('p','Branch linked · No pull request yet'));
       const details=el('details',undefined,'github-pr-editor');details.append(el('summary','Add a pull request'));section.append(details);
       const prMode=field(details,'Pull request action','select');
-      prMode.append(new Option('Create a draft pull request','create'),new Option('Link an existing pull request','link'));
-      const number=field(details,'PR number','number');number.min='1';number.step='1';
-      const description=field(details,'PR description','textarea');description.rows=3;description.maxLength=10000;
+      prMode.append(new Option('Publish a pull request','create'),new Option('Link an existing pull request','link'));
+      const number=field(details,'Pull request','select');number.append(new Option('Choose a pull request',''));
+      searchableBranches(number,'Pull request','pull requests');
+      const prStatus=el('p');prStatus.setAttribute('aria-live','polite');details.append(prStatus);
+      const retryRow=controls(details);retryRow.hidden=true;
+      button(retryRow,'Retry loading pull requests',readPulls);
+      let prLoaded=false,prLoading=false,prFailed=false;
+      async function readPulls(){
+        if(prLoading||prLoaded)return;
+        prLoading=true;prFailed=false;retryRow.hidden=true;number.pickerInput.disabled=true;
+        prStatus.textContent='Loading pull requests…';
+        try{
+          let page=1,more;
+          do{
+            const result=await api('/github/pulls?'+new URLSearchParams({repository_name:branchLink.repository,branch_name:branchLink.branch,page}));
+            if(!body.isConnected)return;
+            for(const pr of result.items){
+              if(![...number.options].some(option=>option.value===String(pr.number)))number.append(new Option('#'+pr.number+' · '+pr.title+' · '+(pr.draft&&pr.state==='open'?'Draft':pr.state),String(pr.number)));
+            }
+            more=result.more;page++;
+          }while(more);
+          prLoaded=true;prStatus.textContent=number.options.length===1?'No pull requests found for this branch.':'';
+        }catch(error){if(body.isConnected){prFailed=true;prStatus.textContent=error.message;retryRow.hidden=prMode.value!=='link';}}
+        finally{prLoading=false;number.pickerInput.disabled=!prLoaded||number.options.length===1;}
+      }
+      const description=field(details,'Description','textarea');description.rows=3;description.maxLength=10000;
       const hint=el('p');details.append(hint);
-      const save=button(controls(details),'Create draft PR',async()=>{
+      const save=button(controls(details),'Publish pull request',async()=>{
         const existing=prMode.value==='link';
-        if(existing&&(!number.value||!number.checkValidity())){number.setCustomValidity('Enter a positive PR number.');number.reportValidity();return;}
+        if(existing&&(!prLoaded||!number.value)){number.pickerInput.setCustomValidity('Choose a pull request.');number.pickerInput.reportValidity();return;}
         await api('/actions/'+item.id+'/github/pr',{resource:branchLink.resource,number:existing?number.value:null,body:existing?'':description.value});
         await load();await refresh();
       });
       number.oninput=()=>number.setCustomValidity('');
       function setPrMode(){
         const existing=prMode.value==='link';number.parentElement.hidden=!existing;description.parentElement.hidden=existing;
-        save.textContent=existing?'Link existing PR':'Create draft PR';
-        hint.textContent=existing?'Enter a PR number from this repository whose source is this branch.':'Creates a draft on GitHub using the action title. Commit and push your changes first, then mark the draft ready for review on GitHub.';
+        prStatus.hidden=!existing;retryRow.hidden=!existing||!prFailed;
+        save.textContent=existing?'Link existing PR':'Publish pull request';
+        hint.textContent=existing?'Choose a pull request for this repository and branch.':'Publishes a draft on GitHub using the action title. Commit and push your changes first, then mark the draft ready for review on GitHub.';
+        if(existing&&!prFailed)void readPulls();
       }
       prMode.onchange=setPrMode;setPrMode();
     }
@@ -224,7 +288,7 @@
     const settingsControls=controls(provider);settingsControls.classList.add('repository-provider-settings');
     let active=null,disposed=false;
     const eligible=()=>current.some(c=>c.provider==='github'&&c.enabled&&c.status==='Connected')&&getItem()?.kind==='action';
-    const open=button(settingsControls,'Github settings',async()=>{
+    const open=button(settingsControls,'Settings',async()=>{
       const item=getItem();if(!item?.id)return;
       const modal=dialog('Github settings');active={...modal,id:item.id};
       modal.d.classList.add('github-settings-dialog');
