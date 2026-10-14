@@ -14,7 +14,7 @@
   function dialog(title){const opener=document.activeElement,d=el('dialog',undefined,'integration-dialog'),h=el('header');d.setAttribute('aria-label',title);const heading=el('h2',title);heading.tabIndex=-1;h.append(heading);const close=button(h,'',()=>d.close());close.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"></path></svg>';close.classList.add('integration-dialog-close');close.setAttribute('aria-label','Close');close.title='Close';d.append(h);const body=el('div'),error=el('p');error.setAttribute('role','alert');d.append(body,error);document.body.append(d);d.addEventListener('close',()=>{d.remove();if(opener?.isConnected)opener.focus();},{once:true});d.showModal();heading.focus();return {d,body,error};}
   const controls=parent=>parent.appendChild(el('div',undefined,'integration-controls'));
   let current=[], cardLinks=[];
-  function badges(parent,identity){parent.querySelectorAll("[data-connector-summary]").forEach(n=>n.remove());for(const row of cardLinks.filter(r=>r.action_id===identity)){const text=row.provider==='jira'?row.issue_key+' · '+row.jira_status:row.branch+(row.pr_number?' · PR #'+row.pr_number+' · '+row.pr_state:'');const badge=el('span',text,'action-status');badge.dataset.connectorSummary=identity;parent.append(badge);}}
+  function badges(parent,identity){parent.querySelectorAll("[data-connector-summary]").forEach(n=>n.remove());for(const row of cardLinks.filter(r=>r.action_id===identity&&r.provider==='jira')){const text=row.provider==='jira'?row.issue_key+' · '+row.jira_status:row.branch+(row.pr_number?' · PR #'+row.pr_number+' · '+row.pr_state:'');const badge=el('span',text,'action-status');badge.dataset.connectorSummary=identity;parent.append(badge);}}
   async function load(){
     const snapshot=await api('/connectors');current=snapshot.items;cardLinks=snapshot.links||[];
     const root=document.querySelector('[data-connector-cards]');
@@ -113,12 +113,15 @@
     }
   }
   async function githubControls(body,item,refresh){
+    body.append(el('h3','Link or create a branch'));
     const repo=await repoPicker(body),branch=field(body,'Branch'),base=field(body,'Base branch','text','main');
       repo.onchange=()=>{base.value=repo.selectedOptions[0]?.dataset.base||'main';};
       const options=el('div');body.append(options);
       button(controls(body),'Browse repository branches / PRs',async()=>{options.replaceChildren();const result=await api('/github/resources?'+new URLSearchParams({repository_name:repo.value}));const pick=field(options,'Existing branch','select');pick.append(new Option('Choose a branch',''));result.branches.forEach(b=>pick.append(new Option(b,b)));pick.onchange=()=>{branch.value=pick.value;};result.pulls.forEach(p=>options.append(el('p','#'+p.number+' · '+p.title+' · '+p.branch)));options.append(el('p','You can also enter any branch name or PR number directly.'));});
       const row=controls(body);for(const [label,operation] of [['Link branch','link-branch'],['Create branch','create-branch']])button(row,label,async()=>{await api('/actions/'+item.id+'/github/branch',{repository:repo.value,branch:branch.value,base:base.value,operation});await load();await refresh();});
       const refreshed=await api('/actions/'+item.id+'/github');
+      body.append(el('h3','Linked branches and pull requests'));
+      if(!refreshed.items.length)body.append(el('p','No branches linked yet.','integration-empty'));
       for(const branchLink of refreshed.items){const section=el('section',undefined,'connector-link');body.append(section);link(section,branchLink.repository+' · '+branchLink.branch,branchLink.url);
         if(branchLink.pr_number){section.append(el('p',(branchLink.draft?'Draft · ':'')+branchLink.pr_state));link(section,'PR #'+branchLink.pr_number,branchLink.pr_url);}
         const number=field(section,'Existing PR number (optional)','number'),description=field(section,'PR description','textarea');
@@ -127,29 +130,34 @@
   }
   function attachGithub(parent,getItem){
     const section=el('details',undefined,'action-triage github-action-section');
-    section.append(el('summary','GitHub'));
-    const body=el('div',undefined,'github-action-controls');section.append(body);parent.prepend(section);
-    let loadedId=null,sequence=0,disposed=false;
+    section.append(el('summary','Repository settings'));
+    const body=el('div',undefined,'github-action-controls');section.append(body);parent.append(section);
+    let active=null,disposed=false;
     const eligible=()=>current.some(c=>c.provider==='github'&&c.enabled&&c.status==='Connected')&&getItem()?.kind==='action';
-    async function render(){
-      const item=getItem(),ticket=++sequence;
-      loadedId=item?.id||null;body.replaceChildren();
-      if(!item?.id){body.append(el('p','Save this action to link GitHub work.'));return;}
-      const content=el('div');body.append(content);
-      const error=el('p');error.setAttribute('role','alert');content.append(error);
-      try{await githubControls(content,item,async()=>{if(!disposed&&ticket===sequence)await render();});}
-      catch(e){if(!disposed&&ticket===sequence){error.textContent=e.message;button(controls(content),'Retry',render);}}
-    }
+    const open=button(controls(body),'Github settings',async()=>{
+      const item=getItem();if(!item?.id)return;
+      const modal=dialog('Github settings');active={...modal,id:item.id};
+      modal.d.classList.add('github-settings-dialog');
+      modal.d.addEventListener('close',()=>{if(active?.d===modal.d)active=null;},{once:true});
+      async function render(){
+        if(disposed||!modal.d.open)return;
+        modal.body.replaceChildren();modal.error.textContent='';
+        const content=el('div');modal.body.append(content);
+        try{await githubControls(content,item,render);}
+        catch(e){if(modal.d.open){modal.error.textContent=e.message;button(controls(content),'Retry',render);}}
+      }
+      await render();
+    });
+    const hint=el('p','Save this action to link GitHub work.');body.append(hint);
     function update(){
       if(disposed)return;
-      section.hidden=!eligible();
-      if(section.hidden){section.open=false;sequence++;loadedId=null;body.replaceChildren();}
-      else if(section.open&&loadedId!==getItem()?.id)render();
+      section.hidden=!eligible();open.disabled=!getItem()?.id;hint.hidden=!!getItem()?.id;
+      if(section.hidden)section.open=false;
+      if(active&&(section.hidden||active.id!==getItem()?.id))active.d.close();
     }
-    section.addEventListener('toggle',()=>{if(section.open&&!section.hidden&&!body.children.length)render();});
     for(const event of ['integrations:changed','hfl:actions-updated'])window.addEventListener(event,update);
     update();
-    return ()=>{disposed=true;sequence++;for(const event of ['integrations:changed','hfl:actions-updated'])window.removeEventListener(event,update);section.remove();};
+    return ()=>{disposed=true;active?.d.close();for(const event of ['integrations:changed','hfl:actions-updated'])window.removeEventListener(event,update);section.remove();};
   }
   async function actionDialog(item){
     const {d,body}=dialog('Integrations · '+item.title);const links=await api('/actions/'+encodeURIComponent(item.id));

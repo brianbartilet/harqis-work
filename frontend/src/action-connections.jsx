@@ -239,9 +239,12 @@ window.HflActionConnections = {attach(dialog,getItem) {
   dialog.classList.add('has-connections-sidebar');
   const aside=document.createElement('aside');aside.className='item-connections-sidebar';aside.setAttribute('aria-label','Item integrations');body.after(aside);
   const connections=document.createElement('div');aside.append(connections);
-  const cleanupGithub=window.HarqisIntegrations?.attachGithub(aside,getItem);
   const root=createRoot(connections);root.render(<Sidebar getItem={getItem}/>);
-  const cleanup=()=>{cleanupGithub?.();root.unmount();aside.remove();dialog.removeEventListener('close',cleanup);delete dialog._connectionsCleanup;};
+  const agentSettings=form.querySelector('[data-action-agent-settings]');
+  const agentSettingsHome=agentSettings?document.createComment('Agent settings home'):null;
+  if(agentSettings){agentSettings.before(agentSettingsHome);aside.append(agentSettings);}
+  const cleanupGithub=window.HarqisIntegrations?.attachGithub(aside,getItem);
+  const cleanup=()=>{cleanupGithub?.();root.unmount();if(agentSettingsHome)agentSettingsHome.replaceWith(agentSettings);aside.remove();dialog.removeEventListener('close',cleanup);delete dialog._connectionsCleanup;};
   dialog._connectionsCleanup=cleanup;dialog.addEventListener('close',cleanup,{once:true});
 }, open(item, trigger) {
   activeDialog?.close();

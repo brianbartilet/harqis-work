@@ -8,6 +8,7 @@ dialog.agenda-dialog.has-connections-sidebar { width:min(1100px,calc(100vw - 24p
 .item-connections-sidebar .connections-canvas { height:300px; }
 .item-connections-sidebar .connections-details { height:auto; max-height:400px; border-left:0; border-top:1px solid #243448; padding:.8rem; }
 .item-connections-sidebar .action-triage { margin:0; }
+:is(#followup-editor,.idea-dialog) .item-connections-sidebar > [data-action-agent-settings] { margin:1.25rem 0 0; }
 .item-connections-sidebar summary { position:relative; list-style:none; padding-right:2rem; cursor:pointer; }
 .item-connections-sidebar summary::-webkit-details-marker { display:none; }
 .item-connections-sidebar summary::after { content:''; position:absolute; right:.25rem; top:50%; width:20px; height:20px; transform:translateY(-50%); pointer-events:none; background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='m5 7.5 5 5 5-5' fill='none' stroke='%2367e8f9' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/20px no-repeat; }
@@ -15,7 +16,7 @@ dialog.agenda-dialog.has-connections-sidebar { width:min(1100px,calc(100vw - 24p
 .item-connections-sidebar .connections-footnote { padding:.5rem; }
 dialog.idea-dialog.agenda-dialog.connection-picker-dialog { padding:24px; width:min(720px,calc(100vw - 24px)); box-sizing:border-box; }
 .item-connections-sidebar summary { display:flex; align-items:center; justify-content:space-between; gap:.75rem; }
-.item-connections-sidebar summary > button { margin:0 0 0 auto; padding:.3rem .65rem; font-size:.78rem; }
+.item-connections-sidebar summary > button { margin:0 0 0 auto; padding:0 .65rem; height:20px; line-height:18px; font-size:.78rem; }
 .item-connections-sidebar summary::after { position:static; flex:0 0 20px; transform:none; }
 .item-connections-sidebar details[open] > summary::after { transform:rotate(180deg); }
 .connections-loading { min-height:300px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:.65rem; padding:1.5rem; text-align:center; color:#94a3b8; font-size:.8rem; }
