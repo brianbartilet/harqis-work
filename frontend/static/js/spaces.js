@@ -12,6 +12,40 @@
 
   let viewData = JSON.parse($('#spaces-data').textContent), views = viewData.views, preferences = viewData.preferences;
   const sources = JSON.parse($('#spaces-sources').textContent).map(value => ({value}));
+  const tagOptions = JSON.parse($('#spaces-tags').textContent);
+  const queryInput = $('[data-edit-filter="q"]');
+  function renderTags() {
+    const tokens = queryInput.value.split(/\s+/).filter(Boolean);
+    const selected = [...new Set(tokens.filter(token => token.startsWith('#') && token.length > 1).map(token => token.slice(1).toLowerCase()))];
+    $('[data-space-tag-count]').textContent = selected.length ? `${selected.length} selected` : 'All tags';
+    const selectedList = $('[data-space-tags-selected]'), list = $('[data-space-tags]');
+    selectedList.replaceChildren(); list.replaceChildren();
+    function chip(tag, count, active, destination) {
+      const button = document.createElement('button');
+      button.type = 'button'; button.dataset.spaceTag = tag;
+      button.setAttribute('aria-pressed', String(active));
+      button.textContent = '#' + tag + (count == null ? '' : ` ${count}`);
+      button.onclick = () => {
+        const matching = selected.filter(value => tag.toLowerCase().includes(value));
+        queryInput.value = (matching.length ? tokens.filter(token => !token.startsWith('#') || !matching.includes(token.slice(1).toLowerCase())) : [...tokens, '#' + tag]).join(' ');
+        queryInput.dispatchEvent(new Event('input', {bubbles:true}));
+        const replacement = [...root.querySelectorAll('[data-space-tag]')].find(item => item.dataset.spaceTag === tag);
+        (replacement || $('[data-space-tag-search]')).focus();
+      };
+      destination.append(button);
+    }
+    selected.forEach(tag => chip(tag, null, true, selectedList));
+    selectedList.hidden = !selected.length;
+    const search = $('[data-space-tag-search]').value.trim().toLowerCase().replace(/^#/, '');
+    const visible = tagOptions.filter(([tag]) => !selected.includes(tag.toLowerCase()) && tag.toLowerCase().includes(search)).slice(0,100);
+    visible.forEach(([tag,count]) => chip(tag, count, selected.some(value => tag.toLowerCase().includes(value)), list));
+    $('[data-space-tags-empty]').hidden = !!visible.length;
+  }
+  queryInput.addEventListener('input', renderTags);
+  $('[data-space-tag-search]').addEventListener('input', renderTags);
+  $('[data-space-tag-search]').addEventListener('keydown', event => {
+    if (event.key === 'Enter') event.preventDefault();
+  });
   let editTarget = null, busy = false, baseline = '', draft = null;
   const form = $('#space-form');
   const defaults = {q:'',source:'',date_field:'created',date_from:'',date_to:'',rolling:0,sort:'desc',page_size:20};
@@ -101,6 +135,8 @@
     if (!view) return;
     $('[data-schedule-timezone]').textContent = `Times use ${preferences.timezone}. Change it in Profile settings.`;
     document.querySelectorAll('[data-edit-filter]').forEach(input => input.value = view.state[input.dataset.editFilter] ?? '');
+    $('[data-space-tag-search]').value = '';
+    renderTags();
     fillEditorSources(view.state.source || '');
     const palette = $('[data-view-colors]'); palette.replaceChildren();
     palette.dataset.selected = view.color || viewData.palette[views.length % viewData.palette.length];

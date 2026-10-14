@@ -26,7 +26,7 @@
       <section><span class="context-help-step">04 · Share</span><h3>Decide what others see</h3><p>Use <strong>Sharing preview</strong> to review the context. <strong>Generate share recipe</strong> opens a draft for review before publishing. Search text does not transfer to a recipe.</p><p>Choose the Facet excerpts each recipient may receive. Published shares follow their own frozen or live settings.</p></section>
     </div>
     <section class="context-help-details"><h3>One Space, three ways to explore</h3>
-      <p>Select a Space in <strong>Focus on</strong> to carry the same context across Activity Corpus, Kanban, and Graph. Your selection, applied filters, and Dynamic mode are shared across these views on the same server. Explicit filter links can open a different context.</p>
+      <p>Select a Space in <strong>Focus on</strong> to carry the same context across Activity Corpus, Kanban, and Graph. Your Space selection, saved Space filters, and Dynamic mode are shared across these views on the same server. Additional searches stay in the current view. Changing Spaces clears those local filters. Explicit filter links can open a different context.</p>
       <div class="context-help-grid">
         <section><span class="context-help-step">Corpus · Read the evidence</span><h3>Find the moments that matter</h3><p>Saved sources, search text or #tags, and date rules determine which entries match. Select several Spaces to combine their matches without duplicates. Additional search filters narrow the combined activity.</p><p>Use <strong>Reset</strong> to return to the selected Space’s saved rules. To keep changed filters, choose <strong>Manage Spaces</strong>, select a destination, and save them there.</p></section>
         <section><span class="context-help-step">Kanban · Move work forward</span><h3>Focus on relevant actions and ideas</h3><p>The Space context follows you into the action board and ideas view. Link an action or idea to a Space in its editor to make that membership explicit, even when it does not match the Space’s saved entry filters.</p><p>Additional filters can still narrow what appears. Moving an action between status columns changes its workflow status; edit its Space assignment separately.</p></section>
@@ -41,6 +41,6 @@
   <footer class="context-help-footer"><button type="button" class="role-primary" data-spaces-help-close>Got it</button></footer>
 </dialog>
 <dialog id="space-delete" class="workspace-dialog" aria-labelledby="space-delete-title"><h2 id="space-delete-title">Remove Space?</h2><p id="space-delete-description"></p><div class="workspace-menu-actions"><button id="space-delete-cancel">Cancel</button><button id="space-delete-confirm">Remove Space</button></div><p id="space-delete-error" role="alert"></p></dialog>
-<script type="application/json" id="spaces-data">{{ space_data | tojson }}</script><script type="application/json" id="spaces-sources">{{ source_options | tojson }}</script>
+<script type="application/json" id="spaces-data">{{ space_data | tojson }}</script><script type="application/json" id="spaces-sources">{{ source_options | tojson }}</script><script type="application/json" id="spaces-tags">{{ tag_options | tojson }}</script>
 </main><script defer src="{{ static_asset('js/spaces.js') }}"></script>
 {% endblock %}

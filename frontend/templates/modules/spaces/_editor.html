@@ -9,6 +9,13 @@
       </details>
       <details data-applied-filters><summary>Applied filters</summary>
         <label>Search text or #tags<input data-edit-filter="q" placeholder="Search text or #tag"></label>
+        <details open class="space-tags"><summary>Tags <span data-space-tag-count></span></summary>
+          <p class="role-help">All selected tags must match. Tags match parts of names, ignoring case.</p>
+          <label>Find tags<input type="search" data-space-tag-search placeholder="Find a tag" autocomplete="off"></label>
+          <div class="space-tag-cloud" data-space-tags-selected aria-label="Selected tags"></div>
+          <div class="space-tag-cloud" data-space-tags aria-label="Available tags"></div>
+          <p class="role-help" data-space-tags-empty hidden>No matching tags. You can enter #tags in the search field above.</p>
+        </details>
         <div class="workspace-editor-source-field"><span id="editor-sources-label">Sources</span>
           <input type="hidden" data-edit-filter="source">
           <details data-edit-sources class="workspace-editor-sources">

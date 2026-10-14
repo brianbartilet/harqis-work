@@ -349,6 +349,10 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             page.wait_for_function("document.querySelector('[data-dynamic-badge]').textContent==='Dynamic ON'")
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.screenshot(path=str(tmp_path/f'adaptive-{width}.png'),full_page=True)
+            page.locator('[data-workspace-menu]').evaluate('(el) => el.open = false')
+            page.locator('#q').fill('Project')
+            page.locator('[data-corpus-search]').click()
+            page.wait_for_url('**q=Project**')
             # Block transition during dialogs, then preserve the loaded results on error.
             page.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
             page.locator('[data-workspace-help-open]').click()
@@ -365,6 +369,7 @@ def test_adaptive_browser(authenticated_client, workspace_corpus, tmp_path, widt
             failed[0] = False
             page.locator('[data-adaptive-status] button').click()
             page.wait_for_function("document.querySelector('[data-active-view-name]').textContent==='Work'")
+            assert json.loads(parse_qs(urlparse(page.url).query)['scope'][0])['all'] == workspace_views.WorkspaceState().model_dump()
             assert page.locator('[data-manage-spaces]').get_attribute('href') == '/spaces'
             assert '1 matching entries' in page.locator('[data-corpus-results]').inner_text()
             page.wait_for_function("document.querySelector('[data-activity-body]').classList.contains('workspace-arrive')")

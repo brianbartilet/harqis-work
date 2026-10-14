@@ -242,6 +242,7 @@
     const tokens = form.elements.q.value.split(/\s+/).filter(Boolean);
     const matching = tokens.filter(token => token.startsWith('#') && tag.toLowerCase().includes(token.slice(1).toLowerCase()));
     form.elements.q.value = (matching.length ? tokens.filter(token => !matching.includes(token)) : [...tokens, '#' + tag]).join(' ');
+    editedFilters.add('q');
     form.requestSubmit();
   }));
   const search = $('[data-corpus-search]');
@@ -256,8 +257,7 @@
     $('[data-search-label]').textContent = 'Searching…';
     busy = true;
     try {
-      const data = await savePreferences({manual:activeIds, dynamic:dynamicOn, applied:snapshot()});
-      await loadCombined(data, data.active, data.preferences.dynamic);
+      await loadCombined(viewData, activeIds, dynamicOn, false, localSearchUrl(snapshot()));
     } catch (error) {
       status.textContent = error.message; menu.open = true;
     } finally {
@@ -302,13 +302,21 @@
       }
       return state;
     });
-    const applied = data.preferences.applied || {};
-    const defaults = {q:'',source:'',date_field:'created',date_from:'',date_to:'',rolling:0,sort:'desc',page_size:20};
-    if (!dynamic && ids.length === 1 && Object.entries(applied).every(([key,value]) => value === defaults[key])) {
+    const applied = {q:'',source:'',date_field:'created',date_from:'',date_to:'',rolling:0,sort:'desc',page_size:20};
+    if (!dynamic && ids.length === 1) {
       const view = data.views.find(view => view.id === ids[0]);
       if (view) return viewUrl(view);
     }
     return workspacePath+'?' + new URLSearchParams({...applied, workspace_revision:data.preferences.revision, views:ids.join(','), dynamic:dynamic ? '1' : '0', scope:JSON.stringify({any:clauses, all:applied})});
+  }
+  function localSearchUrl(state) {
+    // Always retain the saved Space predicates, even for a single Space.
+    const base = new URL(combinedUrl(viewData, activeIds, true), location.origin);
+    const scope = JSON.parse(base.searchParams.get('scope'));
+    scope.all = state;
+    return workspacePath + '?' + new URLSearchParams({...state,
+      views:activeIds.join(','), dynamic:dynamicOn ? '1' : '0',
+      workspace_revision:preferences.revision, scope:JSON.stringify(scope)});
   }
   let transitioning = false;
   async function loadCombined(data, ids, dynamic, automatic = false, explicitUrl = null) {
@@ -425,8 +433,9 @@
   let pollInFlight = false;
   async function checkDynamic(force = false) {
     if (transitioning || busy || pollInFlight || disposed || document.hidden || document.querySelector('#followups-board[data-busy=true]') || document.querySelector('dialog[open]:not(#followups-board)') || (menu.open && !(graph && dynamicOn && !picker.open && !pickerChanged))) return;
-    // Applied filters are shared; unfinished typing stays local until submitted.
-    if (JSON.stringify(snapshot()) !== initialFilterState) {
+    // Other surfaces retain their unfinished-edit guard. Corpus follows Space
+    // changes and clears its local filters, including unfinished edits.
+    if ((kanban || graph) && JSON.stringify(snapshot()) !== initialFilterState) {
       $('[data-adaptive-status]').textContent = 'Space sync paused while filters are being edited. Apply your filters to sync.';
       return;
     }
@@ -450,8 +459,7 @@
     if (disposed || busy || transitioning || !reset || event.ctrlKey || event.metaKey || event.shiftKey || event.button) return;
     event.preventDefault();
     try {
-      const data = await savePreferences({applied:{}});
-      await loadCombined(data, data.active, data.preferences.dynamic);
+      await loadCombined(viewData, activeIds, dynamicOn);
     } catch (error) { status.textContent = error.message; menu.open = true; }
   });
   const dynamicTimer = setInterval(checkDynamic, 15000);

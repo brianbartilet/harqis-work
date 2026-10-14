@@ -123,6 +123,9 @@ def listing():
         stored = db.execute('SELECT payload FROM corpus_view_preferences WHERE singleton=1').fetchone()
         prefs = json.loads(stored[0]) if stored else ViewPreferences(manual=[last[0]] if last and last[0] else []).model_dump()
         prefs = ViewPreferences.model_validate(prefs).model_dump()
+        # Legacy search snapshots are no longer shared context. Keep saved
+        # Space definitions intact and tolerate older clients' payloads.
+        prefs['applied'] = WorkspaceState().model_dump()
         prefs['timezone'] = profile_timezone
         prefs['manual'] = [identity for identity in prefs['manual'] if any(v['id'] == identity for v in views)]
         active = active_views(views, prefs)
@@ -219,6 +222,7 @@ def save_preferences(payload):
         if payload.dynamic and not any(json.loads(row[0]) for row in db.execute('SELECT s.payload FROM corpus_view_schedules s JOIN corpus_workspace_views v ON v.id=s.view_id')):
             raise HTTPException(422, 'Add a time block in Edit View → Assign schedules before enabling Dynamic mode.')
         values = payload.model_dump()
+        values['applied'] = WorkspaceState().model_dump()
         values['timezone'] = profile_timezone
         values['manual'] = list(dict.fromkeys(values['manual']))
         values['revision'] = revision + 1
@@ -232,8 +236,8 @@ def selection_url(snapshot, identities=None, dynamic=False):
     identities = snapshot['active'] if identities is None else identities
     chosen = [v for v in snapshot['views'] if v['id'] in identities]
     today = datetime.now(ZoneInfo(snapshot['preferences']['timezone'])).date()
-    applied = snapshot['preferences'].get('applied', WorkspaceState().model_dump())
-    if not dynamic and len(chosen) == 1 and applied == WorkspaceState().model_dump():
+    applied = WorkspaceState().model_dump()
+    if not dynamic and len(chosen) == 1:
         return '/hfl-corpus?' + urlencode({**chosen[0]['state'], 'workspace': chosen[0]['id'], 'workspace_revision': snapshot['preferences']['revision']})
     scope = {'any': [resolved(v['state'], today) for v in chosen], 'all': resolved(applied, today)}
     return '/hfl-corpus?' + urlencode({**applied, 'views': ','.join(v['id'] for v in chosen), 'scope': json.dumps(scope, separators=(',', ':')), 'dynamic': int(dynamic), 'workspace_revision': snapshot['preferences']['revision']})

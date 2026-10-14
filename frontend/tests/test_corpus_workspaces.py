@@ -54,7 +54,8 @@ def test_shared_workspace_restore_and_revision(authenticated_client, workspace_c
         locations.append(urlparse(response.headers['location']).query)
         assert client.get(response.headers['location']).status_code == 200
     assert locations[0] == locations[1]
-    assert parse_qs(locations[0])['q'] == ['planning']
+    assert parse_qs(locations[0])['q'] == ['#work']
+    assert result.json()['preferences']['applied']['q'] == ''
     assert client.put('/hfl-corpus/view-preferences', json=prefs, headers=headers).status_code == 409
     prefs = result.json()['preferences']
     cleared = client.put('/hfl-corpus/view-preferences', json={**prefs, 'manual': [], 'applied': {}}, headers=headers)
@@ -62,6 +63,19 @@ def test_shared_workspace_restore_and_revision(authenticated_client, workspace_c
     for path in ('/hfl-corpus', '/hfl-corpus/actions'):
         params = parse_qs(urlparse(client.get(path, follow_redirects=False).headers['location']).query, keep_blank_values=True)
         assert params['views'] == [''] and params['q'] == ['']
+
+
+def test_legacy_applied_snapshot_is_ignored_without_changing_spaces(authenticated_client, workspace_corpus):
+    import json
+    saved = workspace_views.save(workspace_views.WorkspaceWrite(name='Work', state={'q': '#work'}))
+    legacy = workspace_views.ViewPreferences(manual=[saved['id']], applied={'q': '#personal'}, revision=9).model_dump()
+    with workspace_views.connection() as db:
+        db.execute('INSERT INTO corpus_view_preferences VALUES (1,?)', (json.dumps(legacy),))
+    current = workspace_views.listing()
+    assert current['preferences']['revision'] == 9
+    assert current['preferences']['applied'] == workspace_views.WorkspaceState().model_dump()
+    assert current['views'][0]['state'] == saved['state']
+    assert parse_qs(urlparse(workspace_views.selection_url(current)).query)['q'] == ['#work']
 
 
 @pytest.mark.parametrize('surface', ['actions', 'graph'])
@@ -93,6 +107,7 @@ def test_workspace_cross_tab_sync_browser(authenticated_client, workspace_corpus
             board = context.new_page()
             board.goto('http://workspace.test' + workspace_views.selection_url(workspace_views.listing()).replace('/hfl-corpus?', '/hfl-corpus/'+surface+'?'))
             playwright.expect(board.locator('[data-view-picker-caption]')).to_have_text('Work')
+            before_search = client.get('/hfl-corpus/workspace-views').json()
             corpus.locator('#q').fill('planning')
             corpus.locator('[data-corpus-search]').click()
             corpus.wait_for_url('**/hfl-corpus?**views=**')
@@ -102,8 +117,24 @@ def test_workspace_cross_tab_sync_browser(authenticated_client, workspace_corpus
                 if 'Execution context was destroyed' not in str(error):
                     raise
                 board.wait_for_load_state()
-            playwright.expect(board.locator('[name=q]')).to_have_value('planning')
-            # An unfinished corpus edit must survive a change from Kanban.
+            playwright.expect(board.locator('[name=q]')).to_have_value('#work')
+            assert client.get('/hfl-corpus/workspace-views').json() == before_search
+            playwright.expect(corpus.locator('[data-corpus-results]')).to_contain_text('2 matching entries')
+            # Local filters cannot broaden the saved Space scope.
+            corpus.locator('#q').fill('#personal')
+            corpus.locator('[data-corpus-search]').click()
+            corpus.wait_for_url('**q=%23personal**')
+            playwright.expect(corpus.locator('[data-corpus-results-count]')).to_contain_text('0 matches')
+            corpus.locator('[data-workspace-reset]').first.click()
+            corpus.wait_for_url('**workspace=**')
+            playwright.expect(corpus.locator('#q')).to_have_value('#work')
+            assert client.get('/hfl-corpus/workspace-views').json() == before_search
+            corpus.locator('[data-tag-cloud]').evaluate('(el) => el.open = true')
+            corpus.locator('[data-workspace-tag=work]').click()
+            corpus.wait_for_url('**views=**')
+            playwright.expect(corpus.locator('[data-corpus-results]')).to_contain_text('2 matching entries')
+            assert client.get('/hfl-corpus/workspace-views').json() == before_search
+            # Space changes clear local filters, including unfinished edits.
             corpus.locator('#q').fill('unfinished')
             board.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
             board.locator('[data-view-picker]').evaluate('(el) => el.open = true')
@@ -112,7 +143,7 @@ def test_workspace_cross_tab_sync_browser(authenticated_client, workspace_corpus
                 board.locator('[data-view-all]').click()
             board.wait_for_function("document.querySelector('[data-view-picker-caption]')?.textContent === 'All activity' && !document.querySelector('[data-view-loading]')?.open")
             corpus.evaluate("window.dispatchEvent(new Event('focus'))")
-            playwright.expect(corpus.locator('#q')).to_have_value('unfinished')
+            playwright.expect(corpus.locator('#q')).to_have_value('')
             corpus.goto('http://workspace.test/hfl-corpus')
             playwright.expect(corpus.locator('[data-view-picker-caption]')).to_have_text('All activity')
             playwright.expect(corpus.locator('#q')).to_have_value('')

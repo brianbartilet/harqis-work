@@ -14,6 +14,13 @@ def test_manage_spaces(editor_page, workspace_corpus, width):
     page.get_by_label('Name',exact=True).fill('Learning')
     page.locator('[data-applied-filters] > summary').click()
     page.locator('[data-edit-filter=q]').fill('#work')
+    expect(page.locator('[data-space-tags-selected] button')).to_have_text('#work')
+    page.locator('[data-space-tag-search]').fill('personal')
+    page.locator('[data-space-tags] button').click()
+    expect(page.locator('[data-edit-filter=q]')).to_have_value('#work #personal')
+    page.locator('[data-space-tags-selected] [data-space-tag=personal]').click()
+    expect(page.locator('[data-edit-filter=q]')).to_have_value('#work')
+    page.locator('[data-space-tag-search]').fill('')
     page.locator('[data-edit-filter=rolling]').select_option('7')
     expect(page.locator('[data-edit-filter=date_from]')).to_be_disabled()
     page.get_by_role('button',name='Add time block').click()
@@ -25,6 +32,7 @@ def test_manage_spaces(editor_page, workspace_corpus, width):
     page.reload()
     page.locator('.space-card').click()
     expect(page.locator('[data-edit-filter=q]')).to_have_value('#work')
+    expect(page.locator('[data-space-tags-selected] button')).to_have_text('#work')
     page.locator('[data-applied-filters] > summary').click()
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     from pathlib import Path
@@ -94,3 +102,30 @@ def test_spaces_auth_and_navigation(authenticated_client):
     assert 'spaces.js?v=' in html or 'spaces.js?' in html
     client.cookies.clear()
     assert client.get('/spaces',follow_redirects=False).status_code in (302,303,307)
+
+
+def test_existing_space_tags_survive_unavailable_catalog(editor_page, workspace_corpus, monkeypatch):
+    from playwright.sync_api import expect
+    from modules.hfl_corpus import workspace_views
+    from modules.spaces import router as routes
+    from modules.hfl_corpus.remote import RemoteCorpusError
+    page, client = editor_page
+    state = {'q': 'Project planning #Wo #unlisted', 'source': 'git,notes', 'rolling': 30}
+    schedule = [{'days': [0, 1], 'start': '09:00', 'end': '17:00'}]
+    saved = workspace_views.save(workspace_views.WorkspaceWrite(name='Existing', state=state, schedule=schedule))
+    monkeypatch.setattr(routes, '_uses_remote_corpus', lambda: True)
+    def unavailable(*args, **kwargs):
+        raise RemoteCorpusError('Unavailable')
+    monkeypatch.setattr(routes.RemoteCorpusClient, 'from_settings', unavailable)
+    page.goto('https://editing.test/spaces?edit=' + saved['id'])
+    page.locator('[data-applied-filters] > summary').click()
+    expect(page.locator('[data-space-tags-selected] button')).to_have_text(['#wo', '#unlisted'])
+    page.locator('[data-space-tag-search]').fill('absent')
+    expect(page.locator('[data-space-tags-selected] button')).to_have_count(2)
+    page.get_by_role('button', name='Save Space', exact=True).click()
+    expect(page.locator('#space-status')).to_contain_text('Space saved')
+    actual = client.get('/hfl-corpus/workspace-views').json()['views'][0]
+    assert actual['state'] == saved['state']
+    assert actual['schedule'] == schedule
+    page.locator('[data-space-tag=wo]').click()
+    expect(page.locator('[data-edit-filter=q]')).to_have_value('Project planning #unlisted')

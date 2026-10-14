@@ -25,11 +25,14 @@ async def page(request: Request):
         if _uses_remote_corpus():
             result = await asyncio.to_thread(RemoteCorpusClient.from_settings().index, params={'page_size': '20', 'include_secrets': 'false', 'secret_tags': ','.join(tags)})
             sources = result.get('sources', [])
+            tag_options = result.get('tag_cloud', [])
         else:
             documents = await asyncio.to_thread(corpus_index.documents)
             view = await asyncio.to_thread(corpus_view_cache.get, documents, include_secrets=False, secret_tags=tags)
             sources = view.sources
+            tag_options = view.tag_cloud
     except RemoteCorpusError:
         sources = []
-        warning = 'Activity sources are temporarily unavailable. Saved Space sources remain editable.'
-    return templates.TemplateResponse(request, 'modules/spaces/index.html', page_context(request, user, 'spaces', csrf=make_csrf_token(user), space_data=data, source_options=sources, source_warning=warning))
+        tag_options = []
+        warning = 'Activity sources and tags are temporarily unavailable. Saved Space filters remain editable.'
+    return templates.TemplateResponse(request, 'modules/spaces/index.html', page_context(request, user, 'spaces', csrf=make_csrf_token(user), space_data=data, source_options=sources, tag_options=tag_options, source_warning=warning))

@@ -20,6 +20,17 @@ def test_filtered_matching_entries_load(editor_page, workspace_corpus):
     expect(page.locator('[data-matching-entry]')).to_have_count(2)
 
 
+def test_matching_entries_load_after_search(editor_page, workspace_corpus):
+    page, _ = editor_page
+    page.goto('https://editing.test/hfl-corpus')
+    page.locator('#q').fill('#work')
+    page.locator('[data-corpus-search]').click()
+    summary = page.locator('summary').filter(has_text='2 matching entries')
+    expect(summary).to_be_visible()
+    summary.click()
+    expect(page.locator('[data-matching-entry]')).to_have_count(2)
+
+
 @pytest.mark.parametrize('failure', ['server', 'network'])
 def test_matching_entries_can_retry_failed_load(editor_page, workspace_corpus, failure):
     page, _ = editor_page
