@@ -271,7 +271,7 @@
       function setPrMode(){
         const existing=prMode.value==='link';number.parentElement.hidden=!existing;description.parentElement.hidden=existing;
         prStatus.hidden=!existing;retryRow.hidden=!existing||!prFailed;
-        save.textContent=existing?'Link existing PR':'Publish pull request';
+        save.textContent=existing?'Link':'Publish pull request';
         hint.textContent=existing?'Choose a pull request for this repository and branch.':'Publishes a draft on GitHub using the action title. Commit and push your changes first, then mark the draft ready for review on GitHub.';
         if(existing&&!prFailed)void readPulls();
       }

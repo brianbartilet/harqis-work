@@ -355,7 +355,7 @@ def test_connector_setup_and_github_flow_in_browser(connectors,authenticated_cli
             modal.get_by_label('Pull request action',exact=True).select_option('link')
             playwright.expect(modal.get_by_label('Description',exact=True)).not_to_be_visible()
             playwright.expect(modal.get_by_text('No pull requests found for this branch.',exact=True)).to_be_visible()
-            modal.get_by_role('button',name='Link existing PR',exact=True).click()
+            modal.locator('details').filter(has=modal.get_by_label('Pull request action',exact=True)).get_by_role('button',name='Link',exact=True).click()
             assert connectors['pulls']==[]
             modal.get_by_label('Pull request action',exact=True).select_option('create')
             modal.get_by_label('Description',exact=True).fill('Browser test draft')
@@ -410,7 +410,7 @@ def test_connector_setup_and_github_flow_in_browser(connectors,authenticated_cli
             pr_picker.fill('Ship integration')
             modal.get_by_role('option',name='#1 · Ship integration · Draft',exact=True).click()
             playwright.expect(pr_picker).to_have_value('#1 · Ship integration · Draft')
-            modal.get_by_role('button',name='Link existing PR',exact=True).click()
+            modal.locator('details').filter(has=modal.get_by_label('Pull request action',exact=True)).get_by_role('button',name='Link',exact=True).click()
             playwright.expect(modal.get_by_role('link',name='PR #1',exact=True)).to_be_visible()
             assert len(connectors['pulls'])==1
             modal.get_by_role('button',name='Close',exact=True).click()
