@@ -5,27 +5,31 @@
     <div class="entry-editor-body">
       <p data-entry-editor-status role="status"></p>
       <p data-entry-editor-error role="alert" hidden></p>
-      <p data-entry-editor-source class="entry-editor-help"></p>
       <fieldset data-entry-editor-fields disabled>
         <div class="entry-editor-dates">
           <label>Date<input name="date" type="date"></label>
           <label>Time<input name="time" type="time" step="1"></label>
         </div>
-        <label>Moment<textarea name="moment" rows="2" maxlength="20000"></textarea></label>
-        <label>What happened<textarea name="what_happened" rows="6" maxlength="2000000"></textarea></label>
+        <label>Moment<textarea name="moment" rows="1" maxlength="20000"></textarea></label>
+        <label>What happened<textarea name="what_happened" rows="3" maxlength="2000000"></textarea></label>
+        <details class="entry-editor-more">
+          <summary>More details<svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg></summary>
+          <div class="entry-editor-more-body">
+        <div><span class="entry-editor-label">Source</span><p data-entry-editor-source class="entry-editor-help"></p></div>
         <label>Why it stayed<textarea name="why_it_stayed" rows="2" maxlength="100000"></textarea></label>
         <label>Possible use<textarea name="possible_use" rows="2" maxlength="100000"></textarea></label>
         <label>Tags<input name="tags" maxlength="20000" placeholder="#notes #moments"></label>
         <label>Web references<textarea name="web_references" rows="3" placeholder="One reference per line"></textarea></label>
-        <div><h3>Attachments and other references</h3>
+        <div class="entry-editor-files"><h3>Attachments and other references</h3>
           <p class="entry-editor-help">Remove detaches the reference from this entry. Stored files are retained.</p>
           <ul data-entry-editor-existing></ul>
-        </div>
-        <div><button type="button" data-entry-editor-choose>Choose files</button>
+        <div class="entry-editor-file-picker"><button type="button" data-entry-editor-choose>Choose files</button></div>
           <input data-entry-editor-files type="file" multiple hidden>
           <p class="entry-editor-help">Choose, paste, or drop files. Up to 50 files, 500 MB each. Changes apply when you save.</p>
           <ul data-entry-editor-pending></ul>
         </div>
+          </div>
+        </details>
       </fieldset>
     </div>
     <footer><button type="button" data-entry-editor-close>Cancel</button><button type="submit" data-entry-editor-save disabled>Save entry</button></footer>

@@ -52,7 +52,8 @@
   async function open(anchor) {
     const sequence = ++ticket;
     snapshot = null; pending = []; existing = []; saved = false;
-    form.reset(); renderFiles(); fields.disabled = true; save.disabled = true;
+    form.reset(); dialog.querySelector('.entry-editor-more').open = false;
+    renderFiles(); fields.disabled = true; save.disabled = true;
     dialog.querySelector('[data-entry-editor-source]').textContent = '';
     showError(''); status.textContent = 'Loading entry…';
     if (!dialog.open) dialog.showModal();
@@ -75,7 +76,10 @@
       form.elements.moment.focus();
     } catch (failure) { if (sequence === ticket) { status.textContent = ''; showError(failure.message || 'Could not load entry. Close and try again.'); } }
   }
-  document.querySelectorAll('[data-entry-edit]').forEach(button => button.addEventListener('click', () => open(button.dataset.entryEdit)));
+  document.querySelectorAll('[data-entry-edit]').forEach(button => {
+    button.addEventListener('click', () => open(button.dataset.entryEdit));
+    button.disabled = false;
+  });
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (!snapshot || saving || saved) return;
@@ -95,7 +99,7 @@
       saved = true;
       if (body.warning) sessionStorage.setItem('hfl-entry-save-warning', body.warning);
       const url = new URL(location.href); url.hash = body.anchor;
-      location.replace(url); location.reload();
+      history.replaceState(null, '', url); location.reload();
     } catch (failure) {
       status.textContent = ''; showError(failure.message || 'Save could not be confirmed. Reload and check before retrying.');
       fields.disabled = false; save.disabled = false;

@@ -4490,7 +4490,7 @@ def test_memory_pin_prompt_fields_and_preview(authenticated_client):
 
 
 @pytest.mark.parametrize("width", [390, 1440])
-def test_edit_entry_opens_source_at_selected_entry(authenticated_client, monkeypatch, width):
+def test_edit_entry_opens_selected_entry_dialog(authenticated_client, monkeypatch, width, tmp_path):
     import modules.hfl_corpus.router as routes
     playwright = pytest.importorskip("playwright.sync_api")
     text = "## Repeated heading\nEntry ID: hfl-first\nWhat happened: " + ("Long wrapped narrative. " * 300) + "\n\n## Repeated heading\nEntry ID: hfl-second\nWhat happened: Target entry\n"
@@ -4520,13 +4520,22 @@ def test_edit_entry_opens_source_at_selected_entry(authenticated_client, monkeyp
             page.route("**/*", route)
             page.goto("http://entry.test/hfl-corpus/document/edit.md")
             page.locator("[data-entry-edit]").nth(1).click()
-            editor = page.locator("[data-document-edit-text]")
+            editor = page.locator('[data-entry-editor]')
+            playwright.expect(editor.locator('[name="what_happened"]')).to_have_value('Target entry')
             assert editor.is_visible()
-            assert editor.input_value() == text
-            assert editor.evaluate("e => e.selectionStart") == text.rindex("## Repeated heading")
-            assert editor.evaluate("e => e.scrollTop") > 0
-            assert editor.bounding_box()["y"] < 844
-            page.locator("[data-document-edit-discard]").click()
+            assert not page.locator('[data-document-edit-text]').is_visible()
+            assert editor.bounding_box()['y'] >= 0
+            assert editor.evaluate('e => e.scrollWidth <= e.clientWidth')
+            editor.locator('[name="moment"]').fill('Unsaved change')
+            editor.locator('.entry-editor-more summary').click()
+            editor.locator('[data-entry-editor-files]').set_input_files({'name': 'extra.txt', 'mimeType': 'text/plain', 'buffer': b'hello'})
+            assert editor.locator('[data-entry-editor-pending] li').count() == 1
+            page.screenshot(path=str(tmp_path / f'entry-editor-{width}.png'))
+            editor.get_by_role('button', name='Cancel', exact=True).click()
+            page.locator('[data-entry-edit]').nth(1).click()
+            playwright.expect(editor.locator('[name="moment"]')).to_have_value('')
+            assert editor.locator('[data-entry-editor-pending] li').count() == 0
+            page.keyboard.press('Escape')
             assert page.locator("[data-document-rendered]").is_visible()
             with page.expect_navigation():
                 page.locator('[data-entry-action="secret"]').nth(1).click()

@@ -236,15 +236,18 @@ window.HflActionConnections = {attach(dialog,getItem) {
   dialog._connectionsCleanup?.();
   const form=dialog.querySelector('form'), body=form.querySelector('.agenda-form-body');
   if(!body)return;
-  dialog.classList.add('has-connections-sidebar');
   const aside=document.createElement('aside');aside.className='item-connections-sidebar';aside.setAttribute('aria-label','Item integrations');body.after(aside);
+  const updateLayout=()=>{const saved=!!getItem()?.id;aside.hidden=!saved;dialog.classList.toggle('has-connections-sidebar',saved);};
+  updateLayout();
+  window.addEventListener('hfl:ideas-updated',updateLayout);
+  window.addEventListener('hfl:actions-updated',updateLayout);
   const connections=document.createElement('div');aside.append(connections);
   const root=createRoot(connections);root.render(<Sidebar getItem={getItem}/>);
   const agentSettings=form.querySelector('[data-action-agent-settings]');
   const agentSettingsHome=agentSettings?document.createComment('Agent settings home'):null;
   if(agentSettings){agentSettings.before(agentSettingsHome);aside.append(agentSettings);}
   const cleanupGithub=window.HarqisIntegrations?.attachGithub(aside,getItem);
-  const cleanup=()=>{cleanupGithub?.();root.unmount();if(agentSettingsHome)agentSettingsHome.replaceWith(agentSettings);aside.remove();dialog.removeEventListener('close',cleanup);delete dialog._connectionsCleanup;};
+  const cleanup=()=>{cleanupGithub?.();root.unmount();if(agentSettingsHome)agentSettingsHome.replaceWith(agentSettings);aside.remove();dialog.classList.remove('has-connections-sidebar');window.removeEventListener('hfl:ideas-updated',updateLayout);window.removeEventListener('hfl:actions-updated',updateLayout);dialog.removeEventListener('close',cleanup);delete dialog._connectionsCleanup;};
   dialog._connectionsCleanup=cleanup;dialog.addEventListener('close',cleanup,{once:true});
 }, open(item, trigger) {
   activeDialog?.close();

@@ -46,6 +46,7 @@ from modules.hfl_corpus.document_edit import (
     update_document_text,
 )
 from modules.hfl_corpus.entry_enrichment import enrich_manual_entry
+from modules.hfl_corpus.entry_edit import EntryUpdate, save_entry
 from modules.hfl_corpus.secrets import (
     document_has_secrets,
     filter_document,
@@ -512,6 +513,26 @@ async def hfl_api_document(
         ),
         "references": references,
     }
+
+
+@router.post('/entry-edit/{relative_path:path}')
+async def hfl_api_update_entry(relative_path: str, payload: str = Form(...),
+                               files: list[UploadFile] = File(default=[])):
+    try:
+        update = EntryUpdate.model_validate_json(payload)
+        document = corpus_index.get(relative_path)
+        if not document:
+            raise HTTPException(404, 'Corpus document not found')
+        return await save_entry(document, update, files, corpus_dir=resolve_corpus_root())
+    except DocumentConflictError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(500, 'The entry could not be saved.') from exc
+    finally:
+        for upload in files:
+            await upload.close()
 
 
 @router.post("/document/{relative_path:path}")

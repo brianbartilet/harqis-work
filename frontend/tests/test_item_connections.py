@@ -6,6 +6,40 @@ import pytest
 from test_hfl_ideas import ideas, BASE, payload
 
 
+@pytest.mark.parametrize('kind', ['idea', 'action'])
+def test_new_item_sidebar_hidden_until_saved(kind):
+    from pathlib import Path
+    playwright = pytest.importorskip('playwright.sync_api')
+    frontend = Path(__file__).resolve().parents[1]
+    with playwright.sync_playwright() as engine:
+        options = {'headless': True}
+        if not Path(engine.chromium.executable_path).exists():
+            options['channel'] = 'msedge'
+        browser = engine.chromium.launch(**options)
+        try:
+            page = browser.new_page()
+            page.set_content('<dialog class="agenda-dialog"><form><div class="agenda-form-body">Details</div><section data-action-agent-settings>Agent settings</section></form></dialog>')
+            page.add_style_tag(path=str(frontend / 'static/css/hfl-timeline.css'))
+            page.add_style_tag(path=str(frontend / 'static/css/hfl-ideas.css'))
+            page.add_script_tag(path=str(frontend / 'static/js/action-connections.js'))
+            page.evaluate('''kind => {window.item=null;window.editor=document.querySelector('dialog');
+                HflActionConnections.attach(editor,()=>item);editor.showModal();}''', kind)
+            sidebar = page.locator('.item-connections-sidebar')
+            assert not sidebar.is_visible()
+            assert not page.locator('.has-connections-sidebar').count()
+            assert not page.locator('[data-action-agent-settings]').is_visible()
+            page.evaluate('''kind => {window.item={id:'saved',kind};window.dispatchEvent(new Event('hfl:ideas-updated'));}''', kind)
+            assert sidebar.is_visible()
+            assert page.locator('.has-connections-sidebar').count() == 1
+            page.evaluate('editor.close()')
+            playwright.expect(sidebar).to_have_count(0)
+            assert not page.locator('.has-connections-sidebar').count()
+            page.evaluate('''() => {window.item=null;HflActionConnections.attach(editor,()=>item);editor.showModal();}''')
+            assert not page.locator('.item-connections-sidebar').is_visible()
+        finally:
+            browser.close()
+
+
 def test_manual_idea_prefix_and_legacy_retry(ideas, authenticated_client):
     raw = payload(description='', body='Keep books')
     item = ideas.save_idea(raw, 'owner')

@@ -46,7 +46,7 @@ def doc(tmp_path, monkeypatch):
     monkeypatch.setattr(corpus, 'resolve_corpus_root', lambda: tmp_path)
     index = corpus.CorpusIndex(ttl_seconds=0)
     document = index.documents(force=True)[0]
-    monkeypatch.setattr(entry_edit.corpus_index, 'documents', lambda **kwargs: ())
+    monkeypatch.setattr(entry_edit.corpus_index, 'documents', lambda *args, **kwargs: ())
     monkeypatch.setattr(entry_edit, 'sync_entry', lambda *args: True)
     return document
 
@@ -149,3 +149,85 @@ def test_legacy_entry_gets_stable_id_without_source_rewrite(doc):
     assert identity.startswith('hfl-')
     assert 'Entry ID: ' + identity in text
     assert 'Source: notes' in text
+
+
+def test_browser_save_reopens_with_details_and_attachments(doc, authenticated_client, monkeypatch, tmp_path):
+    from modules.hfl_corpus import router
+    from workflows.hfl import entity_events
+    playwright = pytest.importorskip('playwright.sync_api')
+    monkeypatch.setattr(entity_events, 'notify_change', lambda *args: None)
+    monkeypatch.setattr(router, '_uses_remote_corpus', lambda: False)
+    monkeypatch.setattr(router, 'resolve_corpus_root', lambda: tmp_path)
+    monkeypatch.setattr(entry_edit, 'resolve_upload_inbox', lambda: tmp_path / 'inbox')
+    def latest(path):
+        index = corpus.CorpusIndex(ttl_seconds=0)
+        return next(item for item in index.documents(force=True) if item.relative_path == path)
+    monkeypatch.setattr(router.corpus_index, 'get', latest)
+    with playwright.sync_playwright() as engine:
+        options = {'headless': True}
+        if not Path(engine.chromium.executable_path).exists():
+            options['channel'] = 'msedge'
+        browser = engine.chromium.launch(**options)
+        try:
+            page = browser.new_page(viewport={'width': 390, 'height': 844})
+            errors = []
+            page.on('pageerror', lambda error: errors.append(error.stack))
+            def route(intercept):
+                request = intercept.request
+                if not request.url.startswith('http://entry.test/'):
+                    intercept.abort(); return
+                response = authenticated_client.request(request.method, request.url.replace('http://entry.test', ''),
+                    content=request.post_data_buffer,
+                    headers={key: value for key, value in request.headers.items() if key in ('content-type', 'x-csrf-token')})
+                intercept.fulfill(status=response.status_code, body=response.content,
+                    headers={'content-type': response.headers.get('content-type', 'text/html')})
+            page.route('**/*', route)
+            page.goto('http://entry.test/hfl-corpus/document/' + doc.relative_path)
+            page.locator('[data-entry-edit]').first.click()
+            editor = page.locator('[data-entry-editor]')
+            playwright.expect(editor.locator('[name="moment"]')).to_have_value('Original')
+            editor.locator('[name="moment"]').fill('Saved in browser')
+            editor.locator('[name="date"]').fill('2026-10-12')
+            editor.locator('.entry-editor-more summary').click()
+            editor.locator('[data-entry-editor-existing] button').click()
+            editor.locator('[data-entry-editor-files]').set_input_files({'name':'new.txt','mimeType':'text/plain','buffer':b'new attachment'})
+            editor.locator('[data-entry-editor-pending]').scroll_into_view_if_needed()
+            page.screenshot(path=str(tmp_path / 'entry-editor-attachments.png'))
+            with page.expect_response(lambda response: '/hfl-corpus/document/' in response.url):
+                editor.get_by_role('button', name='Save entry', exact=True).click()
+            playwright.expect(page.locator('[data-document-rendered]')).to_contain_text('Saved in browser')
+            page.wait_for_load_state('load')
+            page.locator('[data-entry-edit]').first.click()
+            assert not errors, errors
+            playwright.expect(editor).to_be_visible()
+            playwright.expect(editor.locator('[name="moment"]')).to_have_value('Saved in browser')
+            playwright.expect(editor.locator('[name="date"]')).to_have_value('2026-10-12')
+            editor.locator('.entry-editor-more summary').click()
+            assert editor.locator('[data-entry-editor-existing]').inner_text().startswith('new.txt')
+            assert '/inbox/shared.pdf' not in doc.path.read_text(encoding='utf-8')
+            assert doc.path.read_text(encoding='utf-8').split('## 2026-10-13 18:00')[1] == TEXT.split('## 2026-10-13 18:00')[1]
+            assert list((tmp_path / 'inbox').rglob('new.txt'))[0].read_bytes() == b'new attachment'
+        finally:
+            browser.close()
+
+
+def test_remote_entry_upload_preserves_conflict_status(doc, authenticated_client, monkeypatch):
+    import httpx
+    import json
+    from modules.hfl_corpus import router, remote
+    from modules.hfl_shares.security import make_csrf_token
+    monkeypatch.setattr(router, '_uses_remote_corpus', lambda: True)
+    client = remote.RemoteCorpusClient(base_url='http://canonical.test/api/hfl', token='test', timeout=5)
+    monkeypatch.setattr(client, 'document', lambda *args, **kwargs: (doc, []))
+    monkeypatch.setattr(remote.RemoteCorpusClient, 'from_settings', lambda: client)
+    seen = []
+    def respond(request):
+        seen.append(request)
+        return httpx.Response(409, json={'detail':'Newer document exists'})
+    monkeypatch.setattr(remote, '_http_client', lambda: httpx.Client(transport=httpx.MockTransport(respond)))
+    response = authenticated_client.post('/hfl-corpus/entry-edit/' + doc.relative_path,
+        headers={'X-CSRF-Token':make_csrf_token('frontend-test-user')},
+        data={'payload':json.dumps(payload(doc).model_dump())}, files={'files':('new.txt', b'hello')})
+    assert response.status_code == 409
+    assert 'Newer document exists' in response.json()['detail']
+    assert b'filename="new.txt"' in seen[0].content

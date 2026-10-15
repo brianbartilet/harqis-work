@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
+from collections.abc import Callable
 
 from filelock import BaseFileLock, FileLock
 from pydantic import BaseModel, Field
@@ -75,6 +76,7 @@ def update_document_text(
     *,
     corpus_dir: Path,
     expected_updated_at: str | None = None,
+    after_write: Callable[[], None] | None = None,
 ) -> Path:
     """Replace a known corpus document without allowing arbitrary path writes."""
     root = corpus_dir.expanduser().resolve()
@@ -102,6 +104,10 @@ def update_document_text(
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary, path)
+            if after_write is not None:
+                # Entry projections must be updated under the same corpus lock,
+                # otherwise a slower earlier save can overwrite a newer index.
+                after_write()
         finally:
             temporary.unlink(missing_ok=True)
     from workflows.hfl.entity_events import notify_change

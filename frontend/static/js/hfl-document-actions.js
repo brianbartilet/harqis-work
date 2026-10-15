@@ -22,7 +22,7 @@
     return data;
   }
   document.addEventListener('click', async event => {
-    const link = event.target.closest('.corpus-followup-action');
+    const link = event.target.closest('a.corpus-followup-action[href]');
     if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     if (busy) return;

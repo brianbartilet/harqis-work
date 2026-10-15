@@ -2,6 +2,7 @@
 {% block title %}HARQIS — {{ document.name }}{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ static_asset('css/hfl-timeline.css') }}">
+<link rel="stylesheet" href="{{ static_asset('css/hfl-entry-editor.css') }}">
 <style>
   .corpus-entry-header { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:center; gap:.75rem; margin:3.25rem 0 .85rem; padding-bottom:.6rem; border-bottom:1px solid #1e293b; }
   .corpus-action-toast { display:flex; align-items:center; justify-content:space-between; gap:.75rem; margin:.5rem 0 1rem; padding:.35rem .6rem .35rem .85rem; border:1px solid #155e75; border-radius:.6rem; background:rgba(8,47,73,.5); color:#a5f3fc; font-size:.8rem; line-height:1.5; }
@@ -348,16 +349,6 @@
         history.replaceState(null, '', '#' + anchor);
       };
       open.addEventListener('click', () => editEntry());
-      document.querySelectorAll('[data-entry-edit]').forEach(button => {
-        button.addEventListener('click', () => editEntry(button.dataset.entryEdit));
-      });
-      const pendingEdit = new URL(window.location.href).searchParams.get('edit_entry');
-      if (pendingEdit) {
-        const url = new URL(window.location.href);
-        url.searchParams.delete('edit_entry');
-        history.replaceState(null, '', url);
-        editEntry(pendingEdit);
-      }
       document.querySelectorAll('[data-secret-reveal]').forEach(button => {
         button.addEventListener('click', async () => {
           if ({{ 'true' if not secrets_authorized else 'false' }} && !await unlock()) return;
@@ -754,4 +745,6 @@
     })();
   </script>
 </main>
+{% include "modules/hfl_corpus/partials/entry_editor.html" %}
+<script src="{{ static_asset('js/hfl-entry-editor.js') }}" defer></script>
 {% endblock %}

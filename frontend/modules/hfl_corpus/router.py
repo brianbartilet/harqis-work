@@ -63,6 +63,7 @@ from modules.hfl_corpus.document_edit import (
     update_document_text,
 )
 from modules.hfl_corpus.entry_enrichment import enrich_manual_entry
+from modules.hfl_corpus.entry_edit import EntryUpdate, entry_details, locate, save_entry
 from modules.hfl_corpus.secrets import (
     document_has_secrets,
     filter_documents,
@@ -323,9 +324,9 @@ def _anchor_rendered_entries(rendered: Markup, document) -> Markup:
                        'class="corpus-idea-action">Add idea</a>')
         header = _display_entry_header(match.group(1))
         heading = f'<h2 id="{html.escape(entry.anchor, quote=True)}" class="scroll-mt-40">{header}</h2>'
-        edit = (f'<button type="button" class="corpus-followup-action" '
+        edit = (f'<button type="button" disabled class="corpus-followup-action" '
                 f'data-entry-edit="{html.escape(entry.anchor, quote=True)}" '
-                'aria-label="Edit this entry in the document">Edit</button>')
+                'aria-label="Edit this activity entry">Edit entry</button>')
         for operation, label in [('archive', 'Archive'), ('secret', 'Make secret')]:
             if operation == 'secret' and is_secret_entry(entry, protected_tags):
                 continue
@@ -1443,6 +1444,64 @@ async def hfl_document(
             show_secrets=bool(show_secrets and authorized),
         ),
     )
+
+
+async def _editable_entry_document(request, relative_path, anchor, *, write=False):
+    _workspace_authorize(request, write=write)
+    profile = get_profile_store().get()
+    tags = normalize_secret_tags(profile.secret_tags)
+    if _uses_remote_corpus():
+        document = (await asyncio.to_thread(
+            RemoteCorpusClient.from_settings().document,
+            relative_path, include_secrets=True, secret_tags=tags,
+        ))[0]
+    else:
+        document = corpus_index.get(relative_path)
+    if not document:
+        raise HTTPException(404, 'Corpus document not found')
+    entry = locate(document, anchor)[0]
+    if is_secret_entry(entry, tags) and not secrets_unlocked(request, profile):
+        raise HTTPException(403, 'Unlock secrets before editing this entry.')
+    return document
+
+
+@router.get('/entry-edit/{relative_path:path}')
+async def hfl_entry_edit_details(request: Request, relative_path: str, anchor: str):
+    try:
+        document = await _editable_entry_document(request, relative_path, anchor)
+        return entry_details(document, anchor)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except RemoteCorpusError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@router.post('/entry-edit/{relative_path:path}')
+async def hfl_entry_edit_save(request: Request, relative_path: str,
+                              payload: str = Form(...), files: list[UploadFile] = File(default=[])):
+    try:
+        update = EntryUpdate.model_validate_json(payload)
+        document = await _editable_entry_document(request, relative_path, update.anchor, write=True)
+        # Validate against the same full snapshot on both local and remote hosts.
+        from modules.hfl_corpus.entry_edit import apply_update
+        apply_update(document, update)
+        if _uses_remote_corpus():
+            return await asyncio.to_thread(RemoteCorpusClient.from_settings().update_entry,
+                                          relative_path, update.model_dump(), files)
+        return await save_entry(document, update, files, corpus_dir=resolve_corpus_root())
+    except DocumentConflictError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except RemoteCorpusError as exc:
+        cause = exc.__cause__
+        code = getattr(getattr(cause, 'response', None), 'status_code', 502)
+        raise HTTPException(code if code in (400, 403, 404, 409, 413, 422) else 502, str(exc)) from exc
+    except OSError as exc:
+        raise HTTPException(500, 'The entry could not be saved.') from exc
+    finally:
+        for upload in files:
+            await upload.close()
 
 
 @router.post('/entry-action/{relative_path:path}')

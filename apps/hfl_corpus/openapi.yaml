@@ -21,6 +21,36 @@ tags:
 - name: hfl-management
   description: Actions, Memory Signal categories, and date pins
 paths:
+  /api/hfl/entry-edit/{relative_path}:
+    post:
+      summary: Update one activity entry and attach files
+      operationId: hfl_api_update_entry_api_hfl_entry_edit__relative_path__post
+      tags: [hfl-corpus-api]
+      security: [{HTTPBearer: []}]
+      parameters:
+      - {name: relative_path, in: path, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [payload]
+              properties:
+                payload:
+                  type: string
+                  description: JSON with anchor, entry_id, expected_updated_at, date, time, moment, what_happened, why_it_stayed, possible_use, tags, and references (array). Removed references are detached; files are retained. Attribution is immutable.
+                files:
+                  type: array
+                  items: {type: string, format: binary}
+      responses:
+        '200':
+          description: Saved entry identity and anchor; warning is nonempty if search synchronization failed.
+        '400': {description: Invalid edit or upload}
+        '401': {description: Invalid bearer token}
+        '404': {description: Document unavailable}
+        '409': {description: Document or entry changed since review}
+        '422': {description: Invalid form}
   /api/hfl/timeline/ideas/share-context/attachments/{kind}/{source_id}/{attachment_id}:
     get:
       summary: Download immutable workspace sharing attachment input

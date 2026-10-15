@@ -595,6 +595,13 @@ class RemoteCorpusClient:
             ))
         return document, references
 
+    def update_entry(self, relative_path, payload, uploads):
+        encoded = quote(relative_path.replace('\\', '/'), safe='/')
+        files = [('files', (upload.filename or 'upload', upload.file,
+                            upload.content_type or 'application/octet-stream')) for upload in uploads]
+        return self._post(f'/entry-edit/{encoded}', data={'payload': json.dumps(payload)},
+                          files=files, timeout=max(self.timeout, 300.0)).json()
+
     def update_document(
         self,
         relative_path: str,

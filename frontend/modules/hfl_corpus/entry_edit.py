@@ -1,9 +1,11 @@
 """Targeted entry edits: preserve the surrounding document and unknown metadata."""
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import uuid
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -109,8 +111,10 @@ def apply_update(document, payload):
                 raise ValueError('Each reference must be on one line.')
             value = '\n' + '\n'.join('- ' + ref.strip() for ref in dict.fromkeys(value) if ref.strip())
         else:
-            if _HEADER.search(value) or _FIELD.search(value):
-                raise ValueError(f'{label} cannot contain entry headings or unindented metadata labels. Indent those lines.')
+            continuation = value.partition('\n')[2]
+            if (_HEADER.search(value) or _FIELD.search(continuation) or
+                re.search(r'^\s*(Source|Machine|Entry ID|Synthesized|Moment|What happened|Why it stayed|Possible use|Tags|References):', continuation, re.MULTILINE | re.IGNORECASE)):
+                raise ValueError(f'{label} cannot contain entry headings or metadata labels. Use a Markdown quote (>) for those lines.')
             if key == 'tags':
                 value = ' '.join('#' + tag.lstrip('#') for tag in value.split())
         block = replace_field(block, label, value)
@@ -126,6 +130,9 @@ def sync_entry(text, anchor):
     entry = next(entry for entry in parse_entries(text) if entry.anchor == anchor)
     header, body = entry.text.split('\n', 1)
     parsed = HflEntry.from_markdown(header, body)
+    values = fields(body)
+    parsed = replace(parsed, **{key: values.get(label.casefold(), (0, 0, ''))[2]
+                               for key, label in LABELS.items() if key not in ('tags', 'references')})
     return bool(index_hfl_entry(parsed, source=parsed.source, synthesized=bool(parsed.synthesized)))
 
 
@@ -158,18 +165,28 @@ async def save_entry(document, payload, uploads, *, corpus_dir, inbox_dir=None):
                     os.fsync(handle.fileno())
             payload = payload.model_copy(update={'references': [*payload.references, *(str(path) for path in created)]})
             text, identity = apply_update(document, payload)
-        update_document_text(document, text, corpus_dir=corpus_dir, expected_updated_at=payload.expected_updated_at)
-        saved = True
         old_entries = parse_entries(document.text)
         index = next(i for i, item in enumerate(old_entries) if item.anchor == payload.anchor)
         anchor = parse_entries(text)[index].anchor
-        corpus_index.documents(force=True)
         warning = ''
-        try:
-            if not sync_entry(text, anchor):
+        def after_write():
+            nonlocal saved, warning
+            saved = True
+            try:
+                if not sync_entry(text, anchor):
+                    warning = 'Entry saved, but search synchronization failed. Search results may be stale.'
+            except Exception:
                 warning = 'Entry saved, but search synchronization failed. Search results may be stale.'
+        def commit():
+            update_document_text(document, text, corpus_dir=corpus_dir,
+                                 expected_updated_at=payload.expected_updated_at, after_write=after_write)
+            corpus_index.documents(force=True)
+        try:
+            await asyncio.to_thread(commit)
         except Exception:
-            warning = 'Entry saved, but search synchronization failed. Search results may be stale.'
+            if not saved:
+                raise
+            warning = 'Entry saved, but a derived view could not be refreshed. Reload to check the saved entry.'
         return {'updated': True, 'entry_id': identity, 'anchor': anchor, 'warning': warning}
     finally:
         if not saved:

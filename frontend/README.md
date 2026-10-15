@@ -445,6 +445,17 @@ Markdown, Elasticsearch, MCP, RAG, and direct filesystem consumers are not
 encrypted or filtered.
 
 Activity Corpus search and document views hide protected entries by default.
+The document page's **Edit entry** button opens a structured editor for only the
+selected entry, including date/time, narrative fields, tags, references, and file
+uploads. Source, machine, and entry identity are preserved. Attachment removal
+detaches its reference without deleting the stored file. Save checks the document
+version, updates the selected Markdown block in place (even when its date changes),
+refreshes the corpus index, and attempts an Elasticsearch upsert under the same ID.
+Search synchronization failures are reported after saving. Cancel discards staged
+changes. The separate document Edit control still edits the complete Markdown file.
+Remote readers require the canonical API's `/api/hfl/entry-edit/{relative_path}`
+endpoint; deploy the API and frontend together for this feature.
+
 Protected tags remain in the tag cloud, but locked searches return no protected
 entry content. An owner can unlock for the current browser session, then enable
 **Show secrets** on a page or reveal one blurred document entry. Mixed documents
