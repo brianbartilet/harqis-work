@@ -123,8 +123,10 @@
             <input type="date" name="date_to" value="{{ date_to }}" onclick="if (this.showPicker) this.showPicker()"
                    class="mt-1.5 block w-full rounded-lg bg-slate-950 px-2.5 py-2 text-xs text-slate-300 ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500 [color-scheme:dark]">
           </label>
+        </div>
+      </div>
           <div class="workspace-tags corpus-tags-row border-t border-blue-900/70 pt-3 lg:mt-3">
-            <span class="text-xs text-slate-500">Tags</span>
+            <span class="corpus-quick-tags-label text-xs text-slate-500">Quick tags <a href="/settings#favorite_tags" class="text-cyan-300 underline">Edit</a></span>
             <div class="corpus-favorite-tags" aria-label="Quick tags">
               {% for option in favorite_tags %}
               <a data-workspace-tag="{{ option.tag }}" data-favorite-tag href="{{ option.url }}" aria-pressed="{{ 'true' if option.active else 'false' }}"
@@ -132,7 +134,7 @@
                  class="inline-flex items-center rounded-full px-2 py-1 text-xs transition {% if option.active %}bg-emerald-950/70 text-emerald-200 ring-1 ring-emerald-700/60{% else %}bg-blue-950/50 text-blue-300 hover:bg-blue-900 hover:text-blue-100{% endif %}">#{{ option.tag }}</a>
               {% endfor %}
             </div>
-            <a href="/settings#favorite_tags" class="corpus-edit-quick-tags text-xs text-cyan-300 underline">Edit quick tags</a>
+            <button type="button" class="corpus-feed-open" data-curated-feed-open disabled title="View matching entries (V)">View timeline</button>
           {% if tag_cloud %}
           <details data-tag-cloud class="group corpus-all-tags">
             <summary class="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-1 py-1.5 text-xs font-medium text-slate-500 transition hover:text-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden">
@@ -158,8 +160,6 @@
           </details>
           {% endif %}
           </div>
-        </div>
-      </div>
     </div>
   </form>
 
@@ -396,6 +396,8 @@
 })();
 </script>
 <script defer src="{{ static_asset('js/corpus-workspaces.js') }}"></script>
+{% include 'modules/hfl_corpus/partials/curated_feed.html' %}
+<script defer src="{{ static_asset('js/corpus-feed.js') }}"></script>
 <script defer src="{{ static_asset('js/corpus-matches.js') }}"></script>
 <script defer src="{{ static_asset('js/view-visualizer.js') }}"></script>
 {% endblock %}

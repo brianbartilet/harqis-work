@@ -232,6 +232,23 @@
       location.assign('/spaces?draft=1');
     } catch (error) { status.textContent = 'Could not carry filters to Spaces. Allow session storage and try again.'; }
   });
+  document.addEventListener('corpus:save-feed-space', event => {
+    try {
+      const params = event.detail.params;
+      const state = {q:'',source:'',date_field:'created',date_from:'',date_to:'',rolling:0,sort:event.detail.sort,page_size:50};
+      for (const key of ['q','source','date_field','date_from','date_to']) state[key] = params[key] || state[key];
+      state.rolling = Number(params.rolling || 0);
+      const scope = JSON.parse(params.scope || '{"any":[]}');
+      const selectedViews = views.filter(view => activeIds.includes(view.id));
+      // Retain rolling date rules rather than today's resolved date bounds.
+      if (selectedViews.length && selectedViews.length === scope.any?.length) scope.any = selectedViews.map(view => view.state);
+      if (scope.any?.length) state.entry_scope = JSON.stringify({...scope, all:{...scope.all, ...state}});
+      sessionStorage.setItem('harqis:space-draft', JSON.stringify({state, ids:[], combined:false, feed:true, sources:sources.map(input => input.value), at:Date.now()}));
+      location.assign('/spaces?draft=1');
+    } catch (_) {
+      document.querySelector('[data-feed-status]').textContent = 'Could not carry filters to Spaces. Allow session storage and try again.';
+    }
+  });
   document.addEventListener('click', event => { if (!menu.contains(event.target)) menu.open = false; });
   menu.addEventListener('keydown', event => { if (event.key === 'Escape') { menu.open = false; menu.querySelector('summary').focus(); } });
   // Tag clicks retain pending source/date selections as well as the existing
@@ -302,7 +319,7 @@
       }
       return state;
     });
-    const applied = {q:'',source:'',date_field:'created',date_from:'',date_to:'',rolling:0,sort:'desc',page_size:20};
+    const applied = {q:'',source:'',date_field:'created',date_from:'',date_to:'',rolling:0,sort:'desc',page_size:20,entry_scope:''};
     if (!dynamic && ids.length === 1) {
       const view = data.views.find(view => view.id === ids[0]);
       if (view) return viewUrl(view);

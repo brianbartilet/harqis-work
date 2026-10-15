@@ -98,6 +98,15 @@ router = APIRouter(
 )
 
 
+@router.get('/curated-feed')
+async def curated_feed(request: Request, include_secrets: bool = False, secret_tags: str = ''):
+    from modules.hfl_corpus.curated_feed import feed_page
+    from fastapi.responses import JSONResponse
+    result = await asyncio.to_thread(feed_page, dict(request.query_params),
+        include_secrets=include_secrets, secret_tags=_protected_tags(secret_tags))
+    return JSONResponse(result, headers={'Cache-Control': 'no-store'})
+
+
 def _preview_reference_path(token: str):
     root = resolve_corpus_root()
     path = load_download_token(token, allowed_reference_roots(root))

@@ -36,8 +36,13 @@ def predicate(state):
     start = date.fromisoformat(state['date_from']) if state.get('date_from') else None
     end = date.fromisoformat(state['date_to']) if state.get('date_to') else None
     field = state.get('date_field', 'created')
+    nested = parse_scope(state.get('entry_scope', ''))
+    nested_any = [predicate(resolved(item)) for item in nested.any]
+    nested_all = predicate(resolved(nested.all)) if state.get('entry_scope') else None
 
     def matches(document, entry):
+        if nested_all and not (nested_all(document, entry) and (not nested_any or any(check(document, entry) for check in nested_any))):
+            return False
         if sources and entry.source.strip().casefold() not in sources:
             return False
         if not all(any(needle in tag.casefold() for tag in entry.tags) for needle in tags):
@@ -72,6 +77,8 @@ def request_scope(request):
     from fastapi import HTTPException
     try:
         scope = parse_scope(request.query_params.get('scope', ''))
+        if not request.query_params.get('scope') and request.query_params.get('entry_scope'):
+            scope = ViewScope(any=[WorkspaceState(entry_scope=request.query_params['entry_scope'])])
         if scope.any:
             overrides = {key: value for key, value in request.query_params.items() if key in WorkspaceState.model_fields}
             # Query strings carry text; numeric Literal fields require integers.

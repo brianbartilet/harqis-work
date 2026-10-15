@@ -20,7 +20,7 @@
   document.addEventListener('DOMContentLoaded',()=>{
     const board=query('[data-actions-page]'), graph=query('.kg-shell'), corpus=query('[data-corpus-index]');
     if((!board&&!graph&&!corpus)||graph?.dataset.readonly==='true')return;
-    const pageKeys=board?[['i','Ideas drawer'],['a','Create action'],['d','Create idea'],['m','Multiselect'],['Space','Refresh']]:graph?[['a','Explore activity graph'],['e','Entities'],['f','Filters'],['b','Board guide'],['r','Refresh'],['Space','Reapply preset and refresh'],['p','Fit view'],['[','Zoom in'],[']','Zoom out'],['\\','Toggle fullscreen']]:[['e','Create entry'],['a','Create action'],['d','Create idea'],['x','Secrets'],['t','Tags'],['m','Expand/collapse memory signal'],['c','Manage categories'],['Space','Go to today']];
+    const pageKeys=board?[['i','Ideas drawer'],['a','Create action'],['d','Create idea'],['m','Multiselect'],['Space','Refresh']]:graph?[['a','Explore activity graph'],['e','Entities'],['f','Filters'],['b','Board guide'],['r','Refresh'],['Space','Reapply preset and refresh'],['p','Fit view'],['[','Zoom in'],[']','Zoom out'],['\\','Toggle fullscreen']]:[['v','View timeline'],['e','Create entry'],['a','Create action'],['d','Create idea'],['x','Secrets'],['t','Tags'],['m','Expand/collapse memory signal'],['c','Manage categories'],['Space','Go to today']];
     const contextKeys=board?[['e','Edit'],['o','Move to done'],['a','Agents'],['i','Dismiss'],['h','History'],['x','Expand/collapse card sections']]:graph?[['t','Add thought'],['c','Connect on this board'],['n','Clone'],['d','Dismiss'],['r','Promote'],['e','Edit'],['u','Use as starting point'],['o','Board connections'],['x','Clear selection'],['f','Focus connection'],['Delete','Remove selected from board'],['↑ / ↓','+/- orb size']]:[];
     const dialog=document.createElement('dialog');dialog.className='context-help';dialog.id='activity-hotkey-help';dialog.setAttribute('aria-labelledby','activity-hotkey-title');
     const header=document.createElement('header');header.className='context-help-header';
@@ -61,7 +61,7 @@
       for(const handler of handlers)if(handler(key,event)){event.preventDefault();return;}
       if(key==='n'){event.preventDefault();click(query('[data-dynamic-toggle]'));return;}
       if(corpus){
-        const selectors={e:'[data-create-entry-open]',a:'[data-create-action-open]',x:'[data-secrets-toggle], [data-secrets-setup]',t:'[data-tag-cloud] > summary',m:'[data-activity-toggle]',c:'[data-memory-category-new]',' ':'[data-activity-today]'};
+        const selectors={v:'[data-curated-feed-open]',e:'[data-create-entry-open]',a:'[data-create-action-open]',x:'[data-secrets-toggle], [data-secrets-setup]',t:'[data-tag-cloud] > summary',m:'[data-activity-toggle]',c:'[data-memory-category-new]',' ':'[data-activity-today]'};
         if(key==='d'){event.preventDefault();window.HflIdeas?.openEditor('idea');}
         else if(selectors[key]){event.preventDefault();click(query(selectors[key]));}
       }

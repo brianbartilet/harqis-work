@@ -307,6 +307,9 @@ class RemoteCorpusClient:
                 "Canonical HFL corpus returned an invalid upload response"
             ) from exc
 
+    def curated_feed(self, *, params: dict[str, str]) -> dict[str, Any]:
+        return self._get('/curated-feed', params=params).json()
+
     def index(self, *, params: dict[str, str]) -> dict[str, Any]:
         try:
             payload = self._get(

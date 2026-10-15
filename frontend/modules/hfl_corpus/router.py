@@ -714,6 +714,27 @@ def _activity_heatmap(
     }
 
 
+@router.get('/curated-feed')
+async def curated_feed(request: Request, show_secrets: bool = False):
+    user, redirect = require_user(request)
+    if redirect:
+        return JSONResponse({'detail': 'Sign in again to read the timeline.'}, status_code=401)
+    from modules.hfl_corpus.curated_feed import feed_page
+    profile = get_profile_store().get()
+    include_secrets = bool(show_secrets and secrets_unlocked(request, profile))
+    protected_tags = normalize_secret_tags(profile.secret_tags)
+    params = dict(request.query_params)
+    if _uses_remote_corpus():
+        params.update(include_secrets=str(include_secrets).lower(), secret_tags=','.join(protected_tags))
+        try:
+            result = await asyncio.to_thread(RemoteCorpusClient.from_settings().curated_feed, params=params)
+        except RemoteCorpusError:
+            return JSONResponse({'detail': 'The timeline could not load from the corpus host. Retry or reopen the timeline.'}, status_code=502, headers={'Cache-Control': 'no-store'})
+    else:
+        result = await asyncio.to_thread(feed_page, params, include_secrets=include_secrets, secret_tags=protected_tags)
+    return JSONResponse(result, headers={'Cache-Control': 'no-store'})
+
+
 @router.get("", response_class=HTMLResponse)
 async def hfl_corpus_page(
     request: Request,
@@ -739,6 +760,11 @@ async def hfl_corpus_page(
     if redirect:
         return redirect
     saved_workspaces = await asyncio.to_thread(workspace_views.listing)
+    if request.query_params.get('entry_scope'):
+        # Normalize a saved feed into the existing combined-scope URL contract.
+        params = dict(request.query_params)
+        params['scope'] = json.dumps({'any': [{'entry_scope': params.pop('entry_scope')}]})
+        return RedirectResponse('/hfl-corpus?' + urlencode(params), status_code=303)
     if not request.query_params and (saved_workspaces['preferences']['revision'] or saved_workspaces['preferences']['dynamic']):
         return RedirectResponse(workspace_views.selection_url(saved_workspaces, dynamic=saved_workspaces['preferences']['dynamic']), status_code=303)
     if not request.query_params and saved_workspaces['last_used']:

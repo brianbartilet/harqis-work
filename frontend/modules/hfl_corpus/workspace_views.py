@@ -24,6 +24,32 @@ class WorkspaceState(BaseModel):
     rolling: Literal[0, 7, 30, 90] = 0
     sort: Literal['asc', 'desc'] = 'desc'
     page_size: Literal[20, 50, 100] = 20
+    entry_scope: str = Field(default='', max_length=100_000)
+
+    @field_validator('entry_scope')
+    @classmethod
+    def valid_entry_scope(cls, value):
+        if value:
+            # Bound nested saved feeds before recursively validating their states.
+            def check(raw, depth=0):
+                if depth > 4:
+                    raise ValueError('Combined Space filters are nested too deeply.')
+                if not isinstance(raw, str):
+                    raise ValueError('Invalid combined Space filters.')
+                data = json.loads(raw)
+                if not isinstance(data, dict) or set(data) - {'any', 'all'}:
+                    raise ValueError('Invalid combined Space filters.')
+                if not isinstance(data.get('any', []), list) or len(data.get('any', [])) > 30:
+                    raise ValueError('Invalid combined Space filters.')
+                for state in [*data.get('any', []), data.get('all', {})]:
+                    if not isinstance(state, dict):
+                        raise ValueError('Invalid combined Space filters.')
+                    if state.get('entry_scope'):
+                        check(state['entry_scope'], depth + 1)
+            check(value)
+            from modules.hfl_corpus.view_scope import parse_scope
+            parse_scope(value)
+        return value
 
     @field_validator('date_from', 'date_to')
     @classmethod

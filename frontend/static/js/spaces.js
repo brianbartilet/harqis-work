@@ -77,7 +77,7 @@
   function changed() { try { localStorage.setItem('corpus:workspace-change',String(Date.now())); } catch (_) {} }
   function summary(view) {
     const s=view.state;
-    return [s.q, s.source || 'All sources', s.rolling?`Last ${s.rolling} days`:(s.date_from||s.date_to)?`${s.date_from||'Any start'} – ${s.date_to||'Today'}`:'All dates',`${view.schedule?.length||0} time blocks`].filter(Boolean).join(' · ');
+    return [s.entry_scope ? 'Saved timeline filters' : '', s.q, s.source || 'All sources', s.rolling?`Last ${s.rolling} days`:(s.date_from||s.date_to)?`${s.date_from||'Any start'} – ${s.date_to||'Today'}`:'All dates',`${view.schedule?.length||0} time blocks`].filter(Boolean).join(' · ');
   }
   function list() {
     const query=$('#space-search').value.toLowerCase();
@@ -140,6 +140,7 @@
   if(draft){
     (draft.sources||[]).forEach(value=>sources.push({value}));$('#space-handoff').hidden=false;
     $('#space-handoff-text').textContent=draft.combined?'Several Spaces were selected. These are the additional filters only; their combined rules cannot be copied into a single Space. Choose a destination and review every filter before saving.':'Choose a destination to review these filters. Nothing is saved automatically.';
+    if(draft.feed) $('#space-handoff-text').textContent='Save this timeline as a Space. Combined Space filters are preserved; the fields below can further narrow them.';
     const destination=$('#space-destination');views.forEach(v=>destination.add(new Option(v.name,v.id)));
     $('#space-apply-draft').onclick=()=>{
       if(!destination.value){announce('Choose New Space or an existing Space first.');destination.focus();return;}
@@ -156,6 +157,22 @@
   if(params.has('edit')){const target=views.find(v=>v.id===params.get('edit'));if(target)open(target);else announce('This Space is no longer available. Choose another Space.');}
   function fillViewEditor(view) {
     if (!view) return;
+    const rules = $('[data-feed-rules]'), ruleList = $('[data-feed-rules-list]');
+    rules.hidden = !view.state.entry_scope; ruleList.replaceChildren();
+    function describeScope(raw) {
+      const scope = JSON.parse(raw);
+      for (const [prefix, states] of [['Match any', scope.any || []], ['Also require', [scope.all || {}]]]) {
+        for (const state of states) {
+          const labels = [state.q, state.source && 'Sources: ' + state.source,
+            state.rolling ? `Last ${state.rolling} days` : [state.date_from, state.date_to].filter(Boolean).join(' to ')];
+          if (labels.some(Boolean)) {
+            const item = document.createElement('li'); item.textContent = prefix + ': ' + labels.filter(Boolean).join(' · '); ruleList.append(item);
+          }
+          if (state.entry_scope) describeScope(state.entry_scope);
+        }
+      }
+    }
+    if (view.state.entry_scope) describeScope(view.state.entry_scope);
     $('[data-schedule-timezone]').textContent = `Times use ${preferences.timezone}. Change it in Profile settings.`;
     document.querySelectorAll('[data-edit-filter]').forEach(input => input.value = view.state[input.dataset.editFilter] ?? '');
     $('[data-space-tag-search]').value = '';

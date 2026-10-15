@@ -1,0 +1,14 @@
+<dialog class="corpus-feed-dialog" data-curated-feed aria-labelledby="curated-feed-title">
+  <header class="corpus-feed-header">
+    <div><h2 id="curated-feed-title">Activity timeline</h2><p data-feed-summary></p></div>
+    <button type="button" data-feed-close aria-label="Close timeline">Close</button>
+  </header>
+  <div class="corpus-feed-toolbar">
+    <label>Order <span class="workspace-select"><select data-feed-order aria-label="Timeline order"><option value="desc">Newest first</option><option value="asc">Oldest first</option></select></span></label>
+    <button type="button" data-feed-save>Save as Space</button>
+  </div>
+  <div class="corpus-feed-scroll" data-feed-scroll tabindex="0" aria-label="Matching activity entries">
+    <div data-feed-items></div>
+    <div class="corpus-feed-state"><p data-feed-status role="status"></p><button type="button" data-feed-more hidden>Load more</button></div>
+  </div>
+</dialog>
