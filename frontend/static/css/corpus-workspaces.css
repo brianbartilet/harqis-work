@@ -310,7 +310,7 @@
 .corpus-feed-open,.corpus-feed-dialog button{border:1px solid #334155;border-radius:.5rem;background:#17243a;color:#bae6fd;padding:.4rem .75rem;font-size:.8rem}
 .corpus-feed-open:disabled{opacity:.4;cursor:not-allowed}
 .corpus-feed-open:focus-visible,.corpus-feed-dialog :focus-visible{outline:2px solid #38bdf8;outline-offset:3px}
-.corpus-feed-dialog{width:min(1120px,calc(100vw - 32px));max-width:none;height:min(880px,90dvh);max-height:90dvh;padding:0;border:1px solid #334155;border-radius:1rem;background:#0b1223;color:#e2e8f0;overflow:hidden}
+.corpus-feed-dialog{width:min(784px,calc(100vw - 32px));max-width:none;height:min(880px,90dvh);max-height:90dvh;padding:0;border:1px solid #334155;border-radius:1rem;background:#0b1223;color:#e2e8f0;overflow:hidden}
 .corpus-feed-dialog[open]{display:flex;flex-direction:column;position:fixed;inset:0;margin:auto}
 .corpus-feed-dialog::backdrop{background:#020617bb}
 .corpus-feed-header,.corpus-feed-toolbar{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:1rem 1.25rem;border-bottom:1px solid #263247;flex-shrink:0}
