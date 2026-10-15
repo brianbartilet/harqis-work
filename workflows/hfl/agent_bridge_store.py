@@ -5,6 +5,7 @@ import hashlib
 import json
 import sqlite3
 import uuid
+from contextlib import closing, contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -61,11 +62,16 @@ class AgentBridgeStore:
                 db.execute('DROP INDEX agent_one_live_source')
                 db.execute("CREATE UNIQUE INDEX agent_one_live_source ON agent_requests(source_key) WHERE state IN ('queued','running','review','accepting')")
 
+    @contextmanager
     def connect(self):
-        db = sqlite3.connect(self.path, timeout=15)
-        db.row_factory = sqlite3.Row
-        db.execute('PRAGMA foreign_keys=ON')
-        return db
+        """Context-managed connection: commit/roll back, then always close."""
+        # sqlite3's transaction context does not close the connection. Keep
+        # closing outside it so commit/rollback (including failures) runs first.
+        with closing(sqlite3.connect(self.path, timeout=15)) as db:
+            db.row_factory = sqlite3.Row
+            db.execute('PRAGMA foreign_keys=ON')
+            with db:
+                yield db
 
     @staticmethod
     def decode(row, *, private=False):
