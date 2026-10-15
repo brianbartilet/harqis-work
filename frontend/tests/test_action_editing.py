@@ -619,3 +619,25 @@ def test_ideas_drawer_keeps_reading_position_after_dismiss(editor_page, ideas, w
     expect(drawer.locator('[data-idea-id]')).to_have_count(17)
     assert drawer.evaluate('(el) => el.scrollTop') > 0
     assert abs(drawer.locator(f'[data-idea-id="{following_id}"]').bounding_box()['y'] - offset) < 3
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_kanban_creation_notice_auto_dismisses(editor_page, width):
+    from playwright.sync_api import expect
+    page, _ = editor_page
+    page.set_viewport_size({'width': width, 'height': 1000})
+    page.goto('https://editing.test/hfl-corpus/actions')
+    page.wait_for_function('window.hflActions')
+    page.evaluate('window.hflActions.openEditor()')
+    form = page.locator('#followup-form')
+    form.locator('[name=title]').fill('Notification check')
+    form.locator('.action-details > summary').filter(has_text='Action plan').click()
+    form.locator('[name=expected_outcome]').fill('Saved action')
+    form.locator('[type=submit]').click()
+    notice = page.locator('.editor-save-confirmation')
+    expect(notice).to_contain_text('Action saved.')
+    box = notice.bounding_box()
+    assert box['y'] == (108 if width <= 760 else 76)
+    assert abs(box['x'] + box['width'] / 2 - width / 2) < 1
+    assert 0 <= box['x'] and box['x'] + box['width'] <= width
+    expect(notice).to_have_count(0, timeout=5500)

@@ -503,6 +503,11 @@ def test_creation_save_feedback_and_upload_retry(ideas, authenticated_client, ki
             pending.fulfill(status=response.status_code, body=response.content, content_type='application/json')
         expect(dialog).not_to_be_visible()
         expect(page.locator('.editor-save-confirmation')).to_contain_text(('Idea' if kind == 'idea' else 'Action') + ' saved.')
+        notice = page.locator('.editor-save-confirmation')
+        bounds = notice.bounding_box()
+        assert bounds['y'] == 108
+        assert abs(bounds['x'] + bounds['width'] / 2 - page.viewport_size['width'] / 2) < 1
+        expect(notice).to_have_count(0, timeout=5500)
         assert len(ideas.ideas() if kind == 'idea' else ideas.followups.list()) == 1
         assert not errors
         browser.close()

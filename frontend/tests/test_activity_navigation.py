@@ -105,9 +105,8 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
                 menu.get_by_role('link', name=label).click()
                 page.wait_for_url('**' + destination + '**')
                 query = parse_qs(urlsplit(page.url).query)
-                # Graph navigation carries the filters directly (activity-modals.js).
-                assert query['source'] == ['notes']
-                assert query['q'] == ['launch']
+                # Page-local Corpus filters must not follow navigation to another surface.
+                assert query == {}
         finally:
             browser.close()
 

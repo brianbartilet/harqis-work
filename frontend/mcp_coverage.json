@@ -3478,6 +3478,39 @@
       "status": "deferred",
       "tools": [],
       "reason": "Owner-session integration operation using personal connector accounts and local action/board context; host-configured GitHub/Jira tools are not equivalent. Dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/entry-edit/{relative_path:path}",
+      "status": "ui",
+      "tools": [],
+      "reason": "Session-authenticated entry editor form data with per-entry secret unlock checks; machine clients read entries through get_hfl_corpus_document."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/entry-edit/{relative_path:path}",
+      "status": "alias",
+      "tools": [
+        "update_hfl_corpus_entry"
+      ],
+      "reason": "Browser session/CSRF entry editing alias of the canonical bearer-authenticated entry-edit API."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entry-edit/{relative_path:path}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entry"
+      ],
+      "reason": "Revision-checked targeted entry updates and attachment uploads through the canonical API.",
+      "service": "apps.hfl_corpus.references.web.api.documents.ApiServiceHflCorpusDocuments.update_entry"
+    },
+    {
+      "method": "POST",
+      "path": "/settings/corpus",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Compatibility route for session-authenticated App Settings including secrets PIN changes; shares the /settings handler, whose machine-facing contract remains deferred."
     }
   ]
 }

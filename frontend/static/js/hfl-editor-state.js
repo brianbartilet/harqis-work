@@ -86,7 +86,8 @@ if (typeof window !== 'undefined') {
           const message = document.createElement('span'); message.setAttribute('role', 'status');
           message.textContent = creationLabel + ' saved.';
           const dismiss = document.createElement('button'); dismiss.type = 'button'; dismiss.textContent = 'Dismiss';
-          dismiss.onclick = () => notice.remove(); notice.append(message, dismiss);
+          const timer = setTimeout(() => notice.remove(), 4000);
+          dismiss.onclick = () => { clearTimeout(timer); notice.remove(); }; notice.append(message, dismiss);
           (document.querySelector('dialog[open]') || document.body).append(notice);
         }
       } finally {

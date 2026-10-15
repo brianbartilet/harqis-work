@@ -231,7 +231,7 @@
     rendered='';await refresh(true);actions.load();
     if(failure){error.textContent=failure+' The board has been reloaded.';error.hidden=false;}
   }
-  function open(){if(!page){location.assign('/hfl-corpus/actions'+location.search);return;}context();refresh(true);clearInterval(timer);timer=setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]:not(#followups-board)')){refresh();actions.load();}},5000);}
+  function open(){if(!page){location.assign('/hfl-corpus/actions');return;}context();refresh(true);clearInterval(timer);timer=setInterval(()=>{if(!document.hidden&&!document.querySelector('dialog[open]:not(#followups-board)')){refresh();actions.load();}},5000);}
   document.querySelectorAll('[data-followups-open]').forEach(opener=>{
     opener.onclick=event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();opener.closest('details')?.removeAttribute('open');open();};
   });

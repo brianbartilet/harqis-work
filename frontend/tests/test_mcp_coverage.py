@@ -406,3 +406,35 @@ def test_entity_review_options_preserve_wire_contract(recording_api, method, kwa
     assert parse_qs(urlsplit(path).query) == query
     if body:
         assert json.loads(raw) == kwargs
+
+
+@pytest.mark.parametrize('with_attachment', [False, True])
+def test_entry_update_preserves_revision_and_upload_payload(recording_api, tmp_path, with_attachment):
+    from email import policy
+    from email.parser import BytesParser
+    origin, records = recording_api
+    api = service('apps.hfl_corpus.references.web.api.documents.ApiServiceHflCorpusDocuments', origin)
+    payload = {'anchor': 'entry-one', 'entry_id': 'hfl-one',
+               'expected_updated_at': '2026-10-15T12:00:00',
+               'moment': 'Updated moment', 'what_happened': 'Reviewed entry',
+               'references': ['https://example.com/evidence']}
+    attachment = tmp_path / 'evidence.txt'
+    attachment.write_bytes(b'Entry attachment')
+    api.update_entry('folder/entry +#.md', payload, [str(attachment)] if with_attachment else None)
+    method, path, headers, body = records[-1]
+    assert method == 'POST'
+    assert unquote(urlsplit(path).path) == '/api/hfl/entry-edit/folder/entry +#.md'
+    assert not urlsplit(path).query and not urlsplit(path).fragment
+    if with_attachment:
+        message = BytesParser(policy=policy.default).parsebytes(
+            ('Content-Type: ' + headers['Content-Type'] + '\r\n\r\n').encode() + body)
+        parts = {part.get_param('name', header='content-disposition'): part for part in message.iter_parts()}
+        assert json.loads(parts['payload'].get_payload(decode=True)) == payload
+        assert parts['files'].get_filename() == 'evidence.txt'
+        assert parts['files'].get_payload(decode=True) == b'Entry attachment'
+    else:
+        assert json.loads(parse_qs(body.decode())['payload'][0]) == payload
+    before = len(records)
+    with pytest.raises(FileNotFoundError):
+        api.update_entry('entry.md', payload, [str(tmp_path / 'missing.txt')])
+    assert len(records) == before

@@ -581,6 +581,24 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         logger.info("update_hfl_corpus_document done updated=%s", output.get("updated"))
         return output
 
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entry(relative_path: str, payload: dict, file_paths: list[str] | None = None) -> dict:
+        """Update one HFL entry and optionally upload attachments. Destructive remote write.
+
+        Args:
+            relative_path: Corpus-relative Markdown path, read with get_hfl_corpus_document.
+            payload: Editable fields with required anchor, expected_updated_at (last-read
+                document timestamp), moment and what_happened. Optional entry_id, date,
+                time, why_it_stayed, possible_use, tags (string), references (list).
+                Supply the complete intended field values; omitted optional fields use
+                server defaults. Stale revisions return 409; surrounding entries remain intact.
+            file_paths: Local attachment paths to upload; omit to update text only.
+        """
+        logger.info("Tool called: update_hfl_corpus_entry path=%s", relative_path)
+        output = _dict_result(ApiServiceHflCorpusDocuments(CONFIG).update_entry(relative_path, payload, file_paths))
+        logger.info("update_hfl_corpus_entry done")
+        return output
+
     # --- References ---
 
     @mcp.tool()

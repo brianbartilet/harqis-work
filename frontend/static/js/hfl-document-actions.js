@@ -95,7 +95,9 @@
       const dismiss = document.createElement('button');
       dismiss.type = 'button'; dismiss.textContent = '×';
       dismiss.setAttribute('aria-label', 'Dismiss action confirmation');
+      const timer = setTimeout(() => toast.remove(), 4000);
       dismiss.addEventListener('click', () => {
+        clearTimeout(timer);
         toast.remove();
         entryTrigger.focus({preventScroll: true});
       });

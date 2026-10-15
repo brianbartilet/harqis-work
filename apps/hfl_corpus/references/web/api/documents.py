@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from contextlib import ExitStack
+from urllib.parse import quote
 from pathlib import Path
 from typing import Optional
 
@@ -127,6 +129,23 @@ class ApiServiceHflCorpusDocuments(BaseApiServiceHflCorpus):
                 "expected_updated_at": expected_updated_at,
             })
         return self.client.execute_request(self.request.build())
+
+    def update_entry(self, relative_path: str, payload: dict, file_paths: list[str] | None = None) -> dict:
+        """Replace one entry's editable fields using its anchor and document revision."""
+        paths = [Path(value).expanduser().resolve() for value in (file_paths or [])]
+        for path in paths:
+            if not path.is_file():
+                raise FileNotFoundError(f"Attachment file not found: {path}")
+        with ExitStack() as stack:
+            files = [("files", (path.name, stack.enter_context(path.open("rb")), "application/octet-stream"))
+                     for path in paths]
+            response = self._raw_request(
+                "POST", f"entry-edit/{quote(relative_path, safe='/')}",
+                data={"payload": json.dumps(payload)}, files=files,
+                timeout=max(self.client.timeout, 300),
+            )
+            result = response.json()
+            return result if isinstance(result, dict) else {}
 
     def get_reference_preview(self, token: str) -> dict:
         """Return a safe text/Markdown reference preview."""

@@ -283,6 +283,11 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     useEffect(()=>()=>clearTimeout(hoverTimer.current),[]);
     useEffect(()=>setHoverId(null),[board?.id]);
     useEffect(()=>{setChosenEdge(null);setConnectFrom(null);setPreview(null);setConnectionMessage('');},[board?.id]);
+    useEffect(()=>{
+      if(!['Saved','Connections refreshed.','Connection cancelled.'].includes(connectionMessage))return;
+      const timer=setTimeout(()=>setConnectionMessage(''),4000);
+      return ()=>clearTimeout(timer);
+    },[connectionMessage]);
     useEffect(()=>{if(selectedId)setChosenEdge(null);},[selectedId]);
     useEffect(()=>{
       connectionInteraction=!!board&&!!(hoverId||controlsFocused||connectFrom||connection||connectionBusy);

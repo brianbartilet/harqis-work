@@ -74,6 +74,8 @@
     if(link.id === 'kg-entities') return; // Graph supplies its applied filters.
     event.preventDefault();
     document.querySelector('.corpus-tools')?.removeAttribute('open');
+    // Page navigation restores the saved Space; temporary Corpus filters stay local.
+    if (url.pathname.endsWith('/graph')) { location.assign(url); return; }
     const navigation=url.searchParams.has('board')||url.searchParams.has('select');
     open(url.pathname.endsWith('/graph')?'graph':'entities',navigation?'':(document.querySelector('#corpus-search-form') ? location.search.slice(1) : window.activityModals.context()),'',navigation?url.search:'');
   });

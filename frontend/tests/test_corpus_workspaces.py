@@ -119,6 +119,18 @@ def test_workspace_cross_tab_sync_browser(authenticated_client, workspace_corpus
                 board.wait_for_load_state()
             playwright.expect(board.locator('[name=q]')).to_have_value('#work')
             assert client.get('/hfl-corpus/workspace-views').json() == before_search
+            # Navigating from the searched Corpus also restores only the saved Space.
+            navigated = context.new_page()
+            navigated.goto(corpus.url)
+            destination = '/hfl-corpus/' + surface
+            link = navigated.locator('.activity-navigation-options a[href="' + destination + '"]').first
+            assert link.get_attribute('href') == destination
+            link.evaluate('(element) => element.click()')
+            navigated.wait_for_url('**' + destination + '**')
+            playwright.expect(navigated.locator('[data-view-picker-caption]')).to_have_text('Work')
+            playwright.expect(navigated.locator('[name=q]')).to_have_value('#work')
+            assert client.get('/hfl-corpus/workspace-views').json() == before_search
+            navigated.close()
             playwright.expect(corpus.locator('[data-corpus-results]')).to_contain_text('2 matching entries')
             # Local filters cannot broaden the saved Space scope.
             corpus.locator('#q').fill('#personal')
@@ -150,8 +162,9 @@ def test_workspace_cross_tab_sync_browser(authenticated_client, workspace_corpus
             board.reload()
             playwright.expect(board.locator('[data-view-picker-caption]')).to_have_text('All activity')
             board.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
-            board.locator('[data-dynamic-toggle]').check()
-            board.wait_for_function("document.querySelector('[data-dynamic-toggle]').checked && !document.querySelector('[data-view-loading]').open")
+            with board.expect_response(lambda response: '/view-preferences' in response.url and response.request.method == 'PUT'):
+                board.locator('[data-dynamic-toggle]').check()
+            board.wait_for_function("document.querySelector('[data-dynamic-toggle]')?.checked === true && document.querySelector('[data-view-loading]')?.open === false")
             corpus.evaluate("window.dispatchEvent(new Event('focus'))")
             playwright.expect(corpus.locator('[data-dynamic-toggle]')).to_be_checked()
             # An unchanged API snapshot must not reload the page just because
@@ -162,8 +175,9 @@ def test_workspace_cross_tab_sync_browser(authenticated_client, workspace_corpus
             corpus.wait_for_timeout(800)
             assert corpus.locator('html').get_attribute('data-sync-probe') == 'retained'
             board.locator('[data-workspace-menu]').evaluate('(el) => el.open = true')
-            board.locator('[data-dynamic-toggle]').uncheck()
-            board.wait_for_function("!document.querySelector('[data-dynamic-toggle]').checked && !document.querySelector('[data-view-loading]').open")
+            with board.expect_response(lambda response: '/view-preferences' in response.url and response.request.method == 'PUT'):
+                board.locator('[data-dynamic-toggle]').uncheck()
+            board.wait_for_function("document.querySelector('[data-dynamic-toggle]')?.checked === false && document.querySelector('[data-view-loading]')?.open === false")
             corpus.evaluate("window.dispatchEvent(new Event('focus'))")
             playwright.expect(corpus.locator('[data-dynamic-toggle]')).not_to_be_checked()
             corpus.go_back()

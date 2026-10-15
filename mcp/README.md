@@ -380,6 +380,7 @@ session/protocol surfaces. Writes are marked below; file downloads write locally
 | `list_hfl_corpus_matches` | List matching entries within one HFL Markdown document. |
 | `get_hfl_corpus_document` | Get one HFL document with parsed entries and safe references. |
 | `update_hfl_corpus_document` | Replace an HFL document. Destructive: overwrites canonical Markdown text. |
+| `update_hfl_corpus_entry` | Update one entry with its anchor and last-read revision, optionally uploading attachments (destructive remote write). |
 | `get_hfl_corpus_reference_preview` | Get a safe HTML preview for a text or Markdown reference. |
 | `download_hfl_corpus_reference` | Download a reference to a local path. This writes a local file. |
 | `download_hfl_corpus_reference_media` | Download reference image/video content. This writes a local file. |

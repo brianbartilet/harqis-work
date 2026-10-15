@@ -289,3 +289,5 @@
 .corpus-all-tags:not([open]) > div { display:none; }
 
 .corpus-edit-quick-tags { grid-column:3;grid-row:1;padding-top:.25rem;white-space:nowrap; }
+
+.workspace-menu-panel [data-workspace-status]:empty { display:none; }
