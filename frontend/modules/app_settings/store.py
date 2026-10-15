@@ -3,6 +3,7 @@ import json
 import sqlite3
 import re
 from pathlib import Path
+from contextlib import closing, contextmanager
 
 from config import get_settings
 
@@ -14,12 +15,14 @@ DEFAULTS = {'actions_polling_minutes': 30, 'pin_backfill_days': 7,
             'agent_repository': '', 'agent_base_branch': '', 'agent_host': ''}
 
 
+@contextmanager
 def connection():
     path = Path(get_settings().profile_store_path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(path, timeout=15)
-    db.execute('CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
-    return db
+    with closing(sqlite3.connect(path, timeout=15)) as db:
+        db.execute('CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
+        with db:
+            yield db
 
 
 def read_settings():

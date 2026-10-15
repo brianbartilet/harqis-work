@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing, contextmanager
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timezone
 from functools import lru_cache
@@ -103,11 +105,13 @@ class MemoryPinStore:
                 UNIQUE(category_id, event_key)
             )""")
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        return connection
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        with closing(sqlite3.connect(self.path)) as connection:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA foreign_keys = ON")
+            with connection:
+                yield connection
 
     @staticmethod
     def _remove_legacy_color_uniqueness(connection: sqlite3.Connection) -> None:
@@ -175,7 +179,7 @@ class MemoryPinStore:
         bridge_path = Path(os.getenv('HFL_AGENT_BRIDGE_STORE_PATH') or self.path.with_name('hfl-agent-bridge.sqlite3')).expanduser()
         subscriptions = {}
         if bridge_path.is_file():
-            with sqlite3.connect(bridge_path) as db:
+            with closing(sqlite3.connect(bridge_path)) as db:
                 if db.execute("SELECT 1 FROM sqlite_master WHERE name='agent_subscriptions'").fetchone():
                     subscriptions = dict(db.execute("SELECT source_id,cadence FROM agent_subscriptions WHERE kind='pin'"))
         pin_ranges = [asdict(PinRange(**dict(row))) for row in ranges]
