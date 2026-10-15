@@ -1,0 +1,2 @@
+#role-status.role-save-notice,#space-status.role-save-notice,#settings-save-notice,[data-success-toast]{position:fixed;top:76px;left:50%;transform:translateX(-50%);z-index:1000;width:max-content;max-width:calc(100vw - 32px);margin:0;padding:14px 20px;border:1px solid #0e7490;border-radius:12px;background:#082f49;color:#cffafe;box-shadow:0 12px 32px #0006;font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+@media(max-width:760px){#role-status.role-save-notice,#space-status.role-save-notice,#settings-save-notice,[data-success-toast]{top:108px}}

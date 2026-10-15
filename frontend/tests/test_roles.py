@@ -556,3 +556,27 @@ def test_personal_context_is_agent_evidence_without_about_module(editor_page, wi
     assert 'Built test tools' in answer
     assert 'href=' not in answer
     assert 'See entry' not in answer
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_facet_save_notice_auto_dismisses(editor_page, width):
+    from playwright.sync_api import expect
+    owner = role()
+    page, _ = editor_page
+    page.set_viewport_size({'width': width, 'height': 1000})
+    page.goto('https://editing.test/roles')
+    page.locator('[data-role="' + owner['id'] + '"]').first.click()
+    page.get_by_role('button', name='Save facet', exact=True).click()
+    notice = page.locator('#role-status')
+    expect(notice).to_contain_text('Facet saved')
+    assert notice.evaluate('(e) => getComputedStyle(e).position') == 'fixed'
+    box = notice.bounding_box()
+    assert 0 <= box['x'] and box['x'] + box['width'] <= width
+    assert box['y'] < 150
+    expect(notice).to_be_hidden(timeout=6000)
+    # A later failed save remains visible and does not masquerade as success.
+    page.route('**/roles/data/' + owner['id'], lambda route: route.fulfill(
+        status=409, content_type='application/json', body='{"detail":"This facet changed. Reload before saving."}'))
+    page.get_by_role('button', name='Save facet', exact=True).click()
+    expect(notice).to_contain_text('This facet changed')
+    assert notice.evaluate('(e) => getComputedStyle(e).position') != 'fixed'

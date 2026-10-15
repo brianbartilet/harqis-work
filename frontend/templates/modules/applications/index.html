@@ -1,14 +1,6 @@
 {% extends "base.html" %}
 {% block title %}HARQIS — Integrations{% endblock %}
 
-{% block header_actions %}
-<button @click="customize = !customize"
-        :class="customize ? 'text-amber-400 hover:text-amber-300' : 'text-slate-400 hover:text-white'"
-        class="hidden sm:flex items-center gap-1.5 text-xs transition">
-  <span x-text="customize ? 'Done' : 'Edit Layout'"></span>
-</button>
-{% endblock %}
-
 {% block content %}
 <main class="flex-1 mx-auto max-w-7xl w-full px-4 py-5 sm:px-6 lg:px-8">
   <div class="flex items-end justify-between gap-4 mb-4">
@@ -28,7 +20,10 @@
   <div class="integration-workflow-toolbar">
     <label class="integration-search" for="integration-search">Find a workflow integration<input id="integration-search" type="search" placeholder="Search applications" autocomplete="off"></label>
     <p data-inventory-count role="status" class="integration-inventory-count"></p>
-    <div class="integration-controls"><button type="button" data-add-application>Add application</button></div>
+    <div class="integration-controls">
+      <button type="button" @click="customize = !customize" :aria-pressed="customize" aria-controls="integration-workflow-cards" data-edit-app-layout><span x-text="customize ? 'Done' : 'Edit layout'">Edit layout</span></button>
+      <button type="button" data-add-application>Add application</button>
+    </div>
   </div>
   <div x-show="customize" x-cloak
        class="mb-5 rounded-lg border border-amber-900/50 bg-amber-950/30 px-4 py-2.5 text-center text-xs text-amber-400/80">
@@ -40,10 +35,10 @@
     {% for application in applications %}
     <article data-app-key="{{ application.key }}" data-app-description="{{ application.description }}"
              class="workflow-integration-card group relative rounded-xl bg-slate-900 ring-1 ring-slate-800 hover:ring-blue-500/40 transition"
-             :class="customize ? 'ring-amber-900/60' : ''">
+             :class="customize ? 'ring-amber-900/60 is-reordering' : ''">
       <button x-show="customize" x-cloak type="button" data-app-reorder
               aria-label="Reorder {{ application.label }}. Use arrow keys to move it."
-              class="drag-handle absolute left-3 top-3 z-10 cursor-grab touch-none rounded text-slate-400 hover:text-white">
+              class="drag-handle absolute right-3 top-3 z-10 cursor-grab touch-none rounded text-slate-400 hover:text-white">
         <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true">
           <circle cx="5" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/>
           <circle cx="10" cy="4" r="1.2"/><circle cx="10" cy="8" r="1.2"/><circle cx="10" cy="12" r="1.2"/>
@@ -51,7 +46,7 @@
       </button>
       <a href="/applications/{{ application.key }}"
          @click="if (customize) $event.preventDefault()"
-         class="workflow-integration-card-body" :class="customize ? 'pl-10 cursor-default' : ''">
+         class="workflow-integration-card-body" :class="customize ? 'cursor-default' : ''">
         <div class="flex items-start justify-between gap-3">
           <div>
             <h2 class="connector-title font-semibold text-white group-hover:text-blue-300 transition"><img class="connector-logo" src="{{ '/applications/' ~ application.key ~ '/icon?v=' ~ application.icon_version if application.icon_version else static_asset('img/connectors/application.svg') }}" alt="" width="20" height="20" loading="lazy">{{ application.label }}</h2>

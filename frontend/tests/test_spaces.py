@@ -150,3 +150,21 @@ def test_existing_space_tags_survive_unavailable_catalog(editor_page, workspace_
     assert actual['schedule'] == schedule
     page.locator('[data-space-tag=wo]').click()
     expect(page.locator('[data-edit-filter=q]')).to_have_value('Project planning #unlisted')
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_space_save_notice_auto_dismisses(editor_page, workspace_corpus, width):
+    from playwright.sync_api import expect
+    page, _ = editor_page
+    page.set_viewport_size({'width': width, 'height': 1000})
+    page.goto('https://editing.test/spaces')
+    page.get_by_role('button', name='New Space', exact=True).click()
+    page.get_by_label('Name', exact=True).fill('Save notice')
+    page.get_by_role('button', name='Save Space', exact=True).click()
+    notice = page.locator('#space-status')
+    expect(notice).to_contain_text('Space saved')
+    assert notice.evaluate('(e) => getComputedStyle(e).position') == 'fixed'
+    box = notice.bounding_box()
+    assert 0 <= box['x'] and box['x'] + box['width'] <= width
+    assert box['y'] < 150
+    expect(notice).to_be_hidden(timeout=6000)

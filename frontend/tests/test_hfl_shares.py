@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from test_action_editing import editor_page
+from test_hfl_ideas import ideas
 
 from modules.hfl_corpus.corpus import CorpusDocument, CorpusEntry
 from modules.hfl_shares.agent import _context, _validated_answer
@@ -863,7 +865,7 @@ def test_recipe_save_and_update_show_one_time_named_notifications(
     assert 'data-success-toast role="status" aria-live="polite"' in created.text
     assert 'data-toast-close aria-label="Dismiss notification"' in created.text
     assert "searchParams.delete('notice')" in created.text
-    assert "window.setTimeout(dismissToast, 5000)" in created.text
+    assert "window.setTimeout(dismissToast, 4000)" in created.text
 
     configuration = get_share_store().list_configurations()[0]
     updated = authenticated_client.post(
@@ -3722,3 +3724,28 @@ def test_manual_approval_uses_browser_allowance(authenticated_client, sharing_co
         with store._connect() as db:
             db.execute("UPDATE access_requests SET status='approved' WHERE share_id=?", (grant.id,))
         assert guest.get("/share/pending", follow_redirects=False).status_code == 403
+
+
+@pytest.mark.parametrize("width", [1440, 390])
+def test_share_save_notice_centered_and_dismissible(editor_page, sharing_corpus, width, tmp_path):
+    from playwright.sync_api import expect
+    page, client = editor_page
+    response = client.post("/sharing/configurations", data=_form(), follow_redirects=False)
+    assert response.status_code == 303
+    url = "https://editing.test" + response.headers["location"]
+    page.set_viewport_size({"width": width, "height": 1000})
+    page.goto(url)
+    notice = page.locator("[data-success-toast]")
+    expect(notice).to_contain_text("Japan context saved.")
+    assert notice.evaluate("e => getComputedStyle(e).position") == "fixed"
+    box = notice.bounding_box()
+    assert abs(box["x"] + box["width"] / 2 - width / 2) < 1
+    assert 0 <= box["x"] and box["x"] + box["width"] <= width
+    assert box["y"] == (108 if width <= 760 else 76)
+    page.screenshot(path=str(tmp_path / f"share-save-notice-{width}.png"))
+    expect(notice).to_have_count(0, timeout=5500)
+    page.reload()
+    expect(notice).to_have_count(0)
+    page.goto(url)
+    page.get_by_role("button", name="Dismiss notification").click()
+    expect(notice).to_have_count(0)

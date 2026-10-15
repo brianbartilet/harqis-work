@@ -11,7 +11,17 @@
     if (event.target === help && (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom)) help.close();
   });
   let data = {roles:[], spaces:[], runs:[]}, current = null, controls = null;
-  const status = text => { $('#role-status').textContent = text; };
+  let statusTimer;
+  const status = (text, transient = false) => {
+    clearTimeout(statusTimer);
+    const notice = $('#role-status');
+    notice.classList.toggle('role-save-notice', transient);
+    notice.textContent = text;
+    if (transient) statusTimer = setTimeout(() => {
+      notice.textContent = '';
+      notice.classList.remove('role-save-notice');
+    }, 4000);
+  };
   async function api(path, method='GET', body) {
     const headers = {'X-CSRF-Token':root.dataset.rolesCsrf};
     if (body && !(body instanceof FormData)) { headers['Content-Type']='application/json'; body=JSON.stringify(body); }
@@ -128,7 +138,7 @@
     const form=$('#role-form'); if (!form.reportValidity()) return;
     const value={revision:current.revision,name:form.elements.name.value,color:form.elements.color.value,soul:form.elements.soul.value,archived:current.archived,
       workspace_ids:[...form.querySelectorAll('[name=spaces]:checked')].map(e=>e.value),entity_ids:controls.selectedIds()};
-    current=await api('/data'+(current.id?'/'+current.id:''),current.id?'PUT':'POST',value); await load(); open(current); status('Facet saved. Existing shares retain their approved revision.');
+    current=await api('/data'+(current.id?'/'+current.id:''),current.id?'PUT':'POST',value); await load(); open(current); status('Facet saved. Existing shares retain their approved revision.', true);
   }
   root.addEventListener('submit',event=>{if(event.target.id==='role-form'){event.preventDefault();save().catch(e=>status(e.message));}});
   root.addEventListener('click',async event=>{const b=event.target.closest('button'); if(!b)return; try {

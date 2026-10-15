@@ -63,7 +63,17 @@
     if (!response.ok) throw Error(typeof value.detail==='string'?value.detail:Array.isArray(value.detail)?value.detail.map(e=>e.msg).join(' '):'Unable to save this Space. Try again.');
     return value;
   }
-  function announce(text) { $('#space-status').textContent=text; }
+  let noticeTimer;
+  function announce(text, transient=false) {
+    clearTimeout(noticeTimer);
+    const notice=$('#space-status');
+    notice.classList.toggle('role-save-notice',transient);
+    notice.textContent=text;
+    if(transient) noticeTimer=setTimeout(()=>{
+      notice.textContent='';
+      notice.classList.remove('role-save-notice');
+    },4000);
+  }
   function changed() { try { localStorage.setItem('corpus:workspace-change',String(Date.now())); } catch (_) {} }
   function summary(view) {
     const s=view.state;
@@ -107,7 +117,7 @@
     const body=payload();lock(true);$('#space-error').textContent='';
     try {const saved=await request(editTarget.id?'/'+editTarget.id:'',editTarget.id?'PUT':'POST',body);
       views=[...views.filter(v=>v.id!==saved.id),saved].sort((a,b)=>a.name.localeCompare(b.name));
-      open(saved);changed();announce('Space saved. Its filters and schedule are ready to use.');
+      open(saved);changed();announce('Space saved. Its filters and schedule are ready to use.',true);
       try {await refresh();} catch (_) {announce('Space saved. The list could not refresh; reload to see changes from other browsers.');}
     } catch(error){$('#space-error').textContent=error.message+' Your edits are still here. Reload the page to get the latest version if another browser changed this Space.';}
     finally{lock(false);}

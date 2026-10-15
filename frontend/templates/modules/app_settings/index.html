@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}App Settings{% endblock %}
 {% block head %}
+<link rel="stylesheet" href="{{ static_asset('css/save-notice.css') }}">
 <style>
   .profile-fields > * { min-width:0; }
   .profile-section-header { margin:0 0 1rem; }
@@ -23,10 +24,12 @@
 <main class="mx-auto max-w-3xl px-5 py-10 text-slate-200">
   <h1 class="text-2xl font-semibold">App Settings</h1>
   <p class="mt-2 text-sm text-slate-400">Manage agents and application behavior. Personal details are in <a class="text-cyan-300" href="/profile">Profile</a>.</p>
-  {% if saved %}<p role="status" class="mt-5 text-emerald-300">Settings saved.</p>{% endif %}
+  {% if saved %}<p id="settings-save-notice" role="status" aria-live="polite">Settings saved.</p>{% endif %}
+  {% set expanded_sections = (open_sections | default(request.query_params.get('open', ''))).split(',') %}
   <form method="post" action="/settings">
+    <input type="hidden" name="open_sections" value="">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-  <details {% if errors.settings %}open{% endif %} class="settings-section mt-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
+  <details id="agents" {% if errors.settings or 'agents' in expanded_sections %}open{% endif %} class="settings-section mt-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
     <summary><span class="text-lg font-semibold">Agents</span><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg></summary>
   <div class="mt-6 space-y-6">
     {% if errors.settings %}<p class="profile-error" role="alert">{{ errors.settings }}</p>{% endif %}
@@ -91,7 +94,7 @@
     <p class="text-sm">Hermes worker authentication: {{ 'Configured' if worker_configured else 'Not configured on this host' }}. Credentials and provider configuration are managed on the host.</p>
   </div>
   </details>
-  <details id="activity-corpus" class="settings-section mt-6 rounded-xl border border-slate-700 bg-slate-900 p-6" {% if errors or request.query_params.get('section') == 'activity-corpus' %}open{% endif %}>
+  <details id="activity-corpus" class="settings-section mt-6 rounded-xl border border-slate-700 bg-slate-900 p-6" {% if errors.favorite_tags or errors.secret_tags or errors.current_secret_pin or errors.new_secret_pin or errors.confirm_secret_pin or 'activity-corpus' in expanded_sections %}open{% endif %}>
     <summary><span class="text-lg font-semibold">Activity Corpus</span><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg></summary>
     <div class="mt-6 space-y-6">
       <div>

@@ -158,3 +158,34 @@ def test_expanded_tag_cloud_uses_full_width(editor_page, workspace_corpus, monke
     page.locator('[data-tag-cloud] > summary').click()
     expect(cloud).to_be_hidden()
     expect(page.locator('[data-favorite-tag]').first).to_be_visible()
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_settings_save_notice_auto_dismisses(editor_page, width):
+    from playwright.sync_api import expect
+    page, _ = editor_page
+    page.set_viewport_size({'width': width, 'height': 1000})
+    page.goto('https://editing.test/settings')
+    page.get_by_role('button', name='Save settings', exact=True).click()
+    notice = page.locator('#settings-save-notice')
+    expect(notice).to_have_text('Settings saved.')
+    assert notice.evaluate('(e) => getComputedStyle(e).position') == 'fixed'
+    box = notice.bounding_box()
+    assert 0 <= box['x'] and box['x'] + box['width'] <= width
+    assert box['y'] < 150
+    expect(notice).to_have_count(0, timeout=6000)
+    page.reload()
+    expect(notice).to_have_count(0)
+
+
+@pytest.mark.parametrize('expanded', [[], ['agents'], ['activity-corpus'], ['agents', 'activity-corpus']])
+def test_settings_save_preserves_expanded_sections(editor_page, expanded):
+    from playwright.sync_api import expect
+    page, _ = editor_page
+    page.goto('https://editing.test/settings')
+    for identity in expanded:
+        page.locator('#' + identity + ' > summary').click()
+    page.get_by_role('button', name='Save settings', exact=True).click()
+    expect(page.locator('#settings-save-notice')).to_be_visible()
+    assert page.locator('details.settings-section[open]').evaluate_all('(elements) => elements.map(e => e.id)') == expanded
+    assert '#activity-corpus' not in page.url

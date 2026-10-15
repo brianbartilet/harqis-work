@@ -33,6 +33,8 @@ async def update_settings(request: Request):
     form = await request.form(max_files=0, max_fields=40)
     if not verify_csrf_token(str(form.get('csrf', '')), user):
         raise HTTPException(403, 'Invalid form token.')
+    open_sections = ",".join(section for section in ("agents", "activity-corpus")
+                             if section in str(form.get("open_sections", "")).split(","))
     store = get_profile_store()
     saved = store.get()
     errors = {}
@@ -54,12 +56,15 @@ async def update_settings(request: Request):
     draft, errors, pin_change = corpus_secrets_from_form(form, saved, draft, errors)
     if errors:
         return templates.TemplateResponse(request, 'modules/app_settings/index.html', page_context(
-            request, user, 'settings', values=values, profile=draft, errors=errors,
+            request, user, 'settings', values=values, profile=draft, errors=errors, open_sections=open_sections,
             csrf=make_csrf_token(user), saved=False,
             worker_configured=bool(os.getenv('HFL_AGENT_BRIDGE_TOKEN', '').strip())), status_code=422)
     save_settings(values)
     store.save(stamp(draft))
-    response = RedirectResponse('/settings?saved=true&section=activity-corpus#activity-corpus', status_code=303)
+    destination = '/settings?saved=true'
+    if open_sections:
+        destination += '&open=' + open_sections
+    response = RedirectResponse(destination, status_code=303)
     if pin_change:
         clear_unlocked_cookie(response)
     return response
