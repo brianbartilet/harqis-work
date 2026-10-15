@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}App Settings{% endblock %}
 {% block head %}
+<link rel="stylesheet" href="{{ static_asset('css/breadcrumbs.css') }}">
 <link rel="stylesheet" href="{{ static_asset('css/save-notice.css') }}">
 <style>
   .profile-fields > * { min-width:0; }
@@ -22,11 +23,20 @@
 {% endblock %}
 {% block content %}
 <main class="mx-auto max-w-3xl px-5 py-10 text-slate-200">
+  {% if quick_tags_return %}
+  <nav class="integration-breadcrumbs" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="{{ quick_tags_return }}">Activity Corpus</a></li>
+      <li><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m8 5 5 5-5 5"/></svg><span aria-current="page">Quick tag settings</span></li>
+    </ol>
+  </nav>
+  {% endif %}
   <h1 class="text-2xl font-semibold">App Settings</h1>
   <p class="mt-2 text-sm text-slate-400">Manage agents and application behavior. Personal details are in <a class="text-cyan-300" href="/profile">Profile</a>.</p>
   {% if saved %}<p id="settings-save-notice" role="status" aria-live="polite">Settings saved.</p>{% endif %}
   {% set expanded_sections = (open_sections | default(request.query_params.get('open', ''))).split(',') %}
   <form method="post" action="/settings">
+    {% if quick_tags_return %}<input type="hidden" name="quick_tags_return" value="{{ quick_tags_return }}">{% endif %}
     <input type="hidden" name="open_sections" value="">
     <input type="hidden" name="csrf" value="{{ csrf }}">
   <details id="agents" {% if errors.settings or 'agents' in expanded_sections %}open{% endif %} class="settings-section mt-8 rounded-xl border border-slate-700 bg-slate-900 p-6">

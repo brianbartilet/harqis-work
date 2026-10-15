@@ -15,7 +15,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs, urlencode
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import (
@@ -1867,6 +1867,25 @@ templates.env.filters["share_entry"] = _entry_html
 templates.env.filters["share_graph"] = _graph_view
 
 
+def _location_map_url(target: str) -> str | None:
+    """Recognize OSM references; never embed an arbitrary external URL."""
+    try:
+        url = urlparse(target)
+        if url.scheme != 'https' or url.hostname not in {'openstreetmap.org', 'www.openstreetmap.org'}:
+            return None
+        query = parse_qs(url.query)
+        fragment = re.fullmatch(r'map=\d+(?:\.\d+)?/(-?\d+(?:\.\d+)?)/(-?\d+(?:\.\d+)?)', url.fragment)
+        lat = float(query['mlat'][0] if 'mlat' in query else fragment[1])
+        lon = float(query['mlon'][0] if 'mlon' in query else fragment[2])
+        if not math.isfinite(lat) or not math.isfinite(lon) or abs(lat) > 90 or abs(lon) > 180:
+            return ''
+    except (ValueError, TypeError, IndexError, KeyError):
+        return ''
+    bbox = [max(-180, lon-.006), max(-90, lat-.004), min(180, lon+.006), min(90, lat+.004)]
+    return 'https://www.openstreetmap.org/export/embed.html?' + urlencode({
+        'bbox': ','.join(str(v) for v in bbox), 'layer': 'mapnik', 'marker': f'{lat},{lon}'})
+
+
 def _reference_views(entry, *, base_url: str) -> dict[str, dict[str, str]]:
     views: dict[str, dict[str, str]] = {}
     for reference in entry.references:
@@ -1880,6 +1899,11 @@ def _reference_views(entry, *, base_url: str) -> dict[str, dict[str, str]]:
             "media_url": "",
             "thumbnail_url": "",
         }
+        if reference.kind == 'external':
+            location = _location_map_url(reference.target)
+            if location is not None:
+                view['location'] = True
+                view['map_url'] = location
         if reference.kind not in {"external", "activity_attachment"}:
             preview = classify_preview(Path(reference.target))
             if preview:

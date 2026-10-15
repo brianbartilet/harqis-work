@@ -1,10 +1,10 @@
 <dialog class="corpus-feed-dialog" data-curated-feed aria-labelledby="curated-feed-title">
   <header class="corpus-feed-header">
-    <div><h2 id="curated-feed-title">Activity timeline</h2><p data-feed-summary></p></div>
-    <button type="button" data-feed-close aria-label="Close timeline">Close</button>
+    <div><h2 id="curated-feed-title">View activity feed</h2><p data-feed-summary></p></div>
+    <button type="button" class="corpus-feed-close" data-feed-close aria-label="Close feed" title="Close feed (V or Esc)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
   </header>
   <div class="corpus-feed-toolbar">
-    <label>Order <span class="workspace-select"><select data-feed-order aria-label="Timeline order"><option value="desc">Newest first</option><option value="asc">Oldest first</option></select></span></label>
+    <button type="button" data-feed-order value="desc" aria-label="Newest first. Switch to oldest first" title="Switch to oldest first"><span data-feed-order-label>Newest</span><svg data-feed-order-arrow width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 4v12m-5-5 5 5 5-5"/></svg></button>
     <button type="button" data-feed-save>Save as Space</button>
   </div>
   <div class="corpus-feed-scroll" data-feed-scroll tabindex="0" aria-label="Matching activity entries">

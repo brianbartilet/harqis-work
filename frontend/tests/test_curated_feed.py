@@ -156,7 +156,7 @@ def test_feed_browser_keyboard_paging_retry_and_space(editor_page, feed_corpus, 
     scroller = dialog.locator('[data-feed-scroll]')
     scroller.evaluate('(el) => el.scrollTop = el.scrollHeight')
     expect(dialog.locator('.corpus-feed-card')).to_have_count(100)
-    dialog.locator('[data-feed-order]').select_option('asc')
+    dialog.locator('[data-feed-order]').click()
     expect(dialog.locator('.corpus-feed-card h3').first).to_have_text('Entry 0')
     page.keyboard.press('Escape')
     expect(dialog).not_to_be_visible()
@@ -178,3 +178,81 @@ def test_feed_browser_keyboard_paging_retry_and_space(editor_page, feed_corpus, 
     expect(page.locator('#space-editor-title')).to_have_text('Edit Space')
     saved = next(view for view in client.get('/hfl-corpus/workspace-views').json()['views'] if view['name'] == 'Timeline reading')
     assert saved['state']['q'] == '#work' and saved['state']['source'] == 'notes'
+
+
+def test_feed_excludes_summary_tag_index_but_keeps_real_tags_entry(authenticated_client, feed_corpus):
+    from modules.hfl_corpus.corpus import parse_entries
+    rows = parse_entries("""## Tags
+Tags: #dogs #work #summary
+## Undated note
+Source: notes
+Moment: Walking the dogs
+Tags: #dogs
+## Tags
+Source: notes
+Moment: Organizing dog tags
+Tags: #dogs
+""")
+    feed_corpus[0] = replace(feed_corpus[0], entries=rows)
+    result = authenticated_client.get('/hfl-corpus/curated-feed', params={'q': '#dogs'}).json()
+    assert result['total'] == 2
+    assert {entry['title'] for entry in result['entries']} == {'Walking the dogs', 'Organizing dog tags'}
+
+
+def test_feed_resolves_only_visible_entry_attachments(authenticated_client, feed_corpus, tmp_path, monkeypatch):
+    from modules.hfl_corpus import curated_feed as feed
+    from modules.hfl_corpus.corpus import parse_entries
+    import base64
+    image = tmp_path / 'photo.png'
+    image.write_bytes(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='))
+    note = tmp_path / 'notes.txt'; note.write_text('Attachment text')
+    monkeypatch.setattr(feed, 'resolve_corpus_root', lambda: tmp_path)
+    monkeypatch.setattr(feed, 'allowed_reference_roots', lambda root: (tmp_path,))
+    entries = parse_entries(f"""## 2026-01-01
+Source: notes
+Moment: Photo note
+Tags: #dogs
+References:
+- {image.as_posix()}
+- {note.as_posix()}
+## 2026-01-02
+Source: notes
+Moment: Private photo
+Tags: #other
+References:
+- {image.as_posix()}
+""")
+    feed_corpus[0] = replace(feed_corpus[0], path=tmp_path / 'entry.md', entries=entries)
+    result = authenticated_client.get('/hfl-corpus/curated-feed', params={'q':'#dogs'}).json()
+    assert result['total'] == 1
+    row = result['entries'][0]
+    assert [item['kind'] for item in row['attachments']] == ['image', 'download']
+    assert row['attachments'][0]['media_url'].endswith('/media')
+    assert row['attachments'][1]['href'].endswith('/download')
+    assert str(tmp_path) not in row['html'] and 'References:' not in row['html']
+    assert 'Source:' not in row['html'] and 'Tags:' not in row['html']
+
+
+def test_remote_feed_rewrites_attachment_routes(monkeypatch):
+    from modules.hfl_corpus.remote import RemoteCorpusClient
+    from types import SimpleNamespace
+    client = object.__new__(RemoteCorpusClient)
+    monkeypatch.setattr(RemoteCorpusClient, '_get', lambda *a, **kw: SimpleNamespace(json=lambda: {
+        'entries': [{'attachments': [{'token':'signed-token','href':'/hfl-corpus/references/signed-token/download',
+                                     'media_url':'/hfl-corpus/references/signed-token/media','kind':'video'}]}]}))
+    item = client.curated_feed(params={'q':'#dogs'})['entries'][0]['attachments'][0]
+    assert item['href'] == '/hfl-corpus/remote-references/signed-token/download'
+    assert item['media_url'] == '/hfl-corpus/remote-references/signed-token/media'
+    assert 'token' not in item
+
+
+def test_feed_audio_classification_is_opt_in_and_checks_content(tmp_path):
+    from modules.hfl_shares.viewer import classify_preview
+    import wave
+    audio = tmp_path / 'clip.wav'
+    with wave.open(str(audio), 'wb') as out:
+        out.setnchannels(1); out.setsampwidth(2); out.setframerate(8000); out.writeframes(b'\0\0' * 80)
+    assert classify_preview(audio) is None
+    assert classify_preview(audio, include_audio=True).kind == 'audio'
+    audio.write_text('not audio')
+    assert classify_preview(audio, include_audio=True) is None

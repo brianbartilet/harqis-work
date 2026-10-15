@@ -99,7 +99,7 @@ def _looks_like_utf8_text(sample: bytes) -> bool:
     return True
 
 
-def classify_preview(path: Path) -> PreviewFile | None:
+def classify_preview(path: Path, *, include_audio: bool = False) -> PreviewFile | None:
     """Classify only when an allowlisted extension agrees with file content."""
     try:
         size = path.stat().st_size
@@ -118,6 +118,17 @@ def classify_preview(path: Path) -> PreviewFile | None:
         if _detected_video_type(header) == expected:
             return PreviewFile("video", expected, size)
         return None
+    audio_type = None
+    if extension == '.mp3' and (header.startswith(b'ID3') or (len(header) > 1 and header[0] == 255 and header[1] & 224 == 224)):
+        audio_type = 'audio/mpeg'
+    elif extension == '.wav' and header.startswith(b'RIFF') and header[8:12] == b'WAVE':
+        audio_type = 'audio/wav'
+    elif extension in {'.ogg', '.oga'} and header.startswith(b'OggS'):
+        audio_type = 'audio/ogg'
+    elif extension == '.m4a' and header[4:8] == b'ftyp':
+        audio_type = 'audio/mp4'
+    if audio_type and include_audio:
+        return PreviewFile('audio', audio_type, size)
     if extension in _MARKDOWN_EXTENSIONS:
         if size <= MAX_PREVIEW_BYTES and _looks_like_utf8_text(header):
             return PreviewFile("markdown", "text/markdown; charset=utf-8", size)

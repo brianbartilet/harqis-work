@@ -430,7 +430,7 @@ def _with_reference_preview(reference):
         token,
         allowed_reference_roots(resolve_corpus_root()),
     )
-    preview = classify_preview(path) if path else None
+    preview = classify_preview(path, include_audio=True) if path else None
     if not preview:
         return reference
     base_url = reference.href.removesuffix("/download")
@@ -490,7 +490,7 @@ def _preview_path(token: str):
     )
     if not path:
         raise HTTPException(status_code=404, detail="Reference unavailable.")
-    preview = classify_preview(path)
+    preview = classify_preview(path, include_audio=True)
     if not preview:
         raise HTTPException(
             status_code=415,
@@ -554,7 +554,7 @@ def _file_chunks(path: Path, start: int, end: int):
 
 
 def _media_response(request: Request, path: Path, preview):
-    if preview.kind not in {"image", "video"}:
+    if preview.kind not in {"image", "video", "audio"}:
         raise HTTPException(status_code=415, detail="This is not a media reference.")
     headers = {
         "Accept-Ranges": "bytes",

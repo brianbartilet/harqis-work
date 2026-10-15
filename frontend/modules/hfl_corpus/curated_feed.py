@@ -1,6 +1,7 @@
 """Bounded, entry-level reading feed using the corpus' existing filter rules."""
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from urllib.parse import quote
 
@@ -8,11 +9,21 @@ from fastapi import HTTPException
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from config import get_settings
-from modules.hfl_corpus.corpus import corpus_index, format_hfl_markdown
+from modules.hfl_corpus.corpus import corpus_index, format_hfl_markdown, _entry_metadata, resolve_corpus_root
 from modules.hfl_corpus.secrets import is_secret_entry
 from modules.hfl_corpus.view_scope import parse_scope, predicate, resolved
 from modules.hfl_corpus.workspace_views import WorkspaceState
 from services.markdown import render_markdown
+from services.safe_paths import resolve_reference, allowed_reference_roots, load_download_token
+from modules.hfl_shares.viewer import classify_preview
+
+
+def _is_tag_index(entry):
+    """Summary tag inventories are document metadata, not reading entries."""
+    if entry.header.strip().casefold() != 'tags' or entry.source:
+        return False
+    body = entry.text.partition('\n')[2].strip()
+    return bool(re.fullmatch(r'Tags:\s*(?:#[^\s#]+\s*)+', body, re.IGNORECASE))
 
 
 def feed_page(params, *, include_secrets=False, secret_tags=()):
@@ -56,6 +67,8 @@ def feed_page(params, *, include_secrets=False, secret_tags=()):
     matches = []
     for document in corpus_index.documents():
         for entry in document.entries:
+            if _is_tag_index(entry):
+                continue
             if is_secret_entry(entry, secret_tags) and not include_secrets:
                 continue
             if not narrowing(document, entry):
@@ -74,14 +87,47 @@ def feed_page(params, *, include_secrets=False, secret_tags=()):
     remaining = [row for row in matches if after is None or row[0] > after]
     page = remaining[:50]
     entries = []
+    root = resolve_corpus_root()
+    roots = allowed_reference_roots(root)
     for key, document, entry in page:
         href = '/hfl-corpus/document/' + quote(document.relative_path, safe='/')
         if include_secrets:
             href += '?show_secrets=true'
+        attachments = []
+        raw_refs = _entry_metadata(entry.header, entry.text)[1]
+        for raw in dict.fromkeys(raw_refs):
+            ref = resolve_reference(raw, source_document=document.path or root / document.relative_path,
+                                    corpus_root=root, reference_roots=roots)
+            if ref.kind not in {'download', 'external'} or not ref.href:
+                continue
+            item = dict(label=ref.label.replace('\\', '/').rsplit('/', 1)[-1] if ref.kind == 'download' else ref.label, href=ref.href, kind=ref.kind)
+            if ref.kind == 'download':
+                token = ref.href.split('/')[-2]
+                path = load_download_token(token, roots)
+                preview = classify_preview(path, include_audio=True) if path else None
+                item['token'] = token
+                if preview and preview.kind in {'image', 'video', 'audio'}:
+                    item['kind'] = preview.kind
+                    item['media_url'] = ref.href.removesuffix('/download') + '/media'
+            attachments.append(item)
+        # Render metadata once, with references in the dedicated attachment area.
+        lines = entry.text.splitlines()
+        body = []
+        in_refs = False
+        for line in lines:
+            if re.match(r'^\s*References:', line, re.I):
+                in_refs = True
+                continue
+            if in_refs and (not line.strip() or line.strip().startswith('- ')):
+                continue
+            in_refs = False
+            if re.match(r'^\s*(?:(?:Source|Tags|Machine|Entry ID):|#{1,6}\s+)', line, re.I):
+                continue
+            body.append(line)
         entries.append(dict(id=document.relative_path + '#' + entry.anchor,
             title=entry.moment or entry.header or document.name, date=entry.header,
-            source=entry.source, tags=entry.tags,
+            source=entry.source, tags=entry.tags, attachments=attachments,
             href=href + '#' + quote(entry.anchor, safe=''),
-            html=str(render_markdown(format_hfl_markdown(entry.text, ())))))
+            html=str(render_markdown(format_hfl_markdown("\n".join(body), ())))))
     next_cursor = signer.dumps({'scope': fingerprint, 'after': page[-1][0]}) if len(remaining) > 50 else None
     return {'entries': entries, 'total': total, 'next_cursor': next_cursor}

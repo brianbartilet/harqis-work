@@ -112,7 +112,7 @@ def _preview_reference_path(token: str):
     path = load_download_token(token, allowed_reference_roots(root))
     if not path:
         raise HTTPException(status_code=404, detail="Reference unavailable")
-    preview = classify_preview(path)
+    preview = classify_preview(path, include_audio=True)
     if not preview:
         raise HTTPException(
             status_code=415,
@@ -507,7 +507,7 @@ async def hfl_api_document(
                 item["token"],
                 allowed_reference_roots(root),
             )
-            preview = classify_preview(path) if path else None
+            preview = classify_preview(path, include_audio=True) if path else None
             if preview:
                 item["preview_kind"] = preview.kind
         if reference.kind in {"download", "external"} and (
@@ -617,7 +617,7 @@ async def hfl_api_reference_preview(request: Request, token: str):
 @router.get("/reference/{token}/media")
 async def hfl_api_reference_media(request: Request, token: str):
     path, preview = _preview_reference_path(token)
-    if preview.kind not in {"image", "video"}:
+    if preview.kind not in {"image", "video", "audio"}:
         raise HTTPException(status_code=415, detail="This is not a media reference.")
     return FileResponse(
         path,

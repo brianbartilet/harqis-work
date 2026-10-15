@@ -20,7 +20,7 @@
   document.addEventListener('DOMContentLoaded',()=>{
     const board=query('[data-actions-page]'), graph=query('.kg-shell'), corpus=query('[data-corpus-index]');
     if((!board&&!graph&&!corpus)||graph?.dataset.readonly==='true')return;
-    const pageKeys=board?[['i','Ideas drawer'],['a','Create action'],['d','Create idea'],['m','Multiselect'],['Space','Refresh']]:graph?[['a','Explore activity graph'],['e','Entities'],['f','Filters'],['b','Board guide'],['r','Refresh'],['Space','Reapply preset and refresh'],['p','Fit view'],['[','Zoom in'],[']','Zoom out'],['\\','Toggle fullscreen']]:[['v','View timeline'],['e','Create entry'],['a','Create action'],['d','Create idea'],['x','Secrets'],['t','Tags'],['m','Expand/collapse memory signal'],['c','Manage categories'],['Space','Go to today']];
+    const pageKeys=board?[['i','Ideas drawer'],['a','Create action'],['d','Create idea'],['m','Multiselect'],['Space','Refresh']]:graph?[['a','Explore activity graph'],['e','Entities'],['f','Filters'],['b','Board guide'],['r','Refresh'],['Space','Reapply preset and refresh'],['p','Fit view'],['[','Zoom in'],[']','Zoom out'],['\\','Toggle fullscreen']]:[['v','Open/close feed'],['e','Create entry'],['a','Create action'],['d','Create idea'],['x','Secrets'],['t','Tags'],['m','Expand/collapse memory signal'],['c','Manage categories'],['Space','Go to today']];
     const contextKeys=board?[['e','Edit'],['o','Move to done'],['a','Agents'],['i','Dismiss'],['h','History'],['x','Expand/collapse card sections']]:graph?[['t','Add thought'],['c','Connect on this board'],['n','Clone'],['d','Dismiss'],['r','Promote'],['e','Edit'],['u','Use as starting point'],['o','Board connections'],['x','Clear selection'],['f','Focus connection'],['Delete','Remove selected from board'],['↑ / ↓','+/- orb size']]:[];
     const dialog=document.createElement('dialog');dialog.className='context-help';dialog.id='activity-hotkey-help';dialog.setAttribute('aria-labelledby','activity-hotkey-title');
     const header=document.createElement('header');header.className='context-help-header';
@@ -40,8 +40,15 @@
     else query('.corpus-navigation-actions .corpus-create-menu').before(help);
     let opener;help.onclick=()=>{opener=document.activeElement;dialog.showModal();close.focus();};dialog.onclose=()=>opener?.focus();
     document.addEventListener('keydown',event=>{
-      if(event.defaultPrevented||event.repeat||event.isComposing||event.metaKey||event.shiftKey||event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),.xterm,[role="textbox"]')||query('dialog[open]:not(#followups-board):not(#activity-standalone)'))return;
+      if(event.defaultPrevented||event.repeat||event.isComposing||event.metaKey||event.shiftKey||event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),.xterm,[role="textbox"]') )return;
       const key=event.key.toLowerCase();
+      const activeDialog=query('dialog[open]:not(#followups-board):not(#activity-standalone)');
+      if(activeDialog){
+        if(key==='v'&&!event.ctrlKey&&!event.altKey&&activeDialog.matches('[data-curated-feed]')&&!query('dialog[open]:not([data-curated-feed]):not(#followups-board):not(#activity-standalone)')){
+          event.preventDefault();activeDialog.close();
+        }
+        return;
+      }
       if(event.ctrlKey){
         if(graph&&!event.altKey&&window.HflIdeas?.maps.current){
           const pattern={s:/^Save now$/,l:/^Save layout$/,e:/^Settings$/,d:/^Delete$/}[key];

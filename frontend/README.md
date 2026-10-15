@@ -440,16 +440,20 @@ an ordered comma-separated list. Optional leading `#` signs are accepted and
 case-insensitive duplicates are removed. Favorites stay visible beside the Tags
 accordion, including tags with no current matches. Clicking a pill toggles its
 partial tag filter immediately; multiple selected tags use AND and retain the
-other search filters. **Edit**, beside **Quick tags**, opens the settings section and
-focuses the field. Agents and Activity Corpus settings start collapsed.
+other search filters. **Quick tags** opens the settings section and focuses the field, with a breadcrumb
+back to the filtered corpus view. Agents and Activity Corpus settings start collapsed.
 
-**View timeline** (shortcut **V**) opens a reading feed for the applied search,
+**View feed** (shortcut **V**, also closes the dialog) opens a reading feed for the applied search,
 tags, sources, dates, and selected Space filters. It stays disabled without a
 meaningful filter; unsent form edits and sorting alone do not enable it. Entries
 are ordered by their recorded date, newest first, with an oldest-first option
 and undated entries last. The dialog loads 50 entries at a time as you scroll,
 offers retry/load-more controls, and links each card to its original document
-entry. Secret entries retain the existing PIN rules. **Save as Space** carries
+entry. Cards use the shared-page layout with tag and source badges. Attached images
+fit inside each card without cropping or a separate viewer; supported video and
+audio use inline controls without autoplay. Images load lazily, players do not
+preload media, and other files have authenticated download links. Closing the
+dialog pauses playback. Secret entries retain the existing PIN rules. **Save as Space** carries
 the filters into the Space editor, including combined rules shown under
 **Saved timeline rules**; it does not copy or freeze the entries themselves.
 The owner endpoint is `/hfl-corpus/curated-feed`; remote frontends require the

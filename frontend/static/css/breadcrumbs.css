@@ -1,0 +1,9 @@
+/* Shared breadcrumb styling for settings and application integrations. */
+.integration-breadcrumbs{margin-bottom:1rem;font-size:.875rem;line-height:1.25rem}
+.integration-breadcrumbs ol{display:flex;align-items:center;flex-wrap:wrap;gap:.5rem;list-style:none;margin:0;padding:0}
+.integration-breadcrumbs li{display:flex;align-items:center;gap:.5rem;min-width:0}
+.integration-breadcrumbs a{color:#94a3b8;border-radius:.25rem}
+.integration-breadcrumbs a:hover{color:#93c5fd;text-decoration:underline;text-underline-offset:3px}
+.integration-breadcrumbs a:focus-visible{outline:2px solid #38bdf8;outline-offset:3px}
+.integration-breadcrumbs svg{width:1rem;height:1rem;color:#64748b;flex-shrink:0}
+.integration-breadcrumbs [aria-current=page]{color:#e2e8f0;font-weight:500;overflow-wrap:anywhere}

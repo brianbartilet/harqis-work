@@ -308,7 +308,16 @@ class RemoteCorpusClient:
             ) from exc
 
     def curated_feed(self, *, params: dict[str, str]) -> dict[str, Any]:
-        return self._get('/curated-feed', params=params).json()
+        payload = self._get('/curated-feed', params=params).json()
+        for entry in payload.get('entries', []):
+            for attachment in entry.get('attachments', []):
+                token = attachment.pop('token', None)
+                if token:
+                    base = '/hfl-corpus/remote-references/' + quote(token, safe='')
+                    attachment['href'] = base + '/download'
+                    if attachment.get('media_url'):
+                        attachment['media_url'] = base + '/media'
+        return payload
 
     def index(self, *, params: dict[str, str]) -> dict[str, Any]:
         try:

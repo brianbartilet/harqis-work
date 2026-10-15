@@ -289,3 +289,29 @@ def test_citations_switch_from_other_panels(editor_page, context, sharing_corpus
     expect(page.locator('[data-share-sidebar=plans]')).not_to_be_visible()
     expect(page.locator('#evidence-' + citation)).to_be_visible()
     expect(page.locator('#evidence-' + citation)).to_be_focused()
+
+
+def test_shared_location_preview_respects_enabled_references():
+    from types import SimpleNamespace
+    from modules.hfl_shares.router import _reference_views, _location_map_url
+    from web import templates
+    refs = [SimpleNamespace(id='place', enabled=True, kind='external', label='Map',
+                            target='https://www.openstreetmap.org/?mlat=1.3&mlon=103.8'),
+            SimpleNamespace(id='hidden', enabled=False, kind='external', label='Hidden',
+                            target='https://www.openstreetmap.org/?mlat=2&mlon=104'),
+            SimpleNamespace(id='site', enabled=True, kind='external', label='Website',
+                            target='https://example.com')]
+    entry = SimpleNamespace(references=refs)
+    views = _reference_views(entry, base_url='/share/session/references')
+    assert 'hidden' not in views
+    assert views['place']['location'] and 'marker=1.3%2C103.8' in views['place']['map_url']
+    assert 'location' not in views['site']
+    assert _location_map_url('https://www.openstreetmap.org/?mlat=999&mlon=1') == ''
+    assert _location_map_url('https://www.openstreetmap.org/search?query=Singapore') == ''
+    assert _location_map_url('https://openstreetmap.org.evil.test/?mlat=1&mlon=2') is None
+    html = templates.env.get_template('modules/hfl_shares/_guest_references.html').render(
+        entry=entry, item={'reference_views': views})
+    assert html.count('<iframe') == 1
+    assert '>Location</strong>' in html and 'Explore further' in html
+    assert 'Hidden' not in html and 'Website' in html
+    assert 'loading="lazy"' in html and 'Open in OpenStreetMap' in html

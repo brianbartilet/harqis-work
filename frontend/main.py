@@ -328,7 +328,7 @@ async def add_security_headers(request: Request, call_next):
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; img-src 'self' data:; "
-            "media-src 'self'; "
+            "media-src 'self'; frame-src https://www.openstreetmap.org; "
             f"script-src 'self' 'nonce-{request.state.csp_nonce}'; "
             "style-src 'self' 'unsafe-inline'; form-action 'self'; "
             "frame-ancestors 'none'; base-uri 'none'"

@@ -1,9 +1,25 @@
   {% set enabled_refs = entry.references|selectattr('enabled')|list %}
-  {% if enabled_refs %}
+  {% set refs = namespace(locations=[], others=[]) %}
+  {% for reference in enabled_refs %}
+    {% set view = item.reference_views.get(reference.id) %}
+    {% if view and view.location %}{% set refs.locations = refs.locations + [reference] %}
+    {% else %}{% set refs.others = refs.others + [reference] %}{% endif %}
+  {% endfor %}
+  {% if refs.locations %}
+  <section class="entry-references entry-location" aria-label="Location">
+    <strong>Location</strong>
+    {% for reference in refs.locations %}
+      {% set view = item.reference_views.get(reference.id) %}
+      {% if view.map_url %}<iframe src="{{ view.map_url }}" title="Location map" loading="lazy" referrerpolicy="no-referrer"></iframe>{% endif %}
+      <a href="{{ view.download_url }}" target="_blank" rel="noopener noreferrer">Open in OpenStreetMap</a>
+    {% endfor %}
+  </section>
+  {% endif %}
+  {% if refs.others %}
   <div class="entry-references">
     <strong>Explore further</strong>
     <div class="reference-links">
-      {% for reference in enabled_refs %}
+      {% for reference in refs.others %}
       {% set view = item.reference_views.get(reference.id) %}
       {% if view and view.kind %}
       <button class="reference-preview reference-preview-{{ view.kind }}" type="button"
