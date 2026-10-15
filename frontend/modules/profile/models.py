@@ -24,6 +24,7 @@ class OwnerProfile:
     avatar_content_type: str = ""
     secret_pin_hash: str = ""
     secret_tags: str = ""
+    favorite_tags: str = ""
     updated_at: str = ""
     timezone: str = "Asia/Singapore"
 

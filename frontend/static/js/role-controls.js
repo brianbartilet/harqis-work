@@ -4,7 +4,7 @@ window.RoleControls = (form, role, catalog, api, report) => {
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const color = value => /^#[\da-f]{6}$/i.test(value || '') ? value : '#3b82f6';
   let alive = true, sequence = 0, timer, markdownSequence = 0;
-  const selected = new Map(role.entity_ids.map(id => [id, {id, label:id}]));
+  const selected = new Map(role.entity_ids.map(id => [id, {id, label:'Loading entity…'}]));
   const palette = [...new Set([...(catalog.palette || []), role.color])];
   $('#role-colors').innerHTML = palette.map(c => `<button type="button" class="role-swatch" style="--swatch:${color(c)}" aria-label="Color ${escape(c)}" aria-pressed="${c === role.color}" data-color="${escape(c)}"></button>`).join('');
   $('#role-colors').onclick = event => {
@@ -39,7 +39,10 @@ window.RoleControls = (form, role, catalog, api, report) => {
       if (!alive || request !== sequence) return;
       const type = $('#role-entity-type'), value = type.value;
       type.replaceChildren(...[...new Set(['people',...result.types])].map(kind => new Option(kind,kind)),new Option('All types','')); type.value=value;
-      result.selected.forEach(e => { if (selected.has(e.id)) selected.set(e.id,e); });
+      const resolved = new Map(result.selected.map(e => [e.id, e]));
+      selected.forEach((entity, id) => selected.set(id, resolved.get(id) || {
+        id, label: 'Unavailable entity', kind: 'Merged or removed · remove or replace this link'
+      }));
       matches = result.entities;
       $('#role-entities').innerHTML = matches.map(e => `<button type="button" data-entity="${escape(e.id)}" aria-pressed="${selected.has(e.id)}"><strong>${escape(e.label)}</strong><span class="role-entity-meta"><span style="--entity-color:${color(e.color)}">${escape(e.kind)}</span><small>${e.count} ${e.count===1?'entry':'entries'}</small></span></button>`).join('');
       $('#role-entity-status').textContent = `${result.total} matching entities${result.total>50?'; showing 50. Refine your search.':'.'}`;

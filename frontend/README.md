@@ -435,9 +435,17 @@ Tag chips on both search results and document pages are links. Selecting one
 opens a tag-only corpus search and returns every indexed document with a
 matching tag, using the same case-insensitive partial-match behavior.
 
+Quick tags are configured under **User > App Settings > Activity Corpus** as
+an ordered comma-separated list. Optional leading `#` signs are accepted and
+case-insensitive duplicates are removed. Favorites stay visible beside the Tags
+accordion, including tags with no current matches. Clicking a pill toggles its
+partial tag filter immediately; multiple selected tags use AND and retain the
+other search filters. **Edit quick tags** opens the settings section and
+focuses the field. Agents and Activity Corpus settings start collapsed.
+
 ### Secret entries
 
-Profile Settings stores a salted hash of a six-digit owner PIN and a
+**App Settings > Activity Corpus** manages a salted hash of a six-digit owner PIN and a
 comma-separated protected-tag list. `#secrets` is always protected; configured
 tags are normalized without their leading `#` and matched exactly and
 case-insensitively. This is an authenticated-frontend privacy screen only:

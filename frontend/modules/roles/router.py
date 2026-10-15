@@ -61,12 +61,18 @@ def api_list():
 
 def persist(payload, identity=None):
     from modules.hfl_corpus.workspace_views import listing
+    existing = store.get(identity) if identity else None
+    if existing and existing['revision'] != payload.revision:
+        raise HTTPException(409, 'This facet changed. Reload and review before saving.')
     valid = {v['id'] for v in listing()['views']}
     if not set(payload.workspace_ids).issubset(valid):
         raise HTTPException(422, 'A selected Space is unavailable.')
-    if payload.entity_ids:
+    # Merges/removals can leave saved links outside the current catalog. Keep
+    # those links editable without dropping them or blocking unrelated edits.
+    added_entities = set(payload.entity_ids) - set(existing.get('entity_ids', []) if existing else [])
+    if added_entities:
         from modules.hfl_shares.personalization import entity_catalog
-        if not set(payload.entity_ids).issubset({e['id'] for e in entity_catalog()}):
+        if not added_entities.issubset({e['id'] for e in entity_catalog()}):
             raise HTTPException(422, 'A selected entity is unavailable.')
     changes = payload.model_dump(exclude={'revision'})
     return store.save(identity, payload.revision, changes)

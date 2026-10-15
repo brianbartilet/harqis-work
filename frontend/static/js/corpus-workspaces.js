@@ -240,7 +240,7 @@
     event.preventDefault();
     const tag = link.dataset.workspaceTag;
     const tokens = form.elements.q.value.split(/\s+/).filter(Boolean);
-    const matching = tokens.filter(token => token.startsWith('#') && tag.toLowerCase().includes(token.slice(1).toLowerCase()));
+    const matching = tokens.filter(token => token.startsWith('#') && (link.hasAttribute('data-favorite-tag') ? tag.toLowerCase() === token.slice(1).toLowerCase() : tag.toLowerCase().includes(token.slice(1).toLowerCase())));
     form.elements.q.value = (matching.length ? tokens.filter(token => !matching.includes(token)) : [...tokens, '#' + tag]).join(' ');
     editedFilters.add('q');
     form.requestSubmit();

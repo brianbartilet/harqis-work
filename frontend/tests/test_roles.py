@@ -30,6 +30,50 @@ def config(persona):
     return ShareConfiguration(id='recipe', name='Interview', recipient='Hiring manager', sources=('__all__',), persona=persona)
 
 
+def test_update_retains_stale_entities_but_validates_new_links(authenticated_client, monkeypatch):
+    from modules.hfl_shares import personalization
+    monkeypatch.setattr(personalization, 'entity_catalog', lambda: [{'id': 'current'}])
+    owner = role(entity_ids=['merged'])
+    headers = {'X-CSRF-Token': make_csrf_token('frontend-test-user')}
+    fields = {key: owner[key] for key in ('revision', 'name', 'color', 'soul', 'workspace_ids', 'entity_ids', 'archived')}
+    endpoint = '/roles/data/' + owner['id']
+    saved = authenticated_client.put(endpoint, headers=headers, json={**fields, 'soul': 'Updated soul', 'entity_ids': ['merged', 'current']})
+    assert saved.status_code == 200
+    assert saved.json()['entity_ids'] == ['merged', 'current']
+    assert saved.json()['soul'] == 'Updated soul'
+    assert store.history(owner['id'])[-1]['soul'] == owner['soul']
+    assert authenticated_client.put(endpoint, headers=headers, json=fields).status_code == 409
+    fields.update(revision=2, entity_ids=['merged', 'unknown'])
+    assert authenticated_client.put(endpoint, headers=headers, json=fields).status_code == 422
+    assert store.get(owner['id'])['revision'] == 2
+    assert authenticated_client.post('/roles/data', headers=headers, json={**fields, 'revision': 0}).status_code == 422
+    fields.update(entity_ids=['current'])
+    assert authenticated_client.put(endpoint, headers=headers, json=fields).status_code == 200
+    assert store.get(owner['id'])['entity_ids'] == ['current']
+
+
+def test_stale_entity_browser_can_save_and_remove(editor_page, monkeypatch):
+    from playwright.sync_api import expect
+    from modules.hfl_shares import personalization
+    monkeypatch.setattr(personalization, 'entity_catalog', lambda: [])
+    owner = role(entity_ids=['merged'])
+    page, _ = editor_page
+    page.goto('https://editing.test/roles')
+    page.locator('[data-role="' + owner['id'] + '"]').first.click()
+    expect(page.locator('#role-selected-entities')).to_contain_text('Unavailable entity')
+    page.get_by_label('Facet name', exact=True).fill('Updated facet')
+    page.get_by_role('button', name='Save facet', exact=True).click()
+    expect(page.locator('#role-status')).to_contain_text('Facet saved')
+    assert store.get(owner['id'])['name'] == 'Updated facet'
+    assert store.get(owner['id'])['entity_ids'] == ['merged']
+    page.get_by_role('button', name='Remove Unavailable entity', exact=True).click()
+    page.get_by_role('button', name='Save facet', exact=True).click()
+    expect(page.locator('#role-selected-entities > .role-selected-entity')).to_have_count(0)
+    expect(page.locator('#role-status')).to_contain_text('Facet saved')
+    expect(page.locator('[data-role="' + owner['id'] + '"]').first).to_contain_text('revision 3')
+    assert store.get(owner['id'])['entity_ids'] == []
+
+
 def test_sharing_page_survives_stale_facet_entity(authenticated_client, sharing_corpus, monkeypatch):
     from modules.hfl_shares import personalization
     monkeypatch.setattr(personalization, 'entity_catalog', lambda: [])

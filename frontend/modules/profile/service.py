@@ -88,13 +88,14 @@ def profile_from_form(form: Any, saved: OwnerProfile) -> tuple[OwnerProfile, dic
     for field in ("linkedin_url", "github_url", "website_url", "instagram_url"):
         if values[field] and not _valid_https_url(values[field]):
             errors[field] = "Enter a complete HTTPS URL."
-    secret_tags = _clean(form, "secret_tags")
+    secret_tags = _clean(form, "secret_tags") if "secret_tags" in form else saved.secret_tags
     if len(secret_tags) > 1000:
         errors["secret_tags"] = "Use 1000 characters or fewer."
     profile = OwnerProfile(
         **values,
         secret_pin_hash=saved.secret_pin_hash,
         secret_tags=secret_tags,
+        favorite_tags=saved.favorite_tags,
     ).with_avatar_from(saved)
     return profile, errors
 

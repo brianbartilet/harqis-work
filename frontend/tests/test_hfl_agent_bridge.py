@@ -302,6 +302,7 @@ def test_browser_settings_and_future_dates(bridge, authenticated_client, monkeyp
             request_route.fulfill(status=response.status_code, headers={'content-type': response.headers.get('content-type', 'text/html')}, body=response.content)
         page.route('**/*', route)
         page.goto('https://bridge.test/settings')
+        page.locator('details.settings-section > summary').filter(has_text='Agents').click()
         page.get_by_text('Actions polling minutes', exact=False).first.wait_for()
         page.locator('summary[aria-label="Profile menu"]').click()
         assert page.locator('nav[aria-label="Profile menu"] a[href="/settings"]').is_visible()

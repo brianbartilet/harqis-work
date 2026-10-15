@@ -45,7 +45,7 @@ class ProfileStore:
             columns = {
                 row["name"] for row in connection.execute("PRAGMA table_info(owner_profile)")
             }
-            for name in ("secret_pin_hash", "secret_tags", "birthdate"):
+            for name in ("secret_pin_hash", "secret_tags", "birthdate", "favorite_tags"):
                 if name not in columns:
                     connection.execute(
                         f"ALTER TABLE owner_profile ADD COLUMN {name} TEXT NOT NULL DEFAULT ''"

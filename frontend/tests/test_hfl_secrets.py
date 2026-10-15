@@ -133,7 +133,7 @@ def test_secrets_without_pin_offers_setup_without_direct_navigation(authenticate
     assert '<button type="button" data-secrets-setup aria-haspopup="dialog"' in page.text
     assert 'data-secrets-setup-dialog' in page.text
     assert 'Set up your secrets PIN' in page.text
-    assert 'href="/profile#profile-secrets-title">Set up PIN in Profile</a>' in page.text
+    assert 'href="/settings#corpus-secrets-title">Set up PIN in App Settings</a>' in page.text
     assert '<button type="button" data-secrets-toggle' not in page.text
 
 

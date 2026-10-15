@@ -910,9 +910,17 @@ async def hfl_corpus_page(
         **{key: request.query_params.get(key, "") for key in ("scope", "views", "dynamic")},
     )
     tag_options = []
-    for tag, count in tag_cloud:
+    favorite_options = []
+    favorites = [
+        tag.strip().lstrip('#')
+        for tag in profile.favorite_tags.split(',') if tag.strip()
+    ]
+    options = [(tag, None, True) for tag in favorites]
+    options.extend((tag, count, False) for tag, count in tag_cloud)
+    for tag, count, favorite in options:
         matching_selections = tuple(
-            selected for selected in selected_tags if selected in tag.casefold()
+            selected for selected in selected_tags
+            if (selected == tag.casefold() if favorite else selected in tag.casefold())
         )
         active = bool(matching_selections)
         next_tags = tuple(
@@ -921,7 +929,7 @@ async def hfl_corpus_page(
         next_query = " ".join(
             [*(f"#{selected}" for selected in next_tags), text_query]
         ).strip()
-        tag_options.append({
+        (favorite_options if favorite else tag_options).append({
             "tag": tag,
             "count": count,
             "active": active,
@@ -1011,6 +1019,7 @@ async def hfl_corpus_page(
             previous_page_url=previous_page_url,
             next_page_url=next_page_url,
             tag_cloud=tag_options,
+            favorite_tags=favorite_options,
             remote_error=remote_error,
             success_message="HFL entry created successfully." if created else "",
             secrets_configured=bool(profile.secret_pin_hash),
