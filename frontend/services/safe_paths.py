@@ -104,6 +104,7 @@ def resolve_reference(
     *,
     source_document: Path,
     corpus_root: Path,
+    reference_roots: tuple[Path, ...] | None = None,
 ) -> ReferenceLink:
     source = (reference or "").strip()
     markdown_link = _MARKDOWN_LINK.fullmatch(source)
@@ -166,7 +167,7 @@ def resolve_reference(
             reason="invalid",
             source=raw,
         )
-    roots = allowed_reference_roots(corpus_root)
+    roots = reference_roots if reference_roots is not None else allowed_reference_roots(corpus_root)
     if not resolved.exists():
         return ReferenceLink(
             label=Path(local_raw).name or raw,

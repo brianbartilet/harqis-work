@@ -1282,6 +1282,30 @@ def test_snapshot_truncates_oldest_entries_at_character_cap(
     )
 
 
+def test_snapshot_resolves_reference_policy_once_and_refreshes_next_request(tmp_path, monkeypatch):
+    from modules.hfl_shares import scope
+    from services import safe_paths
+
+    document = _document(tmp_path)
+    monkeypatch.setattr(scope, "resolve_corpus_root", lambda: tmp_path)
+    calls = []
+    roots = (tmp_path,)
+
+    def policy(root):
+        calls.append(root)
+        return roots
+
+    monkeypatch.setattr(scope, "allowed_reference_roots", policy)
+    monkeypatch.setattr(safe_paths, "allowed_reference_roots", policy)
+    preview = build_snapshot(_configuration(references_enabled=True), (document,))
+    assert len(calls) == 1
+    assert any(ref.kind == "download" for entry in preview.entries for ref in entry.references)
+    roots = ()
+    preview = build_snapshot(_configuration(references_enabled=True), (document,))
+    assert len(calls) == 2
+    assert not any(ref.kind == "download" for entry in preview.entries for ref in entry.references)
+
+
 def test_reference_sharing_is_opt_in_and_hides_canonical_path(
     tmp_path, monkeypatch
 ):

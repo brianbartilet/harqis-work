@@ -256,6 +256,7 @@ def _corpus_graph(source='', since='', until='', limit=100, query='', shared=Fal
 
 def entity_index(source='', since='', until='', context='', graph_query='', graph_sources=None):
     groups = {}
+    entries_by_entity = {}
     rows = projection(source, since, until, context) if context else projection(source, since, until)
     profiles = get_store().profiles()
     query = graph_query.strip().casefold()
@@ -269,7 +270,8 @@ def entity_index(source='', since='', until='', context='', graph_query='', grap
             continue
         for m in entry['mentions']:
             entity = groups.setdefault(m['id'], {**m, 'entries': []})
-            existing = next((e for e in entity['entries'] if e['id'] == entry['id']), None)
+            entry_index = entries_by_entity.setdefault(m['id'], {})
+            existing = entry_index.get(entry['id'])
             if existing:
                 if m['evidence'] not in existing['evidence'].split('\n\n'):
                     existing['evidence'] += '\n\n' + m['evidence']
@@ -278,6 +280,7 @@ def entity_index(source='', since='', until='', context='', graph_query='', grap
                 source=entry['source'], evidence=m['evidence'], method=m['method'],
                 content_hash=entry_hash(entry), origin_id=entry.get('origin_id'),
                 href='/hfl-corpus/entities/entry/' + quote(entry['id'], safe='')))
+            entry_index[entry['id']] = entity['entries'][-1]
     for group in groups.values():
         group['entries'].sort(key=lambda e: e['date'], reverse=True)
     store = get_store()
@@ -292,9 +295,13 @@ def entity_index(source='', since='', until='', context='', graph_query='', grap
         if identity not in groups and not (source or since or until or context or query or graph_sources):
             groups[identity] = dict(id=identity, label=profile['name'], kind=profile['kind'],
                                     resolution='curated', entries=[])
+    legacy_by_canonical = {}
+    for decision in decisions:
+        if decision['active'] and not decision.get('merge_id'):
+            legacy_by_canonical.setdefault(decision['canonical'], []).append(decision)
     for identity, group in groups.items():
         group['merge'] = merged.get(identity)
-        group['legacy_decisions'] = [d for d in decisions if d['active'] and not d.get('merge_id') and d['canonical'] == identity]
+        group['legacy_decisions'] = legacy_by_canonical.get(identity, [])
         profile = profiles.get(identity)
         group['profile'] = profile
         group['categories'] = profile.get('categories', []) if profile else []

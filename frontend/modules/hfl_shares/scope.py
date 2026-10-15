@@ -103,17 +103,23 @@ def _references(
     document: CorpusDocument,
     entry_id: str,
     entry_text: str,
+    *,
+    reference_context=None,
 ) -> tuple[SnapshotReference, ...]:
     if not document.path:
         return ()
-    corpus_root = resolve_corpus_root()
-    roots = allowed_reference_roots(corpus_root)
+    if reference_context is None:
+        corpus_root = resolve_corpus_root()
+        roots = allowed_reference_roots(corpus_root)
+    else:
+        corpus_root, roots = reference_context
     links: list[SnapshotReference] = []
     for raw in _raw_references(entry_text):
         resolved = resolve_reference(
             raw,
             source_document=document.path,
             corpus_root=corpus_root,
+            reference_roots=roots,
         )
         target = ""
         label = resolved.label
@@ -206,6 +212,7 @@ def build_snapshot(
     max_chars = max(1, get_settings().hfl_share_max_snapshot_chars)
     used_chars = 0
     truncated = False
+    reference_context = None
 
     ordered_documents = sorted(
         documents,
@@ -259,7 +266,12 @@ def build_snapshot(
                     )
                 truncated = True
                 break
-            references = _references(document, entry_id, entry.text)
+            if reference_context is None and document.path:
+                corpus_root = resolve_corpus_root()
+                reference_context = (corpus_root, allowed_reference_roots(corpus_root))
+            references = _references(
+                document, entry_id, entry.text, reference_context=reference_context,
+            )
             available_references += len(references)
             if not configuration.references_enabled:
                 references = ()
