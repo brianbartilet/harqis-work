@@ -202,6 +202,13 @@ class BridgeClient:
                     raise
                 time.sleep(2 ** attempt)
 
+    def check_ready(self):
+        """Verify worker authentication without polling or reconciling work."""
+        response = self.client.get('ready', timeout=10)
+        response.raise_for_status()
+        if response.json() != {'status': 'ok', 'service': 'hfl-agent-bridge'}:
+            raise ValueError('Unexpected agent bridge readiness response.')
+
     def event(self, run, key, kind, payload):
         return self.call('runs/' + run['id'] + '/events', {'lease_token': run['lease_token'], 'event_key': key, 'kind': kind, 'payload': payload})
 
@@ -489,7 +496,7 @@ def main():
     mode.add_argument('--watch', action='store_true')
     mode.add_argument('--daily', action='store_true')
     mode.add_argument('--dispatch', action='store_true', help='Discover due work without executing it (Hermes cron).')
-    mode.add_argument('--check', action='store_true')
+    mode.add_argument('--check', action='store_true', help='Read-only Hermes import and authenticated bridge readiness check.')
     mode.add_argument('--capabilities', action='store_true', help='Discover profile tools without inference or consuming tasks.')
     mode.add_argument('--smoke', action='store_true', help='Run two synthetic file tasks, without consuming the production queue.')
     args = parser.parse_args()
@@ -513,7 +520,7 @@ def main():
         if args.check:
             command, root = hermes_command('from hermes_cli.config import load_config_readonly\nimport cli')
             subprocess.run(command, cwd=root, check=True, timeout=60, capture_output=True)
-            client.call('queue')
+            client.check_ready()
             print('Hermes installation and authenticated bridge are available.')
             return
         if args.daily or args.dispatch:
