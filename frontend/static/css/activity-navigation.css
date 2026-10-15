@@ -1,3 +1,14 @@
+/* Keep the shared header independent of each page's content layout and font. */
+.site-header { font-family:var(--font-sans); }
+.site-header-mobile-nav { justify-content:safe center; }
+/* Equal side columns keep desktop navigation centered despite wider account controls. */
+@media (min-width:1024px) {
+  .site-header-inner { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:24px; }
+  .site-header-inner > a { justify-self:start; }
+  .site-header-inner > nav { justify-self:center; }
+  .site-header-inner > div { justify-self:end; }
+}
+
 .activity-navigation { display:flex; align-items:center; flex-shrink:0; border-radius:.375rem; color:#94a3b8; font-size:.75rem; font-weight:500; white-space:nowrap; }
 .activity-navigation.is-active { background:rgba(23,37,84,.7); color:#93c5fd; box-shadow:0 0 0 1px rgba(30,64,175,.6); }
 .activity-navigation > a,.activity-navigation > button { padding:.375rem .75rem; border-radius:.375rem; }
