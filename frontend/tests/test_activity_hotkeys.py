@@ -148,15 +148,15 @@ def test_corpus_shortcuts_and_space_order(editor_page, workspace_corpus):
     page.locator('[data-memory-dialog-close]').first.click()
     expect(page.locator('[data-memory-dialog]')).not_to_be_visible()
     # A typing target must not switch Space or open help.
-    for key, selector in [('q', '[data-advanced-filters]'), ('w', '[data-tag-cloud]'), ('e', '[data-quick-tags-menu]'), ('r', '[data-exclude-tags-menu]')]:
+    for key, selector in [('q', '[data-quick-tags-menu]'), ('w', '[data-exclude-tags-menu]'), ('e', '[data-tag-cloud]'), ('r', '[data-advanced-filters]')]:
         section = page.locator(selector)
         section.evaluate('(el) => el.open = false')
         page.locator('.activity-hotkey-trigger').focus()
         page.keyboard.press(key)
         expect(section).to_have_attribute('open', '')
-        if key == 'q':
+        if key == 'r':
             expect(section.locator('[data-expression-toggle]')).to_be_checked()
-        if key in ('e', 'r'):
+        if key in ('q', 'w'):
             expect(section.locator('summary')).to_be_focused()
         page.keyboard.press(key)
         expect(section).not_to_have_attribute('open', '')

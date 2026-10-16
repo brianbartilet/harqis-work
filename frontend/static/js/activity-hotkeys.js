@@ -20,7 +20,7 @@
   document.addEventListener('DOMContentLoaded',()=>{
     const board=query('[data-actions-page]'), graph=query('.kg-shell'), corpus=query('[data-corpus-index]');
     if((!board&&!graph&&!corpus)||graph?.dataset.readonly==='true')return;
-    const pageKeys=board?[['i','Ideas drawer'],['a','Create action'],['d','Create idea'],['m','Multiselect'],['Space','Refresh']]:graph?[['a','Explore activity graph'],['e','Entities'],['f','Filters'],['b','Board guide'],['r','Refresh'],['Space','Reapply preset and refresh'],['p','Fit view'],['[','Zoom in'],[']','Zoom out'],['\\','Toggle fullscreen']]:[['v','Open/close feed'],['q','Advanced filters / enable Query mode'],['w','Expand/collapse all tags'],['e','Show/hide quick tags'],['r','Show/hide exclude tags'],['a','Create action'],['d','Create idea'],['x','Secrets'],['t','Tags'],['c','Manage categories'],['Space','Expand memory signal and go to Today / collapse']];
+    const pageKeys=board?[['i','Ideas drawer'],['a','Create action'],['d','Create idea'],['m','Multiselect'],['Space','Refresh']]:graph?[['a','Explore activity graph'],['e','Entities'],['f','Filters'],['b','Board guide'],['r','Refresh'],['Space','Reapply preset and refresh'],['p','Fit view'],['[','Zoom in'],[']','Zoom out'],['\\','Toggle fullscreen']]:[['v','Open/close feed'],['q','Show/hide quick tags'],['w','Show/hide exclude tags'],['e','Expand/collapse all tags'],['r','Advanced filters / enable Query mode'],['a','Create action'],['d','Create idea'],['x','Secrets'],['t','Tags'],['c','Manage categories'],['Space','Expand memory signal and go to Today / collapse']];
     const contextKeys=board?[['e','Edit'],['o','Move to done'],['a','Agents'],['i','Dismiss'],['h','History'],['x','Expand/collapse card sections']]:graph?[['t','Add thought'],['c','Connect on this board'],['n','Clone'],['d','Dismiss'],['r','Promote'],['e','Edit'],['u','Use as starting point'],['o','Board connections'],['x','Clear selection'],['f','Focus connection'],['Delete','Remove selected from board'],['↑ / ↓','+/- orb size']]:[];
     const dialog=document.createElement('dialog');dialog.className='context-help';dialog.id='activity-hotkey-help';dialog.setAttribute('aria-labelledby','activity-hotkey-title');
     const header=document.createElement('header');header.className='context-help-header';
@@ -69,11 +69,11 @@
       for(const handler of handlers)if(handler(key,event)){event.preventDefault();return;}
       if(key==='n'){event.preventDefault();click(query('[data-dynamic-toggle]'));return;}
       if(corpus){
-        const selectors={v:'[data-curated-feed-open]',w:'[data-tag-cloud] > summary',e:'[data-quick-tags-menu] > summary',r:'[data-exclude-tags-menu] > summary',a:'[data-create-action-open]',x:'[data-secrets-toggle], [data-secrets-setup]',t:'[data-tag-cloud] > summary',c:'[data-memory-category-new]'};
+        const selectors={v:'[data-curated-feed-open]',e:'[data-tag-cloud] > summary',q:'[data-quick-tags-menu] > summary',w:'[data-exclude-tags-menu] > summary',a:'[data-create-action-open]',x:'[data-secrets-toggle], [data-secrets-setup]',t:'[data-tag-cloud] > summary',c:'[data-memory-category-new]'};
         if(key===' '){event.preventDefault();const toggle=query('[data-activity-toggle]');click(toggle?.getAttribute('aria-expanded')==='true'?toggle:query('[data-activity-today]'));}
-        else if(key==='q'){event.preventDefault();const panel=query('[data-advanced-filters]');if(panel){click(panel.querySelector('summary'));const mode=panel.querySelector('[data-expression-toggle]');if(panel.open&&!mode?.checked)click(mode);}}
+        else if(key==='r'){event.preventDefault();const panel=query('[data-advanced-filters]');if(panel){click(panel.querySelector('summary'));const mode=panel.querySelector('[data-expression-toggle]');if(panel.open&&!mode?.checked)click(mode);}}
         else if(key==='d'){event.preventDefault();window.HflIdeas?.openEditor('idea');}
-        else if(selectors[key]){event.preventDefault();const control=query(selectors[key]);if(control&&(key==='e'||key==='r')){control.parentElement.dataset.hotkeyToggle='true';control.focus();}click(control);}
+        else if(selectors[key]){event.preventDefault();const control=query(selectors[key]);if(control&&(key==='q'||key==='w')){control.parentElement.dataset.hotkeyToggle='true';control.focus();}click(control);}
       }
     },{signal:controller.signal});
   },{once:true});
