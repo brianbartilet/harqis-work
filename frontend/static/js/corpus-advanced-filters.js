@@ -114,6 +114,7 @@
       const draft = excludeMenu.querySelector('[data-exclude-tags-input]');
       const save = excludeMenu.querySelector('[data-exclude-tags-save]');
       const status = excludeMenu.querySelector('[data-exclude-tags-status]');
+      excludeMenu.querySelector('[data-tags-clear]').onclick = () => { draft.value = ''; status.hidden = true; draft.focus(); };
       excludeMenu.addEventListener('toggle', () => {
         if (excludeMenu.open) {
           draft.value = control('exclude_tags').value; status.hidden = true; draft.focus();

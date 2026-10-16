@@ -151,6 +151,7 @@
               <div class="corpus-quick-tags-editor">
                 <input data-quick-tags-input aria-label="Quick tags, separated by commas" maxlength="1000" placeholder="#notes, #work" value="{{ quick_tags_value }}" autocomplete="off">
                 <button type="button" data-quick-tags-save data-csrf="{{ memory_csrf }}">Save</button>
+                <button type="button" data-tags-clear>Clear</button>
                 <p data-quick-tags-status role="status" hidden></p>
               </div>
             </details>
@@ -166,6 +167,7 @@
               <div class="corpus-quick-tags-editor">
                 <input data-exclude-tags-input aria-label="Excluded tags, separated by commas" maxlength="1000" placeholder="#hfl, #work" value="{{ advanced_state.exclude_tags }}" autocomplete="off">
                 <button type="button" data-exclude-tags-save>Save</button>
+                <button type="button" data-tags-clear>Clear</button>
                 <p data-exclude-tags-status role="status" hidden></p>
               </div>
             </details>
