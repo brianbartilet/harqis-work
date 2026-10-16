@@ -87,7 +87,7 @@
     }
     async function translate(fromExpression) {
       const current = ++generation; lastController?.abort(); lastController = new AbortController();
-      pending = true; checkingDraft = fromExpression; apply.disabled = true; error.textContent = 'Validating…';
+      pending = true; checkingDraft = fromExpression; apply.disabled = true; error.textContent = '';
       try {
         const response = await fetch('/hfl-corpus/expression', {method:'POST', headers:{'Content-Type':'application/json'},
           body:JSON.stringify(fromExpression ? {expression:editor.value} : {state:snapshot()}), signal:lastController.signal});
@@ -213,6 +213,7 @@
     }, true);
     panel.advancedValid = () => !(pending && checkingDraft) && !invalid;
     panel.refreshAdvanced = () => { media.checked = control('has_media')?.value === 'true'; translate(false); };
+    editor.disabled = !toggle.checked;
     panel.refreshAdvanced();
   }
   window.initializeCorpusAdvanced = () => document.querySelectorAll('[data-advanced-filters]').forEach(initialize);

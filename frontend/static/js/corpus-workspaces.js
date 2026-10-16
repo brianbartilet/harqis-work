@@ -436,11 +436,13 @@
       let html = await response.text();
       const parsed = new DOMParser().parseFromString(html, 'text/html');
       if (!parsed.querySelector('#corpus-search-form') || parsed.querySelector('[data-corpus-load-error]')) throw Error('The corpus could not load. Your previous results are still shown.');
-      if (target.searchParams.get('open_feed') === '1') {
+      const queryMode = !!form.querySelector('[data-expression-toggle]')?.checked;
+      if (target.searchParams.get('open_feed') === '1' || (explicitUrl && queryMode)) {
         for (const selector of ['[data-advanced-filters]', '[data-tag-cloud]']) {
           const previous = form.querySelector(selector), next = parsed.querySelector(selector);
           if (previous && next) next.open = previous.open;
         }
+        parsed.querySelector('[data-expression-toggle]')?.toggleAttribute('checked', queryMode);
         html = '<!DOCTYPE html>' + parsed.documentElement.outerHTML;
       }
       const scroll = {window:window.scrollY, index:$('[data-corpus-index]')?.scrollTop || 0, results:$('[data-corpus-results-scroll]')?.scrollTop || 0};
