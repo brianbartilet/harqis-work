@@ -8,6 +8,25 @@ import pytest
 from playwright.sync_api import expect
 
 
+@pytest.mark.parametrize('surface', ['', '/graph', '/actions'])
+def test_keyboard_help_toggles_with_k(editor_page, workspace_corpus, surface):
+    page, _ = editor_page
+    page.goto('https://editing.test/hfl-corpus' + surface)
+    trigger = page.locator('.activity-hotkey-trigger')
+    trigger.focus()
+    helper = page.locator('#activity-hotkey-help')
+    for _ in range(2):
+        page.keyboard.press('k')
+        expect(helper).to_be_visible()
+        page.keyboard.press('k')
+        expect(helper).not_to_be_visible()
+        expect(trigger).to_be_focused()
+    trigger.click()
+    expect(helper).to_be_visible()
+    page.keyboard.press('k')
+    expect(helper).not_to_be_visible()
+
+
 @pytest.mark.parametrize('width', [390, 1440])
 def test_kanban_shortcut_context_and_confirmation(editor_page, ideas, width):
     page, client = editor_page

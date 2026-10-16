@@ -23,7 +23,10 @@
     <label class="sr-only" for="corpus-expression">Query expression</label>
     <div class="advanced-expression-input">
       <textarea id="corpus-expression" data-expression-editor rows="1" disabled spellcheck="false" autocomplete="off" aria-describedby="expression-error" aria-autocomplete="list" aria-controls="expression-suggestions" aria-expanded="false" placeholder='source IN ("instagram") AND (hasMedia = true OR tags = "travel")'></textarea>
-      <button type="button" data-expression-apply disabled>Apply</button>
+      <div class="advanced-expression-actions">
+        <button type="button" data-expression-apply disabled>Apply</button>
+        {% if expression_workspace_reset %}<button type="button" data-workspace-reset data-expression-reset disabled title="Reset to the selected Space filters, or all activity">Reset</button>{% endif %}
+      </div>
     </div>
     <div class="advanced-expression-feedback">
       <div id="expression-suggestions" data-expression-suggestions role="listbox" aria-label="Expression suggestions" hidden></div>

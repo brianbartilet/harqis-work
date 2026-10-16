@@ -554,7 +554,8 @@
     if (disposed || busy || transitioning || !reset || event.ctrlKey || event.metaKey || event.shiftKey || event.button) return;
     event.preventDefault();
     try {
-      await loadCombined(viewData, activeIds, dynamicOn);
+      await loadCombined(viewData, activeIds, dynamicOn, false,
+        reset.hasAttribute('data-expression-reset') ? combinedUrl(viewData, activeIds, dynamicOn) : null);
     } catch (error) { status.textContent = error.message; menu.open = true; }
   });
   const dynamicTimer = setInterval(checkDynamic, 15000);

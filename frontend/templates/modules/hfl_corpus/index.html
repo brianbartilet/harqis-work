@@ -128,7 +128,7 @@
       </div>
       <label class="advanced-media-toggle corpus-main-media"><span>With media</span><span class="corpus-main-media-control"><input type="checkbox" role="switch" data-media-toggle></span></label>
           <div class="workspace-tags corpus-tags-row border-t border-blue-900/70 pt-3 lg:mt-3">
-          {% with exclude_tags_in_navigation=true %}{% include "modules/hfl_corpus/partials/advanced_filters.html" %}{% endwith %}
+          {% with exclude_tags_in_navigation=true, expression_workspace_reset=true %}{% include "modules/hfl_corpus/partials/advanced_filters.html" %}{% endwith %}
           {% if tag_cloud %}
           <details data-tag-cloud class="group corpus-all-tags">
             <summary class="corpus-tags-toggle" title="Expand or collapse all tags">

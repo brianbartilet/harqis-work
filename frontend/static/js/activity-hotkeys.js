@@ -27,13 +27,13 @@
     const title=document.createElement('h2');title.id='activity-hotkey-title';title.textContent='Keyboard shortcuts';
     const close=document.createElement('button');close.type='button';close.className='context-icon-button';close.setAttribute('aria-label','Close keyboard shortcuts');close.title='Close';close.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';close.onclick=()=>dialog.close();header.append(title,close);
     const body=document.createElement('div');body.className='context-help-body';
-    for(const [heading,rows] of [['Page',[['k','Keyboard help'],...pageKeys,['n','Toggle dynamic mode'],['Alt + `','All activity'],['Alt + 1–9','Select space']]], ['Selected board',graph?[['Space','Attach existing'],['Ctrl + S','Save now'],['Ctrl + L','Save layout'],['Ctrl + E','Open board settings'],['Ctrl + D','Delete board']]:[]], [board?'Focused or hovered card':'Selected orb',contextKeys]]){
+    for(const [heading,rows] of [['Page',[['k','Show/hide keyboard shortcuts'],...pageKeys,['n','Toggle dynamic mode'],['Alt + `','All activity'],['Alt + 1–9','Select space']]], ['Selected board',graph?[['Space','Attach existing'],['Ctrl + S','Save now'],['Ctrl + L','Save layout'],['Ctrl + E','Open board settings'],['Ctrl + D','Delete board']]:[]], [board?'Focused or hovered card':'Selected orb',contextKeys]]){
       if(!rows.length)continue;
       const h=document.createElement('h3');h.textContent=heading;body.append(h);
       const list=document.createElement('dl');list.className='activity-hotkey-list';
       for(const [key,label] of rows){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=key;dd.textContent=label;list.append(dt,dd);}body.append(list);
     }
-    const note=document.createElement('p');note.textContent='Card and orb commands take priority. Shortcuts pause while typing or using a dialog. Edit, Clone and Promote require one selected orb. Unavailable actions do nothing.';body.append(note);dialog.append(header,body);document.body.append(dialog);
+    dialog.append(header,body);document.body.append(dialog);
     const help=query('[data-activity-hotkey-trigger]')||document.createElement('button');help.type='button';help.className='activity-hotkey-trigger';help.setAttribute('aria-label','Keyboard shortcuts');help.title='Keyboard shortcuts (K)';help.setAttribute('aria-haspopup','dialog');help.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="3"/><path d="M6 9h2m3 0h2m3 0h2M6 12h2m3 0h2m3 0h2M7 15h10"/></svg>';
     if(board)query('[data-board-bulk]').before(help);
     else if(graph)query('#kg-animation-menu').before(help);
@@ -44,6 +44,7 @@
       const key=event.key.toLowerCase();
       const activeDialog=query('dialog[open]:not(#followups-board):not(#activity-standalone)');
       if(activeDialog){
+        if(key==='k'&&!event.ctrlKey&&!event.altKey&&activeDialog===dialog){event.preventDefault();dialog.close();return;}
         if(key==='v'&&!event.ctrlKey&&!event.altKey&&activeDialog.matches('[data-curated-feed]')&&!query('dialog[open]:not([data-curated-feed]):not(#followups-board):not(#activity-standalone)')){
           event.preventDefault();activeDialog.close();
         }

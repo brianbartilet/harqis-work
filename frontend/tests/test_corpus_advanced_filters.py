@@ -211,6 +211,48 @@ def test_tag_search_preserves_advanced_and_cloud(editor_page, advanced_corpus, q
     expect(advanced.locator('[data-expression-toggle]')).to_be_checked(checked=query_mode)
 
 
+@pytest.mark.parametrize('with_space,width', [(False, 390), (True, 1440)])
+def test_expression_reset_restores_scope_and_keeps_editor(editor_page, advanced_corpus, with_space, width):
+    page, client = editor_page
+    page.set_viewport_size({'width': width, 'height': 900})
+    url = '/hfl-corpus?reset=1&q=extra'
+    if with_space:
+        headers = {'X-CSRF-Token': make_csrf_token('frontend-test-user')}
+        view = client.post('/hfl-corpus/workspace-views', json={
+            'name': 'Work', 'state': {'q': '#work'}}, headers=headers).json()
+        client.post('/hfl-corpus/workspace-views/' + view['id'] + '/select', headers=headers)
+        url = '/hfl-corpus?views=' + view['id'] + '&q=extra'
+    page.goto('https://editing.test' + url)
+    advanced = page.locator('[data-advanced-filters]')
+    advanced.locator('summary').click()
+    page.locator('[data-tag-cloud] summary').click()
+    expect(advanced.locator('[data-expression-reset]')).to_be_disabled()
+    advanced.locator('[data-expression-toggle]').check()
+    expect(advanced.locator('[data-expression-reset]')).to_be_enabled()
+    advanced.locator('[data-expression-toggle]').uncheck()
+    expect(advanced.locator('[data-expression-reset]')).to_be_disabled()
+    advanced.locator('[data-expression-toggle]').check()
+    editor = advanced.locator('[data-expression-editor]')
+    editor.fill('invalid @')
+    expect(editor).to_have_attribute('aria-invalid', 'true')
+    reset = advanced.locator('[data-expression-reset]')
+    apply_bounds = advanced.locator('[data-expression-apply]').bounding_box()
+    reset_bounds = reset.bounding_box()
+    assert reset_bounds['x'] >= apply_bounds['x'] + apply_bounds['width']
+    assert reset_bounds['x'] + reset_bounds['width'] <= width
+    reset.click()
+    expect(page.locator('#q')).to_have_value('#work' if with_space else '')
+    expect(advanced).to_have_attribute('open', '')
+    expect(page.locator('[data-tag-cloud]')).to_have_attribute('open', '')
+    expect(advanced.locator('[data-expression-toggle]')).to_be_checked()
+    expect(advanced.locator('[data-expression-apply]')).to_be_enabled()
+    expect(editor).not_to_have_value('invalid @')
+    expect(advanced.locator('[data-expression-error]')).to_be_empty()
+    if with_space:
+        saved = client.get('/hfl-corpus/workspace-views').json()['views']
+        assert next(item for item in saved if item['id'] == view['id'])['state']['q'] == '#work'
+
+
 @pytest.mark.parametrize('advanced_open,tags_open', [(True, True), (True, False), (False, True), (False, False)])
 def test_feed_preserves_filter_disclosures(editor_page, advanced_corpus, advanced_open, tags_open):
     page, _ = editor_page

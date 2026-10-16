@@ -13,6 +13,7 @@
     const editor = find('[data-expression-editor]'), toggle = find('[data-expression-toggle]');
     const media = form.querySelector('[data-media-toggle]'), error = find('[data-expression-error]');
     const suggestions = find('[data-expression-suggestions]'), apply = find('[data-expression-apply]');
+    const reset = find('[data-expression-reset]');
     ['expression', 'exclude'].forEach(kind => {
       const help = find(`[data-${kind}-help-dialog]`);
       const trigger = find(`[data-${kind}-help-open]`);
@@ -191,6 +192,7 @@
     document.addEventListener('click', event => { if (!panel.contains(event.target)) closeSuggestions(); });
     toggle.onchange = () => {
       editor.disabled = !toggle.checked; closeSuggestions(); clearTimeout(timer);
+      if (reset) reset.disabled = !toggle.checked;
       // Leaving edit mode discards an invalid draft, never the last valid filters.
       translate(false);
     };
@@ -217,6 +219,7 @@
     panel.advancedValid = () => !(pending && checkingDraft) && !invalid;
     panel.refreshAdvanced = () => { media.checked = control('has_media')?.value === 'true'; translate(false); };
     editor.disabled = !toggle.checked;
+    if (reset) reset.disabled = !toggle.checked;
     panel.refreshAdvanced();
   }
   window.initializeCorpusAdvanced = () => document.querySelectorAll('[data-advanced-filters]').forEach(initialize);
