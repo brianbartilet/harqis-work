@@ -449,6 +449,7 @@
 .corpus-quick-tags-menu{position:relative}
 .corpus-quick-tags-label{cursor:pointer;list-style:none}
 .corpus-quick-tags-label::-webkit-details-marker{display:none}
+.corpus-tags-row details>summary:focus-visible{outline:none;box-shadow:none;color:#67e8f9;text-decoration:underline;text-underline-offset:3px}
 .corpus-quick-tags-editor{position:absolute;top:calc(100% + .5rem);left:0;z-index:40;width:min(18rem,calc(100vw - 4.5rem));display:flex;flex-wrap:wrap;gap:.375rem;padding:.5rem;border:1px solid #334155;border-radius:.625rem;background:#0b1527;box-shadow:0 12px 24px #0006}
 .corpus-quick-tags-editor input{flex:1;min-width:0;width:10rem;border:1px solid #475569;border-radius:.375rem;padding:.375rem .5rem;background:#020617;color:#e2e8f0;font-size:.75rem}
 .corpus-quick-tags-editor button{border-radius:.375rem;padding:.375rem .625rem;background:#2563eb;color:white;font-size:.75rem;font-weight:600}

@@ -18,7 +18,7 @@
     const save = quickMenu.querySelector('[data-quick-tags-save]');
     const status = quickMenu.querySelector('[data-quick-tags-status]');
     quickMenu.querySelector('[data-tags-clear]').onclick = () => { input.value = ''; status.hidden = true; input.focus(); };
-    quickMenu.addEventListener('toggle', () => { if (quickMenu.open) input.focus(); });
+    quickMenu.addEventListener('toggle', () => { if (quickMenu.open && !quickMenu.dataset.hotkeyToggle) input.focus(); delete quickMenu.dataset.hotkeyToggle; });
     document.addEventListener('click', event => { if (!quickMenu.contains(event.target)) quickMenu.open = false; });
     quickMenu.addEventListener('keydown', event => {
       if (event.key === 'Escape') { event.stopPropagation(); quickMenu.open = false; quickMenu.querySelector('summary').focus(); }

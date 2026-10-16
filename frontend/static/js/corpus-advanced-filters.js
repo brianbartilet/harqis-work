@@ -116,8 +116,10 @@
       const status = excludeMenu.querySelector('[data-exclude-tags-status]');
       excludeMenu.querySelector('[data-tags-clear]').onclick = () => { draft.value = ''; status.hidden = true; draft.focus(); };
       excludeMenu.addEventListener('toggle', () => {
+        const fromHotkey = !!excludeMenu.dataset.hotkeyToggle;
+        delete excludeMenu.dataset.hotkeyToggle;
         if (excludeMenu.open) {
-          draft.value = control('exclude_tags').value; status.hidden = true; draft.focus();
+          draft.value = control('exclude_tags').value; status.hidden = true; if (!fromHotkey) draft.focus();
           const popup = excludeMenu.querySelector('.corpus-quick-tags-editor');
           popup.style.transform = '';
           const bounds = popup.getBoundingClientRect();
