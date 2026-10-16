@@ -1,0 +1,18 @@
+<details class="corpus-advanced-filters" data-advanced-filters>
+  <summary class="corpus-tags-toggle">Advanced Filters</summary>
+  <div class="corpus-advanced-panel">
+    <div class="advanced-filter-fields">
+      <label class="advanced-media-toggle"><input type="checkbox" role="switch" data-media-toggle> Has media only</label>
+      <input type="hidden" name="has_media" data-edit-filter="has_media" value="{{ 'true' if advanced_state is defined and advanced_state.has_media else 'false' }}">
+      <label>Exclude tags<input type="text" name="exclude_tags" data-edit-filter="exclude_tags" value="{{ advanced_state.exclude_tags if advanced_state is defined else '' }}" placeholder="#hfl, #work" autocomplete="off"><small>Whole tag names, separated by commas.</small></label>
+    </div>
+    <input type="hidden" name="expression" data-edit-filter="expression" value="{{ advanced_state.expression if advanced_state is defined else '' }}">
+    <div class="advanced-expression-label"><label><input type="checkbox" data-expression-toggle> Edit query expression</label><button type="button" data-expression-apply>Apply</button></div>
+    <label class="sr-only" for="corpus-expression">Query expression</label>
+    <textarea id="corpus-expression" data-expression-editor rows="3" disabled spellcheck="false" autocomplete="off" aria-describedby="expression-help expression-error" aria-autocomplete="list" aria-controls="expression-suggestions" aria-expanded="false" placeholder='source IN ("instagram") AND (hasMedia = true OR tags = "travel")'></textarea>
+    <div id="expression-suggestions" data-expression-suggestions role="listbox" aria-label="Expression suggestions" hidden></div>
+    <p id="expression-error" data-expression-error role="alert"></p>
+    <p id="expression-help">Use AND, OR, NOT and parentheses. Quote text values. Entry date: <code>entryDate &gt;= "2026-01-01"</code>. Apply runs the search; in Spaces it applies the draft for saving.</p>
+    <div data-expression-summary hidden><strong>Additional conditions</strong><div data-expression-tree></div><small>These branches remain active when expression editing is off. The filters above further narrow them.</small></div>
+  </div>
+</details>
