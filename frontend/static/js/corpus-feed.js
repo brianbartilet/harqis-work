@@ -1,4 +1,4 @@
-/* Read the applied result scope, not unsent form edits. */
+/* Submit current filters before opening the feed on the resulting page. */
 (() => {
   const open = document.querySelector('[data-curated-feed-open]');
   const dialog = document.querySelector('[data-curated-feed]');
@@ -9,13 +9,23 @@
   const form = document.getElementById('corpus-search-form');
   const params = new URLSearchParams(location.search);
   // Initial page context can contain restored filters not present in the URL.
-  for (const key of ['q','source','date_field','date_from','date_to','rolling','scope','show_secrets']) {
+  for (const key of ['q','source','date_field','date_from','date_to','rolling','scope','show_secrets','has_media','exclude_tags','expression','order_by']) {
     if (!params.has(key) && form.elements[key]) params.set(key, form.elements[key].value);
   }
-  const meaningful = state => ['q','source','date_from','date_to'].some(key => String(state[key] || '').trim()) || Number(state.rolling || 0) > 0 || !!state.entry_scope;
-  let scope;
-  try { scope = JSON.parse(params.get('scope') || '{"any":[]}'); } catch (_) { scope = {any:[]}; }
-  open.disabled = !(meaningful(Object.fromEntries(params)) || scope.any?.some(meaningful) || meaningful(scope.all || {}));
+  if (form.elements.order_by?.value) params.set('order_by', form.elements.order_by.value);
+  const ordered = params.get('order_by') || '';
+  if (ordered) order.value = ordered.split(',')[0].trim().split(/\s+/)[1]?.toLowerCase() || 'asc';
+  const meaningful = state => ['q','source','date_from','date_to','exclude_tags','expression','order_by'].some(key => String(state[key] || '').trim()) || Number(state.rolling || 0) > 0 || !!state.entry_scope || state.has_media === true || state.has_media === 'true';
+  const updateAvailability = () => {
+    const current = Object.fromEntries(new FormData(form));
+    let scope;
+    try { scope = JSON.parse(current.scope || '{"any":[]}'); } catch (_) { scope = {any:[]}; }
+    open.disabled = !(meaningful(current) || scope.any?.some(meaningful));
+  };
+  form.addEventListener('input', updateAvailability);
+  form.addEventListener('change', updateAvailability);
+  form.querySelector('[data-sources-clear]')?.addEventListener('click', updateAvailability);
+  updateAvailability();
   let controller, cursor = null, loading = false, ended = false, generation = 0, seen = new Set();
   async function load(reset = false) {
     if (!dialog.open || (loading && !reset) || (ended && !reset)) return;
@@ -154,19 +164,29 @@
     if (entries.some(entry => entry.isIntersecting) && more.textContent !== 'Retry') load();
   }, {root:scroller, rootMargin:'250px'});
   observer.observe(more);
-  open.onclick = () => { if (!open.disabled) { dialog.showModal(); find('[data-feed-close]').focus(); load(true); } };
+  if (params.get('open_feed') === '1') {
+    params.delete('open_feed');
+    const cleanUrl = new URL(location.href); cleanUrl.searchParams.delete('open_feed');
+    history.replaceState(history.state, '', cleanUrl);
+    if (!open.disabled) { dialog.showModal(); find('[data-feed-close]').focus(); load(true); }
+  }
   find('[data-feed-close]').onclick = () => dialog.close();
   dialog.addEventListener('close', () => { items.querySelectorAll('video,audio').forEach(media => media.pause()); generation++; controller?.abort(); loading = false; open.focus(); });
   more.onclick = () => load();
   order.onclick = () => {
     order.value = order.value === 'desc' ? 'asc' : 'desc';
-    const newest = order.value === 'desc';
-    find('[data-feed-order-label]').textContent = newest ? 'Newest' : 'Oldest';
-    find('[data-feed-order-arrow]').style.transform = newest ? '' : 'rotate(180deg)';
-    order.title = newest ? 'Switch to oldest first' : 'Switch to newest first';
-    order.setAttribute('aria-label', (newest ? 'Newest first. ' : 'Oldest first. ') + order.title);
+    updateOrderCaption();
     load(true);
   };
+  function updateOrderCaption() {
+    const descending = order.value === 'desc';
+    const field = ordered.split(',')[0].trim().split(/\s+/)[0];
+    find('[data-feed-order-label]').textContent = ordered ? field + (descending ? ' DESC' : ' ASC') : descending ? 'Newest' : 'Oldest';
+    find('[data-feed-order-arrow]').style.transform = descending ? '' : 'rotate(180deg)';
+    order.title = ordered ? 'Reverse the first sort field; keep secondary ordering' : descending ? 'Switch to oldest first' : 'Switch to newest first';
+    order.setAttribute('aria-label', find('[data-feed-order-label]').textContent + '. ' + order.title);
+  }
+  updateOrderCaption();
   find('[data-feed-save]').onclick = () => {
     document.dispatchEvent(new CustomEvent('corpus:save-feed-space', {detail:{params:Object.fromEntries(params), sort:order.value}}));
   };

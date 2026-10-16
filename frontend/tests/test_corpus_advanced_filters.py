@@ -53,6 +53,16 @@ def test_expression_round_trip_preserves_branches(advanced_corpus):
     assert [entry.anchor for entry in doc.entries if dates(doc, entry)] == ['video', 'audio']
 
 
+def test_projection_keeps_literal_text_and_empty_source_semantics(advanced_corpus):
+    for expression in ('text IN ("Holiday", "Work")', 'text ~ "two  spaces"', 'source = ""', 'text ~ "#literal"'):
+        state = WorkspaceState.model_validate(project(expression))
+        assert state.expression
+        original, projected = compile_expression(expression), predicate(state.model_dump())
+        assert [original(advanced_corpus, entry) for entry in advanced_corpus.entries] == [projected(advanced_corpus, entry) for entry in advanced_corpus.entries]
+    from modules.hfl_corpus.view_scope import filter_scope, ViewScope
+    assert not filter_scope((advanced_corpus,), ViewScope(all=WorkspaceState(source='missing')))
+
+
 @pytest.mark.parametrize('expression', ['source =', 'unknown = "x"', 'hasMedia = "true"', 'tags > "hfl"',
     'text ~ "x" trailing', 'source IN ()', 'entryDate = "bad"', '(tags = "x"',
     'tags = "work" OR rolling = 7', 'NOT sort = "desc"', '(' * 26 + 'tags = "x"' + ')' * 26])
@@ -91,25 +101,98 @@ def test_expression_browser_roundtrip_validation_and_apply(editor_page, advanced
     page.goto('https://editing.test/hfl-corpus?reset=1')
     panel = page.locator('[data-advanced-filters]')
     panel.locator('summary').click()
+    expect(panel.locator('[data-expression-apply]')).to_be_disabled()
+    expect(panel.get_by_role('switch', name='Query mode', exact=True)).not_to_be_checked()
+    page.get_by_role('button', name='Query mode help', exact=True).click()
+    help_dialog = page.get_by_role('dialog', name='Query mode', exact=True)
+    expect(help_dialog).to_be_visible()
+    expect(help_dialog).to_contain_text('ORDER BY source ASC, entryDate DESC')
+    assert help_dialog.bounding_box()['width'] <= width
+    page.screenshot(path=str(tmp_path / f'query-help-{width}.png'))
+    page.keyboard.press('Escape')
+    expect(help_dialog).not_to_be_visible()
+    expect(page.get_by_role('button', name='Query mode help', exact=True)).to_be_focused()
+    expect(panel.locator('[data-expression-apply]')).to_be_disabled()
     panel.locator('[data-expression-toggle]').check()
     editor = panel.locator('[data-expression-editor]')
     expect(editor).to_be_enabled()
     expect(panel.locator('[data-expression-apply]')).to_be_enabled()
+    editor.fill('')
+    page.screenshot(path=str(tmp_path / f'suggestions-{width}.png'))
     editor.fill('hasMedia = true AND (tags = "hfl" OR tags = "hfl-random")')
-    expect(panel.locator('[data-media-toggle]')).to_be_checked()
-    expect(panel.locator('[data-expression-summary]')).to_be_visible()
+    expect(page.locator('[data-media-toggle]')).to_be_checked()
     editor.fill('source =')
     expect(editor).to_have_attribute('aria-invalid', 'true')
-    expect(panel.locator('[data-media-toggle]')).to_be_checked()
+    expect(page.locator('[data-media-toggle]')).to_be_checked()
     expect(panel.locator('[data-expression-apply]')).to_be_disabled()
     panel.locator('[data-expression-toggle]').uncheck()
-    expect(panel.locator('[data-expression-apply]')).to_be_enabled()
-    panel.locator('[name=exclude_tags]').fill('#hfl')
+    expect(panel.locator('[data-expression-apply]')).to_be_disabled()
+    page.locator('[data-exclude-tags-menu] > summary').click()
+    expect(page.locator('[data-exclude-tags-input]')).to_be_focused()
+    popup = page.locator('[data-exclude-tags-menu] .corpus-quick-tags-editor').bounding_box()
+    assert popup['x'] >= 0 and popup['x'] + popup['width'] <= width
+    page.screenshot(path=str(tmp_path / f'exclude-menu-{width}.png'))
+    page.locator('[data-exclude-tags-input]').fill('#hfl')
+    page.locator('[data-exclude-tags-save]').click()
+    expect(page.locator('[name=exclude_tags]')).to_have_value('#hfl')
+    expect(page.locator('[data-exclude-tags-menu]')).not_to_have_attribute('open', '')
+    panel.locator('summary').click()
+    expect(panel.locator('[data-expression-apply]')).to_be_disabled()
+    panel.locator('[data-expression-toggle]').check()
     expect(panel.locator('[data-expression-apply]')).to_be_enabled()
     page.screenshot(path=str(tmp_path / f'advanced-{width}.png'))
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    feed_box = page.locator('[data-curated-feed-open]').bounding_box()
+    panel_box = panel.locator('.corpus-advanced-panel').bounding_box()
+    assert feed_box['y'] + feed_box['height'] <= panel_box['y']
     panel.locator('[data-expression-apply]').click()
-    expect(page.locator('[name=exclude_tags]')).to_have_value('#hfl')
+    expect(page.locator('[name=exclude_tags]')).to_have_value('hfl')
     expect(page.locator('[name=expression]')).not_to_have_value('')
     page.locator('[data-curated-feed-open]').click()
     expect(page.locator('[data-feed-summary]')).to_contain_text('1 of 1')
+
+
+def test_space_expression_save_reopen_and_keyboard_suggestions(editor_page, advanced_corpus):
+    page, client = editor_page
+    page.goto('https://editing.test/spaces')
+    page.locator('#space-new').click()
+    page.locator('#workspace-name').fill('Media branches')
+    panel = page.locator('[data-advanced-filters]')
+    panel.locator('summary').click()
+    panel.locator('[data-expression-toggle]').check()
+    expect(panel.locator('[data-expression-apply]')).to_be_enabled()
+    editor = panel.locator('[data-expression-editor]')
+    editor.fill('hasM')
+    editor.press('ArrowDown')
+    editor.press('Enter')
+    expect(editor).to_have_value('hasMedia')
+    editor.fill('source IN ("notes") AND (tags = "hfl-random" OR hasMedia = false)')
+    expect(page.locator('[data-edit-filter=source]')).to_have_value('notes')
+    expect(panel.locator('[data-expression-apply]')).to_be_enabled()
+    page.get_by_role('button', name='Save Space', exact=True).click()
+    expect(page.locator('#space-status')).to_contain_text('Space saved')
+    saved = next(view for view in client.get('/hfl-corpus/workspace-views').json()['views'] if view['name'] == 'Media branches')
+    assert saved['state']['source'] == 'notes' and 'OR' in saved['state']['expression']
+    page.reload()
+    page.get_by_role('button', name='Media branches', exact=False).first.click()
+    expect(page.locator('[data-edit-filter=expression]')).to_have_value(saved['state']['expression'])
+
+
+@pytest.mark.parametrize('advanced_open,tags_open', [(True, True), (True, False), (False, True), (False, False)])
+def test_feed_preserves_filter_disclosures(editor_page, advanced_corpus, advanced_open, tags_open):
+    page, _ = editor_page
+    page.goto('https://editing.test/hfl-corpus?q=%23hfl')
+    advanced = page.locator('[data-advanced-filters]')
+    tags = page.locator('[data-tag-cloud]')
+    if advanced_open:
+        advanced.locator('summary').click()
+    if tags_open:
+        tags.locator('summary').click()
+    page.locator('[data-curated-feed-open]').click()
+    expect(page.locator('[data-feed-close]')).to_be_visible()
+    assert advanced.evaluate('(el) => el.open') == advanced_open
+    assert tags.evaluate('(el) => el.open') == tags_open
+    page.locator('[data-feed-close]').click()
+    expect(page.locator('[data-feed-close]')).not_to_be_visible()
+    assert advanced.evaluate('(el) => el.open') == advanced_open
+    assert tags.evaluate('(el) => el.open') == tags_open

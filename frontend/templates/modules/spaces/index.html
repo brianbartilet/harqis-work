@@ -43,5 +43,5 @@
 </dialog>
 <dialog id="space-delete" class="workspace-dialog" aria-labelledby="space-delete-title"><h2 id="space-delete-title">Remove Space?</h2><p id="space-delete-description"></p><div class="workspace-menu-actions"><button id="space-delete-cancel">Cancel</button><button id="space-delete-confirm">Remove Space</button></div><p id="space-delete-error" role="alert"></p></dialog>
 <script type="application/json" id="spaces-data">{{ space_data | tojson }}</script><script type="application/json" id="spaces-sources">{{ source_options | tojson }}</script><script type="application/json" id="spaces-tags">{{ tag_options | tojson }}</script>
-</main><script defer src="{{ static_asset('js/spaces.js') }}"></script>
+</main><script defer src="{{ static_asset('js/corpus-advanced-filters.js') }}"></script><script defer src="{{ static_asset('js/spaces.js') }}"></script>
 {% endblock %}

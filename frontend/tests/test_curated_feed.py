@@ -180,6 +180,31 @@ def test_feed_browser_keyboard_paging_retry_and_space(editor_page, feed_corpus, 
     assert saved['state']['q'] == '#work' and saved['state']['source'] == 'notes'
 
 
+def test_view_feed_applies_pending_filters_before_opening(editor_page, feed_corpus):
+    from urllib.parse import parse_qs, urlparse
+    page, client = editor_page
+    page.goto('https://editing.test/hfl-corpus?reset=1')
+    button = page.locator('[data-curated-feed-open]')
+    page.locator('#q').fill('#other')
+    expect(button).to_be_enabled()
+    button.click()
+    dialog = page.locator('[data-curated-feed]')
+    expect(dialog).to_be_visible()
+    expect(dialog.locator('.corpus-feed-card')).to_have_count(1)
+    assert parse_qs(urlparse(page.url).query)['q'] == ['#other']
+    assert 'open_feed' not in parse_qs(urlparse(page.url).query)
+    page.keyboard.press('v')
+    expect(dialog).not_to_be_visible()
+    page.locator('#q').fill('#work')
+    page.get_by_role('button', name='Search', exact=True).click()
+    expect(page.locator('[data-search-label]')).to_have_text('Search')
+    expect(dialog).not_to_be_visible()
+    page.locator('#q').fill('#other')
+    button.click()
+    expect(dialog).to_be_visible()
+    expect(dialog.locator('.corpus-feed-card')).to_have_count(1)
+
+
 def test_feed_excludes_summary_tag_index_but_keeps_real_tags_entry(authenticated_client, feed_corpus):
     from modules.hfl_corpus.corpus import parse_entries
     rows = parse_entries("""## Tags

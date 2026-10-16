@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import re
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -2023,7 +2024,10 @@ def test_historical_counted_day_enables_matching_without_canonical_document(
         "hfl-corpus/day-matches/2023-01-04"
         in historical_cell
     )
-    assert "matchingEntries.disabled = !canShowMatches" in response.text
+    # The heatmap interaction now lives in a versioned external asset.
+    asset = re.search(r'src="([^"]*activity-heatmap\.js[^\"]*)"', response.text)
+    assert asset is not None
+    assert "matchingEntries.disabled = !canShowMatches" in authenticated_client.get(asset[1]).text
 
 
 def test_corpus_search_uses_compact_date_controls(authenticated_client, monkeypatch):
@@ -3722,9 +3726,9 @@ def test_compiled_css_contains_manual_entry_location_toggle_utilities():
         Path(__file__).resolve().parents[1] / "static" / "css" / "app.min.css"
     ).read_text(encoding="utf-8")
 
-    assert ".h-6{height:1.5rem}" in css
-    assert ".w-11{width:2.75rem}" in css
-    assert ".left-1{left:.25rem}" in css
+    assert ".h-6{height:calc(var(--spacing) * 6)}" in css
+    assert ".w-11{width:calc(var(--spacing) * 11)}" in css
+    assert ".left-1{left:var(--spacing)}" in css
     assert ".bg-white{" in css
     assert "peer-checked\\:bg-sky-600" in css
     assert "peer-checked\\:translate-x-5" in css

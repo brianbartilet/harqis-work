@@ -324,6 +324,10 @@ class RemoteCorpusClient:
             payload = self._get(
                 "/documents", params={**params, "compact": "true"}
             ).json()
+            if (params.get('expression') or params.get('exclude_tags') or str(params.get('has_media', '')).lower() == 'true') and not payload.get('advanced_filters_supported'):
+                raise RemoteCorpusError('Update the canonical corpus host to support advanced filters.')
+            if params.get('order_by') and not payload.get('order_by_supported'):
+                raise RemoteCorpusError('Update the canonical corpus host to support ORDER BY.')
             if params.get("scope") and not payload.get("scope_supported"):
                 raise RemoteCorpusError("Update the canonical corpus host to support combined views.")
             documents = tuple(

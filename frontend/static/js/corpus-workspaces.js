@@ -6,6 +6,51 @@
   const kanban=!!document.querySelector('[data-actions-page]');
   const graph=!!document.querySelector('.kg-shell');
   const workspacePath=graph?'/hfl-corpus/graph':kanban?'/hfl-corpus/actions':'/hfl-corpus';
+  const quickMenu = $('[data-quick-tags-menu]');
+  form.querySelectorAll('[data-advanced-filters], [data-tag-cloud]').forEach(details => {
+    details.querySelector('summary').addEventListener('click', () => {
+      const toggle = $('[data-activity-toggle]');
+      if (toggle?.getAttribute('aria-expanded') === 'true') toggle.click();
+    });
+  });
+  if (quickMenu) {
+    const input = quickMenu.querySelector('[data-quick-tags-input]');
+    const save = quickMenu.querySelector('[data-quick-tags-save]');
+    const status = quickMenu.querySelector('[data-quick-tags-status]');
+    quickMenu.addEventListener('toggle', () => { if (quickMenu.open) input.focus(); });
+    document.addEventListener('click', event => { if (!quickMenu.contains(event.target)) quickMenu.open = false; });
+    quickMenu.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { event.stopPropagation(); quickMenu.open = false; quickMenu.querySelector('summary').focus(); }
+      if (event.key === 'Enter' && event.target === input) { event.preventDefault(); save.click(); }
+    });
+    // Preferences are separate from the search form's filter state.
+    input.addEventListener('input', event => event.stopPropagation());
+    input.addEventListener('change', event => event.stopPropagation());
+    save.addEventListener('click', async () => {
+      save.disabled = true; status.hidden = true;
+      try {
+        const response = await fetch('/settings/quick-tags', {method:'POST', body:new URLSearchParams({csrf:save.dataset.csrf, favorite_tags:input.value})});
+        if (response.redirected) throw Error('Sign in again to save quick tags.');
+        const data = await response.json();
+        if (!response.ok) throw Error(typeof data.detail === 'string' ? data.detail : 'Could not save quick tags.');
+        input.value = data.favorite_tags;
+        const selected = form.elements.q.value.split(/\s+/).filter(value => value.startsWith('#')).map(value => value.slice(1).toLowerCase());
+        const pills = data.favorite_tags.split(',').map(value => value.trim().replace(/^#/, '')).filter(Boolean).map(tag => {
+          const link = document.createElement('a');
+          const active = selected.some(value => tag.toLowerCase().includes(value));
+          link.dataset.workspaceTag = tag; link.dataset.favoriteTag = ''; link.textContent = '#' + tag;
+          link.setAttribute('aria-pressed', String(active));
+          link.title = `${active ? 'Remove' : 'Add'} #${tag} filter`;
+          link.className = 'inline-flex items-center rounded-full px-2 py-1 text-xs transition ' + (active ? 'bg-emerald-950/70 text-emerald-200 ring-1 ring-emerald-700/60' : 'bg-blue-950/50 text-blue-300 hover:bg-blue-900 hover:text-blue-100');
+          const url = new URL(location.href); url.searchParams.set('q', [...form.elements.q.value.split(/\s+/).filter(Boolean), '#' + tag].join(' ')); link.href = url.pathname + url.search;
+          return link;
+        });
+        $('.corpus-favorite-tags').replaceChildren(...pills);
+        status.textContent = 'Saved.'; status.hidden = false;
+      } catch (error) { status.textContent = error.message; status.hidden = false; }
+      finally { save.disabled = false; }
+    });
+  }
   const createMenu = document.querySelector('.corpus-create-menu');
   if (createMenu) {
     const headerMenus = [...document.querySelectorAll('.corpus-create-menu, .corpus-workspace-controls > [data-workspace-menu]')];
@@ -127,17 +172,32 @@
     $('[data-source-caption]').textContent = values.length ? `${values.length} selected${inheritedFilters.has('source') && !editedFilters.has('source') ? ' from views' : ''}` : 'All sources';
   }
   sources.forEach(input => input.addEventListener('change', syncSources));
+  form.addEventListener('corpus:expression-state', event => {
+    const selected = event.detail.source.split(',').filter(Boolean);
+    selected.forEach(value => {
+      if (sources.some(input => input.value === value)) return;
+      const label=document.createElement('label'), input=document.createElement('input');
+      input.type='checkbox'; input.value=value; input.dataset.sourceOption='';
+      input.addEventListener('change', syncSources); sources.push(input);
+      label.append(input, document.createTextNode(value)); sourcesDropdown.querySelector('.workspace-source-options').append(label);
+    });
+    sources.forEach(input => input.checked=selected.includes(input.value)); syncSources();
+  });
   $('[data-sources-clear]').onclick = () => { const values = inheritedFilters.get('source')?.display.split(',') || []; sources.forEach(input => input.checked = values.includes(input.value)); editedFilters.delete('source'); syncSources(); updateViewContext(); };
   function dates() {
     const rolling = Number(form.elements.rolling.value);
-    for (const key of ['date_from', 'date_to']) form.elements[key].disabled = !!rolling;
+    for (const key of ['date_from', 'date_to']) {
+      form.elements[key].disabled = !!rolling;
+      form.elements[key].title = rolling ? 'Controlled by Date range. Select Fixed dates to edit.' : '';
+    }
   }
   form.elements.rolling.addEventListener('change', dates);
   dates();
   function snapshot() {
     syncSources();
     const values = new FormData(form), state = {};
-    for (const key of ['q','source','date_field','date_from','date_to','sort']) state[key] = String(values.get(key) || '');
+    for (const key of ['q','source','date_field','date_from','date_to','sort','order_by','exclude_tags','expression']) state[key] = String(values.get(key) || '');
+    state.has_media = values.get('has_media') === 'true';
     state.rolling = Number(values.get('rolling') || 0);
     state.page_size = Number(values.get('page_size') || 20);
     return state;
@@ -157,6 +217,7 @@
     $('[data-dynamic-badge]').dataset.on = String(dynamicOn);
     $('[data-active-view-caption]').title = applied.map(view => view.name).join(' + ') || name.textContent;
     const normalized = state => JSON.stringify([
+      !!state.has_media, state.exclude_tags || '', state.expression || '', state.order_by || '',
       (state.q || '').trim(), (state.source || '').split(',').filter(Boolean).sort(),
       state.date_field || 'created', Number(state.rolling || 0),
       state.rolling ? '' : state.date_from || '', state.rolling ? '' : state.date_to || '',
@@ -236,7 +297,8 @@
     try {
       const params = event.detail.params;
       const state = {q:'',source:'',date_field:'created',date_from:'',date_to:'',rolling:0,sort:event.detail.sort,page_size:50};
-      for (const key of ['q','source','date_field','date_from','date_to']) state[key] = params[key] || state[key];
+      for (const key of ['q','source','date_field','date_from','date_to','order_by','exclude_tags','expression']) state[key] = params[key] || state[key] || '';
+      state.has_media = params.has_media === 'true';
       state.rolling = Number(params.rolling || 0);
       const scope = JSON.parse(params.scope || '{"any":[]}');
       const selectedViews = views.filter(view => activeIds.includes(view.id));
@@ -253,7 +315,9 @@
   menu.addEventListener('keydown', event => { if (event.key === 'Escape') { menu.open = false; menu.querySelector('summary').focus(); } });
   // Tag clicks retain pending source/date selections as well as the existing
   // partial, case-insensitive tag matching rules.
-  form.querySelectorAll('[data-workspace-tag]').forEach(link => link.addEventListener('click', event => {
+  form.addEventListener('click', event => {
+    const link = event.target.closest('[data-workspace-tag]');
+    if (!link) return;
     event.preventDefault();
     const tag = link.dataset.workspaceTag;
     const tokens = form.elements.q.value.split(/\s+/).filter(Boolean);
@@ -261,7 +325,7 @@
     form.elements.q.value = (matching.length ? tokens.filter(token => !matching.includes(token)) : [...tokens, '#' + tag]).join(' ');
     editedFilters.add('q');
     form.requestSubmit();
-  }));
+  });
   const search = $('[data-corpus-search]');
   form.addEventListener('submit', async event => {
     event.preventDefault();
@@ -274,7 +338,9 @@
     $('[data-search-label]').textContent = 'Searching…';
     busy = true;
     try {
-      await loadCombined(viewData, activeIds, dynamicOn, false, localSearchUrl(snapshot()));
+      const target = new URL(localSearchUrl(snapshot()), location.origin);
+      if (event.submitter?.matches('[data-curated-feed-open]')) target.searchParams.set('open_feed', '1');
+      await loadCombined(viewData, activeIds, dynamicOn, false, target.pathname + target.search);
     } catch (error) {
       status.textContent = error.message; menu.open = true;
     } finally {
@@ -367,9 +433,16 @@
       }
       const response = await fetch(url, {signal:controller.signal, cache:'no-store'});
       if (!response.ok || response.redirected) throw Error('The views could not load. Please retry, or sign in again.');
-      const html = await response.text();
+      let html = await response.text();
       const parsed = new DOMParser().parseFromString(html, 'text/html');
       if (!parsed.querySelector('#corpus-search-form') || parsed.querySelector('[data-corpus-load-error]')) throw Error('The corpus could not load. Your previous results are still shown.');
+      if (target.searchParams.get('open_feed') === '1') {
+        for (const selector of ['[data-advanced-filters]', '[data-tag-cloud]']) {
+          const previous = form.querySelector(selector), next = parsed.querySelector(selector);
+          if (previous && next) next.open = previous.open;
+        }
+        html = '<!DOCTYPE html>' + parsed.documentElement.outerHTML;
+      }
       const scroll = {window:window.scrollY, index:$('[data-corpus-index]')?.scrollTop || 0, results:$('[data-corpus-results-scroll]')?.scrollTop || 0};
       if (!automatic) form.dispatchEvent(new CustomEvent('corpus:view-search'));
       try { sessionStorage.setItem('corpus:view-transition', JSON.stringify({automatic, scroll, message:arrivalMessage || status.textContent, menuOpen:!!arrivalMessage && menu.open})); } catch (_) {}
@@ -569,6 +642,7 @@
     }
   }
   $('[data-corpus-share-preview]').onclick = event => {
+    if ($('[data-advanced-filters]')?.advancedValid?.() === false) { $('[data-advanced-filters]').open=true; return; }
     shareOpener = event.currentTarget;
     const key = contextKey();
     if (key !== previewKey) {
@@ -606,6 +680,7 @@
     captureReferences();
   });
   document.querySelectorAll('[data-corpus-share-generate]').forEach(button => button.onclick = () => {
+    if ($('[data-advanced-filters]')?.advancedValid?.() === false) { $('[data-advanced-filters]').open=true; return; }
     if (contextKey() !== previewKey) { previewState = null; disabledReferences = []; }
     else captureReferences();
     const transfer = document.createElement('form');

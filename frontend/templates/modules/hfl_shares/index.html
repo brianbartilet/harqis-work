@@ -241,7 +241,8 @@
         {% if cfg and cfg.corpus_scope %}
         <input type="hidden" name="corpus_scope" value="{{ cfg.corpus_scope }}">
         <details class="message"><summary>Combined Activity Views scope</summary><p>This recipe keeps each view’s source, tag, and date rules. The controls below further narrow that scope.</p>
-        {% for clause in corpus_scope_clauses %}<p>{{ clause.source or 'All sources' }} · {{ clause.q or 'All tags' }} · {{ clause.date_field }}: {{ clause.date_from or 'Any' }}–{{ clause.date_to or 'Any' }}</p>{% endfor %}</details>
+        {% for clause in corpus_scope_clauses %}<p>{{ clause.source or 'All sources' }} · {{ clause.q or 'All tags' }} · {{ clause.date_field }}: {{ clause.date_from or 'Any' }}–{{ clause.date_to or 'Any' }}{% if clause.has_media %} · Has media only{% endif %}{% if clause.exclude_tags %} · Exclude tags: {{ clause.exclude_tags }}{% endif %}{% if clause.expression %} · Expression: <code>{{ clause.expression }}</code>{% endif %}</p>{% endfor %}
+        {% if corpus_scope_all %}<p><strong>Additional filters:</strong> {{ corpus_scope_all.q or '' }}{% if corpus_scope_all.has_media %} · Has media only{% endif %}{% if corpus_scope_all.exclude_tags %} · Exclude tags: {{ corpus_scope_all.exclude_tags }}{% endif %}{% if corpus_scope_all.order_by %} · Order by: {{ corpus_scope_all.order_by }}{% endif %}{% if corpus_scope_all.expression %} · Expression: <code>{{ corpus_scope_all.expression }}</code>{% endif %}</p>{% endif %}</details>
         {% endif %}
         <input type="hidden" name="configuration_id" value="{{ cfg.id if cfg else '' }}">
         {% if cfg %}{% for reference_id in cfg.disabled_reference_ids %}<input type="hidden" name="disabled_reference_ids" value="{{ reference_id }}" data-disabled-reference>{% endfor %}{% endif %}

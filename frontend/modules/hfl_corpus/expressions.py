@@ -188,6 +188,8 @@ def compile_expression(expression):
 
 def project(expression):
     """Extract only faithfully representable global conditions; retain all branches."""
+    from modules.hfl_corpus.ordering import split_order, parse_order
+    expression, order_by = split_order(expression)
     state, remaining = {}, []
     for node in terms(parse(expression)):
         if node[0] != 'term':
@@ -196,9 +198,9 @@ def project(expression):
         key, converted = None, value
         if field in SETTINGS and op == '=':
             key = SETTINGS[field]
-        elif (field == 'q' or (field == 'text' and '#' not in value and value.strip() == value)) and op == '~':
+        elif op == '~' and (field == 'q' or (field == 'text' and '#' not in value and ' '.join(value.split()) == value)):
             key = 'q'
-        elif field == 'source' and op in {'=', 'IN'} and all(',' not in v for v in (value if isinstance(value, tuple) else (value,))):
+        elif field == 'source' and op in {'=', 'IN'} and all(v and ',' not in v and v.strip() == v for v in (value if isinstance(value, tuple) else (value,))):
             key, converted = 'source', ','.join(value) if isinstance(value, tuple) else value
         elif field == 'hasMedia' and op == '=' and value is True:
             key = 'has_media'
@@ -210,6 +212,11 @@ def project(expression):
             remaining.append(node)
     state['expression'] = ' AND '.join(f'({render(node)})' for node in remaining)
     compile_expression(state['expression'])
+    if order_by:
+        direction = parse_order(order_by)[0][1].lower()
+        if 'sort' in state and state['sort'] != direction:
+            raise ValueError('sort conflicts with the first ORDER BY direction.')
+        state.update(order_by=order_by, sort=direction)
     return state
 
 
@@ -226,8 +233,14 @@ def generate(state):
     if state.get('exclude_tags'):
         add('tags', 'NOT IN', tuple(normalize_tags(state['exclude_tags']).split(',')))
     for field, key in SETTINGS.items():
+        if key == 'sort' and state.get('order_by'):
+            continue
         if state.get(key) not in ('', None, 0):
             add(field, '=', state[key])
     if state.get('expression'):
         clauses.append('(' + state['expression'] + ')')
-    return ' AND '.join(clauses)
+    expression = ' AND '.join(clauses)
+    if state.get('order_by'):
+        from modules.hfl_corpus.ordering import normalize_order
+        expression += ' ORDER BY ' + normalize_order(state['order_by'], state.get('sort'))
+    return expression.strip()

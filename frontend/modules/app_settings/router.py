@@ -15,6 +15,23 @@ from web import page_context, require_user, templates
 router = APIRouter(prefix='/settings')
 
 
+@router.post('/quick-tags')
+async def update_quick_tags(request: Request):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    form = await request.form(max_files=0, max_fields=2)
+    if not verify_csrf_token(str(form.get('csrf', '')), user):
+        raise HTTPException(403, 'Invalid form token.')
+    try:
+        favorites = normalize_favorite_tags(str(form.get('favorite_tags', '')))
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    store = get_profile_store()
+    store.save(stamp(replace(store.get(), favorite_tags=favorites)))
+    return {'favorite_tags': favorites}
+
+
 def _quick_tags_return(value: str) -> str:
     # Only allow this entry point to return to the local corpus index.
     try:

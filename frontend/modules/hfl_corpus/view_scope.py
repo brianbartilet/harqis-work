@@ -31,6 +31,9 @@ def resolved(state, today=None):
 
 def predicate(state):
     """Compile tag/source/date filters once, rather than once per entry."""
+    from modules.hfl_corpus.expressions import compile_expression, has_media, normalize_tags
+    expression_matches = compile_expression(state.get('expression', ''))
+    excluded = set(normalize_tags(state.get('exclude_tags', '')).split(',')) - {''}
     tags, phrase = parse_search_query(state.get('q', ''))
     sources = {s.strip().casefold() for s in state.get('source', '').split(',') if s.strip()}
     start = date.fromisoformat(state['date_from']) if state.get('date_from') else None
@@ -41,6 +44,12 @@ def predicate(state):
     nested_all = predicate(resolved(nested.all)) if state.get('entry_scope') else None
 
     def matches(document, entry):
+        if not expression_matches(document, entry):
+            return False
+        if excluded.intersection(tag.casefold().lstrip('#') for tag in entry.tags):
+            return False
+        if state.get('has_media') and not has_media(entry):
+            return False
         if nested_all and not (nested_all(document, entry) and (not nested_any or any(check(document, entry) for check in nested_any))):
             return False
         if sources and entry.source.strip().casefold() not in sources:
@@ -58,18 +67,26 @@ def predicate(state):
 
 
 def filter_scope(documents, scope):
-    if not scope.any:
+    selection_keys = ('q', 'source', 'date_from', 'date_to', 'rolling', 'entry_scope', 'has_media', 'exclude_tags', 'expression')
+    constrained = lambda state: any(getattr(state, key) for key in selection_keys)
+    if scope.all.order_by and not constrained(scope.all) and (not scope.any or any(not constrained(state) for state in scope.any)):
+        from modules.hfl_corpus.ordering import sorted_documents
+        return tuple(sorted_documents(documents, scope.all.order_by))
+    if not scope.any and not any(getattr(scope.all, key) for key in ('q', 'source', 'date_from', 'date_to', 'rolling', 'entry_scope', 'has_media', 'exclude_tags', 'expression', 'order_by')):
         return documents
     clauses = [predicate(resolved(s)) for s in scope.any]
     narrowing = predicate(resolved(scope.all))
     result = []
     for document in documents:
-        entries = tuple(entry for entry in document.entries if narrowing(document, entry) and any(clause(document, entry) for clause in clauses))
+        entries = tuple(entry for entry in document.entries if narrowing(document, entry) and (not clauses or any(clause(document, entry) for clause in clauses)))
         if entries:
             tags = Counter(tag for entry in entries for tag in entry.tags)
             result.append(replace(document, entries=entries, entry_count=len(entries), matching_entry_count=len(entries),
                 text='\n'.join(entry.text for entry in entries), tags=tuple(tags), tag_counts=tuple(tags.items()),
                 tag_entry_anchors=tuple((tag, entry.anchor) for entry in entries for tag in entry.tags)))
+    if scope.all.order_by:
+        from modules.hfl_corpus.ordering import sorted_documents
+        result = sorted_documents(result, scope.all.order_by)
     return tuple(result)
 
 
@@ -79,13 +96,20 @@ def request_scope(request):
         scope = parse_scope(request.query_params.get('scope', ''))
         if not request.query_params.get('scope') and request.query_params.get('entry_scope'):
             scope = ViewScope(any=[WorkspaceState(entry_scope=request.query_params['entry_scope'])])
-        if scope.any:
+        advanced = {key: request.query_params[key] for key in ('has_media', 'exclude_tags', 'expression', 'order_by') if key in request.query_params}
+        validated = WorkspaceState.model_validate(advanced)
+        if (validated.has_media or validated.exclude_tags or validated.expression or validated.order_by) and not scope.any:
+            scope.any = [WorkspaceState()]
+        if scope.any or request.query_params.get('scope'):
             overrides = {key: value for key, value in request.query_params.items() if key in WorkspaceState.model_fields}
             # Query strings carry text; numeric Literal fields require integers.
             for key in ('page_size', 'rolling'):
                 if key in overrides:
                     overrides[key] = int(overrides[key])
-            scope.all = WorkspaceState.model_validate({**scope.all.model_dump(), **overrides})
+            merged = {**scope.all.model_dump(), **overrides}
+            if 'order_by' in overrides and 'sort' not in overrides:
+                merged.pop('sort', None)
+            scope.all = WorkspaceState.model_validate(merged)
         return scope
     except ValueError as exc:
         raise HTTPException(422, 'Invalid combined view filters.') from exc

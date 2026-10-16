@@ -77,7 +77,7 @@
   function changed() { try { localStorage.setItem('corpus:workspace-change',String(Date.now())); } catch (_) {} }
   function summary(view) {
     const s=view.state;
-    return [s.entry_scope ? 'Saved timeline filters' : '', s.q, s.source || 'All sources', s.rolling?`Last ${s.rolling} days`:(s.date_from||s.date_to)?`${s.date_from||'Any start'} – ${s.date_to||'Today'}`:'All dates',`${view.schedule?.length||0} time blocks`].filter(Boolean).join(' · ');
+    return [s.entry_scope ? 'Saved timeline filters' : '', s.has_media ? 'Has media' : '', s.exclude_tags ? 'Excluding: ' + s.exclude_tags : '', s.expression ? 'Additional expression conditions' : '', s.order_by ? 'Order by: ' + s.order_by : '', s.q, s.source || 'All sources', s.rolling?`Last ${s.rolling} days`:(s.date_from||s.date_to)?`${s.date_from||'Any start'} – ${s.date_to||'Today'}`:'All dates',`${view.schedule?.length||0} time blocks`].filter(Boolean).join(' · ');
   }
   function list() {
     const query=$('#space-search').value.toLowerCase();
@@ -100,7 +100,7 @@
     $('#space-discard').disabled=busy||!editTarget.id;
     $('#space-editor-title').textContent=editTarget.id?'Edit Space':'New Space';baseline=JSON.stringify(payload());list();form.elements.name.focus();
   }
-  function lock(value) {busy=value;root.querySelectorAll('button').forEach(b=>b.disabled=value);form.querySelectorAll('input,select').forEach(e=>e.disabled=value);$('#space-discard').disabled=value||!editTarget?.id;if(!value)dates();}
+  function lock(value) {busy=value;root.querySelectorAll('button').forEach(b=>b.disabled=value);form.querySelectorAll('input,select,textarea').forEach(e=>e.disabled=value);$('#space-discard').disabled=value||!editTarget?.id;if(!value){dates();const expression=form.querySelector('[data-expression-editor]');if(expression)expression.disabled=!form.querySelector('[data-expression-toggle]').checked;}}
   $('#space-discard').onclick=()=>{
     if(busy||!editTarget?.id)return;
     const saved=views.find(view=>view.id===editTarget.id);
@@ -174,7 +174,8 @@
     }
     if (view.state.entry_scope) describeScope(view.state.entry_scope);
     $('[data-schedule-timezone]').textContent = `Times use ${preferences.timezone}. Change it in Profile settings.`;
-    document.querySelectorAll('[data-edit-filter]').forEach(input => input.value = view.state[input.dataset.editFilter] ?? '');
+    document.querySelectorAll('[data-edit-filter]').forEach(input => input.value = view.state[input.dataset.editFilter] ?? (input.dataset.editFilter === 'has_media' ? 'false' : ''));
+    document.querySelector('[data-advanced-filters]')?.refreshAdvanced?.();
     $('[data-space-tag-search]').value = '';
     renderTags();
     fillEditorSources(view.state.source || '');
@@ -190,6 +191,7 @@
     $('[data-schedule-blocks]').replaceChildren();
     (view.schedule || []).forEach(addBlock);
   }
+  form.addEventListener('corpus:expression-state', event => { fillEditorSources(event.detail.source); renderTags(); });
   function fillEditorSources(value) {
     const selected = value.split(',').filter(Boolean);
     const names = [...new Set([...sources.map(input => input.value), ...selected])].sort((a,b) => a.localeCompare(b));
@@ -265,7 +267,7 @@
   }
   function readViewEditor() {
     const state = {...editTarget.state};
-    document.querySelectorAll('[data-edit-filter]').forEach(input => state[input.dataset.editFilter] = ['rolling','page_size'].includes(input.dataset.editFilter) ? Number(input.value) : input.value);
+    document.querySelectorAll('[data-edit-filter]').forEach(input => state[input.dataset.editFilter] = input.dataset.editFilter === 'has_media' ? input.value === 'true' : ['rolling','page_size'].includes(input.dataset.editFilter) ? Number(input.value) : input.value);
     return state;
   }
 

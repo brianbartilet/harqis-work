@@ -62,8 +62,8 @@
     <input type="hidden" name="activity_year" value="{{ activity_year }}">
     <div class="grid gap-3 corpus-filter-grid lg:items-end">
       <div>
-        <div class="flex items-center gap-1.5 text-xs font-medium text-slate-400">
-          <details class="group relative">
+        <div class="relative flex items-center gap-1.5 text-xs font-medium text-slate-400">
+          <details class="group">
             <summary aria-label="How corpus search works" class="flex h-4 w-4 cursor-pointer list-none items-center justify-center rounded-full border border-slate-600 text-[10px] text-slate-400 hover:border-blue-500 hover:text-blue-300">i</summary>
             <div class="absolute left-0 top-6 z-20 w-72 rounded-lg border border-blue-800 bg-slate-950 p-3 text-xs font-normal leading-relaxed text-slate-300 shadow-xl">
               Words are searched as one partial text phrase. Tags are partial and case-insensitive; every space-delimited tag must match. Combine them freely, for example <span class="text-blue-300">#jira #testing some testing topic</span>.
@@ -125,7 +125,9 @@
           </label>
         </div>
       </div>
+      <label class="advanced-media-toggle corpus-main-media"><span>Media only</span><span class="corpus-main-media-control"><input type="checkbox" role="switch" data-media-toggle></span></label>
           <div class="workspace-tags corpus-tags-row border-t border-blue-900/70 pt-3 lg:mt-3">
+          {% with exclude_tags_in_navigation=true %}{% include "modules/hfl_corpus/partials/advanced_filters.html" %}{% endwith %}
           {% if tag_cloud %}
           <details data-tag-cloud class="group corpus-all-tags">
             <summary class="corpus-tags-toggle" title="Expand or collapse all tags">
@@ -144,7 +146,14 @@
           </details>
           {% endif %}
             <div class="corpus-quick-tags-group" role="group" aria-label="Quick tag filters">
-            <a href="/settings?quick_tags_return={{ (request.url.path ~ ('?' ~ request.url.query if request.url.query else '')) | urlencode }}#favorite_tags" class="corpus-quick-tags-label text-xs" title="Edit quick tags">Quick tags</a>
+            <details data-quick-tags-menu class="corpus-quick-tags-menu">
+              <summary class="corpus-quick-tags-label text-xs" title="Edit quick tags">Quick tags</summary>
+              <div class="corpus-quick-tags-editor">
+                <input data-quick-tags-input aria-label="Quick tags, separated by commas" maxlength="1000" placeholder="#notes, #work" value="{{ quick_tags_value }}" autocomplete="off">
+                <button type="button" data-quick-tags-save data-csrf="{{ memory_csrf }}">Save</button>
+                <p data-quick-tags-status role="status" hidden></p>
+              </div>
+            </details>
             <div class="corpus-favorite-tags" aria-label="Quick tags">
               {% for option in favorite_tags %}
               <a data-workspace-tag="{{ option.tag }}" data-favorite-tag href="{{ option.url }}" aria-pressed="{{ 'true' if option.active else 'false' }}"
@@ -152,9 +161,20 @@
                  class="inline-flex items-center rounded-full px-2 py-1 text-xs transition {% if option.active %}bg-emerald-950/70 text-emerald-200 ring-1 ring-emerald-700/60{% else %}bg-blue-950/50 text-blue-300 hover:bg-blue-900 hover:text-blue-100{% endif %}">#{{ option.tag }}</a>
               {% endfor %}
             </div>
+            <details data-exclude-tags-menu class="corpus-quick-tags-menu corpus-exclude-tags-menu">
+              <summary class="corpus-quick-tags-label text-xs" title="Edit excluded tags">Exclude tags</summary>
+              <div class="corpus-quick-tags-editor">
+                <input data-exclude-tags-input aria-label="Excluded tags, separated by commas" maxlength="1000" placeholder="#hfl, #work" value="{{ advanced_state.exclude_tags }}" autocomplete="off">
+                <button type="button" data-exclude-tags-save>Save</button>
+                <p data-exclude-tags-status role="status" hidden></p>
+              </div>
+            </details>
+            <div class="corpus-favorite-tags" data-excluded-tag-pills aria-label="Excluded tags">
+              {% for tag in advanced_state.exclude_tags.split(',') if tag.strip() %}<span class="corpus-excluded-tag" title="Excluded tag">#{{ tag.strip().lstrip('#') }}</span>{% endfor %}
+            </div>
             </div>
             <div class="corpus-feed-action">
-              <button type="button" class="corpus-feed-open" data-curated-feed-open disabled title="View feed of matching entries (V)">View feed</button>
+              <button type="submit" class="corpus-feed-open" data-curated-feed-open disabled title="View feed of matching entries (V)">View feed</button>
             </div>
 
           </div>
@@ -198,11 +218,11 @@
             </select>
           </label>
           <a href="{{ sort_toggle_url }}" data-focus-results
-             aria-label="Show {{ 'oldest' if sort_order == 'desc' else 'newest' }} results first"
-             title="Show {{ 'oldest' if sort_order == 'desc' else 'newest' }} first"
+             aria-label="{{ 'Reverse primary sort direction' if advanced_state.order_by else 'Show oldest results first' if sort_order == 'desc' else 'Show newest results first' }}"
+             title="{{ 'Reverse primary sort direction; keep secondary fields' if advanced_state.order_by else 'Show oldest first' if sort_order == 'desc' else 'Show newest first' }}"
              class="inline-flex h-7 items-center gap-1 rounded-md bg-slate-900 px-2 text-xs text-slate-400 ring-1 ring-slate-700 hover:text-blue-300 hover:ring-blue-700">
             <span aria-hidden="true">{{ '↓' if sort_order == 'desc' else '↑' }}</span>
-            <span>{{ 'Newest' if sort_order == 'desc' else 'Oldest' }}</span>
+            <span>{{ advanced_state.order_by.split(',')[0] if advanced_state.order_by else 'Newest' if sort_order == 'desc' else 'Oldest' }}</span>
           </a>
         </div>
       </div>
@@ -226,7 +246,7 @@
               <p class="text-xs font-medium text-slate-400">{{ document.entry_count | default(0) }} entries</p>
               <div class="mt-2 flex flex-wrap items-center gap-1.5" data-result-tags aria-label="Document tags">
               {% if document.tag_counts %}
-                {% set top_tags = document.tag_counts | sort(attribute='0') | sort(attribute='1', reverse=true) %}
+                {% set top_tags = document.ordered_tag_counts(selected_tags) if selected_tags else document.tag_counts | sort(attribute='0') | sort(attribute='1', reverse=true) %}
                 {% for tag, count in top_tags[:10] %}
                 {% set active = document.tag_matches(tag, selected_tags) %}
                 {% set tag_entry_anchor = document.first_matching_entry_anchor(tag) %}
@@ -393,6 +413,7 @@
   });
 })();
 </script>
+<script defer src="{{ static_asset('js/corpus-advanced-filters.js') }}"></script>
 <script defer src="{{ static_asset('js/corpus-workspaces.js') }}"></script>
 {% include 'modules/hfl_corpus/partials/curated_feed.html' %}
 <script defer src="{{ static_asset('js/corpus-feed.js') }}"></script>

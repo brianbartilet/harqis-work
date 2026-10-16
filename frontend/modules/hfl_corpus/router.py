@@ -373,6 +373,8 @@ async def hfl_activity_year(
                 RemoteCorpusClient.from_settings().index,
                 params={
                     "q": q,
+                    **{key: request.query_params.get(key, "") for key in ("exclude_tags", "expression", "order_by")},
+                    "has_media": request.query_params.get("has_media", "false"),
                     "scope": request.query_params.get("scope", ""),
                     "source": source,
                     "page": "1",
@@ -608,8 +610,12 @@ def _index_url(
     rolling: int = 0,
     workspace: str = "",
     scope: str = "", views: str = "", dynamic: str = "0",
+    has_media: str = "", exclude_tags: str = "", expression: str = "", order_by: str = "",
 ) -> str:
-    params = {}
+    if order_by:
+        from modules.hfl_corpus.ordering import normalize_order
+        order_by = normalize_order(order_by, sort)
+    params = {key: value for key, value in dict(has_media=has_media, exclude_tags=exclude_tags, expression=expression, order_by=order_by).items() if value}
     if scope:
         params.update(scope=scope, views=views, dynamic=dynamic)
     if rolling:
@@ -735,6 +741,26 @@ async def curated_feed(request: Request, show_secrets: bool = False):
     return JSONResponse(result, headers={'Cache-Control': 'no-store'})
 
 
+@router.post('/expression')
+async def corpus_expression(request: Request):
+    """Validate/translate expressions without executing a search or persisting state."""
+    from modules.hfl_corpus.expressions import generate, project, parse
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    try:
+        if len(await request.body()) > 100_000:
+            raise ValueError('Expression request is too large.')
+        payload = await request.json()
+        if not isinstance(payload, dict) or ('expression' in payload and not isinstance(payload['expression'], str)):
+            raise ValueError('Provide an expression string or filter state.')
+        state = workspace_views.WorkspaceState.model_validate(
+            project(payload['expression']) if 'expression' in payload else payload.get('state', {}))
+        return {'state': state.model_dump(), 'expression': generate(state.model_dump()), 'tree': parse(state.expression)}
+    except (ValueError, TypeError, KeyError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
 @router.get("", response_class=HTMLResponse)
 async def hfl_corpus_page(
     request: Request,
@@ -759,6 +785,11 @@ async def hfl_corpus_page(
     user, redirect = require_user(request)
     if redirect:
         return redirect
+    effective_scope = request_scope(request)  # Validate before local or remote search.
+    advanced_state = workspace_views.WorkspaceState.model_validate({key: request.query_params[key] for key in ('has_media', 'exclude_tags', 'expression', 'order_by') if key in request.query_params})
+    if effective_scope.all.order_by:
+        sort = effective_scope.all.sort
+        advanced_state.order_by = effective_scope.all.order_by
     saved_workspaces = await asyncio.to_thread(workspace_views.listing)
     if request.query_params.get('entry_scope'):
         # Normalize a saved feed into the existing combined-scope URL contract.
@@ -819,7 +850,9 @@ async def hfl_corpus_page(
                 RemoteCorpusClient.from_settings().index,
                 params={
                     "q": q,
-                    "scope": request.query_params.get("scope", ""),
+                    **{key: request.query_params.get(key, "") for key in ("exclude_tags", "expression", "order_by")},
+                    "has_media": request.query_params.get("has_media", "false"),
+                    "scope": effective_scope.model_dump_json() if effective_scope.any else request.query_params.get("scope", ""),
                     "date_field": date_field,
                     "date_from": date_from,
                     "date_to": date_to,
@@ -907,6 +940,7 @@ async def hfl_corpus_page(
             date_from=date_from,
             date_to=date_to,
             sort_order=sort,
+            order_by=effective_scope.all.order_by,
             source=selected_source,
         )
         result_page = paginate_documents(all_results, page=page, page_size=page_size)
@@ -933,7 +967,7 @@ async def hfl_corpus_page(
         activity_year=selected_timeline_year,
         rolling=rolling,
         workspace=workspace,
-        **{key: request.query_params.get(key, "") for key in ("scope", "views", "dynamic")},
+        **{key: request.query_params.get(key, "") for key in ("scope", "views", "dynamic", "has_media", "exclude_tags", "expression", "order_by")},
     )
     tag_options = []
     favorite_options = []
@@ -971,7 +1005,7 @@ async def hfl_corpus_page(
                 activity_year=selected_timeline_year,
                 rolling=rolling,
                 workspace=workspace,
-                **{key: request.query_params.get(key, "") for key in ("scope", "views", "dynamic")},
+                **{key: request.query_params.get(key, "") for key in ("scope", "views", "dynamic", "has_media", "exclude_tags", "expression", "order_by")},
             ),
         })
     page_url_values = {
@@ -987,7 +1021,7 @@ async def hfl_corpus_page(
         "rolling": rolling,
         "workspace": workspace,
     }
-    page_url_values.update({key: request.query_params.get(key, "") for key in ("scope", "views", "dynamic")})
+    page_url_values.update({key: request.query_params.get(key, "") for key in ("scope", "views", "dynamic", "has_media", "exclude_tags", "expression", "order_by")})
     previous_page_url = _index_url(
         **page_url_values, page=result_page.page - 1
     )
@@ -1025,6 +1059,7 @@ async def hfl_corpus_page(
             total_results=total_results,
             document_count=document_count,
             query=q,
+            advanced_state=advanced_state,
             selected_tags=selected_tags,
             selected_tag=selected_tags[0] if len(selected_tags) == 1 else "",
             text_query=text_query,
@@ -1035,7 +1070,7 @@ async def hfl_corpus_page(
             source_options=source_options,
             selected_sources=selected_source.split(",") if selected_source else [],
             saved_workspaces=saved_workspaces,
-            scope=request.query_params.get("scope", ""),
+            scope=effective_scope.model_dump_json() if effective_scope.any else request.query_params.get("scope", ""),
             active_view_ids=request.query_params.get("views", workspace).split(","),
             dynamic_view=request.query_params.get("dynamic") == "1",
             entry_source_options=entry_source_options,
@@ -1046,6 +1081,7 @@ async def hfl_corpus_page(
             next_page_url=next_page_url,
             tag_cloud=tag_options,
             favorite_tags=favorite_options,
+            quick_tags_value=profile.favorite_tags,
             remote_error=remote_error,
             success_message="HFL entry created successfully." if created else "",
             secrets_configured=bool(profile.secret_pin_hash),
@@ -1065,7 +1101,7 @@ async def hfl_corpus_page(
                 "documents": timeline_paths,
                 "selected_day": selected_activity_day.isoformat() if selected_activity_day else "",
                 "query": q,
-                "scope": request.query_params.get("scope", ""),
+                "scope": effective_scope.model_dump_json() if effective_scope.any else request.query_params.get("scope", ""),
                 "source": selected_source,
                 "show_secrets": include_secrets,
             },

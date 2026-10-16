@@ -23,7 +23,41 @@ class WorkspaceState(BaseModel):
     date_to: str = ''
     rolling: Literal[0, 7, 30, 90] = 0
     sort: Literal['asc', 'desc'] = 'desc'
+    order_by: str = Field(default='', max_length=200)
     page_size: Literal[20, 50, 100] = 20
+    has_media: bool = False
+    exclude_tags: str = Field(default='', max_length=2000)
+    expression: str = Field(default='', max_length=12000)
+
+    @field_validator('order_by')
+    @classmethod
+    def valid_order(cls, value):
+        from modules.hfl_corpus.ordering import normalize_order
+        return normalize_order(value)
+
+    @model_validator(mode='after')
+    def synchronize_order(self):
+        if self.order_by:
+            from modules.hfl_corpus.ordering import normalize_order, parse_order
+            if 'sort' in self.model_fields_set:
+                self.order_by = normalize_order(self.order_by, self.sort)
+            else:
+                self.sort = parse_order(self.order_by)[0][1].lower()
+        return self
+
+    @field_validator('exclude_tags')
+    @classmethod
+    def valid_exclusions(cls, value):
+        from modules.hfl_corpus.expressions import normalize_tags
+        return normalize_tags(value)
+
+    @field_validator('expression')
+    @classmethod
+    def valid_expression(cls, value):
+        from modules.hfl_corpus.expressions import compile_expression
+        compile_expression(value)
+        return value
+
     entry_scope: str = Field(default='', max_length=100_000)
 
     @field_validator('entry_scope')

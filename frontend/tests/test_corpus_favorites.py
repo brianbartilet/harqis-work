@@ -98,18 +98,37 @@ def test_favorites_browser_toggle_and_settings_link(editor_page, workspace_corpu
     expect(page.locator('#q')).to_have_value('#personal')
     page.locator('[data-tag-cloud] > summary').click()
     expect(page.locator('[data-tag-cloud] [data-workspace-tag]').first).to_be_visible()
+    expect(page.locator('[data-activity-toggle]')).to_have_attribute('aria-expanded', 'false')
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     page.screenshot(path=str(tmp_path / f'corpus-favorites-{width}.png'))
-    page.get_by_role('link', name='Edit quick tags', exact=True).click()
-    expect(page.locator('#favorite_tags')).to_be_focused()
-    expect(page.locator('#activity-corpus')).to_have_attribute('open', '')
-    expect(page.locator('details.settings-section').first).not_to_have_attribute('open', '')
-    page.locator('#favorite_tags').fill('notes, #notes, work')
-    page.get_by_role('button', name='Save settings').click()
-    expect(page.locator('#favorite_tags')).to_have_value('#notes, #work')
-    expect(page.locator('#favorite_tags')).to_be_visible()
+    page.locator('[data-activity-toggle]').click()
+    expect(page.locator('[data-activity-toggle]')).to_have_attribute('aria-expanded', 'true')
+    page.locator('[data-quick-tags-menu] > summary').click()
+    expect(page.locator('[data-quick-tags-input]')).to_be_focused()
+    expect(page.locator('[data-activity-toggle]')).to_have_attribute('aria-expanded', 'true')
+    page.locator('[data-quick-tags-input]').fill('notes, #notes, personal')
+    page.locator('[data-quick-tags-save]').click()
+    expect(page.locator('[data-quick-tags-status]')).to_have_text('Saved.')
+    expect(page.locator('[data-quick-tags-input]')).to_have_value('#notes, #personal')
+    expect(page.locator('[data-favorite-tag][data-workspace-tag="personal"]')).to_have_attribute('aria-pressed', 'true')
+    expect(page.locator('#q')).to_have_value('#personal')
+    assert get_profile_store().get().favorite_tags == '#notes, #personal'
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-    page.screenshot(path=str(tmp_path / f'corpus-settings-{width}.png'))
+    box = page.locator('[data-quick-tags-menu] .corpus-quick-tags-editor').bounding_box()
+    assert box['x'] >= 0 and box['x'] + box['width'] <= width
+    page.screenshot(path=str(tmp_path / f'corpus-quick-tags-{width}.png'))
+    page.locator('[data-quick-tags-input]').press('Escape')
+    expect(page.locator('[data-quick-tags-menu]')).not_to_have_attribute('open', '')
+    page.locator('[data-advanced-filters] > summary').click()
+    expect(page.locator('[data-activity-toggle]')).to_have_attribute('aria-expanded', 'false')
+    page.reload()
+    page.locator('[data-quick-tags-menu] > summary').click()
+    expect(page.locator('[data-quick-tags-input]')).to_have_value('#notes, #personal')
+    page.locator('[data-quick-tags-input]').fill('two words')
+    page.locator('[data-quick-tags-save]').click()
+    expect(page.locator('[data-quick-tags-status]')).not_to_have_text('Saved.')
+    assert get_profile_store().get().favorite_tags == '#notes, #personal'
+
 
 
 def test_combined_settings_save_validates_both_sections(authenticated_client):
@@ -189,3 +208,18 @@ def test_settings_save_preserves_expanded_sections(editor_page, expanded):
     expect(page.locator('#settings-save-notice')).to_be_visible()
     assert page.locator('details.settings-section[open]').evaluate_all('(elements) => elements.map(e => e.id)') == expanded
     assert '#activity-corpus' not in page.url
+
+
+def test_inline_quick_tags_only_changes_favorites(authenticated_client):
+    store = get_profile_store()
+    original = OwnerProfile(nickname='Owner', secret_tags='#private', secret_pin_hash=hash_pin('123456'))
+    store.save(original)
+    assert authenticated_client.post('/settings/quick-tags', data={'favorite_tags':'work'}).status_code == 403
+    assert authenticated_client.post('/settings/quick-tags', data=form(favorite_tags='two words')).status_code == 422
+    assert store.get() == original
+    response = authenticated_client.post('/settings/quick-tags', data=form(favorite_tags='work, #work, notes'))
+    assert response.json() == {'favorite_tags':'#work, #notes'}
+    assert store.get().secret_pin_hash == original.secret_pin_hash
+    assert store.get().secret_tags == original.secret_tags
+    assert store.get().nickname == original.nickname
+    assert authenticated_client.post('/settings/quick-tags', data=form(favorite_tags='')).json() == {'favorite_tags':''}

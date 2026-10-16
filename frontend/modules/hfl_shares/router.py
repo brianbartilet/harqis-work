@@ -618,6 +618,7 @@ def _owner_context_sync(
         default_expires_at=default_expires_at,
         configuration=configuration,
         corpus_scope_clauses=json.loads(configuration.corpus_scope).get("any", []) if configuration and configuration.corpus_scope else [],
+        corpus_scope_all=json.loads(configuration.corpus_scope).get("all", {}) if configuration and configuration.corpus_scope else {},
         preview=preview,
         preview_answer=preview_answer,
         preview_question=preview_question or f"What is {_profile().display_name} currently working on?",
@@ -896,11 +897,15 @@ async def recipe_from_corpus(request: Request, mode: str = 'recipe'):
         )
         from modules.hfl_corpus.view_scope import parse_scope, resolved
         aggregate = parse_scope(str(form.get('scope') or ''))
+        advanced = bool(state.has_media or state.exclude_tags or state.expression or state.order_by)
+        if advanced and not aggregate.any:
+            aggregate.any = [WorkspaceState()]
         if aggregate.any:
-            # Freeze all ranges and omit only free text, retaining each view's tags.
+            # Freeze ranges; advanced searches preserve text as part of their full conditions.
             aggregate.all = state
             for clause in [*aggregate.any, aggregate.all]:
-                clause.q = ' '.join('#'+tag for tag in parse_search_query(clause.q)[0])
+                if not advanced:
+                    clause.q = ' '.join('#'+tag for tag in parse_search_query(clause.q)[0])
                 values = resolved(clause, now.date())
                 clause.date_from, clause.date_to, clause.rolling = values['date_from'], values['date_to'], 0
             ids = str(form.get('views') or '').split(',')

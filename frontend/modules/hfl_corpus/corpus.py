@@ -915,6 +915,7 @@ def search_documents(
     updated_from: str = "",
     updated_to: str = "",
     sort_order: str = "desc",
+    order_by: str = "",
     source: str = "",
 ) -> list[CorpusDocument]:
     tag_needles, text_needle = parse_search_query(query)
@@ -965,6 +966,9 @@ def search_documents(
         if u_to and document.updated_at.date() > u_to:
             continue
         results.append(document)
+    if order_by:
+        from modules.hfl_corpus.ordering import sorted_documents
+        return sorted_documents(results, order_by)
     return sorted(
         results,
         key=lambda item: (item.created_at, item.relative_path),

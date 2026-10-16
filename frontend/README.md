@@ -445,7 +445,8 @@ back to the filtered corpus view. Agents and Activity Corpus settings start coll
 
 **View feed** (shortcut **V**, also closes the dialog) opens a reading feed for the applied search,
 tags, sources, dates, and selected Space filters. It stays disabled without a
-meaningful filter; unsent form edits and sorting alone do not enable it. Entries
+meaningful filter; pending filter edits or an explicit ORDER BY enable it.
+Clicking it applies the current filters through Search, then opens the feed. Entries
 are ordered by their recorded date, newest first, with an oldest-first option
 and undated entries last. The dialog loads 50 entries at a time as you scroll,
 offers retry/load-more controls, and links each card to its original document
@@ -1137,3 +1138,29 @@ archive/revocation, file limits, API ownership, and the weekly `persona-audit` j
 The Spaces management route is `/spaces`; it reuses the existing authenticated
 `/hfl-corpus/workspace-views` APIs and revision checks. The frontend Space editor
 was moved out of the activity dropdowns. See [Spaces guide](../docs/info/SPACES-GUIDE.md).
+
+
+### Advanced corpus filters
+
+Activity Corpus offers **Query mode** under **Advanced**, **Media only** in the main filter row, and an **Exclude tags** popup beside Quick tags. The Space editor keeps these controls in its **Advanced Filters** panel. **Media only** matches entries with recognized image/video references or embedded media; audio alone does not qualify. **Exclude tags** accepts comma-separated whole tag names, ignores case and optional `#`, and never excludes similarly prefixed names.
+
+Enable **Query mode** to generate a query from the current controls. Valid edits synchronize the controls; **Apply** searches the corpus (or applies a Space draft before Save Space). Invalid expressions retain the last valid filters. Suggestions support arrow keys and Enter/Tab; Escape dismisses them. Ctrl/Cmd+Enter applies.
+
+Expressions support `AND`, `OR`, `NOT`, parentheses, `=`, `!=`, `~`, `!~`, `IN`, and `NOT IN` where appropriate. `~` matches partial text/tags; tag equality and lists use exact names. For example:
+
+```text
+hasMedia = true AND tags NOT IN ("hfl") AND (source = "instagram" OR tags = "travel")
+```
+
+Fields: `text`, `tags`, `source`, `hasMedia`, and `q` (the existing combined text/#tag search). `entryDate`, `created`, and `updated` accept quoted ISO dates and comparison operators. Global control settings `dateField`, `dateFrom`, `dateTo`, `rolling`, `sort`, and `pageSize` use top-level `AND` equality clauses. Nested conditions that cannot fit the ordinary controls remain in the expression and stay active when Query mode is disabled. Saved Space restrictions remain in force. Advanced filters travel with feeds, saved Spaces, and generated recipes; canonical remote hosts must also run the updated backend.
+
+
+Expressions also accept a trailing, multi-field `ORDER BY`, for example:
+
+```text
+hasMedia = true AND tags NOT IN ("hfl") ORDER BY source ASC, entryDate DESC
+```
+
+Supported sort fields are `source`, `entryDate`, `created`, and `updated`. Directions default to `ASC`; fields are evaluated left to right. Source names ignore case, missing values sort last in either direction, and document paths/entry anchors break remaining ties. `ORDER BY` can appear on its own. Duplicate/unknown fields and conflicting legacy `sort` clauses are rejected. Sorting is independent of the date filter. The existing direction control reverses the first field and retains secondary fields.
+
+Corpus results stay grouped by document: matching entries are sorted within each document, and each document is positioned by its first ordered entry. Feeds and recipe snapshots use the full entry-level order. The sort list is preserved in URLs, saved Spaces, feed cursors, and recipe scope. Queries without `ORDER BY` keep the existing default behavior.

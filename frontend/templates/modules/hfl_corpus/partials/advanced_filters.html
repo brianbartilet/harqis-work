@@ -1,18 +1,45 @@
 <details class="corpus-advanced-filters" data-advanced-filters>
-  <summary class="corpus-tags-toggle">Advanced Filters</summary>
+  <summary class="corpus-tags-toggle">Advanced</summary>
   <div class="corpus-advanced-panel">
-    <div class="advanced-filter-fields">
-      <label class="advanced-media-toggle"><input type="checkbox" role="switch" data-media-toggle> Has media only</label>
       <input type="hidden" name="has_media" data-edit-filter="has_media" value="{{ 'true' if advanced_state is defined and advanced_state.has_media else 'false' }}">
-      <label>Exclude tags<input type="text" name="exclude_tags" data-edit-filter="exclude_tags" value="{{ advanced_state.exclude_tags if advanced_state is defined else '' }}" placeholder="#hfl, #work" autocomplete="off"><small>Whole tag names, separated by commas.</small></label>
+      {% if exclude_tags_in_navigation %}
+      <input type="hidden" name="exclude_tags" data-edit-filter="exclude_tags" value="{{ advanced_state.exclude_tags }}">
+      {% else %}
+    <div class="advanced-filter-fields">
+      <div class="advanced-exclude-tags">
+        <div class="advanced-exclude-heading"><button type="button" class="expression-help-trigger" data-exclude-help-open aria-label="Exclude tags help" aria-haspopup="dialog" aria-controls="exclude-help-dialog" popovertarget="exclude-help-dialog">i</button><label for="corpus-exclude-tags">Exclude tags</label></div>
+        <input id="corpus-exclude-tags" type="text" name="exclude_tags" data-edit-filter="exclude_tags" value="{{ advanced_state.exclude_tags if advanced_state is defined else '' }}" placeholder="#hfl, #work" autocomplete="off">
+      </div>
+      <label class="advanced-media-toggle">Has media only <input type="checkbox" role="switch" data-media-toggle></label>
     </div>
+      {% endif %}
+    <input type="hidden" name="order_by" data-edit-filter="order_by" value="{{ advanced_state.order_by if advanced_state is defined else '' }}">
+    <p data-order-summary hidden></p>
     <input type="hidden" name="expression" data-edit-filter="expression" value="{{ advanced_state.expression if advanced_state is defined else '' }}">
-    <div class="advanced-expression-label"><label><input type="checkbox" data-expression-toggle> Edit query expression</label><button type="button" data-expression-apply>Apply</button></div>
+    <div class="advanced-expression-label">
+      <button type="button" class="expression-help-trigger" data-expression-help-open aria-label="Query mode help" aria-haspopup="dialog" aria-controls="expression-help-dialog" popovertarget="expression-help-dialog">i</button>
+      <label class="advanced-media-toggle">Query mode <input type="checkbox" role="switch" data-expression-toggle></label>
+    </div>
     <label class="sr-only" for="corpus-expression">Query expression</label>
-    <textarea id="corpus-expression" data-expression-editor rows="3" disabled spellcheck="false" autocomplete="off" aria-describedby="expression-help expression-error" aria-autocomplete="list" aria-controls="expression-suggestions" aria-expanded="false" placeholder='source IN ("instagram") AND (hasMedia = true OR tags = "travel")'></textarea>
-    <div id="expression-suggestions" data-expression-suggestions role="listbox" aria-label="Expression suggestions" hidden></div>
-    <p id="expression-error" data-expression-error role="alert"></p>
-    <p id="expression-help">Use AND, OR, NOT and parentheses. Quote text values. Entry date: <code>entryDate &gt;= "2026-01-01"</code>. Apply runs the search; in Spaces it applies the draft for saving.</p>
-    <div data-expression-summary hidden><strong>Additional conditions</strong><div data-expression-tree></div><small>These branches remain active when expression editing is off. The filters above further narrow them.</small></div>
+    <div class="advanced-expression-input">
+      <textarea id="corpus-expression" data-expression-editor rows="1" disabled spellcheck="false" autocomplete="off" aria-describedby="expression-error" aria-autocomplete="list" aria-controls="expression-suggestions" aria-expanded="false" placeholder='source IN ("instagram") AND (hasMedia = true OR tags = "travel")'></textarea>
+      <button type="button" data-expression-apply disabled>Apply</button>
+    </div>
+    <div class="advanced-expression-feedback">
+      <div id="expression-suggestions" data-expression-suggestions role="listbox" aria-label="Expression suggestions" hidden></div>
+      <p id="expression-error" data-expression-error role="alert"></p>
+    </div>
+    <div id="exclude-help-dialog" popover class="advanced-help-popover" data-exclude-help-dialog role="dialog" aria-label="Exclude tags">
+      <p>Whole tag names, separated by commas.</p>
+    </div>
+    <div id="expression-help-dialog" popover class="advanced-help-popover" data-expression-help-dialog role="dialog" aria-label="Query mode">
+      <p>The query expression is generated dynamically from your previously applied filters and updates as you change the filter controls. Turn on Query mode to edit it directly; a valid expression also updates those controls.</p>
+      <p>Use AND, OR, NOT and parentheses to combine conditions. Quote text values.</p>
+      <p>Match tags partially with <code>~</code> and exclude partial matches with <code>!~</code>: <code>tags ~ "windows" AND tags !~ "windows-work"</code>. This matches #windows but excludes entries with tags such as #windows-work-20232, even if they also have #windows.</p>
+      <p>For an exact tag match, use <code>tags = "windows"</code>. <code>tags NOT IN ("test", "manok")</code> excludes whole tag names only.</p>
+      <p>Filter by entry date: <code>entryDate &gt;= "2026-01-01"</code></p>
+      <p>Sort by multiple fields: <code>ORDER BY source ASC, entryDate DESC</code></p>
+      <p>Apply runs the search; in Spaces it applies the draft for saving.</p>
+    </div>
   </div>
 </details>

@@ -2,7 +2,8 @@
 import hashlib
 import json
 import re
-from datetime import datetime, timezone
+from functools import cmp_to_key
+from modules.hfl_corpus.ordering import parse_order, normalize_order, entry_key, compare_keys
 from urllib.parse import quote
 
 from fastapi import HTTPException
@@ -36,16 +37,18 @@ def feed_page(params, *, include_secrets=False, secret_tags=()):
         scope = parse_scope(params.get('scope', ''))
         if scope.any:
             scope.all = WorkspaceState.model_validate({**scope.all.model_dump(), **values})
-        order = params.get('order', 'desc')
+        requested_order = state.order_by or scope.all.order_by
+        order = params.get('order', parse_order(requested_order)[0][1].lower() if requested_order else 'desc')
         if order not in {'asc', 'desc'}:
             raise ValueError()
+        ordering = parse_order(normalize_order(requested_order, order) if requested_order else 'entryDate ' + order.upper())
         narrowing = predicate(resolved(state))
         scope_narrowing = predicate(resolved(scope.all))
         alternatives = [predicate(resolved(item)) for item in scope.any]
     except ValueError as exc:
         raise HTTPException(422, 'Invalid timeline filters.') from exc
     def meaningful(item):
-        if any(str(item.get(key, '')).strip() for key in ('q', 'source', 'date_from', 'date_to')) or item.get('rolling'):
+        if any(str(item.get(key, '')).strip() for key in ('q', 'source', 'date_from', 'date_to', 'exclude_tags', 'expression', 'order_by')) or item.get('rolling') or item.get('has_media'):
             return True
         if item.get('entry_scope'):
             nested = parse_scope(item['entry_scope'])
@@ -75,16 +78,11 @@ def feed_page(params, *, include_secrets=False, secret_tags=()):
                 continue
             if not scope_narrowing(document, entry) or (alternatives and not any(check(document, entry) for check in alternatives)):
                 continue
-            try:
-                when = datetime.fromisoformat(entry.header.strip())
-                stamp = when.replace(tzinfo=when.tzinfo or timezone.utc).timestamp()
-                key = (0, -stamp if order == 'desc' else stamp, document.relative_path, entry.anchor)
-            except (ValueError, OverflowError):
-                key = (1, 0, document.relative_path, entry.anchor)
+            key = entry_key(document, entry, ordering)
             matches.append((key, document, entry))
-    matches.sort(key=lambda row: row[0])
+    matches.sort(key=cmp_to_key(lambda a, b: compare_keys(a[0], b[0], ordering)))
     total = len(matches)
-    remaining = [row for row in matches if after is None or row[0] > after]
+    remaining = [row for row in matches if after is None or compare_keys(row[0], after, ordering) > 0]
     page = remaining[:50]
     entries = []
     root = resolve_corpus_root()

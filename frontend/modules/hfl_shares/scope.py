@@ -176,9 +176,12 @@ def build_snapshot(
                     entity_entries.add(target[6:])
     from modules.hfl_shares.activity_models import selection
     controls = selection(configuration)
+    order_by = ''
     if configuration.corpus_scope:
         from modules.hfl_corpus.view_scope import filter_scope, parse_scope
-        documents = filter_scope(documents, parse_scope(configuration.corpus_scope))
+        corpus_scope = parse_scope(configuration.corpus_scope)
+        documents = filter_scope(documents, corpus_scope)
+        order_by = corpus_scope.all.order_by
     all_sources = ALL_SOURCES in configuration.sources
     protected_tags = secret_tags or normalize_secret_tags("")
     sources = {
@@ -223,90 +226,87 @@ def build_snapshot(
         ),
         reverse=True,
     )
-    for document in ordered_documents:
-        ordered_entries = sorted(
-            document.entries,
-            key=lambda entry: _entry_datetime(entry.header) or datetime.min,
-            reverse=True,
-        )
-        for entry in ordered_entries:
-            if is_secret_entry(entry, protected_tags) and not (
-                configuration.include_secrets and allow_secrets
-            ):
+    pairs = [(document, entry) for document in ordered_documents for entry in sorted(
+        document.entries, key=lambda entry: _entry_datetime(entry.header) or datetime.min, reverse=True)]
+    if order_by:
+        from modules.hfl_corpus.ordering import sorted_pairs
+        pairs = [(doc, entry) for _, doc, entry in sorted_pairs(pairs, order_by)]
+    for document, entry in pairs:
+        if is_secret_entry(entry, protected_tags) and not (
+            configuration.include_secrets and allow_secrets
+        ):
+            continue
+        if not all_sources and entry.source.casefold() not in sources:
+            continue
+        missing_sources.discard(entry.source.casefold())
+        entry_id = _entry_key(document, entry.anchor, entry.text)
+        if entity_entries is not None and entry_id not in entity_entries:
+            continue
+        if tags and not tags.issubset({tag.casefold() for tag in entry.tags}):
+            continue
+        when = _entry_date(entry.header)
+        filter_date = when if configuration.date_field == "entry" else getattr(document, configuration.date_field + "_at").date()
+        if start and (not filter_date or filter_date < start):
+            continue
+        if end and (not filter_date or filter_date > end):
+            continue
+        sanitized_text = _sanitize_entry_text(entry.text)
+        searchable = sanitized_text.casefold()
+        if topic_terms and not all(term in searchable for term in topic_terms):
+            continue
+        matching_ids.add(entry_id)
+        if configuration.activity:
+            if "entry:" + entry_id in controls.excluded_ids:
                 continue
-            if not all_sources and entry.source.casefold() not in sources:
+            if controls.approved_ids is not None and "entries" not in controls.automatic and entry_id not in controls.approved_ids.get("entries", []):
                 continue
-            missing_sources.discard(entry.source.casefold())
-            entry_id = _entry_key(document, entry.anchor, entry.text)
-            if entity_entries is not None and entry_id not in entity_entries:
-                continue
-            if tags and not tags.issubset({tag.casefold() for tag in entry.tags}):
-                continue
-            when = _entry_date(entry.header)
-            filter_date = when if configuration.date_field == "entry" else getattr(document, configuration.date_field + "_at").date()
-            if start and (not filter_date or filter_date < start):
-                continue
-            if end and (not filter_date or filter_date > end):
-                continue
-            sanitized_text = _sanitize_entry_text(entry.text)
-            searchable = sanitized_text.casefold()
-            if topic_terms and not all(term in searchable for term in topic_terms):
-                continue
-            matching_ids.add(entry_id)
-            if configuration.activity:
-                if "entry:" + entry_id in controls.excluded_ids:
-                    continue
-                if controls.approved_ids is not None and "entries" not in controls.automatic and entry_id not in controls.approved_ids.get("entries", []):
-                    continue
-            entry_chars = len(sanitized_text)
-            if used_chars + entry_chars > max_chars:
-                if not entries:
-                    raise ValueError(
-                        "The newest matching entry exceeds the snapshot size limit."
-                    )
-                truncated = True
-                break
-            if reference_context is None and document.path:
-                corpus_root = resolve_corpus_root()
-                reference_context = (corpus_root, allowed_reference_roots(corpus_root))
-            references = _references(
-                document, entry_id, entry.text, reference_context=reference_context,
-            )
-            available_references += len(references)
-            if not configuration.references_enabled:
-                references = ()
-            else:
-                references = tuple(
-                    replace(
-                        item,
-                        enabled=(
-                            item.id not in disabled
-                            if enabled is None
-                            else item.id in enabled
-                        ),
-                    )
-                    for item in references
+        entry_chars = len(sanitized_text)
+        if used_chars + entry_chars > max_chars:
+            if not entries:
+                raise ValueError(
+                    "The newest matching entry exceeds the snapshot size limit."
                 )
-            if when:
-                dates.append(when)
-            entries.append(
-                SnapshotEntry(
-                    id=entry_id,
-                    citation=f"S{len(entries) + 1}",
-                    relative_path=document.relative_path,
-                    anchor=entry.anchor,
-                    header=entry.header,
-                    moment=entry.moment,
-                    what_happened=entry.what_happened,
-                    source=entry.source,
-                    tags=entry.tags,
-                    text=sanitized_text,
-                    references=references,
-                )
-            )
-            used_chars += entry_chars
-        if truncated:
+            truncated = True
             break
+        if reference_context is None and document.path:
+            corpus_root = resolve_corpus_root()
+            reference_context = (corpus_root, allowed_reference_roots(corpus_root))
+        references = _references(
+            document, entry_id, entry.text, reference_context=reference_context,
+        )
+        available_references += len(references)
+        if not configuration.references_enabled:
+            references = ()
+        else:
+            references = tuple(
+                replace(
+                    item,
+                    enabled=(
+                        item.id not in disabled
+                        if enabled is None
+                        else item.id in enabled
+                    ),
+                )
+                for item in references
+            )
+        if when:
+            dates.append(when)
+        entries.append(
+            SnapshotEntry(
+                id=entry_id,
+                citation=f"S{len(entries) + 1}",
+                relative_path=document.relative_path,
+                anchor=entry.anchor,
+                header=entry.header,
+                moment=entry.moment,
+                what_happened=entry.what_happened,
+                source=entry.source,
+                tags=entry.tags,
+                text=sanitized_text,
+                references=references,
+            )
+        )
+        used_chars += entry_chars
 
     source_counts = Counter(entry.source for entry in entries)
     tag_counts = Counter(tag for entry in entries for tag in set(entry.tags))

@@ -253,7 +253,8 @@ async def hfl_api_documents(
         include_secrets=include_secrets,
         secret_tags=protected_tags,
     )
-    documents = filter_scope(view.documents, request_scope(request))
+    filters = request_scope(request)
+    documents = filter_scope(view.documents, filters)
     sources = view.sources
     selected_source = normalize_source(source, sources)
     calendar_years = activity_calendar_years()
@@ -275,12 +276,15 @@ async def hfl_api_documents(
         date_from=date_from,
         date_to=date_to,
         sort_order=sort,
+        order_by=filters.all.order_by,
         source=selected_source,
     )
     result_page = paginate_documents(results, page=page, page_size=page_size)
     selected_tags, text_query = parse_search_query(q)
     payload = {
         "scope_supported": True,
+        "advanced_filters_supported": True,
+        "order_by_supported": True,
         "results": (
             [
                 _document_payload(
@@ -403,6 +407,7 @@ async def hfl_api_matches(
     normalized_limit = min(max(1, limit), 20)
     return {
         "scope_supported": True,
+        "advanced_filters_supported": True,
         "entries": [
             asdict(entry)
             for entry in entries[
@@ -443,6 +448,7 @@ async def hfl_api_day_matches(
     normalized_limit = min(max(1, limit), 20)
     return {
         "scope_supported": True,
+        "advanced_filters_supported": True,
         "matches": [
             {"relative_path": relative_path, "entry": asdict(entry)}
             for relative_path, entry in matches[
