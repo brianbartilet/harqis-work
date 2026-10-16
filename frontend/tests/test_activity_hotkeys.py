@@ -110,7 +110,14 @@ def test_corpus_shortcuts_and_space_order(editor_page, workspace_corpus):
     was_open=tags.evaluate('(el)=>el.open')
     page.keyboard.press('t')
     assert tags.evaluate('(el)=>el.open') != was_open
+    toggle = page.locator('[data-activity-toggle]')
+    if toggle.get_attribute('aria-expanded') == 'true':
+        toggle.click()
+    expect(toggle).to_have_attribute('aria-expanded', 'false')
+    page.locator('.activity-hotkey-trigger').focus()
     page.keyboard.press('Space')
+    expect(toggle).to_have_attribute('aria-expanded', 'true')
+    expect(page.locator('[data-activity-day][data-today="true"]')).to_be_focused()
     expect(page.locator('#activity-cell-tooltip')).to_be_visible()
     page.keyboard.press('c')
     expect(page.locator('[data-memory-dialog]')).to_be_visible()

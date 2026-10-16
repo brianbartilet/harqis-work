@@ -854,6 +854,8 @@
     todayShortcuts.forEach(shortcut => shortcut.addEventListener('click', () => {
         closeDayMenu();
         setYearMenuOpen(false);
+        setActivityExpanded(true);
+        writeActivityState(true);
         void scrollToDate(timelineData.end);
       }, {signal: activityController.signal}));
     memoryDialog.querySelectorAll('[data-memory-dialog-close]').forEach(button => button.addEventListener('click', () => memoryDialog.close()));
