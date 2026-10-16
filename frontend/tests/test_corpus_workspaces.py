@@ -304,11 +304,11 @@ def test_workspace_mobile_and_desktop_browser(authenticated_client, workspace_co
             assert view['state']['source'] == 'git,notes'
             assert view['state']['rolling'] == 7
             playwright.expect(page.locator('[data-active-view-name]')).to_have_text('Work sources')
-            assert page.locator('[data-active-view-modified]').inner_text() == 'Saved'
+            assert page.locator('[data-active-view-modified]').count() == 0
             page.locator('#q').fill('#work changed')
-            assert page.locator('[data-active-view-modified]').inner_text() == 'Modified'
+            assert page.locator('[data-active-view-modified]').count() == 0
             page.locator('#q').fill('#work')
-            assert page.locator('[data-active-view-modified]').inner_text() == 'Saved'
+            assert page.locator('[data-active-view-modified]').count() == 0
             for width, height in [(390, 844), (320, 740), (1440, 1000)]:
                 page.set_viewport_size({'width': width, 'height': height})
                 page.evaluate("window.scrollTo(0,0); document.querySelector('[data-corpus-index]').scrollTop=0")

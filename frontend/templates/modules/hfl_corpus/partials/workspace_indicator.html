@@ -3,5 +3,5 @@
 <div class="activity-view-context" role="status" aria-live="polite">
   <span class="activity-view-caption" title="{{ active_view.name if active_view else 'All activity' }}" data-active-view-caption><strong data-active-view-name>{{ active_view.name if active_view else 'All activity' }}</strong></span>
   {% if activity_readonly %}<span class="activity-dynamic-badge">View only</span>{% else %}<span class="activity-dynamic-badge" data-dynamic-badge>Dynamic OFF</span>{% endif %}
-  <span class="activity-view-modified" data-active-view-modified data-state="{{ 'saved' if active_view else 'default' }}">{{ 'Saved' if active_view else 'Default' }}</span>
+  {% if workspace_show_modified | default(false) %}<span class="activity-view-modified" data-active-view-modified data-state="{{ 'saved' if active_view else 'default' }}">{{ 'Saved' if active_view else 'Default' }}</span>{% endif %}
 </div>

@@ -170,7 +170,7 @@
   function syncSources() {
     const values = sources.filter(input => input.checked).map(input => input.value);
     form.elements.source.value = values.join(',');
-    $('[data-source-caption]').textContent = values.length ? `${values.length} selected${inheritedFilters.has('source') && !editedFilters.has('source') ? ' from views' : ''}` : 'All sources';
+    $('[data-source-caption]').textContent = values.length ? `${values.length} selected` : 'All sources';
   }
   sources.forEach(input => input.addEventListener('change', syncSources));
   form.addEventListener('corpus:expression-state', event => {
@@ -226,8 +226,10 @@
     ]);
     const badge = $('[data-active-view-modified]');
     const modified = normalized(snapshot()) !== normalized(aggregateScope.any.length ? {} : current?.state || {});
-    badge.textContent = modified ? 'Modified' : current || applied.length ? 'Saved' : 'Default';
-    badge.dataset.state = modified ? 'modified' : current || applied.length ? 'saved' : 'default';
+    if (badge) {
+      badge.textContent = modified ? 'Modified' : current || applied.length ? 'Saved' : 'Default';
+      badge.dataset.state = modified ? 'modified' : current || applied.length ? 'saved' : 'default';
+    }
     if(kanban)window.dispatchEvent(new CustomEvent('hfl:workspace-context',{detail:{names:activeIds.map(id=>views.find(view=>view.id===id)?.name||'Unavailable Space')}}));
   }
   form.addEventListener('input', updateViewContext);
@@ -438,7 +440,7 @@
       const parsed = new DOMParser().parseFromString(html, 'text/html');
       if (!parsed.querySelector('#corpus-search-form') || parsed.querySelector('[data-corpus-load-error]')) throw Error('The corpus could not load. Your previous results are still shown.');
       const queryMode = !!form.querySelector('[data-expression-toggle]')?.checked;
-      if (target.searchParams.get('open_feed') === '1' || (explicitUrl && queryMode)) {
+      if (explicitUrl) {
         for (const selector of ['[data-advanced-filters]', '[data-tag-cloud]']) {
           const previous = form.querySelector(selector), next = parsed.querySelector(selector);
           if (previous && next) next.open = previous.open;

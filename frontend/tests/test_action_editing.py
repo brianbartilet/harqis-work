@@ -76,7 +76,7 @@ def test_kanban_full_workspace_controls(editor_page, workspace_corpus, width, tm
     page.goto('https://editing.test/hfl-corpus/actions')
     expect(page.locator('[data-active-view-name]')).to_have_text('Kanban focus')
     expect(page.locator('[data-dynamic-badge]')).to_have_text('Dynamic OFF')
-    expect(page.locator('[data-active-view-modified]')).to_have_text('Saved')
+    expect(page.locator('[data-active-view-modified]')).to_have_count(0)
     if not menu.evaluate('(element) => element.open'):
         menu.locator(':scope > summary').click()
     menu.get_by_role('button', name='Visualize', exact=True).click()

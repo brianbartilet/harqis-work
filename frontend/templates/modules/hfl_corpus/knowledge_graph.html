@@ -54,7 +54,7 @@
       <span id="kg-view-status" hidden>Sources preset</span>
     </div>
     <div class="corpus-workspace-controls kg-workspace-controls">
-      {% include "modules/hfl_corpus/partials/workspace_indicator.html" %}
+      {% with workspace_show_modified=true %}{% include "modules/hfl_corpus/partials/workspace_indicator.html" %}{% endwith %}
       {% include "modules/hfl_corpus/partials/workspace_views.html" %}
     <button id="kg-entities" type="button">Entities</button>
     <button id="kg-open-filters" type="button" aria-haspopup="dialog" aria-controls="kg-filter-drawer" aria-expanded="false">Filters</button>

@@ -136,7 +136,7 @@ def test_expression_browser_roundtrip_validation_and_apply(editor_page, advanced
     page.locator('[data-exclude-tags-save]').click()
     expect(page.locator('[name=exclude_tags]')).to_have_value('#hfl')
     expect(page.locator('[data-exclude-tags-menu]')).not_to_have_attribute('open', '')
-    panel.locator('summary').click()
+    expect(panel).to_have_attribute('open', '')
     expect(panel.locator('[data-expression-apply]')).to_be_disabled()
     panel.locator('[data-expression-toggle]').check()
     expect(panel.locator('[data-expression-apply]')).to_be_enabled()
@@ -188,6 +188,27 @@ def test_space_expression_save_reopen_and_keyboard_suggestions(editor_page, adva
     page.reload()
     page.get_by_role('button', name='Media branches', exact=False).first.click()
     expect(page.locator('[data-edit-filter=expression]')).to_have_value(saved['state']['expression'])
+
+
+@pytest.mark.parametrize('query_mode', [False, True])
+def test_tag_search_preserves_advanced_and_cloud(editor_page, advanced_corpus, query_mode):
+    page, _ = editor_page
+    page.goto('https://editing.test/hfl-corpus?reset=1')
+    advanced = page.locator('[data-advanced-filters]')
+    tags = page.locator('[data-tag-cloud]')
+    advanced.locator('summary').click()
+    tags.locator('summary').click()
+    if query_mode:
+        advanced.locator('[data-expression-toggle]').check()
+        expect(advanced.locator('[data-expression-apply]')).to_be_enabled()
+    from urllib.parse import parse_qs, urlparse
+    tag = tags.locator('[data-workspace-tag]').first
+    selected = '#' + tag.get_attribute('data-workspace-tag')
+    tag.click()
+    page.wait_for_url(lambda url: parse_qs(urlparse(url).query).get('q') == [selected])
+    expect(advanced).to_have_attribute('open', '')
+    expect(tags).to_have_attribute('open', '')
+    expect(advanced.locator('[data-expression-toggle]')).to_be_checked(checked=query_mode)
 
 
 @pytest.mark.parametrize('advanced_open,tags_open', [(True, True), (True, False), (False, True), (False, False)])
