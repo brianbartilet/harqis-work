@@ -115,6 +115,15 @@ def test_mcp_bootstrap_preserves_explicit_client_filter(monkeypatch):
     assert launch.os.environ['MCP_ENABLED_APPS'] == 'hfl_corpus'
 
 
+def test_mcp_bootstrap_preserves_explicit_disabled_tools(monkeypatch):
+    launch = load_launch_module()
+    monkeypatch.setattr(launch.os, 'environ', {'MCP_DISABLED_TOOLS': 'send_*'})
+    monkeypatch.setattr(launch, 'load_env_file', lambda: {'MCP_DISABLED_TOOLS': ''})
+    monkeypatch.setattr(launch, '_machine_env_vars', lambda: {})
+    launch.setup_mcp_env()
+    assert launch.os.environ['MCP_DISABLED_TOOLS'] == 'send_*'
+
+
 def test_server_deployment_defaults_enable_canonical_hfl_adapter():
     root = Path(__file__).resolve().parents[2]
     config = tomllib.loads((root / 'machines.toml').read_text(encoding='utf-8'))
