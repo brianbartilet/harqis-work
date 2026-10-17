@@ -1,0 +1,93 @@
+# Default Google Sheets layout for the trade log (workflows/finance/sheets_sync.py).
+#
+# Used by `create-sheet` to build a new sheet, and by `sync` to map ledger records
+# onto a sheet's columns. To use your OWN sheet, copy this file to
+# ${HARQIS_DATA_ROOT}/finance/trade_log_sheet.yaml (default: .harqis-data/finance/,
+# gitignored) or point $TRADE_LOG_TEMPLATE at it, then edit tabs and headers.
+#
+# group_by:  execution — one row per fill;  order — fills of one IBKR order combined
+#            (quantities summed, price volume-weighted, commissions summed).
+# id_field:  de-duplication key written to the sheet (record_id = execution ID, or
+#            order ID when grouping by order). Each route must map it to a column.
+#
+# routes:    each record goes to the FIRST route whose `match` fits. Match keys are
+#            record fields (currency, exchange, listing_exchange, sub_category,
+#            asset_category); a value may be a list. An empty match catches everything;
+#            records no route matches are reported, not written.
+#   tab:            sheet tab name
+#   symbol_prefix:  optional text put before the symbol, e.g. "SGX: "
+#   summary:        optional {tab, symbol_column} of a per-symbol formula block (e.g. running
+#                   quantities). Symbols traded but not listed there get a new row under the
+#                   last one, with formulas generated from the block's first data row (row 2);
+#                   references to that row move, ranges into the data stay. Never overwrites.
+#   columns:        {header, field} maps a row-1 header to a record field;
+#                   {header, value} writes a constant (e.g. Platform: IBKR).
+#                   Columns follow the sheet's own order; unmapped headers stay blank.
+#
+# Record fields: trade_time, trade_date, symbol, description, side, quantity,
+# signed_quantity (negative for sells), price, currency, amount, commission, fees
+# (commission as a positive number), commission_currency, exchange, listing_exchange,
+# order_type, order_id, account_id, asset_category, sub_category, trade_id,
+# record_id, captured_at, synced_at.
+
+title: IBKR Trade Log
+group_by: execution
+id_field: record_id
+
+routes:
+  - tab: Trades
+    match: {}
+    columns:
+      - {header: Trade Time (IBKR),   field: trade_time}
+      - {header: Symbol,              field: symbol}
+      - {header: Side,                field: side}
+      - {header: Quantity,            field: signed_quantity}
+      - {header: Price,               field: price}
+      - {header: Currency,            field: currency}
+      - {header: Amount,              field: amount}
+      - {header: Fees,                field: fees}
+      - {header: Commission Currency, field: commission_currency}
+      - {header: Exchange,            field: exchange}
+      - {header: Order Type,          field: order_type}
+      - {header: Account,             field: account_id}
+      - {header: Trade ID,            field: record_id}
+      - {header: Recorded At,         field: synced_at}
+
+# Optional: IBKR deposits/withdrawals (Activity query → Cash Transactions → Deposits & Withdrawals).
+#   match:                  filter, e.g. {currency: SGD}; other records are reported, not written
+#   insert_above_blank_row: true inserts new rows above the first blank row under the data
+#                           (e.g. a spacer before a total row); false appends at the end
+#   columns:                {header, field} as above, or {column: A, field: ...} for a column
+#                           without a header. Fields: date, amount (negative = withdrawal),
+#                           currency, description, type, note, record_id (transaction ID).
+deposits:
+  tab: Deposits
+  match: {}
+  insert_above_blank_row: false
+  columns:
+    - {header: Date,           field: date}
+    - {header: Currency,       field: currency}
+    - {header: Amount,         field: amount}
+    - {header: Notes,          field: note}
+    - {header: Transaction ID, field: record_id}
+
+# Optional: IBKR cash dividends (Activity query → Cash Transactions → Dividends, Payment In Lieu
+# Of Dividends, Withholding Tax). One row per corporate action and payment date: gross, withholding
+# tax, net and net in the account's base currency. Later corrections get their own row.
+# Fields: pay_date, ex_date, symbol, kind (Dividend / Payment in lieu / Tax adjustment), currency,
+# gross, withholding_tax, net, fx_rate_to_base, net_base, description, record_id.
+# Backfill history once with:  python scripts/ibkr_trade_log.py capture-history --from YYYY-MM-DD
+dividends:
+  tab: Dividends
+  create_if_missing: true
+  columns:
+    - {header: Pay Date,        field: pay_date}
+    - {header: Ex-Date,         field: ex_date}
+    - {header: Symbol,          field: symbol}
+    - {header: Type,            field: kind}
+    - {header: Currency,        field: currency}
+    - {header: Gross,           field: gross}
+    - {header: Withholding Tax, field: withholding_tax}
+    - {header: Net,             field: net}
+    - {header: Net (Base),      field: net_base}
+    - {header: Dividend ID,     field: record_id}

@@ -818,3 +818,22 @@ IBKR:
     flex_query_id_trades: ${IBKR_FLEX_QUERY_ID_TRADES}
     flex_query_id_activity: ${IBKR_FLEX_QUERY_ID_ACTIVITY}
   return_data_only: True
+
+
+GOOGLE_SHEETS_TRADE_LOG:
+  app_id: 'sheets'
+  client: 'rest'
+  parameters:
+    base_url: 'https://sheets.googleapis.com/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 60
+    stream: False
+  app_data:
+    scopes:
+      - "https://www.googleapis.com/auth/spreadsheets"
+    credentials: "credentials.json"
+    storage: "storage_sheets.json"
+    service_account: ${GOOGLE_SERVICE_ACCOUNT}   # optional: key file name in .env/, or the key JSON itself
+    sheet_id: ${TRADE_LOG_SHEET_ID}
+  return_data_only: True
