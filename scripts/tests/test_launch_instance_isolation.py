@@ -121,3 +121,24 @@ def test_server_deployment_defaults_enable_canonical_hfl_adapter():
     enabled = config['harqis-server']['env_vars']['MCP_ENABLED_APPS'].split(',')
     assert 'hfl_corpus' in enabled
     assert 'memory' in enabled
+
+
+def test_load_env_file_strips_inline_comments_like_dotenv(tmp_path):
+    launch = load_launch_module()
+    env = tmp_path / 'apps.env'
+    env.write_text(
+        '# full-line comment\n'
+        'QUERY_ID= 123456       # numeric id with a trailing note\n'
+        'EMPTY=                  # optional, left blank\n'
+        'URL=http://host/a#frag\n'
+        'QUOTED="keep # this"   # but not this\n'
+        "SINGLE='x'\n",
+        encoding='utf-8',
+    )
+    assert launch.load_env_file(env) == {
+        'QUERY_ID': '123456',
+        'EMPTY': '',
+        'URL': 'http://host/a#frag',
+        'QUOTED': 'keep # this',
+        'SINGLE': 'x',
+    }

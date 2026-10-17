@@ -28,6 +28,7 @@ from __future__ import annotations
 import argparse
 import glob
 import os
+import re
 import shelve
 import subprocess
 import sys
@@ -68,12 +69,24 @@ def load_env_file(path: Path = ENV_FILE) -> dict[str, str]:
         if not line or line.startswith("#") or "=" not in line:
             continue
         key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
-            value = value[1:-1]
-        out[key] = value
+        out[key.strip()] = _env_value(value.strip())
     return out
+
+
+def _env_value(value: str) -> str:
+    """Unquote a .env value and drop an inline ``# comment`` (python-dotenv semantics).
+
+    Quoted values keep any ``#`` inside the quotes; unquoted values end at the first
+    ``#`` preceded by whitespace, so ``KEY=123   # note`` yields ``123`` and ``KEY=   # note`` yields ``''``.
+    """
+    if value[:1] in ("'", '"'):
+        end = value.find(value[0], 1)
+        if end > 0:
+            return value[1:end]
+    if value.startswith("#"):
+        return ""  # KEY=   # comment only
+    match = re.search(r"\s#", value)
+    return (value[:match.start()] if match else value).strip()
 
 
 def _machine_env_vars() -> dict[str, str]:
