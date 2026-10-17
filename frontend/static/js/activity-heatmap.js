@@ -4,8 +4,9 @@
   tooltip.id = 'activity-cell-tooltip';tooltip.className = 'activity-cell-tooltip';
   tooltip.setAttribute('role', 'tooltip');tooltip.hidden = true;document.body.append(tooltip);
   let hoveredCell = null, hideTimer;
-  const hideTooltip = () => {tooltip.hidden=true;hoveredCell?.removeAttribute('aria-describedby');hoveredCell=null;};
+  const hideTooltip = () => {clearTimeout(hideTimer);tooltip.hidden=true;hoveredCell?.removeAttribute('aria-describedby');hoveredCell=null;};
   const showTooltip = cell => {
+    if (cell.closest('[data-activity-body]')?.hidden) return;
     clearTimeout(hideTimer);hoveredCell?.removeAttribute('aria-describedby');hoveredCell=cell;
     tooltip.textContent=cell.getAttribute('aria-label');tooltip.hidden=false;cell.setAttribute('aria-describedby',tooltip.id);
     const rect=cell.getBoundingClientRect();
@@ -656,6 +657,10 @@
     };
 
     const setActivityExpanded = expanded => {
+      if (!expanded) {
+        if (body.contains(document.activeElement)) toggle?.focus({preventScroll:true});
+        hideTooltip();
+      }
       toggle?.setAttribute('aria-expanded', String(expanded));
       toggle?.setAttribute('aria-label', `${expanded ? 'Hide' : 'Show'} activity heat map`);
       body.hidden = !expanded;

@@ -137,8 +137,18 @@ def test_corpus_shortcuts_and_space_order(editor_page, workspace_corpus):
     page.keyboard.press('Space')
     expect(toggle).to_have_attribute('aria-expanded', 'true')
     expect(page.locator('[data-activity-day][data-today="true"]')).to_be_focused()
+    expect(page.locator('#activity-cell-tooltip')).to_be_visible()
+    page.evaluate("""() => {
+      const body = document.querySelector('[data-activity-body]');
+      window.tooltipVisibleAtCollapse = null;
+      new MutationObserver(() => {
+        if (body.hidden) window.tooltipVisibleAtCollapse = !document.querySelector('#activity-cell-tooltip').hidden;
+      }).observe(body, {attributes:true, attributeFilter:['hidden']});
+    }""")
     page.keyboard.press('Space')
     expect(toggle).to_have_attribute('aria-expanded', 'false')
+    assert page.evaluate('tooltipVisibleAtCollapse') is False
+    expect(page.locator('[data-activity-day][data-today="true"]')).not_to_have_attribute('aria-describedby', 'activity-cell-tooltip')
     page.keyboard.press('Space')
     expect(toggle).to_have_attribute('aria-expanded', 'true')
     expect(page.locator('[data-activity-day][data-today="true"]')).to_be_focused()
@@ -148,7 +158,7 @@ def test_corpus_shortcuts_and_space_order(editor_page, workspace_corpus):
     page.locator('[data-memory-dialog-close]').first.click()
     expect(page.locator('[data-memory-dialog]')).not_to_be_visible()
     # A typing target must not switch Space or open help.
-    for key, selector in [('q', '[data-quick-tags-menu]'), ('w', '[data-exclude-tags-menu]'), ('e', '[data-tag-cloud]'), ('r', '[data-advanced-filters]')]:
+    for key, selector in [('q', '[data-quick-tags-menu]'), ('e', '[data-exclude-tags-menu]'), ('t', '[data-tag-cloud]'), ('r', '[data-advanced-filters]')]:
         section = page.locator(selector)
         section.evaluate('(el) => el.open = false')
         page.locator('.activity-hotkey-trigger').focus()
@@ -156,10 +166,14 @@ def test_corpus_shortcuts_and_space_order(editor_page, workspace_corpus):
         expect(section).to_have_attribute('open', '')
         if key == 'r':
             expect(section.locator('[data-expression-toggle]')).to_be_checked()
-        if key in ('q', 'w'):
+        if key in ('q', 'e'):
             expect(section.locator('summary')).to_be_focused()
         page.keyboard.press(key)
         expect(section).not_to_have_attribute('open', '')
+    page.locator('[data-quick-tags-menu]').evaluate('(el) => el.open = false')
+    page.locator('.activity-hotkey-trigger').focus()
+    page.keyboard.press('w')
+    expect(page.locator('[data-exclude-tags-menu]')).not_to_have_attribute('open', '')
     search=page.locator('#corpus-search-form input[name=q]')
     search.focus()
     page.keyboard.press('k')

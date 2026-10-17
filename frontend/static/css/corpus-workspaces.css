@@ -459,14 +459,15 @@
 .corpus-quick-tags-editor input:focus,.corpus-quick-tags-editor input:focus-visible{outline:none;box-shadow:none;border-color:#94a3b8;--tw-ring-color:transparent}
 .corpus-quick-tags-editor :focus-visible{outline:2px solid #38bdf8;outline-offset:2px}
 .corpus-quick-tags-editor p{flex-basis:100%;font-size:.75rem;color:#a5f3fc;margin:0}
-.corpus-tags-row{padding-left:0;grid-template-columns:auto minmax(0,1fr) auto}
-.corpus-tags-row .corpus-all-tags>summary{grid-column:1;grid-row:1;padding-left:0}
-.corpus-tags-row .corpus-all-tags>summary::before{content:none}
-.corpus-tags-row .corpus-quick-tags-group{grid-column:2;grid-row:1;padding-left:.5rem}
+.corpus-tags-row{padding-left:0;grid-template-columns:auto auto minmax(0,1fr) auto}
+.corpus-tags-heading{grid-column:1;grid-row:1;font-size:.75rem;font-weight:600;color:#94a3b8}
+.corpus-tags-row .corpus-all-tags>summary{grid-column:2;grid-row:1;padding-left:.5rem}
+.corpus-tags-row .corpus-all-tags>summary::before{content:""}
+.corpus-tags-row .corpus-quick-tags-group{grid-column:3;grid-row:1;padding-left:.5rem}
 .corpus-tags-row .corpus-quick-tags-group::before{content:""}
-.corpus-tags-row .corpus-feed-action{grid-column:3}
+.corpus-tags-row .corpus-feed-action{grid-column:4}
 @media(max-width:640px){
-  .corpus-tags-row .corpus-quick-tags-group{grid-column:2/-1}
+  .corpus-tags-row .corpus-quick-tags-group{grid-column:3/-1}
   .corpus-tags-row .corpus-feed-action{grid-column:1/-1;grid-row:2;justify-content:flex-end}
   .corpus-tags-row .corpus-advanced-panel{grid-row:3}
   .corpus-tags-row .corpus-all-tags>div{grid-row:4}

@@ -129,10 +129,11 @@
       </div>
       <label class="advanced-media-toggle corpus-main-media"><span>With media</span><span class="corpus-main-media-control"><input type="checkbox" role="switch" data-media-toggle></span></label>
           <div class="workspace-tags corpus-tags-row border-t border-blue-900/70 pt-3 lg:mt-3">
+          <span class="corpus-tags-heading">Tags</span>
           {% if tag_cloud %}
           <details data-tag-cloud class="group corpus-all-tags">
             <summary class="corpus-tags-toggle" title="Expand or collapse all tags">
-              <span>All tags</span>
+              <span>All</span>
             </summary>
             <div class="mt-1 flex max-h-56 flex-wrap gap-2 overflow-y-auto p-1">
               {% for option in tag_cloud %}
@@ -148,7 +149,7 @@
           {% endif %}
             <div class="corpus-quick-tags-group" role="group" aria-label="Quick tag filters">
             <details data-quick-tags-menu class="corpus-quick-tags-menu">
-              <summary class="corpus-quick-tags-label text-xs" title="Edit quick tags">Quick tags</summary>
+              <summary class="corpus-quick-tags-label text-xs" title="Edit quick tags">Quick</summary>
               <div class="corpus-quick-tags-editor">
                 <input data-quick-tags-input aria-label="Quick tags, separated by commas" maxlength="1000" placeholder="#notes, #work" value="{{ quick_tags_value }}" autocomplete="off">
                 <button type="button" data-quick-tags-save data-csrf="{{ memory_csrf }}">Save</button>
@@ -164,7 +165,7 @@
               {% endfor %}
             </div>
             <details data-exclude-tags-menu class="corpus-quick-tags-menu corpus-exclude-tags-menu">
-              <summary class="corpus-quick-tags-label text-xs" title="Edit excluded tags">Exclude tags</summary>
+              <summary class="corpus-quick-tags-label text-xs" title="Edit excluded tags">Exclude</summary>
               <div class="corpus-quick-tags-editor">
                 <input data-exclude-tags-input aria-label="Excluded tags, separated by commas" maxlength="1000" placeholder="#hfl, #work" value="{{ advanced_state.exclude_tags }}" autocomplete="off">
                 <button type="button" data-exclude-tags-save>Save</button>
