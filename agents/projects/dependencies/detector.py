@@ -77,6 +77,7 @@ class DependencyDetector:
     _SERVICE_SECRETS: list[tuple[str, str]] = [
         # Finance
         (r"\bALPHA\s*VANTAGE\b|\bALPHAVANTAGE\b",  "ALPHA_VANTAGE_API_KEY"),
+        (r"\bIBKR\b|\bINTERACTIVE\s*BROKERS\b",   "IBKR_FLEX_TOKEN"),
         (r"\bOANDA\b",                            "OANDA_BEARER_TOKEN"),
         (r"\bSTRIPE\b",                           "STRIPE_API_KEY"),
         (r"\bYNAB\b",                             "YNAB_ACCESS_TOKEN"),
