@@ -29,32 +29,35 @@ def test_capacity_api_bounds_and_opt_in(authenticated_client, monkeypatch):
     assert response['capacity']['total_nodes'] == 1200
     assert response['capacity']['total_edges'] == 4720
     response = authenticated_client.get(url, params={'capacity_guard': True, 'preview': True}).json()
-    assert len(response['nodes']) == 500
+    assert len(response['nodes']) == 1000
     assert 0 < len(response['edges']) <= 2000
     ids = {n['id'] for n in response['nodes']}
     assert all(e['source'] in ids and e['target'] in ids for e in response['edges'])
     assert response['capacity']['preview'] and response['truncated']
-    assert authenticated_client.get(url, params={'node_limit': 1001}).status_code == 422
+    assert authenticated_client.get(url, params={'node_limit': 10001}).status_code == 422
+    assert authenticated_client.get(url, params={'node_limit': 999}).status_code == 422
+    assert authenticated_client.get(url, params={'edge_limit': 5001}).status_code == 422
+    assert not authenticated_client.get(url, params={'capacity_guard': True, 'node_limit': 10000, 'edge_limit': 5000}).json()['capacity']['exceeded']
     assert authenticated_client.get(url, params={'edge_limit': 0}).status_code == 422
 
 
 def test_connection_budget_and_exact_boundary(authenticated_client, monkeypatch):
     from modules.hfl_corpus import entities
-    graph = sample_graph(100, 4)
+    graph = sample_graph(1000, 4)
     monkeypatch.setattr(entities, 'graph', lambda *args: graph)
-    params = dict(capacity_guard=True, node_limit=100, edge_limit=320)
+    params = dict(capacity_guard=True, node_limit=1000, edge_limit=3920)
     url = '/api/hfl/entities/graph'
     assert not authenticated_client.get(url, params=params).json()['capacity']['exceeded']
-    params['edge_limit'] = 319
+    params['edge_limit'] = 3919
     assert authenticated_client.get(url, params=params).json()['capacity']['exceeded']
     params['preview'] = True
-    assert len(authenticated_client.get(url, params=params).json()['edges']) == 319
+    assert len(authenticated_client.get(url, params=params).json()['edges']) == 3919
 
 
 def test_capacity_uses_filtered_canonical_graph(corpus, authenticated_client):
-    corpus.extend(entry(str(i), source='meetings') for i in range(150))
+    corpus.extend(entry(str(i), source='meetings') for i in range(1100))
     url = '/api/hfl/entities/graph'
-    blocked = authenticated_client.get(url, params={'capacity_guard': True, 'node_limit': 100}).json()
+    blocked = authenticated_client.get(url, params={'capacity_guard': True, 'node_limit': 1000}).json()
     assert blocked['capacity']['exceeded']
     filtered = authenticated_client.get(url, params={'capacity_guard': True, 'source': 'notes'}).json()
     assert not filtered['capacity']['exceeded']
@@ -66,10 +69,10 @@ def test_capacity_uses_filtered_canonical_graph(corpus, authenticated_client):
 def test_capacity_includes_saved_intents(ideas, authenticated_client):
     for i in range(101):
         ideas.save_idea(payload(title=f'Intent {i}'), 'owner')
-    response = authenticated_client.get('/api/hfl/entities/graph', params={'capacity_guard': True, 'node_limit': 100}).json()
-    assert response['capacity']['exceeded']
+    response = authenticated_client.get('/api/hfl/entities/graph', params={'capacity_guard': True, 'node_limit': 1000}).json()
+    assert not response['capacity']['exceeded']
     assert response['capacity']['total_nodes'] >= 101
-    assert response['nodes'] == []
+    assert len(response['nodes']) == response['capacity']['total_nodes']
 
 
 def launch(engine):
@@ -114,20 +117,20 @@ def test_capacity_browser_recovery(authenticated_client, monkeypatch, width):
             box = overlay.bounding_box()
             assert box['x'] >= 0 and box['x'] + box['width'] <= width + 1
             page.click('#kg-capacity-filters')
-            page.fill('#kg-node-limit', '300')
+            page.fill('#kg-node-limit', '1100')
             page.fill('#kg-edge-limit', '1000')
             page.click('#kg-filter')
-            playwright.expect(page.locator('#kg-capacity-message')).to_contain_text('300 nodes')
+            playwright.expect(page.locator('#kg-capacity-message')).to_contain_text('1,100 nodes')
             page.click('#kg-capacity-preview')
             playwright.expect(overlay).to_be_hidden()
-            playwright.expect(page.locator('#kg-capacity-preview-note')).to_contain_text('300 of 1,200')
+            playwright.expect(page.locator('#kg-capacity-preview-note')).to_contain_text('1,100 of 1,200')
             page.screenshot(path=f'results/activity-graph-preview-{width}.png')
             page.reload()
             playwright.expect(overlay).to_be_visible()
             page.click('#kg-capacity-filters')
-            assert page.input_value('#kg-node-limit') == '300'
+            assert page.input_value('#kg-node-limit') == '1100'
             page.click('#kg-capacity-reset')
-            assert page.input_value('#kg-node-limit') == '500'
+            assert page.input_value('#kg-node-limit') == '1000'
             page.click('#kg-filter')
             playwright.expect(overlay).to_be_visible()
             page.click('#kg-capacity-search')
@@ -189,6 +192,82 @@ def test_background_growth_and_failed_retry(authenticated_client, monkeypatch):
             page.click('#kg-reload')
             playwright.expect(page.locator('#kg-map-count')).to_contain_text('30 nodes')
             assert page.locator('#kg-capacity-overlay').is_hidden()
+        finally:
+            browser.close()
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_filter_controls_week_and_capacity_migration(authenticated_client, monkeypatch, width):
+    from urllib.parse import urlsplit, parse_qs
+    playwright = pytest.importorskip('playwright.sync_api')
+    from modules.hfl_corpus import entities
+    monkeypatch.setattr(entities, 'graph', lambda *args: sample_graph(30))
+    with playwright.sync_playwright() as engine:
+        browser = launch(engine)
+        try:
+            page = browser.new_page(viewport={'width': width, 'height': 900}, timezone_id='Asia/Singapore')
+            page.add_init_script('''if (!localStorage.getItem('capacity-test-seeded')) {
+                localStorage.setItem('hfl:graph:capacity:v1:frontend-test-user',JSON.stringify({nodes:500,edges:2000}));
+                localStorage.setItem('capacity-test-seeded','true');
+            }''')
+            # Sunday locally: the date range must not slip into Monday in UTC.
+            page.clock.set_fixed_time('2026-10-25T10:00:00+08:00')
+            requests, errors = [], []
+            page.on('request', lambda r: requests.append(parse_qs(urlsplit(r.url).query)) if '/entities/graph?' in r.url else None)
+            page.on('pageerror', lambda e: errors.append(str(e)))
+            route_app(page, authenticated_client)
+            page.goto('http://graph.test/hfl-corpus/graph')
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.click('#kg-open-filters')
+            assert page.input_value('#kg-node-limit') == '1000'
+            assert page.input_value('#kg-edge-limit') == '2000'
+            assert page.get_by_role('switch', name='Shared connections only').count() == 1
+            page.get_by_role('switch', name='Shared connections only').check()
+            assert page.get_by_role('button', name='Decrease maximum nodes by 100').is_disabled()
+            page.get_by_role('button', name='Increase maximum nodes by 100').click()
+            assert page.input_value('#kg-node-limit') == '1100'
+            page.fill('#kg-node-limit', '10000')
+            assert page.get_by_role('button', name='Increase maximum nodes by 100').is_disabled()
+            page.get_by_role('button', name='Decrease maximum nodes by 100').click()
+            assert page.input_value('#kg-node-limit') == '9900'
+            page.fill('#kg-node-limit', '10001')
+            page.click('#kg-filter')
+            assert page.locator('#kg-filter-drawer').is_visible()
+            assert not page.locator('#kg-node-limit').evaluate('el=>el.validity.valid')
+            page.click('#kg-capacity-reset')
+            assert page.input_value('#kg-node-limit') == '1000'
+            assert page.input_value('#kg-edge-limit') == '2000'
+            page.select_option('#kg-rolling', 'week')
+            assert page.input_value('#kg-since') == '2026-10-19'
+            assert page.input_value('#kg-until') == '2026-10-25'
+            page.locator('#kg-capacity-settings').scroll_into_view_if_needed()
+            page.screenshot(path=f'results/activity-graph-filters-{width}.png')
+            page.click('#kg-capacity-help-open')
+            help_dialog = page.locator('#kg-capacity-help')
+            playwright.expect(help_dialog).to_be_visible()
+            playwright.expect(help_dialog).to_contain_text('time and memory')
+            page.screenshot(path=f'results/activity-graph-help-{width}.png')
+            box=help_dialog.bounding_box()
+            assert box['x'] >= 0 and box['x'] + box['width'] <= width
+            page.keyboard.press('Escape')
+            playwright.expect(help_dialog).to_be_hidden()
+            playwright.expect(page.locator('#kg-capacity-help-open')).to_be_focused()
+            assert page.locator('#kg-filter-drawer').is_visible()
+            page.click('#kg-filter')
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            assert requests[-1]['since'] == ['2026-10-19'] and requests[-1]['until'] == ['2026-10-25']
+            assert requests[-1]['shared'] == ['true']
+            page.wait_for_timeout(600)  # Existing view-state persistence debounce.
+            page.reload()
+            page.wait_for_selector('#kg-workspace:not([inert])')
+            page.click('#kg-open-filters')
+            assert page.input_value('#kg-rolling') == 'week'
+            assert page.locator('#kg-shared').is_checked()
+            page.click('#kg-close-filters')
+            page.clock.set_fixed_time('2026-10-26T00:05:00+08:00')
+            page.wait_for_function("document.querySelector('#kg-since').value==='2026-10-26'", timeout=15000)
+            assert requests[-1]['since'] == ['2026-10-26'] and requests[-1]['until'] == ['2026-10-26']
+            assert not errors
         finally:
             browser.close()
 

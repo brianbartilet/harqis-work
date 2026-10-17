@@ -589,10 +589,10 @@ anchor. Reopening and completing an occurrence again does not create a second su
 combined selections, and Dynamic mode. Corpus, Kanban, and Graph synchronize
 workspace selection and applied corpus filters through the existing owner profile
 and cross-tab updates. Graph-only filters and presets further narrow that scope.
-The main graph uses an opt-in capacity guard: by default, more than 500 matching
+The main graph uses an opt-in capacity guard: by default, more than 1,000 matching
 nodes or 2,000 connections pauses the viewport before rendering. The overlay
 reports counts and offers Refine search, Open filters, or Show limited preview.
-Filters → Graph capacity accepts 100–1,000 nodes and 100–4,000 connections,
+Filters → Graph capacity accepts 1,000–10,000 nodes and 100–5,000 connections,
 remembered per owner in this browser, with Restore recommended limits. Limits
 count all node types before local preset/type visibility filters. Preview results
 are explicitly incomplete, keep valid connection endpoints, and use stable
@@ -604,6 +604,16 @@ retain their existing behavior; API consumers without `capacity_guard=true` are
 unchanged. Overview, Expanded, Dense, and the separate All activity switch are removed.
 The information helper reports matching/displayed nodes, locally hidden nodes,
 and visible connections. Old browser detail settings are ignored.
+
+In the main graph's Filters drawer, Shared connections only is a switch.
+Graph capacity has an info button explaining performance and preview omissions
+in a small dialog. Its arrow buttons adjust values by 100; typed whole numbers
+and keyboard arrows remain supported. Restore recommended limits sets 1,000 nodes
+and 2,000 connections. Older saved node limits below 1,000 migrate to 1,000;
+other valid saved preferences are preserved. **This week** selects Monday through
+today, inclusive, in browser-local time: Monday selects only that day, Sunday
+selects all seven days. The range is recalculated on each graph refresh, including
+after a week boundary, and the From/To fields show the effective dates.
 
 Boards use explicit workspace assignments, not matching member content. All
 activity includes unassigned boards. New boards default to all currently selected
@@ -660,9 +670,11 @@ Drift animation, 1440px / 390px viewports):
 | 6,000 | 23,920 | 2,331 KiB | 1,949.9 / 666.7 ms |
 | 1,000 | 11,760 | 930 KiB | 985.1 / 283.3 ms |
 
-The results support a conservative 500-node/2,000-connection default and an
-explicitly adjustable ceiling of 1,000/4,000; they do not establish a universally
-smooth size. Narrow viewports used the same desktop CPU, not phone hardware.
+These measurements informed the original 500-node/2,000-connection default.
+The current user-requested default is 1,000/2,000, with adjustable maxima of
+10,000/5,000. These larger allowances are not guarantees of smooth performance;
+10,000 nodes were not benchmarked. Narrow viewports used the same desktop CPU,
+not phone hardware.
 Frame measurements include initial animation settling and background refresh;
 random layout and visibility explain non-monotonic results. Mocked page load
 times were 1.2–2.2 seconds after the first cold load (4.2 seconds), including the

@@ -1,9 +1,10 @@
 """Opt-in response budget for the main activity graph; other consumers are unchanged."""
 
-DEFAULT_NODES = 500
+MIN_NODES = 1000
+DEFAULT_NODES = 1000
 DEFAULT_EDGES = 2000
-MAX_NODES = 1000
-MAX_EDGES = 4000
+MAX_NODES = 10000
+MAX_EDGES = 5000
 
 
 def bounded_graph(source, since, until, query, shared, context, node_limit, edge_limit, preview):

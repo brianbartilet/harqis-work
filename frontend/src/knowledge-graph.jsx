@@ -1,4 +1,5 @@
 import {readGraphState} from './graph-state.mjs';
+import {graphDateRange} from './graph-dates.mjs';
 import {createLabelLayout} from './graph-labels.mjs';
 import {boardCurvature} from './graph-curves.mjs';
 import {exampleGraph} from './knowledge-graph-example.js';
@@ -14,15 +15,23 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   const readOnly = document.querySelector('.kg-shell').dataset.readonly === 'true';
   const capacityEnabled=!readOnly&&new URLSearchParams(location.search).get('embed')!=='1';
   const capacityKey='hfl:graph:capacity:v1:'+document.querySelector('.kg-shell').dataset.viewOwner;
-  const recommendedCapacity={nodes:500,edges:2000};
+  const recommendedCapacity={nodes:1000,edges:2000};
   let capacityLimits={...recommendedCapacity},capacityBlocked=false,capacityPreview=false;
   try {
     const saved=JSON.parse(localStorage.getItem(capacityKey));
-    if(Number.isInteger(saved?.nodes)&&saved.nodes>=100&&saved.nodes<=1000&&Number.isInteger(saved?.edges)&&saved.edges>=100&&saved.edges<=4000)capacityLimits=saved;
+    if(Number.isInteger(saved?.nodes)&&saved.nodes>=100&&saved.nodes<=10000&&Number.isInteger(saved?.edges)&&saved.edges>=100&&saved.edges<=5000){
+      capacityLimits={nodes:Math.max(1000,saved.nodes),edges:saved.edges};
+      if(saved.nodes<1000)localStorage.setItem(capacityKey,JSON.stringify(capacityLimits));
+    }
   } catch {}
   function syncCapacitySettings(){
     $('node-limit').value=capacityLimits.nodes;$('edge-limit').value=capacityLimits.edges;
     $('capacity-settings').hidden=!capacityEnabled||!!window.HflIdeas?.maps.current;
+    $('filter-drawer').classList.toggle('kg-main-filters',!$('capacity-settings').hidden);
+    if($('capacity-settings').hidden)$('shared').removeAttribute('role');else $('shared').setAttribute('role','switch');
+    const week=$('rolling').querySelector('[value="week"]');
+    if(week){week.hidden=week.disabled=$('capacity-settings').hidden;}
+    syncCapacitySteppers();
   }
   syncCapacitySettings();
   let infoUrgent=true,infoPaused=false;
@@ -182,12 +191,16 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     draw();scheduleStateSave();if(window.HflIdeas?.maps.current)window.HflIdeas.maps.saveLayout();
   }
   const viewKey=()=>JSON.stringify([preset,[...enabled].sort(),focusId]);
-  function syncDates(){for(const id of ['since','until'])$(id).disabled=$('rolling').value!=='0';}
+  function syncDates(){
+    for(const id of ['since','until'])$(id).disabled=$('rolling').value!=='0';
+    if($('rolling').value==='week'){
+      const range=graphDateRange('week');$('since').value=range.since;$('until').value=range.until;
+    }
+  }
   function applyRollingDates(params){
-    const days=Number(params.get('rolling'));if(!days)return;
-    const end=new Date(),start=new Date(end);start.setDate(start.getDate()-days+1);
-    const date=value=>[value.getFullYear(),String(value.getMonth()+1).padStart(2,'0'),String(value.getDate()).padStart(2,'0')].join('-');
-    params.set('since',date(start));params.set('until',date(end));
+    const range=graphDateRange(params.get('rolling'));if(!range)return;
+    params.set('since',range.since);params.set('until',range.until);
+    if(params.get('rolling')==='week'&&$('rolling').value==='week')syncDates();
   }
   function requestParams(){
     const params=new URLSearchParams({since:$('since').value,until:$('until').value,rolling:$('rolling').value,limit:'0',query:$('search').value,shared:String($('shared').checked)});
@@ -817,7 +830,26 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   $('capacity-search').onclick=()=>{if(fullscreen)setFullscreen(false);$('search').focus();};
   $('capacity-filters').onclick=()=>{if(fullscreen)setFullscreen(false);$('open-filters').click();};
   $('capacity-preview').onclick=()=>{capacityPreview=true;load(false,true);};
-  $('capacity-reset').onclick=()=>{$('node-limit').value=recommendedCapacity.nodes;$('edge-limit').value=recommendedCapacity.edges;};
+  function syncCapacitySteppers(){
+    document.querySelectorAll('[data-capacity-step]').forEach(button=>{
+      const input=$(button.dataset.capacityInput),value=input.valueAsNumber;
+      button.disabled=Number.isFinite(value)&&(Number(button.dataset.capacityStep)>0?value>=Number(input.max):value<=Number(input.min));
+    });
+  }
+  document.querySelectorAll('[data-capacity-step]').forEach(button=>button.onclick=()=>{
+    const input=$(button.dataset.capacityInput),value=Number.isFinite(input.valueAsNumber)?input.valueAsNumber:Number(input.min);
+    input.value=Math.max(Number(input.min),Math.min(Number(input.max),Math.round(value+Number(button.dataset.capacityStep))));
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+  });
+  for(const key of ['node-limit','edge-limit'])$(key).addEventListener('input',syncCapacitySteppers);
+  $('capacity-reset').onclick=()=>{$('node-limit').value=recommendedCapacity.nodes;$('edge-limit').value=recommendedCapacity.edges;syncCapacitySteppers();};
+  $('capacity-help-open').onclick=()=>$('capacity-help').showModal();
+  $('capacity-help-close').onclick=()=>$('capacity-help').close();
+  $('capacity-help').addEventListener('close',()=>{$('capacity-help-open').focus();});
+  $('capacity-help').addEventListener('click',event=>{
+    const box=$('capacity-help').getBoundingClientRect();
+    if(event.target===$('capacity-help')&&(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom))$('capacity-help').close();
+  });
   function sourceOptions(values) {
     const params=new URLSearchParams(window.activityModals?.context()||'');
     const scope=JSON.parse(params.get('scope')||'{"any":[],"all":{}}');

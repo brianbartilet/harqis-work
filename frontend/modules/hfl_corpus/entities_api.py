@@ -10,7 +10,7 @@ from web import templates, page_context, require_user
 from modules.hfl_corpus import entities
 from workflows.hfl.entity_store import get_store
 from modules.hfl_corpus import graph_views
-from modules.hfl_corpus.graph_capacity import DEFAULT_NODES, DEFAULT_EDGES, MAX_NODES, MAX_EDGES
+from modules.hfl_corpus.graph_capacity import DEFAULT_NODES, DEFAULT_EDGES, MIN_NODES, MAX_NODES, MAX_EDGES
 
 router = APIRouter()
 
@@ -115,7 +115,7 @@ async def graph(request: Request, source: str = '', since: str = '', until: str 
                 query: str = Query(default='', max_length=200), shared: bool = False,
                 sources: list[str] = Query(default=[]), context: str = '',
                 capacity_guard: bool = False, preview: bool = False,
-                node_limit: int = Query(default=DEFAULT_NODES, ge=100, le=MAX_NODES),
+                node_limit: int = Query(default=DEFAULT_NODES, ge=MIN_NODES, le=MAX_NODES),
                 edge_limit: int = Query(default=DEFAULT_EDGES, ge=100, le=MAX_EDGES)):
     authorize(request)
     if capacity_guard:
