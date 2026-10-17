@@ -12,6 +12,19 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   'use strict';
   const $ = id => document.getElementById('kg-' + id);
   const readOnly = document.querySelector('.kg-shell').dataset.readonly === 'true';
+  const capacityEnabled=!readOnly&&new URLSearchParams(location.search).get('embed')!=='1';
+  const capacityKey='hfl:graph:capacity:v1:'+document.querySelector('.kg-shell').dataset.viewOwner;
+  const recommendedCapacity={nodes:500,edges:2000};
+  let capacityLimits={...recommendedCapacity},capacityBlocked=false,capacityPreview=false;
+  try {
+    const saved=JSON.parse(localStorage.getItem(capacityKey));
+    if(Number.isInteger(saved?.nodes)&&saved.nodes>=100&&saved.nodes<=1000&&Number.isInteger(saved?.edges)&&saved.edges>=100&&saved.edges<=4000)capacityLimits=saved;
+  } catch {}
+  function syncCapacitySettings(){
+    $('node-limit').value=capacityLimits.nodes;$('edge-limit').value=capacityLimits.edges;
+    $('capacity-settings').hidden=!capacityEnabled||!!window.HflIdeas?.maps.current;
+  }
+  syncCapacitySettings();
   let infoUrgent=true,infoPaused=false;
   function showInfo(channel,text,urgent=false) {
     $(channel).textContent=text;
@@ -69,7 +82,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   if(pendingState?.preset==='mindmap')pendingState={...pendingState,preset:'timeline',positions:{},viewport:null,selected:null,focusId:null};
   function saveGraphState(){
     if(readOnly)return;
-    if(!stateReady||loading||!graphApi||window.HflIdeas?.maps.current)return;
+    if(!stateReady||loading||capacityBlocked||!graphApi||window.HflIdeas?.maps.current)return;
     const filters=Object.fromEntries(['search','rolling','since','until'].map(id=>[id,$(id).value]));
     filters.shared=$('shared').checked;
     const positions=Object.fromEntries(nodes.slice(0,10000).map(n=>[n.id,{...(layoutTargets.get(n.id)||{x:n.x,y:n.y}),manual:!!n.manual}]));
@@ -92,7 +105,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     const chips=[window.HflIdeas?.maps.current?.name||PRESETS[preset]];
     chips.push(document.querySelector('[data-active-view-name]')?.textContent||'All activity');
     if($('search').value)chips.push('Search: '+$('search').value);
-    chips.push('All matching nodes');
+    chips.push(capacityBlocked?'Graph exceeds capacity':data.capacity?.preview?'Limited preview':'All matching nodes');
     if($('rolling').value!=='0')chips.push($('rolling').selectedOptions[0].textContent);
     else for(const id of ['since','until'])if($(id).value)chips.push(id+': '+$(id).value);
     if(selectedSources.size)chips.push('Sources: '+[...selectedSources].join(', '));
@@ -180,6 +193,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     const params=new URLSearchParams({since:$('since').value,until:$('until').value,rolling:$('rolling').value,limit:'0',query:$('search').value,shared:String($('shared').checked)});
     const context=window.activityModals?.context();if(context)params.set('context',context);
     if(window.HflIdeas?.maps.current)return new URLSearchParams({limit:'0'});
+    if(capacityEnabled){
+      params.set('capacity_guard','true');params.set('node_limit',capacityLimits.nodes);params.set('edge_limit',capacityLimits.edges);
+      params.set('preview',String(capacityPreview));
+    }
     selectedSources.forEach(source=>params.append('sources',source));applyRollingDates(params);return params;
   }
   $('rolling').onchange=syncDates;
@@ -229,7 +246,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     document.querySelectorAll('[data-animation]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.animation===mode)));
     host.dataset.animation=mode;
   }
-  function motionPaused(){return connectionInteraction||document.hidden||loading||selected!==null||activePointers.size>0||Date.now()-lastInteraction<250||
+  function motionPaused(){return capacityBlocked||connectionInteraction||document.hidden||loading||selected!==null||activePointers.size>0||Date.now()-lastInteraction<250||
     !!document.querySelector('dialog[open]:not(#activity-standalone)')||!$('views-panel').hidden||!$('animation-panel').hidden;}
   function animate(now){
     requestAnimationFrame(animate);
@@ -771,6 +788,36 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     $('loading').hidden=!value; $('stage').setAttribute('aria-busy',String(value));
     $('workspace').inert=value;
   }
+  function clearCapacity(){
+    capacityBlocked=false;
+    $('capacity-overlay').hidden=true;$('capacity-preview-note').hidden=true;
+    host.inert=false;document.querySelector('.kg-zoom').inert=false;
+  }
+  function acceptGraph(next,preserveLayout=false,background=false){
+    const capacity=capacityEnabled&&!window.HflIdeas?.maps.current?next.capacity:null;
+    sourceOptions(next.sources||[]);
+    if(capacity?.exceeded&&!capacity.preview){
+      capacityBlocked=true;
+      // Remove the old graph from the renderer; an overlay alone would keep drawing it.
+      configureData({nodes:[],edges:[],sources:next.sources||[],total_nodes:0});
+      host.inert=true;document.querySelector('.kg-zoom').inert=true;
+      $('capacity-preview-note').hidden=true;
+      $('capacity-message').textContent=`${capacity.total_nodes.toLocaleString()} matching nodes and ${capacity.total_edges.toLocaleString()} connections exceed your limits of ${capacity.node_limit.toLocaleString()} nodes and ${capacity.edge_limit.toLocaleString()} connections.`;
+      $('capacity-overlay').hidden=false;
+      showInfo('status','Graph paused · Refine your search or show a limited preview.',true);
+      if(!background)requestAnimationFrame(()=>{if(capacityBlocked)$('capacity-overlay').focus();});
+      return;
+    }
+    clearCapacity();configureData(next,preserveLayout);
+    if(capacity?.preview){
+      $('capacity-preview-note').textContent=`Limited preview · ${next.nodes.length.toLocaleString()} of ${capacity.total_nodes.toLocaleString()} nodes · ${next.edges.length.toLocaleString()} of ${capacity.total_edges.toLocaleString()} connections. Some matches and connections are omitted.`;
+      $('capacity-preview-note').hidden=false;
+    }
+  }
+  $('capacity-search').onclick=()=>{if(fullscreen)setFullscreen(false);$('search').focus();};
+  $('capacity-filters').onclick=()=>{if(fullscreen)setFullscreen(false);$('open-filters').click();};
+  $('capacity-preview').onclick=()=>{capacityPreview=true;load(false,true);};
+  $('capacity-reset').onclick=()=>{$('node-limit').value=recommendedCapacity.nodes;$('edge-limit').value=recommendedCapacity.edges;};
   function sourceOptions(values) {
     const params=new URLSearchParams(window.activityModals?.context()||'');
     const scope=JSON.parse(params.get('scope')||'{"any":[],"all":{}}');
@@ -798,8 +845,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     }
     $('source-caption').textContent=selectedSources.size?selectedSources.size+' sources selected':baseline;
   }
-  async function load(force=false) {
+  async function load(force=false,preview=false) {
     delete $('info').dataset.error;
+    capacityPreview=preview;
+    clearCapacity();syncCapacitySettings();
     backgroundController?.abort();
 
     requestController?.abort(); const version=++requestVersion;
@@ -830,7 +879,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       const response=await fetch('/api/hfl/entities/graph?'+params,{cache:'no-store',signal:requestController.signal});
       if(!response.ok)throw Error(response.status===401?'Sign in to view your knowledge graph.':'Graph could not load. Use Refresh to try again.');
       const next=await response.json();
-      if(!exampleMode&&version===requestVersion){appliedParams=params.toString();graphSignature=signature(next);sourceOptions(next.sources||[]);configureData(next);}
+      if(!exampleMode&&version===requestVersion){appliedParams=params.toString();graphSignature=signature(next);acceptGraph(next);}
     } catch(error){if(!exampleMode&&version===requestVersion&&error.name!=='AbortError'){$('info').dataset.error='true';showInfo('status',error.message,true);}} finally{if(version===requestVersion){setLoading(false);window.HflIdeas?.maps.finishDeletionTransition(!!$('info').dataset.error);}}
   }
   // Poll only the applied query, without a loading overlay or interrupting interaction.
@@ -857,7 +906,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       finally{backgroundController=null;nextRefresh=Date.now()+5000;}
       return;
     }
-    if(busy()||backgroundController||!appliedParams||Date.now()<nextRefresh)return;
+    if(capacityBlocked||busy()||backgroundController||!appliedParams||Date.now()<nextRefresh)return;
     const started=Date.now(),controller=new AbortController(),version=requestVersion,key=viewKey();backgroundController=controller;
     const timeout=setTimeout(()=>controller.abort('timeout'),45000);
     try{
@@ -868,7 +917,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(version!==requestVersion||key!==viewKey()||busy())return;
       const nextSignature=signature(next);
       if(nextSignature!==graphSignature){
-        sourceOptions(next.sources||[]);configureData(next,true);graphSignature=nextSignature;
+        acceptGraph(next,true,true);graphSignature=nextSignature;
         $('live').textContent='Live · updated '+new Date().toLocaleTimeString();
       }
       refreshDelay=Math.max(3000,Math.min(60000,(Date.now()-started)*2));
@@ -880,7 +929,14 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){nextRefresh=0;refreshInBackground();}});
   window.addEventListener('pagehide',()=>{backgroundController?.abort();});
   let searchTimer;$('search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>exampleMode?render():load(),300);};
-  $('filter').onclick=()=>{$('filter-drawer').close();if(!exampleMode)load();};
+  $('filter').onclick=()=>{
+    if(capacityEnabled&&!window.HflIdeas?.maps.current){
+      if(!$('node-limit').reportValidity()||!$('edge-limit').reportValidity())return;
+      capacityLimits={nodes:Number($('node-limit').value),edges:Number($('edge-limit').value)};
+      try{localStorage.setItem(capacityKey,JSON.stringify(capacityLimits));}catch{}
+    }
+    $('filter-drawer').close();if(!exampleMode)load();
+  };
   window.HflHotkeys?.register(key=>{
     if(readOnly)return false;
     const hotkeys=window.HflHotkeys, maps=window.HflIdeas?.maps;
@@ -932,7 +988,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   document.addEventListener('click',event=>{if(!$('views-menu').contains(event.target))setViewsOpen(false);});
   $('views-menu').addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('views-panel').hidden){event.preventDefault();event.stopPropagation();setViewsOpen(false,true);}});
   $('views-menu').addEventListener('focusout',event=>{if(event.relatedTarget&&!$('views-menu').contains(event.relatedTarget))setViewsOpen(false);});
-  $('open-filters').onclick=()=>{setViewsOpen(false);$('filter-drawer').showModal();$('open-filters').setAttribute('aria-expanded','true');};
+  $('open-filters').onclick=()=>{syncCapacitySettings();setViewsOpen(false);$('filter-drawer').showModal();$('open-filters').setAttribute('aria-expanded','true');};
   $('close-filters').onclick=()=>$('filter-drawer').close();
   $('filter-drawer').addEventListener('close',()=>{$('open-filters').setAttribute('aria-expanded','false');$('source-menu').open=false;$('open-filters').focus();});
   $('filter-drawer').addEventListener('click',event=>{const box=$('filter-drawer').getBoundingClientRect();if(event.target===$('filter-drawer')&&(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom))$('filter-drawer').close();});

@@ -158,7 +158,9 @@ def test_presets_motion_and_large_graph(authenticated_client, monkeypatch, tmp_p
                 route.fulfill(status=response.status_code,body=response.content,
                     headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding','content-length'}})
             page.route('http://graph.test/**',route_request)
-            started=time.monotonic();page.goto('http://graph.test/hfl-corpus/graph')
+            # Exercise the uncapped embedded renderer; the main graph capacity guard
+            # has its own block/preview/recovery tests in test_graph_capacity.py.
+            started=time.monotonic();page.goto('http://graph.test/hfl-corpus/graph?embed=1')
             page.wait_for_selector('#kg-workspace:not([inert])')
             print(f'Overview usable ({mobile=}): {time.monotonic()-started:.2f}s')
             assert page.locator('#kg-canvas').get_attribute('data-preset')=='timeline'

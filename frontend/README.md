@@ -589,8 +589,19 @@ anchor. Reopening and completing an occurrence again does not create a second su
 combined selections, and Dynamic mode. Corpus, Kanban, and Graph synchronize
 workspace selection and applied corpus filters through the existing owner profile
 and cross-tab updates. Graph-only filters and presets further narrow that scope.
-The graph always requests `limit=0`, including every matching node and connection;
-Overview, Expanded, Dense, and the separate All activity switch are removed.
+The main graph uses an opt-in capacity guard: by default, more than 500 matching
+nodes or 2,000 connections pauses the viewport before rendering. The overlay
+reports counts and offers Refine search, Open filters, or Show limited preview.
+Filters → Graph capacity accepts 100–1,000 nodes and 100–4,000 connections,
+remembered per owner in this browser, with Restore recommended limits. Limits
+count all node types before local preset/type visibility filters. Preview results
+are explicitly incomplete, keep valid connection endpoints, and use stable
+recency order with connected neighbors. Animation Off is recommended for larger
+previews. Blocked graphs stop automatic polling until the user takes action;
+preview polling remains bounded. Changes to search, filters, or scope require a
+new preview choice. Boards, embedded graphs, timeline previews, and shared graphs
+retain their existing behavior; API consumers without `capacity_guard=true` are
+unchanged. Overview, Expanded, Dense, and the separate All activity switch are removed.
 The information helper reports matching/displayed nodes, locally hidden nodes,
 and visible connections. Old browser detail settings are ignored.
 
@@ -636,6 +647,33 @@ surviving layout and viewport. Rolling windows
 use the browser's local calendar dates. A stale indicator accompanies failures.
 Full graphs can take several seconds to lay out; narrower workspace filters remain useful
 for quick navigation. The neighbor list shows up to 200 items at a time.
+
+Capacity measurements (2026-10-17, local headless Chromium, synthetic hub graphs,
+Drift animation, 1440px / 390px viewports):
+
+| Nodes | Connections | JSON size | Frame interval p95, desktop / narrow |
+|---|---|---|---|
+| 500 | 1,920 | 185 KiB | 16.8 / 50.4 ms |
+| 1,000 | 3,920 | 378 KiB | 316.6 / 133.3 ms |
+| 2,000 | 7,920 | 768 KiB | 566.7 / 66.6 ms |
+| 3,000 | 11,920 | 1,159 KiB | 916.7 / 433.6 ms |
+| 6,000 | 23,920 | 2,331 KiB | 1,949.9 / 666.7 ms |
+| 1,000 | 11,760 | 930 KiB | 985.1 / 283.3 ms |
+
+The results support a conservative 500-node/2,000-connection default and an
+explicitly adjustable ceiling of 1,000/4,000; they do not establish a universally
+smooth size. Narrow viewports used the same desktop CPU, not phone hardware.
+Frame measurements include initial animation settling and background refresh;
+random layout and visibility explain non-monotonic results. Mocked page load
+times were 1.2–2.2 seconds after the first cold load (4.2 seconds), including the
+test client's asset routing, so these are not production API latency figures.
+The guard bounds browser payload/rendering, but still assembles the canonical
+server graph to count it. Server assembly cost and real-corpus latency remain
+unmeasured; a future count-first projection could address that separately.
+The reproducible opt-in test is `test_graph_capacity.py::test_capacity_measurements`
+with `GRAPH_CAPACITY_BENCHMARK=1`; it writes raw results to
+`results/graph-capacity-measurements.json`. Follow the repository test environment
+bootstrap when running it.
 
 ### References and downloads
 
