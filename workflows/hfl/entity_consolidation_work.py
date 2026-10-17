@@ -6,7 +6,7 @@ from uuid import uuid4
 from filelock import FileLock
 
 from workflows.hfl import entity_consolidation as runs, entity_matching as matching
-from workflows.hfl.entity_candidates import candidates, similarity, preferred
+from workflows.hfl.entity_candidates import CandidateIndex, candidates, similarity, preferred
 from workflows.hfl.entity_store import digest, get_store
 
 
@@ -49,7 +49,7 @@ def defer_unusable(run):
             pair.update(state='deferred', note='No corroborating activity on an endpoint; excluded provenance retained, identity not adjudicated')
 
 
-def discover(run, live, signatures, seeds):
+def discover(run, live, signatures, seeds, index=None):
     """Bounded expansion, never an assertion that the candidate graph is complete."""
     existing = {tuple(p['ids']) for p in run['pairs'].values() if p['state'] != 'stale'
                 and all(p.get('snapshots', run['snapshots']).get(i) == signatures.get(i) for i in p['ids'])}
@@ -60,7 +60,7 @@ def discover(run, live, signatures, seeds):
         if p['state'] == 'pending' for side in ('left', 'right')
         if p.get('snapshots', run['snapshots']).get(p[side]['id']) == signatures.get(p[side]['id'])}
     with get_store().connection() as db:
-        for left, right in candidates(list(live.values()), seeds, per_entity=20):
+        for left, right in candidates(list(live.values()), seeds, per_entity=20, index=index):
             if (left, right) in existing or matching.blocked(db, [left, right]):
                 continue
             pair_id = digest([left, right, signatures[left], signatures[right]])
@@ -112,7 +112,8 @@ def claim_work(run_id, options):
         live, _ = runs.live_snapshot(run)
         signatures = reconcile(run, live)
         changed = {i for i, value in signatures.items() if run['discovery_snapshots'].get(i) != value}
-        added = discover(run, live, signatures, changed) if changed else 0
+        index = CandidateIndex(list(live.values()), persistent=True)
+        added = discover(run, live, signatures, changed, index) if changed else 0
         run['discovery_snapshots'] = signatures
         run['checkpoint'] = {'at': time.time(), 'added': added,
                              'counts': runs.view(run, limit=0)['counts']}
@@ -135,7 +136,7 @@ def claim_work(run_id, options):
         # selected BEFORE applying packet limits; continuation stays explicit.
         expansions = run.setdefault('expanded_anchors', {})
         if expansions.get(anchor) != signatures[anchor]:
-            added += discover(run, live, signatures, {anchor})
+            added += discover(run, live, signatures, {anchor}, index)
             expansions[anchor] = signatures[anchor]
         run['checkpoint'].update(added=added, counts=runs.view(run, limit=0)['counts'])
         edges = sorted((p for p in run['pairs'].values() if p['state'] == 'pending'
@@ -190,7 +191,8 @@ def checkpoint(run_id):
         signatures = reconcile(run, live)
         previous = run.get('discovery_snapshots', run['snapshots'])
         changed = {i for i, value in signatures.items() if previous.get(i) != value}
-        added = discover(run, live, signatures, changed)
+        added = discover(run, live, signatures, changed,
+                         CandidateIndex(list(live.values()), persistent=True))
         run['discovery_snapshots'] = signatures
         run['claims'] = active_claims(run)
         run['checkpoint'] = {'at': time.time(), 'added': added,

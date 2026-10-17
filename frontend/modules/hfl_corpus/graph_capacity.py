@@ -4,7 +4,7 @@ MIN_NODES = 1000
 DEFAULT_NODES = 1000
 DEFAULT_EDGES = 2000
 MAX_NODES = 10000
-MAX_EDGES = 5000
+MAX_EDGES = 10000
 
 
 def bounded_graph(source, since, until, query, shared, context, node_limit, edge_limit, preview):

@@ -12,8 +12,9 @@ from zoneinfo import ZoneInfo
 from filelock import FileLock
 
 from workflows.hfl import entity_matching as matching, entity_merges
-from workflows.hfl.entity_candidates import AUDIT_SOURCES, activity_count, candidates, preferred, similarity
+from workflows.hfl.entity_candidates import AUDIT_SOURCES, CandidateIndex, activity_count, candidates, preferred, similarity
 from workflows.hfl.entity_store import digest, get_store
+from workflows.hfl.entity_run_storage import read_run, write_run
 
 POLICY = 'hermes-entity-consolidation-v1'
 SKILL = Path(__file__).resolve().parents[2] / '.agents/skills/auto-merge-entities/SKILL.md'
@@ -65,7 +66,8 @@ def evidence(entity):
 
 def load(run_id):
     started = time.perf_counter()
-    run = get_store().state('consolidation:' + run_id)
+    with get_store().connection() as db:
+        run = read_run(db, run_id)
     if not run:
         raise ValueError('Unknown consolidation run')
     metric(run, 'load', time.perf_counter() - started)
@@ -74,7 +76,8 @@ def load(run_id):
 
 def save(run):
     started = time.perf_counter()
-    get_store().state('consolidation:' + run['id'], run)
+    with get_store().connection() as db:
+        write_run(db, run)
     # Log the actual write duration without a second write solely for timing.
     log.info('entity-consolidation run=%s operation=save seconds=%.6f pairs=%d',
              run['id'], time.perf_counter() - started, len(run['pairs']))
@@ -89,7 +92,8 @@ def begin():
             if prior['state'] == 'running':
                 return view(prior)
         run_id = datetime.now(ZoneInfo('Asia/Singapore')).date().isoformat()
-        existing = store.state('consolidation:' + run_id)
+        with store.connection() as db:
+            existing = read_run(db, run_id)
         if existing:
             return view(existing)
         rows = current_entities()
@@ -103,7 +107,7 @@ def begin():
                    pairs={}, delivery={}, initial=not bool(previous))
         evidence_cache = {}
         with store.connection() as db:
-            pairs = candidates(rows, changed)
+            pairs = candidates(rows, changed, index=CandidateIndex(rows, persistent=True))
             # Existing review suggestions participate in the first pass even when
             # their names do not meet the new discovery threshold.
             if not previous:
@@ -126,13 +130,13 @@ def begin():
         # see this owner before applying another automatic merge.
         with store.connection() as db:
             db.execute("UPDATE entity_match_jobs SET state='delegated' WHERE state IN ('pending','running')")
-            for key, value in [('entity-consolidation-owner', 'hermes'), ('consolidation-active', run_id),
-                               ('consolidation:' + run_id, run)]:
+            write_run(db, run)
+            for key, value in [('entity-consolidation-owner', 'hermes'), ('consolidation-active', run_id)]:
                 db.execute('INSERT OR REPLACE INTO state VALUES (?,?)', (key, json.dumps(value)))
         return view(run)
 
 
-TYPE_PRIORITY = ('people', 'companies', 'tools', 'apps', 'pets', 'games')
+TYPE_PRIORITY = ('people', 'companies', 'tools', 'pets', 'apps', 'games')
 
 
 def pair_priority(pair):
@@ -435,7 +439,7 @@ def finish(run_id):
         # groups and changed evidence must participate on the next daily run.
         with store.connection() as db:
             db.execute('INSERT OR REPLACE INTO state VALUES (?,?)', ('consolidation-checkpoint', json.dumps(run['snapshots'])))
-            db.execute('INSERT OR REPLACE INTO state VALUES (?,?)', ('consolidation:'+run_id, json.dumps(run)))
+            write_run(db, run)
         return view(run)
 
 
@@ -474,6 +478,7 @@ def dispatch_reports(run_id=None):
         with store.connection() as db:
             runs = [json.loads(r[0]) for r in db.execute("SELECT value FROM state WHERE key LIKE 'consolidation:%' AND json_extract(value, '$.state') = 'complete' AND coalesce(json_extract(value, '$.delivery.telegram_state'), '') NOT IN ('sent', 'sending', 'suppressed')")]
         for run in runs:
+            run = load(run['id'])
             delivery = run['delivery']
             if run_id and run['id'] != run_id:
                 continue

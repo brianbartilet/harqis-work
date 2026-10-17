@@ -29,6 +29,11 @@ class EntityStore:
                 CREATE TABLE IF NOT EXISTS profiles(id TEXT PRIMARY KEY, kind TEXT NOT NULL,
                     data TEXT NOT NULL, updated TEXT DEFAULT CURRENT_TIMESTAMP);
                 CREATE TABLE IF NOT EXISTS state(key TEXT PRIMARY KEY, value TEXT);
+                CREATE TABLE IF NOT EXISTS entity_search_features(id TEXT PRIMARY KEY, input TEXT NOT NULL, data TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS consolidation_pairs(run_id TEXT NOT NULL, id TEXT NOT NULL,
+                    data TEXT NOT NULL, PRIMARY KEY(run_id,id));
+                CREATE TABLE IF NOT EXISTS consolidation_evidence(run_id TEXT NOT NULL, id TEXT NOT NULL,
+                    data TEXT NOT NULL, PRIMARY KEY(run_id,id));
                 CREATE TABLE IF NOT EXISTS entity_merges(id TEXT PRIMARY KEY, kind TEXT NOT NULL,
                     name TEXT NOT NULL, members TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1);
                 CREATE TABLE IF NOT EXISTS entity_operations(request_id TEXT PRIMARY KEY,
