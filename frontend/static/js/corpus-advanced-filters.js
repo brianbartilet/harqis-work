@@ -8,6 +8,13 @@
     const form = panel.closest('form');
     if (!form) return;
     const corpus = form.id === 'corpus-search-form';
+    const disclosure = form.querySelector('[data-advanced-filter-trigger]');
+    if (disclosure) {
+      disclosure.onclick = () => { panel.open = !panel.open; };
+      const syncDisclosure = () => disclosure.setAttribute('aria-expanded', String(panel.open));
+      panel.addEventListener('toggle', syncDisclosure);
+      syncDisclosure();
+    }
     const find = selector => panel.querySelector(selector);
     const control = key => corpus ? form.elements[key] : form.querySelector(`[data-edit-filter="${key}"]`);
     const editor = find('[data-expression-editor]'), toggle = find('[data-expression-toggle]');

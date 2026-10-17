@@ -1,6 +1,6 @@
 <details class="corpus-advanced-filters" data-advanced-filters>
   <summary class="corpus-tags-toggle">Advanced</summary>
-  <div class="corpus-advanced-panel">
+  <div class="corpus-advanced-panel" {% if expression_workspace_reset %}id="corpus-advanced-panel"{% endif %}>
       <input type="hidden" name="has_media" data-edit-filter="has_media" value="{{ 'true' if advanced_state is defined and advanced_state.has_media else 'false' }}">
       {% if exclude_tags_in_navigation %}
       <input type="hidden" name="exclude_tags" data-edit-filter="exclude_tags" value="{{ advanced_state.exclude_tags }}">

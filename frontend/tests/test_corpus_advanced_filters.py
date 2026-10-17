@@ -100,7 +100,7 @@ def test_expression_browser_roundtrip_validation_and_apply(editor_page, advanced
     page.set_viewport_size({'width':width, 'height':900})
     page.goto('https://editing.test/hfl-corpus?reset=1')
     panel = page.locator('[data-advanced-filters]')
-    panel.locator('summary').click()
+    page.locator('[data-advanced-filter-trigger]').click()
     expect(panel.locator('[data-expression-apply]')).to_be_disabled()
     expect(panel.get_by_role('switch', name='Query mode', exact=True)).not_to_be_checked()
     page.get_by_role('button', name='Query mode help', exact=True).click()
@@ -196,7 +196,7 @@ def test_tag_search_preserves_advanced_and_cloud(editor_page, advanced_corpus, q
     page.goto('https://editing.test/hfl-corpus?reset=1')
     advanced = page.locator('[data-advanced-filters]')
     tags = page.locator('[data-tag-cloud]')
-    advanced.locator('summary').click()
+    page.locator('[data-advanced-filter-trigger]').click()
     tags.locator('summary').click()
     if query_mode:
         advanced.locator('[data-expression-toggle]').check()
@@ -224,7 +224,7 @@ def test_expression_reset_restores_scope_and_keeps_editor(editor_page, advanced_
         url = '/hfl-corpus?views=' + view['id'] + '&q=extra'
     page.goto('https://editing.test' + url)
     advanced = page.locator('[data-advanced-filters]')
-    advanced.locator('summary').click()
+    page.locator('[data-advanced-filter-trigger]').click()
     page.locator('[data-tag-cloud] summary').click()
     expect(advanced.locator('[data-expression-reset]')).to_be_disabled()
     advanced.locator('[data-expression-toggle]').check()
@@ -260,7 +260,7 @@ def test_feed_preserves_filter_disclosures(editor_page, advanced_corpus, advance
     advanced = page.locator('[data-advanced-filters]')
     tags = page.locator('[data-tag-cloud]')
     if advanced_open:
-        advanced.locator('summary').click()
+        page.locator('[data-advanced-filter-trigger]').click()
     if tags_open:
         tags.locator('summary').click()
     page.locator('[data-curated-feed-open]').click()

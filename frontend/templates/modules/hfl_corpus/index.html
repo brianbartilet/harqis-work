@@ -62,8 +62,8 @@
     <input type="hidden" name="workspace" value="{{ workspace }}">
     <input type="hidden" name="activity_year" value="{{ activity_year }}">
     <div class="grid gap-3 corpus-filter-grid lg:items-end">
-      <div>
-        <div class="relative flex items-center gap-1.5 text-xs font-medium text-slate-400">
+      <div class="corpus-search-controls">
+        <div class="corpus-search-label relative flex items-center gap-1.5 text-xs font-medium text-slate-400">
           <details class="group">
             <summary aria-label="How corpus search works" class="flex h-4 w-4 cursor-pointer list-none items-center justify-center rounded-full border border-slate-600 text-[10px] text-slate-400 hover:border-blue-500 hover:text-blue-300">i</summary>
             <div class="absolute left-0 top-6 z-20 w-72 rounded-lg border border-blue-800 bg-slate-950 p-3 text-xs font-normal leading-relaxed text-slate-300 shadow-xl">
@@ -71,6 +71,7 @@
             </div>
           </details>
           <label for="q">Search the corpus</label>
+          <button type="button" class="corpus-advanced-trigger" data-advanced-filter-trigger aria-expanded="false" aria-controls="corpus-advanced-panel">Advanced</button>
         </div>
         <div class="mt-1.5 grid grid-cols-2 gap-2 sm:flex sm:items-center" data-search-input-actions>
           <input id="q" name="q" value="{{ query }}" placeholder="Try a topic, phrase, or #tag"
@@ -128,6 +129,23 @@
       </div>
       <label class="advanced-media-toggle corpus-main-media"><span>With media</span><span class="corpus-main-media-control"><input type="checkbox" role="switch" data-media-toggle></span></label>
           <div class="workspace-tags corpus-tags-row border-t border-blue-900/70 pt-3 lg:mt-3">
+          {% if tag_cloud %}
+          <details data-tag-cloud class="group corpus-all-tags">
+            <summary class="corpus-tags-toggle" title="Expand or collapse all tags">
+              <span>All tags</span>
+            </summary>
+            <div class="mt-1 flex max-h-56 flex-wrap gap-2 overflow-y-auto p-1">
+              {% for option in tag_cloud %}
+              <a data-workspace-tag="{{ option.tag }}" href="{{ option.url }}"
+                 aria-pressed="{{ 'true' if option.active else 'false' }}"
+                 title="{{ 'Remove' if option.active else 'Add' }} #{{ option.tag }} filter · {{ option.count }} matching documents"
+                 class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs transition {% if option.active %}bg-emerald-950/70 text-emerald-200 ring-1 ring-emerald-700/60{% else %}bg-blue-950/50 text-blue-300 hover:bg-blue-900 hover:text-blue-100{% endif %}">
+                <span>#{{ option.tag }}</span><span class="{% if option.active %}text-emerald-400{% else %}text-blue-500{% endif %}">{{ option.count }}</span>
+              </a>
+              {% endfor %}
+            </div>
+          </details>
+          {% endif %}
             <div class="corpus-quick-tags-group" role="group" aria-label="Quick tag filters">
             <details data-quick-tags-menu class="corpus-quick-tags-menu">
               <summary class="corpus-quick-tags-label text-xs" title="Edit quick tags">Quick tags</summary>
@@ -158,23 +176,6 @@
               {% for tag in advanced_state.exclude_tags.split(',') if tag.strip() %}<span class="corpus-excluded-tag" title="Excluded tag">#{{ tag.strip().lstrip('#') }}</span>{% endfor %}
             </div>
             </div>
-          {% if tag_cloud %}
-          <details data-tag-cloud class="group corpus-all-tags">
-            <summary class="corpus-tags-toggle" title="Expand or collapse all tags">
-              <span>All tags</span>
-            </summary>
-            <div class="mt-1 flex max-h-56 flex-wrap gap-2 overflow-y-auto p-1">
-              {% for option in tag_cloud %}
-              <a data-workspace-tag="{{ option.tag }}" href="{{ option.url }}"
-                 aria-pressed="{{ 'true' if option.active else 'false' }}"
-                 title="{{ 'Remove' if option.active else 'Add' }} #{{ option.tag }} filter · {{ option.count }} matching documents"
-                 class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs transition {% if option.active %}bg-emerald-950/70 text-emerald-200 ring-1 ring-emerald-700/60{% else %}bg-blue-950/50 text-blue-300 hover:bg-blue-900 hover:text-blue-100{% endif %}">
-                <span>#{{ option.tag }}</span><span class="{% if option.active %}text-emerald-400{% else %}text-blue-500{% endif %}">{{ option.count }}</span>
-              </a>
-              {% endfor %}
-            </div>
-          </details>
-          {% endif %}
           {% with exclude_tags_in_navigation=true, expression_workspace_reset=true %}{% include "modules/hfl_corpus/partials/advanced_filters.html" %}{% endwith %}
             <div class="corpus-feed-action">
               <button type="submit" class="corpus-feed-open" data-curated-feed-open disabled title="View feed of matching entries (V)">View feed</button>
