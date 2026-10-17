@@ -7,7 +7,7 @@
    No new per-alias LLM search is needed. Existing shortlist/discovery limits remain.
 2. Rank the complete pending ledger by `(type_priority, -anchor.related_items,
    anchor_id, -contact, -exact_name_or_alias, -partial, -fuzzy, -other.related_items,
-   pair_id)`. Type priority is people, companies, tools, apps, pets, games, then other
+   pair_id)`. Type priority is people, companies, tools, pets, apps, games, then other
    kinds. `related_items` counts unique non-audit entries, not raw word mentions.
 3. Bound the response to at most 20 comparisons. In compact mode, put evidence in
    `entities[id]` exactly once; comparison records refer through `left_id`/`right_id`.
@@ -148,17 +148,23 @@ Operator strategy (not a new scheduler/model router):
 
 ## Limits and rollout
 
-Strict priority can starve lower-priority types until higher tiers clear. Claims and
+Every fifth new claim selects the oldest pending comparison for fairness. Claims and
 checkpoints permit fresh discovery during unfinished runs and expose partial counts.
 Final HFL/Telegram reporting still waits for no pending comparisons. This change does
-not implement fairness quotas, bounded-run finalization, partial HFL delivery,
-cross-run caching, worker process supervision or a new runtime/model selector.
+not implement bounded-run finalization, partial HFL delivery, cross-run semantic
+verdict caching, worker process supervision or a new runtime/model selector.
 
-Compact packets and shared batch persistence reduce repetition but do not remove
-server-side full-run JSON storage/rewrite costs. A normalized ledger remains future
-work requiring its own migration and performance evidence. These changes
-also do not promise exhaustive alias discovery: existing candidate caps/incremental
-seed rules remain. API/CLI/skill must be deployed compatibly before live execution;
+Run storage now uses separate pair rows and content-addressed evidence rows, updating
+only changed rows transactionally. Legacy JSON runs migrate on their next write.
+Metadata remains JSON; reads and serialization still traverse the run in memory.
+Search features persist by versioned search inputs; each snapshot builds postings
+and counts once, reused for changed-seed discovery and anchor expansion. Exact
+name/contact buckets emit highest-activity anchor stars without the fuzzy cap.
+Fuzzy discovery skips repeated postings for homogeneous name buckets larger than
+256 entities, already covered by exact stars, and retains the 50-member pool.
+Ambiguous leaf-to-leaf identities and fuzzy variants outside the pool may be missed.
+The discovery version forces one refresh for existing runs/checkpoints on upgrade.
+API/CLI/skill must be deployed compatibly before live execution;
 status advertises `atomic-anchor-groups-v1`, compact output `anchor-packets-v1`.
 Legacy calls remain supported without new flags. Never solve a deployment mismatch
 by bypassing validation through manual merge routes.

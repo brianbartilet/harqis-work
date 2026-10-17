@@ -78,3 +78,24 @@ def test_row_storage_rollback_preserves_previous_run():
         pass
     with store.connection() as db:
         assert read_run(db, 'rollback')['pairs']['a']['state'] == 'pending'
+
+
+def test_status_read_keeps_one_snapshot_during_concurrent_save():
+    store = get_store()
+    run = {'id': 'concurrent', 'pairs': {'a': {'left': {'id': 'x'}, 'right': {'id': 'y'}, 'state': 'pending'}}}
+    with store.connection() as db:
+        db.execute('PRAGMA journal_mode=WAL')
+        write_run(db, run)
+    saved = []
+    def concurrent_write(sql):
+        if 'SELECT id,data FROM consolidation_evidence' in sql and not saved:
+            saved.append(True)
+            run['pairs']['a']['state'] = 'merged'
+            with store.connection() as writer:
+                write_run(writer, run)
+    with store.connection() as reader:
+        reader.set_trace_callback(concurrent_write)
+        assert read_run(reader, 'concurrent')['pairs']['a']['state'] == 'pending'
+    assert saved
+    with store.connection() as db:
+        assert read_run(db, 'concurrent')['pairs']['a']['state'] == 'merged'

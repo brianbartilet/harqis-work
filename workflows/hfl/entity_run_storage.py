@@ -1,5 +1,6 @@
 """Transactional row-based run persistence with lazy migration of legacy JSON runs."""
 import json
+from copy import deepcopy
 
 from workflows.hfl.entity_store import digest
 
@@ -28,6 +29,10 @@ def write_run(db, run):
 
 
 def read_run(db, run_id):
+    # Status reads do not hold the matching lock. All three SELECTs must see
+    # the same committed snapshot while a reviewer saves a new checkpoint.
+    if not db.in_transaction:
+        db.execute('BEGIN')
     row = db.execute('SELECT value FROM state WHERE key=?', ('consolidation:' + run_id,)).fetchone()
     if not row:
         return None
@@ -41,7 +46,6 @@ def read_run(db, run_id):
         pair = json.loads(row['data'])
         for side in ('left', 'right'):
             # Packets may hydrate their evidence in place; preserve per-pair isolation.
-            from copy import deepcopy
             pair[side] = deepcopy(evidence[pair.pop(side + '_evidence')])
         run['pairs'][row['id']] = pair
     return run

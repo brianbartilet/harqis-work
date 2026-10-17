@@ -10,6 +10,40 @@ from workflows.hfl.entity_store import get_store
 from test_entity_consolidation import corpus, alias_group, decision, first, FACT  # noqa: F401
 
 
+def test_fifth_claim_selects_oldest_and_recovery_keeps_turn(alias_group):
+    run, _ = alias_group
+    stored = runs.load(run['id'])
+    identities = sorted({i for p in stored['pairs'].values() for i in p['ids']})
+    for pair in stored['pairs'].values():
+        pair['queued_at'] = 1 if identities[0] not in pair['ids'] else 100
+    stored['claim_sequence'] = 4
+    runs.save(stored)
+    packet = work.claim_work(run['id'], {'worker_id': 'fairness', 'max_pairs': 1})
+    assert packet['claim']['anchor_id'] == identities[1]
+    assert packet['pairs'][0]['queued_at'] == 1
+    assert runs.load(run['id'])['claim_sequence'] == 5
+    recovered = work.claim_work(run['id'], {'worker_id': 'fairness', 'max_pairs': 1})
+    assert recovered['claim']['token'] == packet['claim']['token']
+    assert runs.load(run['id'])['claim_sequence'] == 5
+
+
+def test_old_run_refreshes_discovery_version_once(corpus, monkeypatch):
+    run, _ = first()
+    stored = runs.load(run['id'])
+    stored.pop('discovery_version')
+    runs.save(stored)
+    calls = []
+    original = work.discover
+    def discover(run, live, signatures, seeds, index=None):
+        calls.append(set(seeds))
+        return original(run, live, signatures, seeds, index)
+    monkeypatch.setattr(work, 'discover', discover)
+    work.checkpoint(run['id'])
+    assert calls[0] == set(runs.load(run['id'])['snapshots'])
+    work.checkpoint(run['id'])
+    assert calls[1] == set()
+
+
 def test_batch_loads_and_saves_once_with_partial_errors(alias_group, monkeypatch):
     run, _ = alias_group
     calls = []

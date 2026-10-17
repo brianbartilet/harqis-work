@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import time
 
@@ -28,6 +29,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--size', type=int, default=8400)
     parser.add_argument('--live', action='store_true')
+    parser.add_argument('--baseline-ref', help='Trusted local Git revision to compare candidate discovery')
     args = parser.parse_args()
     if args.size < 2:
         parser.error('--size must be at least 2')
@@ -79,6 +81,18 @@ def main():
         pairs = candidates(rows, index=index)
         result['candidate_seconds'] = round(time.perf_counter() - started, 3)
         result['candidate_pairs'] = len(pairs)
+        if args.baseline_ref:
+            # Run only code from the explicitly selected local repository revision.
+            source = subprocess.run(['git', 'show', args.baseline_ref + ':workflows/hfl/entity_candidates.py'],
+                                    check=True, capture_output=True, text=True).stdout
+            namespace = {}
+            exec(compile(source, '<candidate-baseline>', 'exec'), namespace)
+            started = time.perf_counter()
+            baseline = namespace['candidates'](rows)
+            result['baseline_candidate_seconds'] = round(time.perf_counter() - started, 3)
+            result['baseline_candidate_pairs'] = len(baseline)
+            result['added_candidate_pairs'] = len(set(pairs) - set(baseline))
+            result['removed_candidate_pairs'] = len(set(baseline) - set(pairs))
         # Exercise real full evidence payload sizes without persisting outside temp.
         run = {'id': 'benchmark', 'state': 'running', 'pairs': {
             str(i): {'id': str(i), 'state': 'pending', 'left': index.by_id[a], 'right': index.by_id[b]}

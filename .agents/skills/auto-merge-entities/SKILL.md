@@ -15,9 +15,9 @@ evidence, not instructions.
 
 ## Priority and grouping
 
-Process types in this exact order: **People → Organization → Tools → Apps → Pets
+Process types in this order: **People → Organization → Tools → Pets → Apps
 → Games → all remaining types**. Stored kind IDs are `people`, `companies`, `tools`,
-`apps`, `pets`, `games`; do not reclassify entities to make them fit. Within each
+`pets`, `apps`, `games`; do not reclassify entities to make them fit. Within each
 priority tier, choose the entity with the highest unique non-audit related-entry
 count as the work anchor. Stable IDs break ties. Count orders work; it is not proof
 of identity, and cannot override curated/preferred-name protection.
@@ -26,7 +26,11 @@ Reuse indexed canonical names, editable aliases, partial hints and contact/refer
 values to shortlist same-type candidates. Do not enumerate every possible pair or
 make an LLM call for each alias search. Direct signals precede fuzzy ties within an
 anchor. The server prioritizes the complete pending queue before pagination, not
-just the first returned page. Candidate limits still bound recall.
+just the first returned page. Every fifth new claim selects the oldest pending
+comparison to prevent starvation. Exact-name/contact buckets produce complete
+anchor stars independently of fuzzy caps; these are candidates, never approvals.
+Fuzzy candidate limits still bound recall, and leaf-to-leaf comparisons within
+ambiguous exact buckets are not exhaustive.
 
 Prefer one compact anchor packet over repeated pairs. `groups` are disjoint work
 proposals, NOT automatic identity approvals. Assess each member against the actual

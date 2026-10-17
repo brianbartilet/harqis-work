@@ -17,6 +17,7 @@ from workflows.hfl.entity_store import digest, get_store
 from workflows.hfl.entity_run_storage import read_run, write_run
 
 POLICY = 'hermes-entity-consolidation-v1'
+DISCOVERY_VERSION = 'exact-stars-v2'
 SKILL = Path(__file__).resolve().parents[2] / '.agents/skills/auto-merge-entities/SKILL.md'
 log = logging.getLogger(__name__)
 
@@ -101,8 +102,11 @@ def begin():
         previous = store.state('consolidation-checkpoint') or {}
         snapshots = {e['id']: signature(e) for e in rows}
         changed = {i for i, value in snapshots.items() if previous.get(i) != value}
+        if store.state('consolidation-discovery-version') != DISCOVERY_VERSION:
+            changed = set(snapshots)
         run = dict(id=run_id, state='running', created=datetime.now(ZoneInfo('Asia/Singapore')).isoformat(),
                    policy=POLICY, skill_hash=digest(SKILL.read_text(encoding='utf-8')),
+                   discovery_version=DISCOVERY_VERSION,
                    snapshots=snapshots, discovery_snapshots=dict(snapshots),
                    pairs={}, delivery={}, initial=not bool(previous))
         evidence_cache = {}
@@ -123,6 +127,7 @@ def begin():
                     if identity not in evidence_cache:
                         evidence_cache[identity] = evidence(by_id[identity])
                 run['pairs'][pair_id] = dict(id=pair_id, ids=[left, right], state='pending',
+                    queued_at=time.time(),
                     snapshots={i: snapshots[i] for i in (left, right)},
                     kind=by_id[left]['kind'], left=evidence_cache[left], right=evidence_cache[right],
                     signals=similarity(by_id[left], by_id[right]), preferred_id=preferred([by_id[left], by_id[right]])['id'])
@@ -439,6 +444,9 @@ def finish(run_id):
         # groups and changed evidence must participate on the next daily run.
         with store.connection() as db:
             db.execute('INSERT OR REPLACE INTO state VALUES (?,?)', ('consolidation-checkpoint', json.dumps(run['snapshots'])))
+            if run.get('discovery_version') == DISCOVERY_VERSION:
+                db.execute('INSERT OR REPLACE INTO state VALUES (?,?)',
+                           ('consolidation-discovery-version', json.dumps(DISCOVERY_VERSION)))
             write_run(db, run)
         return view(run)
 

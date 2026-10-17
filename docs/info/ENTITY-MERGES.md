@@ -47,9 +47,40 @@ The first `POST /api/hfl/entities/consolidation/begin` durably transfers automat
 matching ownership to Hermes and includes historical entities and suggestions.
 Previously queued Celery matching tasks stop applying decisions. Later daily runs
 compare entity snapshots; unchanged deferred cases are not repeatedly evaluated.
-Interrupted runs resume before new runs. The candidate shortlist is bounded to five
-neighbors per changed entity, so this is not an exhaustive all-pairs identity scan.
-Newly merged groups can participate in the next daily pass.
+Interrupted runs resume before new runs. Exact name/alias/contact buckets produce
+highest-activity anchor stars, independently of the fuzzy shortlist (five neighbors
+initially; up to 20 during claimed discovery). Buckets never authorize merging by
+name alone. Fuzzy search uses a 50-candidate pool. Large homogeneous name buckets
+reuse their exact stars instead of repeatedly scanning identical fuzzy postings.
+This is not exhaustive all-pairs matching, particularly among ambiguous
+leaves of a same-name bucket. Newly merged groups participate in fresh discovery.
+
+Priority is People → Organizations → Tools → Pets → Apps → Games → remaining types;
+every fifth fresh claim selects the oldest comparison to prevent starvation.
+Search features persist by versioned name/profile inputs; counts and postings are
+shared within a snapshot. Run metadata, comparison rows and content-addressed evidence
+are stored separately. Unchanged rows are not rewritten. Legacy JSON runs migrate
+transactionally on their next write; deploy API and report workers together because
+older code cannot read the new storage format. No entity identities are changed by
+this migration. Full snapshot reads and run serialization still have linear costs.
+
+Run `.venv/Scripts/python.exe scripts/agents/testing/check_entity_scale.py --size 8400`
+for a synthetic scale check, or add `--live` for a paged, read-only API snapshot.
+Only temporary storage is written. The output reports aggregate candidate coverage,
+timings and payload sizes, not confirmed duplicates or model execution time.
+
+Validation on 2026-10-17 used a read-only snapshot of 8,382 entities (6,479 with one
+supporting activity). It contained 334 repeated-name buckets, the largest with 24
+members. Comparing discovery with local revision `e90a1f3f` preserved all 2,893
+candidates: 14.776 seconds versus 27.102 seconds in the final same-process check.
+Serialized benchmark run payloads decreased from 18,533,314 to 6,852,901 bytes;
+one changed comparison wrote two rows (comparison plus metadata). These are local
+discovery/storage measurements, not production merge latency or model cost estimates.
+Reproduce with `check_entity_scale.py --live --baseline-ref e90a1f3f` using the full
+script path above. Only use trusted local revisions for the optional baseline code.
+Regression coverage also includes 8,400 identical-name entities producing 8,399
+review edges, transactional rollback, interrupted-run migration, concurrent snapshot
+reads, claim recovery, and fair scheduling. Identity evidence requirements remain intact.
 
 Agent endpoints under `/api/hfl/entities/consolidation`:
 

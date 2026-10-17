@@ -33,7 +33,7 @@ def search_features(encoded):
 
 def feature_input(entity):
     profile = entity.get('profile') or {}
-    return json.dumps({'label': entity['label'], 'profile': {
+    return json.dumps({'search_version': 2, 'label': entity['label'], 'profile': {
         k: sorted(set(profile.get(k, []))) for k in
         ('aliases', 'partial_aliases', 'emails', 'phones', 'references')}}, sort_keys=True)
 
@@ -67,6 +67,10 @@ class CandidateIndex:
                 db.executemany('INSERT OR REPLACE INTO entity_search_features VALUES (?,?,?)', updates)
                 db.executemany('DELETE FROM entity_search_features WHERE id=?',
                                [(identity,) for identity in stored.keys() - self.by_id.keys()])
+        # Large homogeneous buckets already have complete exact stars. Repeating
+        # their word/gram postings for every member would recreate a quadratic scan.
+        self.direct_only = {key for key, members in self.postings.items()
+                            if len(members) > 256 and len({self.names[i] for i in members}) == 1}
 
     def rank(self, identity):
         return -self.counts[identity], identity
@@ -86,15 +90,26 @@ class CandidateIndex:
         return pairs
 
 
-def similarity(left, right, name_sets=None):
+def similarity(left, right, name_sets=None, *, shortlist=False):
     a, b = name_sets if name_sets is not None else (names(left), names(right))
     exact = bool(a & b)
     partial = any(normalize(h) in n for e, other in ((left, b), (right, a))
                   for h in (e.get('profile') or {}).get('partial_aliases', [])
                   if len(normalize(h)) >= 3 for n in other)
-    fuzzy = max((SequenceMatcher(None, x, y).ratio() for x in a for y in b), default=0)
     contacts = any(set((left.get('profile') or {}).get(k, [])) &
                    set((right.get('profile') or {}).get(k, [])) for k in ('emails', 'phones', 'references'))
+    fuzzy = 1.0 if exact else 0.0
+    if not exact:
+        for x in a:
+            for y in b:
+                matcher = SequenceMatcher(None, x, y)
+                # Upper bounds cannot discard a qualifying fuzzy candidate.
+                # Direct/partial matches retain their original full ranking.
+                if shortlist and not (partial or contacts) and (
+                    round(matcher.real_quick_ratio(), 4) < .8 or round(matcher.quick_ratio(), 4) < .8
+                ):
+                    continue
+                fuzzy = max(fuzzy, matcher.ratio())
     return {'exact': exact, 'partial': partial, 'fuzzy': round(fuzzy, 4), 'contact': contacts}
 
 
@@ -108,24 +123,23 @@ def candidates(entities, seeds=None, per_entity=5, *, index=None):
             continue
         overlaps = Counter()
         for key in keys[e['id']]:
-            # Direct matches are handled in full above. Large common fuzzy
-            # postings cannot discriminate identities; avoid quadratic work.
-            if key[0] in {'name', 'emails', 'phones', 'references'}:
+            # Direct matches are handled in full above. Skip only homogeneous
+            # buckets; common tokens with different names still aid fuzzy recall.
+            if (e['kind'], key) in index.direct_only:
                 continue
-            if len(postings[(e['kind'], key)]) > 256:
-                continue
-            weight = 4 if key[0] == 'word' else 1
+            weight = (100 if key[0] in {'name', 'emails', 'phones', 'references'}
+                      else 4 if key[0] == 'word' else 1)
             for identity in postings[(e['kind'], key)]:
                 if identity != e['id']:
                     overlaps[identity] += weight
         # Bound expensive edit-distance work even for common tokens such as
-        # "project". Exact aliases/contact IDs receive priority in this pool.
+        # "project". Exact aliases/contact IDs have their own complete stars.
         possible = sorted(overlaps, key=lambda i: (-overlaps[i] / (len(keys[e['id']]) + len(keys[i])),
                                                    -index.counts[i], i))[:50]
         ranked = []
         for identity in possible:
             other = by_id[identity]
-            s = similarity(e, other, (name_values[e['id']], name_values[identity]))
+            s = similarity(e, other, (name_values[e['id']], name_values[identity]), shortlist=True)
             if s['exact'] or s['partial'] or s['contact'] or s['fuzzy'] >= .8:
                 ranked.append((-(4*s['contact'] + 3*s['exact'] + 2*s['partial'] + s['fuzzy']),
                                -index.counts[identity], identity))

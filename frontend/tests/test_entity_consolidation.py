@@ -37,7 +37,7 @@ def first():
 
 
 def test_pending_priority_is_global_type_then_occurrence_not_insertion():
-    kinds = ['people', 'companies', 'tools', 'apps', 'pets', 'games', 'topics']
+    kinds = ['people', 'companies', 'tools', 'pets', 'apps', 'games', 'topics']
     pairs = {}
     for kind in reversed(kinds):
         for count in [1, 50]:

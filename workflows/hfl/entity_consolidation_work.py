@@ -74,6 +74,7 @@ def discover(run, live, signatures, seeds, index=None):
                 if identity not in evidence_cache:
                     evidence_cache[identity] = runs.evidence(live[identity])
             run['pairs'][pair_id] = dict(id=pair_id, ids=[left, right], state='pending',
+                queued_at=time.time(),
                 snapshots={i: signatures[i] for i in (left, right)},
                 kind=live[left]['kind'], left=evidence_cache[left], right=evidence_cache[right],
                 signals=similarity(live[left], live[right]), preferred_id=preferred([live[left], live[right]])['id'])
@@ -112,9 +113,12 @@ def claim_work(run_id, options):
         live, _ = runs.live_snapshot(run)
         signatures = reconcile(run, live)
         changed = {i for i, value in signatures.items() if run['discovery_snapshots'].get(i) != value}
+        if run.get('discovery_version') != runs.DISCOVERY_VERSION:
+            changed = set(signatures)
         index = CandidateIndex(list(live.values()), persistent=True)
         added = discover(run, live, signatures, changed, index) if changed else 0
         run['discovery_snapshots'] = signatures
+        run['discovery_version'] = runs.DISCOVERY_VERSION
         run['checkpoint'] = {'at': time.time(), 'added': added,
                              'counts': runs.view(run, limit=0)['counts']}
         run['claims'] = active_claims(run)
@@ -130,7 +134,11 @@ def claim_work(run_id, options):
         if not pending:
             runs.save(run)
             return runs.compact_view(runs.view(run, limit=0)) | {'claim': None, 'waiting': bool(run['claims'])}
-        seed = pending[0]
+        # Reserve every fifth fresh claim for the oldest waiting comparison.
+        # Recovering an existing lease above never consumes a scheduling turn.
+        sequence = run.get('claim_sequence', 0) + 1
+        seed = (min(pending, key=lambda p: (p.get('queued_at', 0), p['id']))
+                if sequence % 5 == 0 else pending[0])
         anchor = min((seed['left'], seed['right']), key=lambda e: (-e['related_items'], e['id']))['id']
         # Expand this anchor once per evidence version. The whole neighborhood is
         # selected BEFORE applying packet limits; continuation stays explicit.
@@ -141,6 +149,8 @@ def claim_work(run_id, options):
         run['checkpoint'].update(added=added, counts=runs.view(run, limit=0)['counts'])
         edges = sorted((p for p in run['pairs'].values() if p['state'] == 'pending'
                         and anchor in p['ids'] and not busy.intersection(p['ids'])), key=runs.pair_priority)
+        if sequence % 5 == 0:
+            edges = [seed] + [p for p in edges if p['id'] != seed['id']]
         claim = dict(token=uuid4().hex, worker_id=worker, anchor_id=anchor,
                      pair_ids=[], entity_ids=[], expires_at=time.time() + duration,
                      remaining_for_anchor=0)
@@ -158,6 +168,7 @@ def claim_work(run_id, options):
             claim = proposed
         claim['remaining_for_anchor'] = len(edges) - len(claim['pair_ids'])
         run['claims'][claim['token']] = claim
+        run['claim_sequence'] = sequence
         runs.metric(run, 'claim', time.perf_counter() - started)
         runs.save(run)
         return packet(run, claim, summary)
@@ -191,9 +202,12 @@ def checkpoint(run_id):
         signatures = reconcile(run, live)
         previous = run.get('discovery_snapshots', run['snapshots'])
         changed = {i for i, value in signatures.items() if previous.get(i) != value}
+        if run.get('discovery_version') != runs.DISCOVERY_VERSION:
+            changed = set(signatures)
         added = discover(run, live, signatures, changed,
                          CandidateIndex(list(live.values()), persistent=True))
         run['discovery_snapshots'] = signatures
+        run['discovery_version'] = runs.DISCOVERY_VERSION
         run['claims'] = active_claims(run)
         run['checkpoint'] = {'at': time.time(), 'added': added,
                              'counts': runs.view(run, limit=0)['counts']}

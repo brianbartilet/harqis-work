@@ -92,6 +92,7 @@ configuration before importing the archive; its exit code reaches the scheduler.
 | Path | Purpose |
 |---|---|
 | `run_test_suite.py` | Exploratory / continuous test runner with coverage + perf tracking. |
+| `check_entity_scale.py` | Read-only entity discovery/storage benchmark: `.venv/Scripts/python.exe scripts/agents/testing/check_entity_scale.py --size 8400`; add `--live` for a paged API snapshot. Writes only to a temporary database and prints aggregate statistics. |
 | [`daily_test_farm_email.py`](#scriptsagentstestingdaily_test_farm_emailpy) | Daily BDD test farm sequence — refreshes `run_test_farm`, renders `logs/BDD-TEST-FARM.md`, emails the HTML report via `GOOGLE_GMAIL_SEND`, posts a Telegram notice. |
 | `smoke-tests.sh` | Daily app smoke tests + Telegram summary. |
 
