@@ -593,7 +593,7 @@ The main graph uses an opt-in capacity guard: by default, more than 1,000 matchi
 nodes or 2,000 connections pauses the viewport before rendering. The overlay
 reports counts and offers Refine search, Open filters, or Show limited preview.
 Filters → Graph capacity accepts 1,000–10,000 nodes and 100–5,000 connections,
-remembered per owner in this browser, with Restore recommended limits. Limits
+remembered per owner in this browser, with a Restore button. Limits
 count all node types before local preset/type visibility filters. Preview results
 are explicitly incomplete, keep valid connection endpoints, and use stable
 recency order with connected neighbors. Animation Off is recommended for larger
@@ -607,8 +607,9 @@ and visible connections. Old browser detail settings are ignored.
 
 In the main graph's Filters drawer, Shared connections only is a switch.
 Graph capacity has an info button explaining performance and preview omissions
-in a small dialog. Its arrow buttons adjust values by 100; typed whole numbers
-and keyboard arrows remain supported. Restore recommended limits sets 1,000 nodes
+in a compact popover on hover, keyboard focus, or tap. Escape or moving away
+dismisses the helper. Its arrow buttons adjust values by 100; typed whole numbers
+and keyboard arrows remain supported. Restore sets 1,000 nodes
 and 2,000 connections. Older saved node limits below 1,000 migrate to 1,000;
 other valid saved preferences are preserved. **This week** selects Monday through
 today, inclusive, in browser-local time: Monday selects only that day, Sunday

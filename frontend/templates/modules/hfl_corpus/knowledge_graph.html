@@ -76,7 +76,14 @@
   <div class="kg-types-heading">Node types</div>
   <div id="kg-types" aria-label="Node types"></div>
   <section id="kg-capacity-settings" class="kg-capacity-settings" aria-labelledby="kg-capacity-heading" hidden>
-    <div class="kg-capacity-heading"><h3 id="kg-capacity-heading" class="kg-types-heading">Graph capacity</h3><button id="kg-capacity-help-open" type="button" aria-label="About graph capacity" aria-haspopup="dialog" aria-controls="kg-capacity-help"><svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5"/><circle cx="10" cy="6" r=".6" fill="currentColor"/></svg></button></div>
+    <div class="kg-capacity-heading"><h3 id="kg-capacity-heading" class="kg-types-heading">Graph capacity</h3><span id="kg-capacity-help-trigger"><button id="kg-capacity-help-open" type="button" aria-label="About graph capacity" aria-expanded="false" aria-controls="kg-capacity-help" aria-describedby="kg-capacity-help"><svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="10" cy="10" r="7.5"/><path d="M10 9v5"/><circle cx="10" cy="6" r=".6" fill="currentColor"/></svg></button>
+      <div id="kg-capacity-help" class="kg-capacity-help" role="tooltip" hidden>
+        <p>Large graphs use more time and memory. Limits keep navigation responsive, especially on slower devices or with animation enabled.</p>
+        <p>All matching nodes and connections count, including those hidden by view filters. Above either limit, the graph pauses and offers a limited preview. Narrow dates or sources to see fewer matches.</p>
+        <p>Choose 1,000–10,000 nodes and 100–5,000 connections. Recommended: <strong>1,000 nodes</strong> and <strong>2,000 connections</strong>. Higher limits may slow the graph.</p>
+        <p>Saved in this browser when you apply filters. Arrows adjust by 100; you can also type a whole number.</p>
+      </div>
+    </span></div>
     <div class="kg-capacity-fields">
       {% for key, label, minimum, maximum, default in [('node', 'Maximum nodes', 1000, 10000, 1000), ('edge', 'Maximum connections', 100, 5000, 2000)] %}
       <div class="kg-capacity-field">
@@ -90,16 +97,9 @@
       </div>
       {% endfor %}
     </div>
-    <button id="kg-capacity-reset" type="button">Restore recommended limits</button>
+    <button id="kg-capacity-reset" type="button">Restore</button>
   </section>
   <button id="kg-filter" class="kg-apply-filters">Apply filters</button>
-  </dialog>
-  <dialog id="kg-capacity-help" class="kg-capacity-help" aria-labelledby="kg-capacity-help-title">
-    <div class="kg-drawer-heading"><h2 id="kg-capacity-help-title">About graph capacity</h2><button id="kg-capacity-help-close" type="button" aria-label="Close graph capacity help"><svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
-    <p>Large graphs take more time and memory to load and draw. These limits help keep navigation responsive, especially on slower devices or with animation enabled.</p>
-    <p>Limits count all matching node types and connections before view filters hide any. When either limit is exceeded, the graph pauses and offers a limited preview. A preview omits some matches and connections.</p>
-    <p>Choose 1,000–10,000 nodes and 100–5,000 connections. Recommended values are <strong>1,000 nodes</strong> and <strong>2,000 connections</strong>. Higher limits may slow the graph; narrowing dates or sources and turning Animation off can help.</p>
-    <p>Settings are saved in this browser when you apply filters. Arrow buttons change values by 100; you can also type a whole number.</p>
   </dialog>
   <div class="kg-stage" id="kg-stage" aria-busy="true">
   <div id="kg-loading" role="status"><span class="kg-spinner" aria-hidden="true"></span><strong>Loading Activity Graph</strong><span>Reading activity and preparing connections…</span></div>

@@ -242,13 +242,20 @@ def test_filter_controls_week_and_capacity_migration(authenticated_client, monke
             assert page.input_value('#kg-until') == '2026-10-25'
             page.locator('#kg-capacity-settings').scroll_into_view_if_needed()
             page.screenshot(path=f'results/activity-graph-filters-{width}.png')
-            page.click('#kg-capacity-help-open')
+            page.hover('#kg-capacity-help-open')
             help_dialog = page.locator('#kg-capacity-help')
+            playwright.expect(help_dialog).to_be_visible()
+            page.hover('#kg-capacity-help')
+            playwright.expect(help_dialog).to_be_visible()
+            page.hover('#kg-node-limit')
+            playwright.expect(help_dialog).to_be_hidden()
+            page.click('#kg-capacity-help-open')
             playwright.expect(help_dialog).to_be_visible()
             playwright.expect(help_dialog).to_contain_text('time and memory')
             page.screenshot(path=f'results/activity-graph-help-{width}.png')
             box=help_dialog.bounding_box()
             assert box['x'] >= 0 and box['x'] + box['width'] <= width
+            assert box['y'] >= 0
             page.keyboard.press('Escape')
             playwright.expect(help_dialog).to_be_hidden()
             playwright.expect(page.locator('#kg-capacity-help-open')).to_be_focused()

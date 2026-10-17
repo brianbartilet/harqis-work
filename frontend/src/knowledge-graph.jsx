@@ -843,13 +843,24 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   });
   for(const key of ['node-limit','edge-limit'])$(key).addEventListener('input',syncCapacitySteppers);
   $('capacity-reset').onclick=()=>{$('node-limit').value=recommendedCapacity.nodes;$('edge-limit').value=recommendedCapacity.edges;syncCapacitySteppers();};
-  $('capacity-help-open').onclick=()=>$('capacity-help').showModal();
-  $('capacity-help-close').onclick=()=>$('capacity-help').close();
-  $('capacity-help').addEventListener('close',()=>{$('capacity-help-open').focus();});
-  $('capacity-help').addEventListener('click',event=>{
-    const box=$('capacity-help').getBoundingClientRect();
-    if(event.target===$('capacity-help')&&(event.clientX<box.left||event.clientX>box.right||event.clientY<box.top||event.clientY>box.bottom))$('capacity-help').close();
+  const capacityHelpTrigger=$('capacity-help-trigger'),capacityHelpButton=$('capacity-help-open'),capacityHelp=$('capacity-help');
+  let capacityHelpTimer;
+  function setCapacityHelp(open){
+    clearTimeout(capacityHelpTimer);
+    capacityHelp.hidden=!open;
+    capacityHelpButton.setAttribute('aria-expanded',String(open));
+  }
+  capacityHelpTrigger.addEventListener('mouseenter',()=>setCapacityHelp(true));
+  capacityHelpTrigger.addEventListener('mouseleave',()=>{capacityHelpTimer=setTimeout(()=>setCapacityHelp(false),150);});
+  capacityHelpButton.addEventListener('focus',()=>setCapacityHelp(true));
+  // Focus opens the helper on keyboard navigation; a tap keeps it open too.
+  capacityHelpButton.addEventListener('click',()=>setCapacityHelp(true));
+  capacityHelpButton.addEventListener('blur',()=>setCapacityHelp(false));
+  document.addEventListener('pointerdown',event=>{if(!capacityHelpTrigger.contains(event.target))setCapacityHelp(false);});
+  $('filter-drawer').addEventListener('keydown',event=>{
+    if(event.key==='Escape'&&!capacityHelp.hidden){event.preventDefault();event.stopPropagation();setCapacityHelp(false);}
   });
+  $('filter-drawer').addEventListener('close',()=>setCapacityHelp(false));
   function sourceOptions(values) {
     const params=new URLSearchParams(window.activityModals?.context()||'');
     const scope=JSON.parse(params.get('scope')||'{"any":[],"all":{}}');
