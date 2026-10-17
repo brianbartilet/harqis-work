@@ -1,3 +1,4 @@
+import json
 import os
 from urllib.parse import urlparse
 
@@ -7,6 +8,7 @@ from core.config.env_variables import ENV_APP_SECRETS, ENV_ENABLE_PROXY
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
+from google.oauth2 import service_account
 from google.auth.exceptions import RefreshError
 
 
@@ -33,6 +35,11 @@ class GoogleApiClient():
             or os.path.join(ENV_APP_SECRETS, "storage.json")
         )
 
+        # Optional service account: raw JSON key content, or a key file path (absolute or
+        # relative to the secrets folder). Unset values come through as the literal '${VAR}'.
+        account = str(kwargs.get("service_account") or "").strip()
+        self.service_account = "" if account.startswith("${") else account
+
         self._proxies = kwargs.get("proxies") or {}
         self._http = self._build_http()
 
@@ -51,7 +58,22 @@ class GoogleApiClient():
         # no proxy
         return Http()
 
+    def _service_account_credentials(self):
+        account = self.service_account
+        if account.startswith("{"):
+            info = json.loads(account)
+        else:
+            path = account if os.path.isabs(account) else os.path.join(ENV_APP_SECRETS, account)
+            with open(path, encoding="utf-8") as f:
+                info = json.load(f)
+        return service_account.Credentials.from_service_account_info(info, scopes=self.scopes)
+
     def authorize(self):
+        # A service account needs no browser consent and its access does not expire, so it
+        # suits unattended jobs; it only reaches what is shared with its email address.
+        if self.service_account:
+            return self._service_account_credentials()
+
         creds = None
 
         # Load existing token

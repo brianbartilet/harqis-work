@@ -15,6 +15,7 @@ class BaseApiServiceGoogle(BaseFixtureServiceRest):
                 scopes_list=config.app_data.get("scopes"),
                 credentials=config.app_data.get("credentials"),
                 storage=config.app_data.get("storage"),
+                service_account=config.app_data.get("service_account"),
                 proxies=kwargs.get("proxies")
             )
         else:
