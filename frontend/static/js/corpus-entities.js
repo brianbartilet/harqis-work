@@ -192,7 +192,7 @@
         typeSave.onclick = async () => { typeSave.disabled = true; try { await api('/type/' + encodeURIComponent(e.id), {kind:typeSelect.value}); await load(); await matchingStatus(); } catch (err) { typeFeedback.textContent = err.message; } finally { typeSave.disabled = false; } };
         const typeControls = el('div'); typeControls.className = 'entity-type-controls';
         typeLabel.append(typeSelect); typeControls.append(typeLabel, typeSave);
-        management.append(typeControls);
+        management.prepend(typeControls);
         if (e.is_owner) {
           const owner = el('a', 'Corpus owner · Managed in /profile'); owner.href = '/profile'; owner.className = 'entity-owner-link'; management.prepend(owner);
           typeSelect.disabled = true; typeSave.disabled = true;
@@ -201,7 +201,7 @@
           bind.onclick = async () => { try { await api('/owner-binding', {identity:e.id}); await load(); } catch(error) { typeFeedback.textContent=error.message; } }; card.append(bind);
         }
         const connections = el('details'); connections.className = 'entity-section'; connections.append(el('summary', 'Connections'));
-        const connectionList = el('div'), connect = el('button', 'Create connections'); connect.type = 'button';
+        const connectionList = el('div'); connectionList.className = 'entity-connection-list'; const connect = el('button', 'Create connections'); connect.type = 'button';
         connect.onclick = () => window.EntityConnections.open(e, async () => { await load(); });
         connections.append(connect, connectionList);
         connections.addEventListener('toggle', async () => {

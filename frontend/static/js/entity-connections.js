@@ -11,15 +11,24 @@
   const relations = ['related_to', 'colleague_of', 'works_at', 'member_of', 'owns', 'uses'];
   function field(parent, title, input) { const label = el('label', title); input.setAttribute('aria-label', title); label.append(input); parent.append(label); return input; }
   function open(entity, onSaved = async () => {}, onNavigate) {
+    let hostDocument = document;
+    try { hostDocument = window.top.document; } catch (_) { /* Keep cross-origin embeds local. */ }
+    if (hostDocument !== document) {
+      const stylesheet = document.querySelector('link[href*="entity-connections.css"]');
+      if (stylesheet && !hostDocument.querySelector('link[href="' + stylesheet.href + '"]')) {
+        const copy = stylesheet.cloneNode(); copy.href = stylesheet.href; hostDocument.head.append(copy);
+      }
+    }
     const dialog = el('dialog'); dialog.className = 'entity-connections-dialog';
     const heading = el('h2', 'Connections · ' + entity.label); heading.id = 'connections-' + crypto.randomUUID(); dialog.setAttribute('aria-labelledby', heading.id);
     const header = el('header'); header.append(heading, button('Close', () => dialog.close()));
     const status = el('p', 'Loading connections…'); status.setAttribute('role', 'status');
-    const content = el('div'); dialog.append(header, status, content); document.body.append(dialog);
+    const content = el('div'); dialog.append(header, status, content); hostDocument.body.append(dialog);
     const previousFocus = document.activeElement;
     let generation = 0, timer, busy = false;
     dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
     dialog.addEventListener('close', () => { generation++; clearTimeout(timer); dialog.remove(); previousFocus?.focus(); });
+    window.addEventListener('pagehide', () => dialog.remove(), {once:true});
     dialog.showModal();
     const navigate = (id, activity = false) => {
       if (onNavigate) { dialog.close(); onNavigate(id); }
@@ -30,6 +39,15 @@
         const [saved, directory] = await Promise.all([api('/connections/' + encodeURIComponent(entity.id)), api('?limit=1')]);
         if (!dialog.isConnected) return;
         content.replaceChildren(); if(status.textContent !== 'Connections saved.')status.textContent = '';
+        const typePill = kind => {
+          const type = directory.types.find(t => t.id === kind);
+          const pill = el('span', (type?.name || kind || 'Entity').toLowerCase());
+          pill.className = 'connection-type-pill';
+          pill.style.setProperty('--entity-color', /^#[0-9a-f]{6}$/i.test(type?.color) ? type.color : '#95a7c3');
+          return pill;
+        };
+        header.querySelector('.connection-type-pill')?.remove();
+        header.insertBefore(typePill(saved.entity.kind), header.lastElementChild);
         const changes = new Map(), selected = new Map();
         const form = el('form'), controls = el('div'); controls.className = 'connection-controls';
         const mode = field(controls, 'Connect to', el('select'));
@@ -93,7 +111,7 @@
         }
         async function searchOptions() {
           const request = ++generation, activity = mode.value === 'activity';
-          type.disabled = activity; create.hidden = activity; results.replaceChildren(); searchStatus.textContent = 'Searching…';
+          type.disabled = activity; create.hidden = true; results.replaceChildren(); searchStatus.textContent = 'Searching…';
           try {
             const data = await api(activity ? '/connection-activities?' + new URLSearchParams({q: search.value}) : '?' + new URLSearchParams({q: search.value, kind: type.value, limit: 50}));
             if (request !== generation || !dialog.isConnected) return;
@@ -101,8 +119,10 @@
             const choices = data.entities.filter(e => e.id !== entity.id && !selected.has((activity ? 'entry:' : '') + e.id));
             for (const choice of choices) {
               const card = button('', () => add(choice)); card.className = 'connection-result-card';
-              card.append(el('strong', choice.label), el('small', choice.kind + ' · ' + (choice.date || `${choice.entries?.length || 0} entries`))); results.append(card);
+              const meta = el('span'); meta.className = 'connection-result-meta'; meta.append(typePill(choice.kind), el('small', choice.date || `${choice.entries?.length || 0} entries`));
+              card.append(el('strong', choice.label), meta); results.append(card);
             }
+            create.hidden = activity || !search.value.trim() || data.total !== 0;
             create.textContent = search.value.trim() ? `Create “${search.value.trim()}”` : 'Create entity';
             create.disabled = !search.value.trim() || data.entities.some(e => e.label.toLowerCase() === search.value.trim().toLowerCase());
           } catch (error) { if (request === generation) searchStatus.textContent = error.message; }

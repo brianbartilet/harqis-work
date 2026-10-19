@@ -12,3 +12,25 @@
 .connection-result-card small,.connection-card small{color:#94a3b8}.connection-selected{display:grid;gap:12px}.connection-card{min-width:0;border:1px solid #334155;border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;background:#0b1322;overflow-wrap:anywhere}.connection-card button{align-self:flex-start}.connection-card legend{font-weight:600;color:#e2e8f0}.entity-connections-dialog footer{justify-content:flex-end;margin-top:24px}.entity-connections-dialog [hidden]{display:none}
 .entity-shell .entity-management-row{display:flex;align-items:flex-end;justify-content:flex-end;gap:12px;flex-wrap:wrap;margin:16px 0}.entity-shell .entity-management-row .merge-card-actions{margin:0}.entity-shell .entity-management-row .entity-type-controls{margin:0;flex:0 1 420px}.entity-shell .entity-section{margin:16px 0;padding:20px;border:1px solid #334155;border-radius:8px;background:#0f172a}.entity-shell .entity-section>summary{font-size:16px;font-weight:600;list-style:none;padding-right:28px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2360a5fa' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 7.5 5 5 5-5'/%3E%3C/svg%3E") right center/20px no-repeat}.entity-section>summary::-webkit-details-marker{display:none}.entity-shell .entity-section[open]>summary{margin-bottom:16px}.entity-owner-link{color:#7dd3fc}
 @media(max-width:540px){.entity-connections-dialog{padding:16px}.connection-controls{grid-template-columns:1fr}.connection-results{gap:8px}.entity-shell .entity-management-row{align-items:stretch}.entity-shell .entity-management-row .entity-type-controls{flex:1 1 100%}}
+
+/* Explicit centering overrides the global dialog reset, including drawer launches. */
+dialog.entity-connections-dialog{position:fixed;inset:0;margin:auto;max-width:calc(100vw - 24px);max-height:90dvh}
+.entity-connections-dialog header{flex-wrap:wrap;justify-content:flex-start}
+.entity-connections-dialog header>button{margin-left:auto}
+.entity-connections-dialog header h2{min-width:0;overflow-wrap:anywhere}
+.connection-type-pill{display:inline-flex;align-items:center;flex-shrink:0;border:1px solid var(--entity-color);border-radius:999px;padding:2px 8px;color:var(--entity-color);font-size:11px;font-weight:400;line-height:1.5;background:transparent}
+.connection-result-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.entity-connections-dialog .connection-results{margin:12px 0 16px}
+.entity-connections-dialog .connection-results:empty{display:none}
+.entity-connections-dialog form>p{margin:12px 0}
+.entity-connections-dialog form>button{margin-top:12px}
+.entity-shell .entity-connection-list{margin-top:16px}
+.entity-shell .entity-soul section{margin-top:24px}
+.entity-shell .entity-soul section>p{margin:12px 0 16px}
+.entity-shell .entity-management-row{justify-content:flex-start;align-items:flex-end}
+.entity-shell .entity-management-row .entity-type-controls{flex:0 1 auto}
+.entity-shell .entity-management-row .entity-type-controls>label{flex:0 1 200px;width:200px;margin:0}
+.entity-shell .entity-management-row .merge-card-actions{margin-left:auto}
+.entity-shell .entity-management-row .merge-card-actions button{background:#422f10;border-color:#eab308;color:#fde68a;min-height:44px}
+.entity-shell .entity-management-row .merge-card-actions button:hover{background:#5c4215}
+@media(max-width:540px){.entity-shell .entity-management-row .entity-type-controls{max-width:100%}.entity-shell .entity-management-row .entity-type-controls>label{width:160px;flex:0 1 160px}}
