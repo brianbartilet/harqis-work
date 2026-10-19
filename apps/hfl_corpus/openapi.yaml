@@ -4086,8 +4086,87 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/soul-editor/{identity}:
+    get:
+      summary: Read Soul Editor
+      operationId: read_soul_editor_api_hfl_entities_soul_editor__identity__get
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      summary: Write Soul Editor
+      operationId: write_soul_editor_api_hfl_entities_soul_editor__identity__post
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SoulEditorWrite'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
+    SoulEditorWrite:
+      properties:
+        revision:
+          type: string
+          title: Revision
+        profile:
+          additionalProperties: true
+          type: object
+          title: Profile
+        soul:
+          $ref: '#/components/schemas/SoulWrite'
+        connections:
+          $ref: '#/components/schemas/ConnectionsWrite'
+        new_entities:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          maxItems: 100
+          title: New Entities
+      additionalProperties: false
+      type: object
+      required:
+      - revision
+      - profile
+      - soul
+      - connections
+      title: SoulEditorWrite
     ConnectionChange:
       properties:
         id:

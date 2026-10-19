@@ -1,5 +1,6 @@
 """Rebuildable entity metadata, reversible identity decisions, and durable work intent."""
 from __future__ import annotations
+from contextlib import nullcontext
 
 import hashlib
 import json
@@ -157,10 +158,11 @@ class EntityStore:
                               'updated': r['updated']}
                     for r in db.execute('SELECT * FROM profiles')}
 
-    def save_profile(self, identity, kind, data, actor='owner'):
+    def save_profile(self, identity, kind, data, actor='owner', connection=None):
         # Curated data is never pruned or overwritten by enrichment.
-        with self.connection() as db:
-            db.execute('BEGIN IMMEDIATE')
+        with (nullcontext(connection) if connection is not None else self.connection()) as db:
+            if connection is None:
+                db.execute('BEGIN IMMEDIATE')
             if db.execute('SELECT 1 FROM decisions WHERE alias=? AND active=1', (identity,)).fetchone():
                 raise ValueError('Entity was merged; refresh before editing its profile')
             group = db.execute('SELECT * FROM entity_merges WHERE id=?', (identity,)).fetchone()

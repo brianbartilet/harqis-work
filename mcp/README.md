@@ -919,3 +919,17 @@ The server uses Python's standard `logging` module with logger hierarchy `harqis
 
 Logs go to stderr (visible in Claude Desktop's MCP log viewer and in the terminal when running manually).
 To increase verbosity, change `logging.basicConfig(level=logging.INFO)` to `logging.DEBUG` in `mcp/server.py`.
+
+
+### Unified entity Soul tools
+
+| Tool | Purpose |
+|---|---|
+| `get_hfl_corpus_entity_soul_editor` | Read profile, identity, connections and concurrency revision. |
+| `update_hfl_corpus_entity_soul_editor` | Atomically save all three sections (destructive remote write). |
+
+*Show the Soul details for this entity.*
+*Update the entity profile and connections together using its current revision.*
+
+The save payload follows the canonical SoulEditorWrite schema; conflicts leave all
+sections unchanged. Existing entity context and soul tools remain available.
