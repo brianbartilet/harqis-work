@@ -34,10 +34,10 @@ def test_capacity_api_bounds_and_opt_in(authenticated_client, monkeypatch):
     ids = {n['id'] for n in response['nodes']}
     assert all(e['source'] in ids and e['target'] in ids for e in response['edges'])
     assert response['capacity']['preview'] and response['truncated']
-    assert authenticated_client.get(url, params={'node_limit': 10001}).status_code == 422
+    assert authenticated_client.get(url, params={'node_limit': 20001}).status_code == 422
     assert authenticated_client.get(url, params={'node_limit': 999}).status_code == 422
-    assert authenticated_client.get(url, params={'edge_limit': 5001}).status_code == 422
-    assert not authenticated_client.get(url, params={'capacity_guard': True, 'node_limit': 10000, 'edge_limit': 5000}).json()['capacity']['exceeded']
+    assert authenticated_client.get(url, params={'edge_limit': 100001}).status_code == 422
+    assert not authenticated_client.get(url, params={'capacity_guard': True, 'node_limit': 20000, 'edge_limit': 100000}).json()['capacity']['exceeded']
     assert authenticated_client.get(url, params={'edge_limit': 0}).status_code == 422
 
 
@@ -118,7 +118,7 @@ def test_capacity_browser_recovery(authenticated_client, monkeypatch, width):
             assert box['x'] >= 0 and box['x'] + box['width'] <= width + 1
             page.click('#kg-capacity-filters')
             page.fill('#kg-node-limit', '1100')
-            page.fill('#kg-edge-limit', '1000')
+            page.fill('#kg-edge-limit', '100000')
             page.click('#kg-filter')
             playwright.expect(page.locator('#kg-capacity-message')).to_contain_text('1,100 nodes')
             page.click('#kg-capacity-preview')
@@ -129,6 +129,7 @@ def test_capacity_browser_recovery(authenticated_client, monkeypatch, width):
             playwright.expect(overlay).to_be_visible()
             page.click('#kg-capacity-filters')
             assert page.input_value('#kg-node-limit') == '1100'
+            assert page.input_value('#kg-edge-limit') == '100000'
             page.click('#kg-capacity-reset')
             assert page.input_value('#kg-node-limit') == '1000'
             page.click('#kg-filter')
@@ -226,11 +227,11 @@ def test_filter_controls_week_and_capacity_migration(authenticated_client, monke
             assert page.get_by_role('button', name='Decrease maximum nodes by 100').is_disabled()
             page.get_by_role('button', name='Increase maximum nodes by 100').click()
             assert page.input_value('#kg-node-limit') == '1100'
-            page.fill('#kg-node-limit', '10000')
+            page.fill('#kg-node-limit', '20000')
             assert page.get_by_role('button', name='Increase maximum nodes by 100').is_disabled()
             page.get_by_role('button', name='Decrease maximum nodes by 100').click()
-            assert page.input_value('#kg-node-limit') == '9900'
-            page.fill('#kg-node-limit', '10001')
+            assert page.input_value('#kg-node-limit') == '19900'
+            page.fill('#kg-node-limit', '20001')
             page.click('#kg-filter')
             assert page.locator('#kg-filter-drawer').is_visible()
             assert not page.locator('#kg-node-limit').evaluate('el=>el.validity.valid')
@@ -271,8 +272,9 @@ def test_filter_controls_week_and_capacity_migration(authenticated_client, monke
             assert page.input_value('#kg-rolling') == 'week'
             assert page.locator('#kg-shared').is_checked()
             page.click('#kg-close-filters')
-            page.clock.set_fixed_time('2026-10-26T00:05:00+08:00')
-            page.wait_for_function("document.querySelector('#kg-since').value==='2026-10-26'", timeout=15000)
+            with page.expect_request(lambda request: '/entities/graph?' in request.url and 'since=2026-10-26' in request.url, timeout=15000):
+                page.clock.set_fixed_time('2026-10-26T00:05:00+08:00')
+                page.wait_for_function("document.querySelector('#kg-since').value==='2026-10-26'", timeout=15000)
             assert requests[-1]['since'] == ['2026-10-26'] and requests[-1]['until'] == ['2026-10-26']
             assert not errors
         finally:

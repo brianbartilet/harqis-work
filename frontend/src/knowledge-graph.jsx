@@ -19,7 +19,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   let capacityLimits={...recommendedCapacity},capacityBlocked=false,capacityPreview=false;
   try {
     const saved=JSON.parse(localStorage.getItem(capacityKey));
-    if(Number.isInteger(saved?.nodes)&&saved.nodes>=100&&saved.nodes<=10000&&Number.isInteger(saved?.edges)&&saved.edges>=100&&saved.edges<=5000){
+    if(Number.isInteger(saved?.nodes)&&saved.nodes>=100&&saved.nodes<=20000&&Number.isInteger(saved?.edges)&&saved.edges>=100&&saved.edges<=100000){
       capacityLimits={nodes:Math.max(1000,saved.nodes),edges:saved.edges};
       if(saved.nodes<1000)localStorage.setItem(capacityKey,JSON.stringify(capacityLimits));
     }
@@ -94,7 +94,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     if(!stateReady||loading||capacityBlocked||!graphApi||window.HflIdeas?.maps.current)return;
     const filters=Object.fromEntries(['search','rolling','since','until'].map(id=>[id,$(id).value]));
     filters.shared=$('shared').checked;
-    const positions=Object.fromEntries(nodes.slice(0,10000).map(n=>[n.id,{...(layoutTargets.get(n.id)||{x:n.x,y:n.y}),manual:!!n.manual}]));
+    const positions=Object.fromEntries(nodes.slice(0,20000).map(n=>[n.id,{...(layoutTargets.get(n.id)||{x:n.x,y:n.y}),manual:!!n.manual}]));
     const center=graphApi.screen2GraphCoords(host.clientWidth/2,host.clientHeight/2);
     try {localStorage.setItem(stateKey,JSON.stringify({version:1,layoutRevision:4,filters,enabled:[...enabled],sources:[...selectedSources],preset,animationMode,layoutSeed,selected,focusId,all:window.activityModals?.isAll(),positions,viewport:{...center,zoom:graphApi.zoom()}}));}
     catch { $('live').textContent='View could not be saved in this browser.'; }
