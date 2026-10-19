@@ -4,6 +4,198 @@ import importlib.util
 import os
 from pathlib import Path
 
+import pytest
+import yaml
+
+
+@pytest.fixture
+def managed_share(tmp_path, monkeypatch):
+    setup = load_setup_module()
+    home = tmp_path / "hermes"
+    profile = home / "profiles" / "sharecorpus"
+    profile.mkdir(parents=True, mode=0o700)
+    setup._write_private_text(profile / ".harqis-share-profile", "managed\n")
+    setup._write_private_text(profile / "config.yaml", setup.json.dumps(
+        setup.locked_down_profile_config("gpt-5.6-sol")
+    ))
+    setup._write_private_text(profile / ".env", setup._dotenv_text(
+        setup._profile_env_values(8643, "fixture-key")
+    ))
+    setup._write_private_text(profile / "auth.json", "{}\n")
+    app_env = tmp_path / "apps.env"
+    setup.upsert_env_file(app_env, setup._harqis_env_values(8643, "fixture-key", 120_000))
+    monkeypatch.setattr(setup, "_oauth_ready", lambda *args: True)
+    args = setup._parser().parse_args([
+        "--check", "--hermes-home", str(home), "--harqis-env", str(app_env)
+    ])
+    return setup, args, profile
+
+
+def test_check_accepts_hermes_migrated_yaml_without_rewriting(managed_share, monkeypatch):
+    setup, args, profile = managed_share
+    config = setup.locked_down_profile_config(args.model)
+    config["_config_version"] = 50
+    path = profile / "config.yaml"
+    path.write_text(yaml.safe_dump(config))
+    before = {p: p.read_bytes() for p in args.hermes_home.rglob("*") if p.is_file()}
+    checked = []
+    monkeypatch.setattr(setup, "_check_api", lambda **kw: checked.append(kw))
+
+    setup._check_setup(args)
+
+    assert checked == [{"base_url": "http://127.0.0.1:8643/v1",
+                        "api_key": "fixture-key", "expected_model": "share-corpus"}]
+    assert before == {p: p.read_bytes() for p in args.hermes_home.rglob("*") if p.is_file()}
+
+
+@pytest.mark.parametrize("change", [
+    {"gateway": {}},
+    {"gateway": {"standalone": False}},
+    {"gateway": {"standalone": "true"}},
+    {"gateway": {"standalone": 1}},
+    {"memory": {"memory_enabled": True, "user_profile_enabled": False}},
+    {"platform_toolsets": {"api_server": ["terminal"]}},
+    {"unknown_setting": True},
+    {"_config_version": "invalid"},
+])
+def test_check_rejects_unsafe_migrated_config_before_api(managed_share, monkeypatch, change):
+    setup, args, profile = managed_share
+    config = setup.locked_down_profile_config(args.model)
+    config.update(change)
+    (profile / "config.yaml").write_text(yaml.safe_dump(config))
+    monkeypatch.setattr(setup, "_check_api", lambda **kw: pytest.fail("unsafe API probe"))
+    with pytest.raises(RuntimeError, match="config"):
+        setup._check_setup(args)
+
+
+@pytest.fixture
+def loopback_api():
+    """Real HTTP boundary; no Hermes, OAuth, provider traffic or production port."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from threading import Thread
+
+    state = {"model": "share-corpus", "tools": False, "auth": True,
+             "cors": False, "redirect": False, "requests": []}
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            pass
+
+        def do_GET(self):
+            state["requests"].append(self.path)
+            if state["redirect"]:
+                self.send_response(302)
+                self.send_header("Location", "/must-not-follow")
+                self.end_headers()
+                return
+            if self.path != "/v1/health" and (
+                not state["auth"] or self.headers.get("Authorization") != "Bearer fixture-key"
+            ):
+                self.send_response(401)
+                self.end_headers()
+                return
+            payloads = {
+                "/v1/health": {"status": "ok"},
+                "/v1/models": {"data": [{"id": state["model"]}]},
+                "/v1/capabilities": {"model": state["model"], "features": {"cors": state["cors"]}},
+                "/v1/toolsets": {"data": [{"name": "terminal", "enabled": state["tools"]}]},
+            }
+            if self.path not in payloads:
+                self.send_response(404)
+                self.end_headers()
+                return
+            import json
+            body = json.dumps(payloads[self.path]).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield server.server_port, state
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def point_managed_share_at_port(managed_share, port):
+    setup, args, profile = managed_share
+    args.port = port
+    setup.upsert_env_file(profile / ".env", setup._profile_env_values(port, "fixture-key"))
+    setup.upsert_env_file(args.harqis_env, setup._harqis_env_values(port, "fixture-key", 120_000))
+
+
+def test_readiness_checks_real_authenticated_app_endpoint(managed_share, loopback_api):
+    setup, args, _ = managed_share
+    port, state = loopback_api
+    point_managed_share_at_port(managed_share, port)
+    setup._check_setup(args)
+    assert state["requests"] == ["/v1/health", "/v1/models", "/v1/capabilities", "/v1/toolsets"]
+
+
+@pytest.mark.parametrize("change", [
+    {"model": "default-private-agent"}, {"tools": True}, {"auth": False},
+    {"cors": True}, {"redirect": True},
+])
+def test_readiness_rejects_live_unsafe_or_wrong_endpoint(
+    managed_share, loopback_api, monkeypatch, change
+):
+    setup, args, _ = managed_share
+    port, state = loopback_api
+    state.update(change)
+    point_managed_share_at_port(managed_share, port)
+    monkeypatch.setattr(setup.time, "sleep", lambda seconds: None)
+    with pytest.raises(RuntimeError, match="API health check failed"):
+        setup._check_setup(args)
+    assert "/must-not-follow" not in state["requests"]
+
+
+def test_gateway_success_cannot_mask_missing_api_listener(managed_share, monkeypatch, capsys):
+    import socket
+    from types import SimpleNamespace
+
+    setup, args, _ = managed_share
+    commands = []
+
+    def gateway_success(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(returncode=0, stdout="served by default multiplexer", stderr="")
+
+    monkeypatch.setattr(setup, "_run", gateway_success)
+    monkeypatch.setattr(setup.time, "sleep", lambda seconds: None)
+    # Bound real network timeouts too: some OSes time out rather than refuse
+    # connections to a reserved-but-not-listening port.
+    build_opener = setup.urllib.request.build_opener
+
+    def bounded_opener(*handlers):
+        opener = build_opener(*handlers)
+        original_open = opener.open
+        opener.open = lambda request, timeout: original_open(request, timeout=min(timeout, 0.1))
+        return opener
+
+    monkeypatch.setattr(setup.urllib.request, "build_opener", bounded_opener)
+    # Hold the ephemeral port without listening: deterministic refusal, no port race.
+    with socket.socket() as reserved:
+        reserved.bind(("127.0.0.1", 0))
+        port = reserved.getsockname()[1]
+        point_managed_share_at_port(managed_share, port)
+        for action in ("--check", "--start"):
+            commands.clear()
+            with pytest.raises(RuntimeError, match="API health check failed"):
+                setup.main([action, "--hermes-home", str(args.hermes_home),
+                            "--harqis-env", str(args.harqis_env), "--port", str(port)])
+            assert "checks passed" not in capsys.readouterr().out
+            if action == "--check":
+                assert commands == []  # A health check never repairs or restarts.
+            else:
+                assert len(commands) == 2
+                assert all(command[1:3] == ["-p", "sharecorpus"] for command in commands)
+
 
 def load_setup_module():
     path = Path(__file__).resolve().parents[1] / "agents" / "hfl" / "setup_hfl_share_hermes.py"
@@ -33,6 +225,8 @@ def test_locked_down_profile_config_has_no_tools_memory_or_fallbacks():
     }
     assert config["platform_toolsets"] == {"api_server": []}
     assert config["platforms"] == {}
+    # A shared host claiming this profile does not serve its dedicated port.
+    assert config["gateway"] == {"standalone": True}
 
 
 def test_upsert_env_is_idempotent_private_and_preserves_unrelated_values(tmp_path):
