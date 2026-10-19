@@ -20,7 +20,7 @@ httpx>=0.28.1,<1
 ijson>=3.4,<4
 # 1.29.0 enters an invalid-request/error-notification loop with Codex 0.149.0
 # on Windows, causing the stdio server to retain gigabytes of memory.
-mcp==1.28.1
+mcp==1.30.0
 numpy>=1.26,<3
 openai>=1.50,<2
 paho-mqtt>=2.1,<3
