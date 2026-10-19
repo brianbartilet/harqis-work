@@ -777,6 +777,12 @@ def prior_artifact(run_id: str, name: str, request: Request, agent=Depends(worke
     return FileResponse(path, media_type='application/octet-stream', headers={'Cache-Control': 'no-store'})
 
 
+@worker_router.get('/ready')
+def worker_ready():
+    """Authenticated reachability only: never initialize stores or poll work."""
+    return {'status': 'ok', 'service': 'hfl-agent-bridge'}
+
+
 @worker_router.get('/queue')
 def queue():
     bridge_store().expire()

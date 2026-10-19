@@ -121,6 +121,26 @@ catalog includes `send_gmail_email`, Gmail search, and other required tools. Mis
 Google tools can indicate `MCP_ENABLED_APPS` filtering, registration/config errors,
 or an MCP server using a stale checkout. Restart that server after deploying.
 
+### Read-only readiness monitoring
+
+`agent_bridge_runner.py --check` imports the local Hermes runtime and performs a
+bounded authenticated `GET /api/hfl-agent/ready`. The response must be exactly
+`{"status": "ok", "service": "hfl-agent-bridge"}`. This verifies installation,
+reachability and worker-token acceptance; it does not prove task execution,
+provider access, storage health or downstream delivery. Check live worker process
+identity and recent polling/error evidence separately.
+
+The readiness route never opens stores, initializes schema, expires leases,
+reconciles actions or dispatches tasks. **Do not substitute `/queue`**: despite
+using GET, that route expires leases and reconciles actionable state. `/settings`
+also initializes its settings schema and is not a strict read-only probe.
+
+Deploy the frontend route before relying on the updated runner. Older frontends
+return 404, which is a verification/deployment gap, not proof of a bridge outage;
+never fall back to queue polling. Until deployment is authorized, monitor existing
+process identity and fresh authenticated polling evidence passively, explicitly
+reporting any missing readiness coverage rather than executing the old `--check`.
+
 ### Gmail delivery
 
 `send_gmail_email` supports text/HTML and up to 30 host-file attachments (20 MB total).
