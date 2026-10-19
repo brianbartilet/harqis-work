@@ -202,6 +202,8 @@ async def change_type(request: Request, identity: str, payload: KindWrite):
     if identity not in available:
         raise HTTPException(404, 'Entity unavailable; refresh the directory.')
     entity = available[identity]
+    if entity.get('is_owner') and payload.kind != 'people':
+        raise HTTPException(409, 'The corpus owner must remain a People entity.')
     data = validated_profile(Profile(**(entity.get('profile') or {'name': entity['label']})))
     try:
         await run_in_threadpool(get_store().save_profile, identity, payload.kind, data, actor)
@@ -249,6 +251,8 @@ async def save_profile(request: Request, identity: str, payload: Profile):
     available = {e['id']: e for e in await run_in_threadpool(entities.entity_index)}
     if identity not in available:
         raise HTTPException(404, 'Entity unavailable')
+    if available[identity].get('is_owner') and data['name'] != available[identity]['label']:
+        raise HTTPException(409, 'Update your owner name in /profile.')
     try:
         await run_in_threadpool(get_store().save_profile, identity, available[identity]['kind'], data, actor)
     except ValueError as exc:

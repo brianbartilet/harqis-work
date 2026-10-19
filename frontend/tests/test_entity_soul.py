@@ -15,7 +15,7 @@ def soul_data(monkeypatch):
     monkeypatch.setenv('HARQIS_ENTITY_AUTO_MATCH', '1')
     rows = [dict(id='entry-one', title='Work log', text='Brian finished the migration.', source='notes',
                  date='2026-10-19', tags=[], path='day.md', anchor='', ref='')]
-    monkeypatch.setattr(entities, 'current_entries', lambda: list(rows))
+    monkeypatch.setattr(entities, 'current_entries', lambda context='': list(rows))
     monkeypatch.setattr(resolution, 'dispatch_pending', lambda: None)
     monkeypatch.setattr(entity_matching, 'dispatch_pending', lambda: None)
     monkeypatch.setattr(entity_merges, 'flush_audits', lambda: None)
@@ -126,7 +126,7 @@ def test_relationship_edges_require_visible_endpoints(soul_data, authenticated_c
     payload['relationships'] = [dict(id='rel', target_id='company', relation='works_at', evidence='Owner confirmed')]
     save(authenticated_client, payload)
     resolution.process_batch(use_model=False)
-    assert not any(e['relation'] == 'works_at' for e in entities._corpus_graph()['edges'])
+    assert not any(e['relation'] == 'works_at' for e in entities._corpus_graph(since='2026-10-19')['edges'])
     company_entry = {**rows[0], 'id':'company-entry', 'text':'Acme', 'source':'calendar'}
     rows.append(company_entry)
     get_store().save(company_entry['id'], entities.entry_hash(company_entry),
@@ -240,26 +240,22 @@ def test_soul_editor_browser(soul_data, authenticated_client, tmp_path, width):
             page.goto('https://entities.test/hfl-corpus/entities')
             card = page.locator('[data-entity-id="brian"]')
             card.locator(':scope > summary').click()
-            card.get_by_text('Soul, identity and relationships', exact=True).click()
+            card.get_by_text('Soul and identity', exact=True).click()
             card.get_by_label('Soul (Markdown)').fill('# Brian Bartilet\nCorpus owner.')
             card.get_by_role('button', name='Add identity rule', exact=True).click()
             card.get_by_label('Observed name', exact=True).fill('Brian')
             card.get_by_label('Activity sources (one per line)').fill('notes')
-            card.get_by_role('button', name='Add relationship', exact=True).click()
-            card.get_by_label('Find entity by name').fill('Acme')
-            card.get_by_role('button', name='Acme · companies').click()
             card.get_by_role('button', name='Add journal note', exact=True).click()
             card.get_by_label('Note', exact=True).fill('Confirmed my identity.')
             card.get_by_role('button', name='Save soul', exact=True).click()
             page.wait_for_function("!document.querySelector('#entity-loading') || document.querySelector('#entity-loading').hidden")
             playwright.expect(card.locator('.entity-soul')).not_to_have_attribute('open','')
-            card.get_by_text('Soul, identity and relationships', exact=True).click()
+            card.get_by_text('Soul and identity', exact=True).click()
             playwright.expect(card.get_by_label('Soul (Markdown)')).to_have_value('# Brian Bartilet\nCorpus owner.')
             playwright.expect(card.get_by_label('Observed name', exact=True)).to_have_value('Brian')
-            playwright.expect(card.get_by_label('Find entity by name')).to_have_value('Acme')
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.screenshot(path=str(tmp_path / f'soul-{width}.png'), full_page=True)
-            for section, label in [('identity', 'Observed name'), ('relationships', 'Find entity by name'), ('journal', 'Note')]:
+            for section, label in [('identity', 'Observed name'), ('journal', 'Note')]:
                 card.get_by_label(label, exact=True).scroll_into_view_if_needed()
                 assert card.locator('.entity-soul').evaluate('(node) => node.scrollWidth <= node.clientWidth')
                 page.screenshot(path=str(tmp_path / f'soul-{section}-{width}.png'))

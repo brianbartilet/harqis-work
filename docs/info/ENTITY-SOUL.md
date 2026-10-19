@@ -92,3 +92,40 @@ directory query with explicit selection and stale-response rejection. Markdown
 uses `frontend/services/markdown.py`; script URLs use `static_asset` for versioned
 cache invalidation. Desktop and 390px browser tests cover save/reopen, relationship
 selection, identity scope and journal persistence.
+
+
+## Connections and the owner profile
+
+The entity directory and activity graph share **Create connections**. Search by
+entity type/name, select several entities, optionally set relationship, dates and
+supporting evidence, then save. Connections appear at both endpoints; directed
+relationships retain their source and incoming label. Editing and removal use
+version checks, and duplicate relationships do not add duplicate graph edges.
+Existing soul relationships remain the canonical storage; the separate Connections
+section does not replace or reset soul prose, identity rules or journal entries.
+
+Choose **Supporting activity** to explicitly link an existing corpus entry without
+rewriting its text. These links are stored separately from extracted mentions and
+follow entity merges. **Create entity** saves a named entity before any activity
+mentions it. Curated entities appear in the unfiltered graph even without activity.
+
+Saving from the graph reloads the applied filters. If a saved connection is hidden,
+**Show connected entities** opens an unfiltered view with the maximum graph budget;
+this temporary view does not overwrite the saved overview. Preview capacity limits
+still apply. Ordinary graph orbs grow with visible edge count using the existing
+logarithmic scale; board-specific manual sizes remain independent.
+
+The owner name in `/profile` is associated with one People entity. A unique exact
+name match is reused; multiple matches show **This is my owner profile** for explicit
+selection. Otherwise an entity is created. The association survives name changes
+and resolves through merges, while the original binding is retained for unmerge.
+The entity displays **Corpus owner**, links to `/profile`, and keeps its connections
+when renamed. Only the owner name is synchronized; private profile contact fields
+are not copied into entity context.
+
+Owner-only connection endpoints:
+
+- `GET /api/hfl/entities/connections/{identity}`: outgoing/incoming connections and versions.
+- `POST /api/hfl/entities/connections/{identity}`: atomic additions, edits and removals.
+- `GET /api/hfl/entities/connection-activities?q=...`: bounded activity picker results.
+- `POST /api/hfl/entities/owner-binding`: explicitly select an ambiguous owner identity.

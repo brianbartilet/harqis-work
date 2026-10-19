@@ -29,6 +29,8 @@ class EntityStore:
                 CREATE TABLE IF NOT EXISTS profiles(id TEXT PRIMARY KEY, kind TEXT NOT NULL,
                     data TEXT NOT NULL, updated TEXT DEFAULT CURRENT_TIMESTAMP);
                 CREATE TABLE IF NOT EXISTS state(key TEXT PRIMARY KEY, value TEXT);
+                CREATE TABLE IF NOT EXISTS entity_activity_links(entity_id TEXT NOT NULL, entry_id TEXT NOT NULL,
+                    actor TEXT NOT NULL, created TEXT NOT NULL, PRIMARY KEY(entity_id,entry_id));
                 CREATE TABLE IF NOT EXISTS entity_souls(id TEXT PRIMARY KEY, version INTEGER NOT NULL, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS entity_resolutions(entry_id TEXT NOT NULL, mention_id TEXT NOT NULL,
                     target_id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(entry_id,mention_id));

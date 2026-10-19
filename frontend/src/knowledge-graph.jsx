@@ -91,6 +91,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   if(pendingState?.preset==='mindmap')pendingState={...pendingState,preset:'timeline',positions:{},viewport:null,selected:null,focusId:null};
   function saveGraphState(){
     if(readOnly)return;
+    if(new URL(location.href).searchParams.get('connections')==='1')return;
     if(!stateReady||loading||capacityBlocked||!graphApi||window.HflIdeas?.maps.current)return;
     const filters=Object.fromEntries(['search','rolling','since','until'].map(id=>[id,$(id).value]));
     filters.shared=$('shared').checked;
@@ -658,7 +659,24 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     if(n?.outside_workspace){const note=document.createElement('p');note.className='kg-outside-workspace';note.textContent='Outside Space filters · Included as a member of this board.';$('detail').append(note);}
     if(n?.href&&n.kind==='entries') {const button=document.createElement('button');button.textContent='Open entry';button.className='kg-open-entry';button.onclick=()=>openEntry(n.id.replace(/^entry:/,''),n.locator);$('detail').append(button);}
     if(!exampleMode)window.HflIdeas?.inspect(n,$('detail'),data.edges);
-    if(n){const focus=document.createElement('button');focus.textContent='Focus on this connection';focus.className='kg-focus-button';focus.onclick=()=>{focusId=n.id;render();};$('detail').append(focus);}
+    if(n?.resolution&&!exampleMode&&!readOnly&&!window.HflIdeas?.maps.current){
+      const connect=document.createElement('button');connect.textContent='Create connections';
+      connect.onclick=()=>window.EntityConnections.open(n,async added=>{
+        const response=await fetch('/api/hfl/entities/graph?'+(appliedParams||requestParams().toString()),{cache:'no-store'});
+        if(!response.ok)throw Error('Saved, but graph refresh failed. Use Refresh to retry.');
+        const next=await response.json();graphSignature=signature(next);acceptGraph(next,true);select(n.id);
+        const missing=added.some(c=>{const target=c.activity?'entry:'+c.target_id:c.target_id;return !edges.some(e=>(e.a.id===n.id&&e.b.id===target)||(e.b.id===n.id&&e.a.id===target));});
+        if(missing){
+          const note=document.createElement('p');note.textContent='Saved connections are hidden by filters or preview limits.';
+          const reveal=document.createElement('button');reveal.textContent='Show connected entities';
+          reveal.onclick=()=>{window.location.href='/hfl-corpus/graph?select='+encodeURIComponent(n.id)+'&connections=1';};
+          $('detail').append(note,reveal);
+        }
+      },id=>{if(nodes.some(node=>node.id===id))select(id);else window.open('/hfl-corpus/graph?select='+encodeURIComponent(id),'_blank','noopener');});
+      $('detail').append(connect);
+    }
+
+    if(n){const focus=document.createElement('button');focus.textContent='Focus on this connection';focus.onclick=()=>{focusId=n.id;render();};$('detail').append(focus);}
     if(focusId){const back=document.createElement('button');back.textContent='Back to overview';back.onclick=()=>{focusId=null;render();};$('detail').append(back);}
     if(n){const clear=document.createElement('button');clear.textContent='Clear selection';clear.onclick=()=>select(null);$('detail').append(clear);}
     if(n&&window.HflIdeas?.maps.current){
@@ -770,6 +788,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     const map=window.HflIdeas?.maps.current;
     if(map){const members=new Set(map.members);next.nodes.filter(n=>members.has(n.list_id)).forEach(n=>members.add(n.id));const drafts=(map.drafts||[]).map(d=>({id:d.id,label:d.title,body:d.body,kind:'drafts',status:'board draft'}));next={...next,nodes:[...next.nodes.filter(n=>members.has(n.id)),...drafts],edges:[...next.edges.filter(e=>members.has(e.source)&&members.has(e.target)),...(map.edges||[]).map(e=>({...e,local:true,method:'board',evidence:'Board-only connection'}))]};next.total_nodes=next.nodes.length;next.truncated=false;}
     data=next;
+    if(new URL(location.href).searchParams.get('connections')==='1'){
+      pendingState=null;enabled=new Set(next.nodes.map(n=>n.kind));
+    }
     const requestedSelection=new URL(location.href).searchParams.get('select');
     if(!readOnly&&requestedSelection&&next.nodes.some(n=>n.id===requestedSelection)){
       selected=requestedSelection;focusId=null;$('search').value='';enabled.add(next.nodes.find(n=>n.id===selected).kind);
@@ -919,6 +940,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     requestController=new AbortController(); setLoading(true);showInfo('status','Loading your graph…',true);
     try {
       const params=requestParams();
+      if(new URL(location.href).searchParams.get('connections')==='1'){
+        for(const key of ['since','until','query','source','sources','context','shared'])params.delete(key);
+        params.set('node_limit','20000');params.set('edge_limit','100000');
+      }
       const response=await fetch('/api/hfl/entities/graph?'+params,{cache:'no-store',signal:requestController.signal});
       if(!response.ok)throw Error(response.status===401?'Sign in to view your knowledge graph.':'Graph could not load. Use Refresh to try again.');
       const next=await response.json();
@@ -926,7 +951,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     } catch(error){if(!exampleMode&&version===requestVersion&&error.name!=='AbortError'){$('info').dataset.error='true';showInfo('status',error.message,true);}} finally{if(version===requestVersion){setLoading(false);window.HflIdeas?.maps.finishDeletionTransition(!!$('info').dataset.error);}}
   }
   // Poll only the applied query, without a loading overlay or interrupting interaction.
-  const busy=()=>document.hidden||!!transition||dragNodes.size>0||activePointers.size>0||document.querySelector('.activity-modal[open]:not(#activity-standalone)')||loading||exampleMode||!$('views-panel').hidden||!$('animation-panel').hidden||$('filter-drawer').open||$('entry-dialog').open||document.querySelector('.idea-dialog[open]')||document.activeElement===$('search')||Date.now()-lastInteraction<500;
+  const busy=()=>!!document.querySelector('.entity-connections-dialog[open]')||document.hidden||!!transition||dragNodes.size>0||activePointers.size>0||document.querySelector('.activity-modal[open]:not(#activity-standalone)')||loading||exampleMode||!$('views-panel').hidden||!$('animation-panel').hidden||$('filter-drawer').open||$('entry-dialog').open||document.querySelector('.idea-dialog[open]')||document.activeElement===$('search')||Date.now()-lastInteraction<500;
   host.addEventListener('pointermove',event=>{if(event.buttons||activePointers.size)lastInteraction=Date.now();});
   host.addEventListener('pointerdown',event=>{activePointers.add(event.pointerId);lastInteraction=Date.now();},{capture:true});
   for(const name of ['pointerup','pointercancel'])window.addEventListener(name,event=>{
@@ -1041,6 +1066,12 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   window.addEventListener('hfl:activity-scope',()=>{focusId=null;selected=null;load();});
   $('entities').onclick=()=>window.activityModals.open('entities','');
 
+  if(new URL(location.href).searchParams.get('connections')==='1'){
+    pendingState=null;window.activityModals?.setAll(true);
+    for(const id of ['search','since','until'])$(id).value='';
+    $('rolling').value='0';
+    $('shared').checked=false;selectedSources.clear();
+  }
   if(pendingState){
     for(const id of ['search','rolling','since','until']){
       const value=pendingState.filters[id];
