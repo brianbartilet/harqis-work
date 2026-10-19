@@ -120,6 +120,12 @@ def projection(source='', since='', until='', context='', resolve_mentions=True)
     store = get_store()
     entries = current_entries(context) if context else current_entries()
     cache = store.records()
+    from workflows.hfl.entity_connections import activity_links
+    manual_links = activity_links()
+    manual_profiles = store.profiles()
+    links_by_entry = {}
+    for link in manual_links:
+        links_by_entry.setdefault(link['entry_id'], []).append(link)
     decisions = [d for d in store.decisions() if d['active']]
     aliases = {d['alias']: d['canonical'] for d in decisions}
     def resolve(identity):
@@ -136,6 +142,13 @@ def projection(source='', since='', until='', context='', resolve_mentions=True)
         valid = cached.get('hash') == entry_hash(entry) and cached.get('version') in {VERSION, VERSION + '-explicit'}
         mentions = cached['mentions'] if valid else explicit_mentions(entry)
         mentions = [m for m in mentions if not is_link(m['label']) and not is_link(m.get('external_id') or '')]
+        mentions = list(mentions)
+        for link in links_by_entry.get(entry['id'], []):
+            identity = resolve(link['entity_id'])
+            profile = manual_profiles.get(identity)
+            if link['entry_id'] == entry['id'] and profile and identity not in {resolve(m['id']) for m in mentions}:
+                mentions.append(dict(id=identity, label=profile['name'], kind=profile['kind'],
+                                     resolution='curated', method='user-confirmed', evidence='Manually linked supporting activity'))
         labels.update({m['id']: m['label'] for m in mentions})
         rows.append({**entry, 'mentions': [{**m, 'id': resolve(m['id'])} for m in mentions],
                      'enriched': valid and cached.get('version') == VERSION})
@@ -182,7 +195,14 @@ def _corpus_graph(source='', since='', until='', limit=100, query='', shared=Fal
     selected_sources = {source} if isinstance(source, str) and source else set(source or [])
     if selected_sources:
         rows = [e for e in rows if e['source'] in selected_sources]
-    profiles = get_store().profiles()
+    from modules.hfl_corpus.entity_owner import needs_sync
+    if needs_sync():
+        entity_index()  # Only reconcile changed/unbound owners; avoid a second corpus scan.
+    graph_store = get_store()
+    profiles = graph_store.profiles()
+    alias_ids = {d['alias'] for d in graph_store.decisions() if d['active']}
+    with graph_store.connection() as db:
+        alias_ids.update(r[0] for r in db.execute('SELECT id FROM entity_merges WHERE active=0'))
     # Scan compact references first; construct nodes/evidence only for the bounded view.
     from collections import Counter
     def targets(entry):
@@ -257,6 +277,15 @@ def _corpus_graph(source='', since='', until='', limit=100, query='', shared=Fal
                 nodes[target] = dict(id=target, label=value, kind=kind)
                 edges[(identity, target)] = dict(source=identity, target=target,
                     relation='from-source' if kind == 'sources' else 'occurred-on', evidence=value, method='corpus-metadata')
+    curated_ids = set()
+    # Curated entities without activity belong to the unfiltered owner overview.
+    if not (selected_sources or since or until or context or shared):
+        for identity, profile in profiles.items():
+            if identity not in alias_ids:
+                if not query or query in profile['name'].casefold():
+                    curated_ids.add(identity)
+                    if not limit or len(nodes) < budget:
+                        nodes.setdefault(identity, dict(id=identity, label=profile['name'], kind=profile['kind'], resolution='curated'))
     # Curated relationship edges stay within the currently permitted graph nodes.
     from workflows.hfl.entity_soul import all_souls
     store = get_store()
@@ -275,7 +304,7 @@ def _corpus_graph(source='', since='', until='', limit=100, query='', shared=Fal
                 relation=relationship['relation'], evidence=relationship.get('evidence', ''),
                 method='user-confirmed', provenance=relationship.get('provenance'))
     bounded_edges = list(edges.values()) if not limit else list(edges.values())[:limit * 4]
-    total_nodes = len(candidates) + len({t for e in candidates for t in targets(e) if t in allowed})
+    total_nodes = len(candidates) + len(available_targets | curated_ids)
     return dict(nodes=list(nodes.values()), edges=bounded_edges,
                 enriched=sum(e['enriched'] for e in rows), entries=len(rows),
                 matching_entries=len(candidates), total_nodes=total_nodes, limit=limit, sources=available_sources,
@@ -286,7 +315,7 @@ def _corpus_graph(source='', since='', until='', limit=100, query='', shared=Fal
 def entity_index(source='', since='', until='', context='', graph_query='', graph_sources=None, resolve_mentions=True):
     groups = {}
     entries_by_entity = {}
-    rows = projection(source, since, until, context, resolve_mentions=resolve_mentions)
+    rows = projection(source, since, until, context) if resolve_mentions else projection(source, since, until, context, resolve_mentions=False)
     profiles = get_store().profiles()
     query = graph_query.strip().casefold()
     for entry in rows:
@@ -323,11 +352,21 @@ def entity_index(source='', since='', until='', context='', graph_query='', grap
     decisions = store.decisions()
     aliases = {d['alias']: d['canonical'] for d in decisions if d['active']}
     for identity, profile in profiles.items():
-        if identity in aliases:
+        if identity in aliases or (identity in merged and not merged[identity]['active']):
             continue  # Alias profiles survive undo; contact details are never silently combined.
         if identity not in groups and not (source or since or until or context or query or graph_sources):
             groups[identity] = dict(id=identity, label=profile['name'], kind=profile['kind'],
                                     resolution='curated', entries=[])
+    from modules.hfl_corpus.entity_owner import synchronize
+    if source or since or until or context or query or graph_sources:
+        bound = store.state('owner-entity')
+        owner = {'id': store.resolve(bound) if bound else None, 'candidates': []}
+    else:
+        owner = synchronize(groups)
+    profiles = store.profiles()
+    if owner['id'] and owner['id'] not in groups and not (source or since or until or context or query or graph_sources):
+        profile = profiles[owner['id']]
+        groups[owner['id']] = dict(id=owner['id'], label=profile['name'], kind='people', resolution='curated', entries=[])
     legacy_by_canonical = {}
     for decision in decisions:
         if decision['active'] and not decision.get('merge_id'):
@@ -335,6 +374,8 @@ def entity_index(source='', since='', until='', context='', graph_query='', grap
     from workflows.hfl.entity_soul import all_souls, empty
     souls = all_souls()
     for identity, group in groups.items():
+        group['is_owner'] = identity == owner['id']
+        group['owner_candidate'] = identity in {e['id'] for e in owner['candidates']}
         group['merge'] = merged.get(identity)
         group['legacy_decisions'] = legacy_by_canonical.get(identity, [])
         profile = profiles.get(identity)

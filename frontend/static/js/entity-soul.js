@@ -2,7 +2,7 @@
 (() => {
   const el = (tag, text = '') => { const n = document.createElement(tag); n.textContent = text; return n; };
   window.entitySoulEditor = (entity, api, reload) => {
-    const panel = el('details'); panel.className = 'entity-soul'; panel.append(el('summary', 'Soul, identity and relationships'));
+    const panel = el('details'); panel.className = 'entity-soul entity-section'; panel.append(el('summary', 'Soul and identity'));
     let loaded = false;
     panel.addEventListener('toggle', async () => {
       if (!panel.open || loaded) return;
@@ -50,38 +50,6 @@
         }
         const ruleList = addSection('Identity rules', 'Saving a rule confirms that this observed name identifies this entity within the scope you specify.', 'Add identity rule', rule);
         soul.identity_rules.forEach(r => rule(ruleList, r));
-        function relationship(list, data = {}) {
-          const node = el('fieldset'), grid = el('div'); grid.className = 'profile-fields'; node.append(el('legend', 'Entity relationship'), grid);
-          const row = {id: data.id || crypto.randomUUID(), target: data.target_id || ''};
-          row.query = field(grid, 'Find entity by name', data.target_name || ''); row.query.autocomplete = 'off';
-          const status = el('p', data.target_name ? `Selected: ${data.target_name}` : 'Search to choose an entity.'); status.setAttribute('role', 'status');
-          const results = el('div'); results.className = 'soul-search-results'; grid.append(status, results);
-          let generation = 0, timer;
-          row.query.oninput = () => {
-            row.target = ''; const current = ++generation; clearTimeout(timer); results.replaceChildren(); status.textContent = 'Searching…';
-            timer = setTimeout(async () => {
-              try {
-                if (!row.query.value.trim()) { status.textContent = 'Search to choose an entity.'; return; }
-                const data = await api('?' + new URLSearchParams({q: row.query.value.trim(), limit: '20'}));
-                if (current !== generation || row.removed) return;
-                const choices = data.entities.filter(e => e.id !== entity.id); status.textContent = choices.length ? 'Choose a matching entity.' : 'No matching entities.';
-                for (const choice of choices) {
-                  const button = el('button', `${choice.label} · ${choice.kind}`); button.type = 'button';
-                  button.onclick = () => { generation++; row.target = choice.id; row.query.value = choice.label; status.textContent = `Selected: ${choice.label}`; results.replaceChildren(); }; results.append(button);
-                }
-              } catch (error) { if (current === generation) status.textContent = error.message; }
-            }, 250);
-          };
-          const label = el('label', 'Relationship'); row.relation = el('select');
-          for (const value of ['colleague_of', 'works_at', 'member_of', 'owns', 'uses', 'related_to']) { const option = el('option', value.replaceAll('_', ' ')); option.value = value; row.relation.append(option); }
-          row.relation.value = data.relation || 'related_to'; label.append(row.relation); grid.append(label);
-          row.since = field(grid, 'Since', data.since || ''); row.since.type = 'date';
-          row.until = field(grid, 'Until', data.until || ''); row.until.type = 'date';
-          row.evidence = field(grid, 'Basis or supporting activity link', data.evidence || '', true);
-          provenance(node, data); remove(node, row); list.append(node); relationships.push(row);
-        }
-        const relationshipList = addSection('Relationships', 'Record explicit connections to other entities. Dates are optional.', 'Add relationship', relationship);
-        soul.relationships.forEach(r => relationship(relationshipList, r));
         function note(list, data = {}) {
           const node = el('fieldset'), row = {id: data.id || crypto.randomUUID()}; node.append(el('legend', 'Journal note'));
           row.text = field(node, 'Note', data.text || '', true); row.text.required = true; row.text.maxLength = 4000;
@@ -97,10 +65,10 @@
         form.onsubmit = async event => {
           event.preventDefault(); save.disabled = true; cancel.disabled = true; feedback.textContent = 'Saving…';
           try {
-            if (relationships.some(r => !r.removed && !r.target)) throw Error('Choose a target for each relationship.');
+
             const payload = {version: soul.version, markdown: markdown.value,
               identity_rules: rules.filter(r => !r.removed).map(r => ({id:r.id, observed_name:r.name.value, sources:lines(r.sources), required_context:lines(r.required), excluded_context:lines(r.excluded), enabled:r.enabled.checked})),
-              relationships: relationships.filter(r => !r.removed).map(r => ({id:r.id, target_id:r.target, relation:r.relation.value, since:r.since.value, until:r.until.value, evidence:r.evidence.value})),
+              relationships: soul.relationships.map(({id,target_id,relation,since,until,evidence}) => ({id,target_id,relation,since,until,evidence})),
               journal: journal.filter(r => !r.removed).map(r => ({id:r.id, text:r.text.value}))};
             await api('/soul/' + encodeURIComponent(entity.id), payload);
             feedback.textContent = 'Saved. Matching has been queued.';

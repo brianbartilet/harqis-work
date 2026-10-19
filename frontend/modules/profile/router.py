@@ -90,6 +90,15 @@ async def save_profile(request: Request):
             status_code=422,
         )
     store.save(stamp(draft))
+    # Reconcile through the full directory so existing People entities are reused.
+    from modules.hfl_corpus.entities import entity_index
+    from starlette.concurrency import run_in_threadpool
+    from workflows.hfl.entity_store import get_store
+    from modules.hfl_corpus.entity_owner import synchronize
+    if get_store().state('owner-entity'):
+        await run_in_threadpool(synchronize)
+    else:
+        await run_in_threadpool(entity_index)
     response = RedirectResponse("/profile?saved=true", status_code=303)
     if pin_change:
         clear_unlocked_cookie(response)

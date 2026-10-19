@@ -3989,8 +3989,189 @@ paths:
               schema: {}
       security:
       - HTTPBearer: []
+  /api/hfl/entities/connections/{identity}:
+    get:
+      summary: Read Connections
+      operationId: read_connections_api_hfl_entities_connections__identity__get
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+    post:
+      summary: Write Connections
+      operationId: write_connections_api_hfl_entities_connections__identity__post
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectionsWrite'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/connection-activities:
+    get:
+      summary: Activity Options
+      operationId: activity_options_api_hfl_entities_connection_activities_get
+      parameters:
+      - name: q
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Q
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/owner-binding:
+    post:
+      summary: Bind Owner
+      operationId: bind_owner_api_hfl_entities_owner_binding_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OwnerBinding'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
+    ConnectionChange:
+      properties:
+        id:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Id
+        target_id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Target Id
+        relation:
+          type: string
+          enum:
+          - colleague_of
+          - works_at
+          - member_of
+          - owns
+          - uses
+          - related_to
+          title: Relation
+        since:
+          type: string
+          pattern: ^(\d{4}-\d{2}-\d{2})?$
+          title: Since
+          default: ''
+        until:
+          type: string
+          pattern: ^(\d{4}-\d{2}-\d{2})?$
+          title: Until
+          default: ''
+        evidence:
+          type: string
+          maxLength: 2000
+          title: Evidence
+          default: ''
+        source_id:
+          type: string
+          maxLength: 200
+          title: Source Id
+          default: ''
+        activity:
+          type: boolean
+          title: Activity
+          default: false
+        remove:
+          type: boolean
+          title: Remove
+          default: false
+      additionalProperties: false
+      type: object
+      required:
+      - target_id
+      - relation
+      title: ConnectionChange
+    ConnectionsWrite:
+      properties:
+        changes:
+          items:
+            $ref: '#/components/schemas/ConnectionChange'
+          type: array
+          maxItems: 100
+          title: Changes
+        versions:
+          additionalProperties:
+            type: integer
+          type: object
+          title: Versions
+      additionalProperties: false
+      type: object
+      required:
+      - changes
+      - versions
+      title: ConnectionsWrite
+    OwnerBinding:
+      properties:
+        identity:
+          type: string
+          title: Identity
+      type: object
+      required:
+      - identity
+      title: OwnerBinding
     AuditRequest:
       properties:
         run_id:

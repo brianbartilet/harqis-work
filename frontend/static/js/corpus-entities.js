@@ -70,6 +70,7 @@
     ]) {
       const label = el('label', title), input = el(multiline ? 'textarea' : 'input');
       input.name = key; input.value = value; input.defaultValue = value;
+      if(key==='name'&&entity.is_owner){input.readOnly=true;input.title='Update your owner name in /profile';}
       if (multiline) input.rows = key === 'notes' ? 4 : 2;
       input.placeholder = {categories: 'One category per line', emails: 'One email address per line', phones: 'One phone number per line', references: 'One website, social-media URL, file link or absolute file path per line', notes: 'Add context, reminders or useful details…'}[key] || '';
       fields[key] = input;
@@ -156,8 +157,8 @@
           undo.onclick = () => run(async () => { undo.disabled = true; undo.textContent = 'Unmerging…'; try { await api('/decisions/' + decision.id + '/undo', {}); await load(); } finally { undo.disabled = false; undo.textContent = 'Unmerge previous alias'; } });
           mergeActions.append(undo);
         }
-        card.append(mergeActions);
-        const audit = el('details'); audit.className = 'entity-audit'; audit.append(el('summary', 'Entity audit history'));
+        const management = el('div'); management.className = 'entity-management-row'; management.append(mergeActions); card.append(management);
+        const audit = el('details'); audit.className = 'entity-audit entity-section'; audit.append(el('summary', 'Entity audit history'));
         audit.addEventListener('toggle', async () => {
           if (!audit.open || audit.dataset.loaded) return;
           audit.dataset.loaded = 'true'; const content = el('div', 'Loading history…'); content.setAttribute('role', 'status'); audit.append(content);
@@ -171,7 +172,7 @@
               const snapshot = el('details'); snapshot.append(el('summary', 'Preserved profile values'), el('pre', JSON.stringify(event.data, null, 2))); content.append(snapshot);
             }
           } catch (err) { content.textContent = err.message; audit.dataset.loaded = ''; }
-        }); card.append(audit);
+        });
         if (e.profile) { const contactLine = el('p', [...(e.profile.emails || []), ...(e.profile.phones || []), e.profile.notes].filter(Boolean).join('\n')); contactLine.className = 'contact-line'; card.append(contactLine); }
         if (e.profile?.references?.length) {
           card.append(el('h2', 'References'));
@@ -191,8 +192,31 @@
         typeSave.onclick = async () => { typeSave.disabled = true; try { await api('/type/' + encodeURIComponent(e.id), {kind:typeSelect.value}); await load(); await matchingStatus(); } catch (err) { typeFeedback.textContent = err.message; } finally { typeSave.disabled = false; } };
         const typeControls = el('div'); typeControls.className = 'entity-type-controls';
         typeLabel.append(typeSelect); typeControls.append(typeLabel, typeSave);
-        card.append(typeControls, typeFeedback, editor(e), window.entitySoulEditor(e, api, load), el('h2', 'Supporting activity'));
-        if (!e.entries.length) card.append(el('p', 'No current supporting entries. Your saved profile remains available.'));
+        management.append(typeControls);
+        if (e.is_owner) {
+          const owner = el('a', 'Corpus owner · Managed in /profile'); owner.href = '/profile'; owner.className = 'entity-owner-link'; management.prepend(owner);
+          typeSelect.disabled = true; typeSave.disabled = true;
+        } else if (e.owner_candidate) {
+          const bind = el('button', 'This is my owner profile'); bind.type = 'button';
+          bind.onclick = async () => { try { await api('/owner-binding', {identity:e.id}); await load(); } catch(error) { typeFeedback.textContent=error.message; } }; card.append(bind);
+        }
+        const connections = el('details'); connections.className = 'entity-section'; connections.append(el('summary', 'Connections'));
+        const connectionList = el('div'), connect = el('button', 'Create connections'); connect.type = 'button';
+        connect.onclick = () => window.EntityConnections.open(e, async () => { await load(); });
+        connections.append(connect, connectionList);
+        connections.addEventListener('toggle', async () => {
+          if (!connections.open) return;
+          connectionList.textContent = 'Loading connections…';
+          try {
+            const data = await api('/connections/' + encodeURIComponent(e.id)); connectionList.replaceChildren();
+            for (const c of data.connections) { const row=el('p'), link=el('a', c.label); link.href=c.activity?'/hfl-corpus/entities/entry/'+encodeURIComponent(c.target_id):'/hfl-corpus/graph?select='+encodeURIComponent(c.other_id); row.append(link, document.createTextNode(' · '+(c.incoming?'Incoming: ':'')+c.relation.replaceAll('_',' '))); connectionList.append(row); }
+            if(!data.connections.length)connectionList.textContent='No connections yet.';
+          } catch(error) { connectionList.textContent=error.message; }
+        });
+        const supporting = el('details'); supporting.className = 'entity-section'; supporting.append(el('summary', 'Supporting activity'));
+        const profileEditor = editor(e); profileEditor.classList.add('entity-section');
+        card.append(typeFeedback, profileEditor, window.entitySoulEditor(e, api, load), connections, supporting, audit);
+        if (!e.entries.length) supporting.append(el('p', 'No current supporting entries. Your saved profile remains available.'));
         for (const entry of e.entries) {
           const row = el('div'), link = el('a', entry.date.slice(0, 10) + ' · ' + entry.title); link.href = entry.href; link.target = '_blank'; link.rel = 'noopener noreferrer';
           const meta = el('p', entry.source + ' · ' + entry.method); meta.className = 'entity-meta'; row.append(link, meta, el('blockquote', entry.evidence));
@@ -201,7 +225,7 @@
             const undo = el('button', 'Keep this mention separate'); undo.type = 'button';
             undo.onclick = async () => { undo.disabled = true; try { await api('/resolutions/' + encodeURIComponent(entry.id) + '/' + encodeURIComponent(assignment.mention_id) + '/undo', {}); await load(); } catch (error) { meta.textContent = error.message; undo.disabled = false; } }; row.append(undo);
           }
-          card.append(row);
+          supporting.append(row);
         }
       });
       $('entity-list').append(card);

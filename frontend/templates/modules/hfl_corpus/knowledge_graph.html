@@ -1,7 +1,7 @@
 {% extends "modules/hfl_corpus/modal_base.html" if request.query_params.get('embed') == '1' else "base.html" %}
 {% block body_class %}activity-modal-page activity-workspace-page{% endblock %}
 {% block title %}HARQIS — Activity Graph{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ static_asset('css/corpus-workspaces.css') }}"><link rel="stylesheet" href="{{ static_asset('css/hfl-timeline.css') }}"><link rel="stylesheet" href="{{ static_asset('css/knowledge-graph.css') }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ static_asset('css/entity-connections.css') }}"><link rel="stylesheet" href="{{ static_asset('css/corpus-workspaces.css') }}"><link rel="stylesheet" href="{{ static_asset('css/hfl-timeline.css') }}"><link rel="stylesheet" href="{{ static_asset('css/knowledge-graph.css') }}">{% endblock %}
 {% block content %}
 <main class="kg-shell{% if request.query_params.get('readonly') == '1' %} kg-readonly{% endif %}" data-readonly="{{ 'true' if request.query_params.get('readonly') == '1' else 'false' }}" data-view-owner="{{ user }}">
   {% if request.query_params.get('embed') == '1' %}
@@ -136,5 +136,6 @@
 {% include "modules/hfl_corpus/partials/kanban_workspace_state.html" %}
 <script src="{{ static_asset('js/corpus-workspaces.js') }}" defer></script>
 <script src="{{ static_asset('js/view-visualizer.js') }}" defer></script>
+<script src="{{ static_asset('js/entity-connections.js') }}" defer></script>
 <script src="{{ static_asset('js/knowledge-graph.js') }}" defer></script>
 {% endblock %}
