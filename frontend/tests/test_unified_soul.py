@@ -70,19 +70,28 @@ def test_unified_dialog_unsaved_and_error_retention(soul_data, authenticated_cli
         browser=engine.chromium.launch(headless=True,**({} if Path(engine.chromium.executable_path).exists() else {'channel':'msedge'}))
         try:
             page=browser.new_page(viewport={'width':1440,'height':1000})
+            searches = []
             def route_request(route):
                 req=route.request
+                if '/api/hfl/entities?' in req.url:
+                    searches.append(req.url)
                 if req.method=='POST' and '/soul-editor/' in req.url:
                     route.fulfill(status=409,json={'detail':'Entity details changed. Your edits are retained.'});return
                 response=authenticated_client.request(req.method,req.url.replace('https://entities.test',''),content=req.post_data_buffer,headers={'content-type':'application/json'})
                 route.fulfill(status=response.status_code,body=response.content,headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding','content-length'}})
             page.route('https://entities.test/**',route_request)
             page.goto('https://entities.test/hfl-corpus/entities')
+            searches.clear()
             card=page.locator('[data-entity-id="brian"]');card.locator(':scope > summary').click()
             card.get_by_role('button',name='Update soul',exact=True).click()
             dialog=page.get_by_role('dialog',name='Brian Bartilet')
             playwright.expect(dialog.get_by_text('Identity matching helpers',exact=True)).to_be_visible()
             assert dialog.locator('form > details[open]').count()==0
+            assert searches == []
+            dialog.get_by_text('Connections', exact=True).click()
+            playwright.expect(dialog.get_by_text('matching entities;', exact=False)).to_be_visible()
+            assert len(searches) == 1
+            dialog.get_by_text('Connections', exact=True).click()
             box=dialog.bounding_box();assert abs(box['x']+box['width']/2-720)<2
             page.screenshot(path='results/unified-soul-collapsed.png')
             dialog.get_by_text('Identity matching helpers',exact=True).click()
@@ -241,6 +250,20 @@ def test_save_spinner_and_failed_reload_retry(soul_data, authenticated_client):
             dialog.get_by_text('Identity matching helpers', exact=True).click()
             playwright.expect(dialog.get_by_label('Notes', exact=True)).to_have_value('Saved despite reload failure')
             assert counts['posts'] == 1
-            assert counts['directory'] == 1
+            assert counts['directory'] == 0
         finally:
             browser.close()
+
+
+def test_editor_reads_corpus_once(soul_data, authenticated_client, monkeypatch):
+    from modules.hfl_corpus import entities
+    original = entities.current_entries
+    calls = []
+    def counted(*args, **kwargs):
+        calls.append(True)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(entities, 'current_entries', counted)
+    response = authenticated_client.get('/api/hfl/entities/soul-editor/brian')
+    assert response.status_code == 200
+    assert response.json()['types']
+    assert len(calls) == 1

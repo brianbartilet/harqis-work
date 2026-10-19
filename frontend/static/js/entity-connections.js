@@ -31,7 +31,7 @@
     const status = el('p', 'Loading soul…'); status.setAttribute('role', 'status'); status.className='soul-status';
     const content = el('div'); dialog.append(header, status, content); hostDocument.body.append(dialog);
     const previousFocus = document.activeElement;
-    let generation = 0, timer, busy = false, dirty = false, directoryCache;
+    let generation = 0, timer, busy = false, dirty = false;
     const markDirty = () => { dirty = true; };
     const mayLeave = () => !busy && (!dirty || hostDocument.defaultView.confirm('Discard unsaved Soul changes?'));
     const close = () => { if(mayLeave())dialog.close(); };
@@ -55,8 +55,8 @@
     };
     async function initialize() {
       try {
-        const [saved, directory] = await Promise.all([api('/soul-editor/' + encodeURIComponent(entity.id)), directoryCache || api('?limit=1')]);
-        directoryCache = directory;
+        const saved = await api('/soul-editor/' + encodeURIComponent(entity.id));
+        const directory = {types: saved.types};
         if (!dialog.isConnected) return;
         content.replaceChildren(); if(!status.textContent.startsWith('Soul saved'))status.textContent = '';
         dirty=false;
@@ -216,7 +216,11 @@
           finally { busy = false;content.inert=false;dialog.classList.remove('is-saving');dialog.removeAttribute('aria-busy');controls.forEach(([control,disabled])=>{control.disabled=disabled;}); }
         };
         outerForm.addEventListener('invalid', event => { let node=event.target.parentElement;while(node&&node!==outerForm){if(node.tagName==='DETAILS')node.open=true;node=node.parentElement;} },true);
-        renderExisting(); dialog.classList.remove('is-loading');await searchOptions();return true;
+        let searched = false;
+        connections.addEventListener('toggle', () => {
+          if (connections.open && !searched) { searched = true; searchOptions(); }
+        });
+        renderExisting(); dialog.classList.remove('is-loading');return true;
       } catch (error) { dialog.classList.remove('is-loading');status.textContent = error.message; content.replaceChildren(button('Retry', () => initialize()));return false; }
     }
     initialize();

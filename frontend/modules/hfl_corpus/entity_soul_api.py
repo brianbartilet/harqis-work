@@ -73,9 +73,9 @@ class SoulWrite(BaseModel):
         return self
 
 
-def snapshot():
+def snapshot(*, entries=None):
     from modules.hfl_corpus.entities import entity_index
-    return {e['id']: e for e in entity_index()}
+    return {e['id']: e for e in (entity_index(entries=entries) if entries is not None else entity_index())}
 
 
 @router.get('/context/{identity}')
@@ -246,8 +246,11 @@ def editor_snapshot(identity):
     from workflows.hfl.entity_soul import all_souls, empty
     from services.markdown import render_markdown
     from modules.hfl_corpus.entities import current_entries
-    available = snapshot()
-    entries = {e['id']: e for e in current_entries()}
+    entries = current_entries()
+    available = snapshot(entries=entries)
+    entries = {e['id']: e for e in entries}
+    from workflows.hfl.entity_types import listing
+    types = listing()
     with get_store().connection() as db:
         db.execute('BEGIN')
         result = connection_snapshot(identity, available, db, entries)
@@ -255,6 +258,7 @@ def editor_snapshot(identity):
         if profile:
             import json
             result['entity']['profile'] = json.loads(profile[0])
+        result['types'] = types
         result['soul'] = all_souls(db).get(identity, empty())
         result['soul_html'] = str(render_markdown(result['soul']['markdown']))
         result['revision'] = editor_revision(db, identity)
