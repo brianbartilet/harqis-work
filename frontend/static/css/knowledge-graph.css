@@ -334,3 +334,10 @@
 .kg-capacity-help p:last-child{margin-bottom:0}
 .kg-capacity-help strong{color:#cbd5e1}
 @media(prefers-reduced-motion:reduce){.kg-main-filters #kg-shared::after{transition:none}}
+
+/* Inspector commands share sizing and neutral styling; Add retains its menu affordance. */
+.kg-shell #kg-detail>button{background:#111e30;border:1px solid #33465f;border-radius:8px;color:#dbe5ef;font:inherit;font-size:12px;min-height:40px;padding:10px 14px}
+.kg-shell #kg-detail>button:hover{background:#20344d;border-color:#526c8d}
+.kg-shell #kg-detail .idea-add-toggle{box-sizing:border-box;width:100%;min-height:40px;border-radius:8px;font-size:12px;padding:10px 14px}
+.kg-shell #kg-detail .kg-action-separator{border:0;border-top:1px solid #293d55;margin:20px 0 10px}
+.kg-shell #kg-detail .idea-inspector-status-row{margin:0 0 12px}

@@ -676,9 +676,25 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       $('detail').append(connect);
     }
 
-    if(n){const focus=document.createElement('button');focus.textContent='Focus on this connection';focus.onclick=()=>{focusId=n.id;render();};$('detail').append(focus);}
+    if(n){const focus=document.createElement('button');focus.textContent='Focus';focus.onclick=()=>{focusId=n.id;render();};$('detail').append(focus);}
     if(focusId){const back=document.createElement('button');back.textContent='Back to overview';back.onclick=()=>{focusId=null;render();};$('detail').append(back);}
     if(n){const clear=document.createElement('button');clear.textContent='Clear selection';clear.onclick=()=>select(null);$('detail').append(clear);}
+    if(n&&!window.HflIdeas?.maps.current){
+      const root=$('detail');
+      const status=root.querySelector('.idea-inspector-status-row');
+      if(status)root.insertBefore(status,description);
+      const commonOrder=['Add','Create connections','Start board','Focus','Clear selection','Back to overview'];
+      const specificOrder=['Open entry','Promote','Create connected action','Clone','Edit','Dismiss','Restore','Manage links'];
+      const controls=[...root.children].filter(child=>child.tagName==='BUTTON'||child.classList.contains('idea-add-menu'));
+      const label=control=>control.classList.contains('idea-add-menu')?'Add':control.textContent;
+      const common=controls.filter(control=>commonOrder.includes(label(control)));
+      const specific=controls.filter(control=>!commonOrder.includes(label(control)));
+      common.sort((a,b)=>commonOrder.indexOf(label(a))-commonOrder.indexOf(label(b)));
+      const rank=control=>{const index=specificOrder.indexOf(label(control));return index<0?specificOrder.length:index;};
+      specific.sort((a,b)=>rank(a)-rank(b));
+      root.append(...common);
+      if(specific.length){const separator=document.createElement('hr');separator.className='kg-action-separator';root.append(separator,...specific);}
+    }
     if(n&&window.HflIdeas?.maps.current){
       // Reuse the inspector's commands so board permissions and workflows stay identical.
       nodeActions=[...$('detail').querySelectorAll(':scope > button')].map(button=>{
