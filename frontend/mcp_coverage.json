@@ -1902,6 +1902,13 @@
     },
     {
       "method": "GET",
+      "path": "/api/hfl-agent/ready",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Worker-authenticated, store-free readiness protocol; not an owner CRUD operation."
+    },
+    {
+      "method": "GET",
       "path": "/api/hfl-agent/settings",
       "status": "protocol",
       "tools": [],
