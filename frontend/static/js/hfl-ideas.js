@@ -583,7 +583,7 @@ window.HflObjectDescription = (item = {}) => {
     if (!node) return;
     if (maps.current) root.append(button(boardSelection.has(node.id)?'Deselect object':'Select for copy / delete',()=>{selectBoardNode(node.id,true);changed();}));
     if (node.kind==='lists'||node.kind==='thoughts') root.append(button('Edit live list',()=>editList(node.list_id||node.id)));
-    if (['ideas','actions'].includes(node.kind)) root.append(button(node.kind==='ideas'?'Clone idea':'Clone action',()=>cloneObject(node.kind==='ideas'?'idea':'actionable',node.object_id)));
+    if (node.kind==='ideas') root.append(button('Clone',()=>cloneObject('idea',node.object_id)));
     if(maps.current&&['lists','thoughts','drafts'].includes(node.kind))root.append(button(node.kind==='lists'?'Clone list':'Clone thought',()=>runBoardCommand(async()=>{
       await maps.flush();maps.status.textContent='Cloning '+node.label+'…';
       const result=await api('/maps/'+maps.current.id+'/paste','POST',{source_board:maps.current.id,source_version:maps.current.version,selected:[node.id],version:maps.current.version,request_id:crypto.randomUUID()});
@@ -604,7 +604,7 @@ window.HflObjectDescription = (item = {}) => {
     if(node.kind==='boards')root.append(button('Open board',async()=>{try{await maps.selectBoard((await api('/maps/'+node.object_id)).item);}catch(error){maps.status.textContent=error.message;}}));
     if (node.kind === 'goals') root.append(el('p', node.success_criteria || 'Add success criteria to define achievement.'), button('Edit Goal / milestones', () => editGoal(node.object_id)));
     if (maps.current) root.append(button('Add thought', () => editThought(null, node.id)), button('Connect on this board', () => connectThought(node)), button('Use as starting point', async () => { try { await maps.persist({root: node.id}); changed(); } catch (error) { maps.status.textContent = error.message; } }));
-    else root.append(button('Start board from this', () => maps.edit(null, node)));
+    else root.append(button('Start board', () => maps.edit(null, node)));
     if (node.status) {
       const status = String(node.status).toLowerCase().replaceAll('_', ' ').replaceAll('-', ' ');
       const row = el('p', undefined, 'idea-inspector-status idea-inspector-status-row');
@@ -612,14 +612,14 @@ window.HflObjectDescription = (item = {}) => {
       pill.dataset.status = status.replaceAll(' ', '-');
       row.append(el('span', 'Status'), pill);root.append(row);
     }
-    if (node.kind === 'ideas') root.append(button('Edit idea', () => editIdea(node.object_id)), button('Promote to action', () => convert(node.object_id)),button('Create connected action',()=>openEditor('actionable',{},node)),button(node.status==='dismissed'?'Restore idea':'Dismiss idea',async()=>{
+    if (node.kind === 'ideas') root.append(button('Edit', () => editIdea(node.object_id)), button('Promote', () => convert(node.object_id)),button('Create connected action',()=>openEditor('actionable',{},node)),button(node.status==='dismissed'?'Restore':'Dismiss',async()=>{
       try{const {item}=await api('/objects/'+node.object_id);await api('/objects/'+node.object_id,'PATCH',{version:item.version,status:item.status==='dismissed'?'suggested':'dismissed'});changed(null,false,true);}catch(error){maps.status.textContent=error.message;}
     }));
-    if (node.kind === 'actions') root.append(button('Edit action', async () => { try { const {item} = await request('/hfl-corpus/timeline/items/' + node.object_id); openEditor('actionable', item); } catch (error) { const d = dialog('Action unavailable'); d.error.textContent = error.message; } }));
-    if(node.kind==='actions')root.append(button(node.status==='dismissed'?'Restore action':'Dismiss action',async()=>{
+    if (node.kind === 'actions') root.append(button('Edit', async () => { try { const {item} = await request('/hfl-corpus/timeline/items/' + node.object_id); openEditor('actionable', item); } catch (error) { const d = dialog('Action unavailable'); d.error.textContent = error.message; } }));
+    if(node.kind==='actions')root.append(button(node.status==='dismissed'?'Restore':'Dismiss',async()=>{
       try{const {item}=await request('/hfl-corpus/timeline/items/'+node.object_id);await request('/hfl-corpus/timeline/items/'+node.object_id,{method:'PATCH',body:JSON.stringify({version:item.version,status:item.status==='dismissed'?'open':'dismissed'})});changed(null,false,true);}catch(error){maps.status.textContent=error.message;}
     }));
-    if (!maps.current && ['entries', 'daily', 'topics', 'tools', 'ideas', 'actions', 'goals'].includes(node.kind)) {
+    if (!maps.current && (node.resolution || ['sources', 'entries', 'daily', 'topics', 'tools', 'ideas', 'actions', 'goals'].includes(node.kind))) {
       const menu = el('div', undefined, 'idea-add-menu'), panel = el('div', undefined, 'idea-add-options');
       panel.id = 'idea-add-' + crypto.randomUUID(); panel.hidden = true; panel.setAttribute('role', 'menu'); panel.setAttribute('aria-label', 'Add object');
       const toggle = button('Add', () => setOpen(panel.hidden)); toggle.className = 'idea-add-toggle';
