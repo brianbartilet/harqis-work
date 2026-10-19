@@ -42,6 +42,8 @@ def refresh_corpus_entities(self, entry_id='*', revision=None, use_model=True):
                     db.execute('UPDATE pending SET queued_at=? WHERE id=?', (time.time(), entry_id))
             store.state('job', {'state': 'running', 'id': self.request.id})
             result = enrich(entry_id=None if entry_id == '*' else entry_id, use_model=use_model)
+            from workflows.hfl.entity_resolution import dispatch_pending as dispatch_resolutions
+            dispatch_resolutions()
             from workflows.hfl.entity_matching import dispatch_pending
             dispatch_pending()
             if result['pending'] and result['processed']:
@@ -84,3 +86,28 @@ def match_corpus_entities(self, job_id):
             db.execute('UPDATE entity_match_jobs SET error=?,state=CASE WHEN ? THEN ? ELSE state END WHERE id=?',
                        (type(exc).__name__, self.request.retries >= 4, 'failed', job_id))
         raise self.retry(exc=exc, countdown=min(300, 15 * 2 ** self.request.retries))
+
+
+@SPROUT.task(bind=True, acks_late=True, reject_on_worker_lost=True, max_retries=4)
+def resolve_corpus_entities(self):
+    frontend = str(Path(__file__).resolve().parents[3] / 'frontend')
+    if frontend not in sys.path:
+        sys.path.insert(0, frontend)
+    from workflows.hfl.entity_resolution import process_batch
+    from workflows.hfl.entity_store import get_store
+    lock = FileLock(str(get_store().path) + '.resolution.lock', timeout=0)
+    try:
+        lock.acquire()
+    except Timeout:
+        self.apply_async(queue=os.environ.get('HARQIS_ENTITIES_QUEUE', 'hfl'), countdown=30,
+                         retries=self.request.retries)
+        return {'state': 'deferred'}
+    try:
+        result = process_batch()
+        if result['pending']:
+            self.apply_async(queue=os.environ.get('HARQIS_ENTITIES_QUEUE', 'hfl'), countdown=2)
+        return result
+    except Exception as exc:
+        raise self.retry(exc=exc, countdown=min(300, 15 * 2 ** self.request.retries))
+    finally:
+        lock.release()

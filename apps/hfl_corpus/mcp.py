@@ -662,6 +662,21 @@ def register_hfl_corpus_tools(mcp: FastMCP):
     # --- Canonical frontend operations (also exposed through the shared CLI) ---
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def get_hfl_corpus_entity_context(identity: str) -> dict:
+        """Read an entity's soul, scoped identity rules, relationships and supporting activity."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).get_entity_context(identity))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_soul(identity: str, soul: dict) -> dict:
+        """Replace owner-authored soul fields with optimistic version checking.
+
+        Read get_hfl_corpus_entity_context first. Supply version, markdown,
+        identity_rules, relationships and journal; remove server provenance from
+        records. Explicitly scoped rules authorize future mention resolution.
+        """
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).update_entity_soul(identity, soul))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
     def list_hfl_corpus_entities(
         query: str = '',
         kind: str = '',

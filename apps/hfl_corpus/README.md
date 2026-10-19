@@ -183,6 +183,8 @@ routes; deploy that API revision before using newly exposed graph-view tools.
 | `download_hfl_corpus_reference_media` | Download reference image/video content. This writes a local file. |
 | `download_hfl_corpus_reference_thumbnail` | Download a reference thumbnail. This writes a local file. |
 | `list_hfl_corpus_entities` | Search the entity directory with explicit pagination (limit 1–10000). |
+| `get_hfl_corpus_entity_context` | Read the entity soul, scoped identity rules, relationships and bounded activity. |
+| `update_hfl_corpus_entity_soul` | Replace soul fields using the current version; confirms explicit identity rules. |
 | `get_hfl_corpus_entity_graph` | Read the entity graph; limit is 0–1000, with 0 requesting all nodes. |
 | `get_hfl_corpus_entity_entry` | Read an entity-linked entry preview and its safe references. |
 | `get_hfl_corpus_entity_status` | Read entity enrichment state and legacy merge decisions. |

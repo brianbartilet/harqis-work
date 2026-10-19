@@ -69,8 +69,10 @@ def test_entity_review_contract_matches_runtime():
     root = Path(__file__).resolve().parents[2]
     contract = yaml.safe_load((root / 'apps/hfl_corpus/openapi.yaml').read_text(encoding='utf-8'))
     live = app.openapi()
-    for suffix in ('types', 'create', 'type/{identity}', 'merges/batch', 'matching', 'backfill'):
+    for suffix in ('types', 'create', 'type/{identity}', 'merges/batch', 'matching', 'backfill',
+                   'soul/{identity}', 'context/{identity}', 'resolutions/{entry_id}/{mention_id}/undo'):
         path = '/api/hfl/entities/' + suffix
         assert contract['paths'][path] == live['paths'][path]
-    for name in ('TypeWrite', 'TypedProfile', 'KindWrite', 'BatchSubmit', 'MergeSubmit'):
+    for name in ('TypeWrite', 'TypedProfile', 'KindWrite', 'BatchSubmit', 'MergeSubmit',
+                 'SoulWrite', 'IdentityRule', 'Relationship', 'JournalEntry'):
         assert contract['components']['schemas'][name] == live['components']['schemas'][name]

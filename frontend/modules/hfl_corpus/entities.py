@@ -116,7 +116,7 @@ def enrich(*, entry_id=None, use_model=True, batch_size=8):
     return result
 
 
-def projection(source='', since='', until='', context=''):
+def projection(source='', since='', until='', context='', resolve_mentions=True):
     store = get_store()
     entries = current_entries(context) if context else current_entries()
     cache = store.records()
@@ -141,8 +141,20 @@ def projection(source='', since='', until='', context=''):
                      'enriched': valid and cached.get('version') == VERSION})
     reviewed = {resolve(d['canonical']) for d in decisions}
     profiles = store.profiles()
+    from workflows.hfl import entity_soul, entity_resolution
+    souls = entity_soul.all_souls()
+    with store.connection() as db:
+        assigned = entity_resolution.assignments(entries, profiles, souls, db) if resolve_mentions else {}
     for row in rows:
         for m in row['mentions']:
+            assignment = assigned.get((row['id'], m['id']))
+            if assignment:
+                m['original_id'] = m['id']
+                m['original_label'] = m['label']
+                m['id'] = assignment['target_id']
+                m['label'] = profiles[m['id']]['name']
+                m['resolution'] = 'resolved-mention'
+                m['assignment'] = assignment
             if m['id'] in profiles:
                 m['kind'] = profiles[m['id']]['kind']
             if m['id'] in reviewed:
@@ -245,6 +257,23 @@ def _corpus_graph(source='', since='', until='', limit=100, query='', shared=Fal
                 nodes[target] = dict(id=target, label=value, kind=kind)
                 edges[(identity, target)] = dict(source=identity, target=target,
                     relation='from-source' if kind == 'sources' else 'occurred-on', evidence=value, method='corpus-metadata')
+    # Curated relationship edges stay within the currently permitted graph nodes.
+    from workflows.hfl.entity_soul import all_souls
+    store = get_store()
+    for identity, soul in all_souls().items():
+        if identity not in nodes:
+            continue
+        for relationship in soul['relationships']:
+            target = store.resolve(relationship['target_id'])
+            if target not in nodes or target == identity:
+                continue
+            if since and relationship.get('until') and relationship['until'] < since:
+                continue
+            if until and relationship.get('since') and relationship['since'] > until:
+                continue
+            edges[(identity, target, relationship['id'])] = dict(source=identity, target=target,
+                relation=relationship['relation'], evidence=relationship.get('evidence', ''),
+                method='user-confirmed', provenance=relationship.get('provenance'))
     bounded_edges = list(edges.values()) if not limit else list(edges.values())[:limit * 4]
     total_nodes = len(candidates) + len({t for e in candidates for t in targets(e) if t in allowed})
     return dict(nodes=list(nodes.values()), edges=bounded_edges,
@@ -254,10 +283,10 @@ def _corpus_graph(source='', since='', until='', limit=100, query='', shared=Fal
                 truncated=total_nodes > len(nodes) or len(edges) > len(bounded_edges))
 
 
-def entity_index(source='', since='', until='', context='', graph_query='', graph_sources=None):
+def entity_index(source='', since='', until='', context='', graph_query='', graph_sources=None, resolve_mentions=True):
     groups = {}
     entries_by_entity = {}
-    rows = projection(source, since, until, context) if context else projection(source, since, until)
+    rows = projection(source, since, until, context, resolve_mentions=resolve_mentions)
     profiles = get_store().profiles()
     query = graph_query.strip().casefold()
     for entry in rows:
@@ -275,11 +304,15 @@ def entity_index(source='', since='', until='', context='', graph_query='', grap
             if existing:
                 if m['evidence'] not in existing['evidence'].split('\n\n'):
                     existing['evidence'] += '\n\n' + m['evidence']
+                if m.get('assignment'):
+                    existing['assignments'].append(dict(mention_id=m['original_id'], **m['assignment']))
                 continue
             entity['entries'].append(dict(id=entry['id'], title=entry['title'], date=entry['date'],
                 source=entry['source'], evidence=m['evidence'], method=m['method'],
                 content_hash=entry_hash(entry), origin_id=entry.get('origin_id'),
-                href='/hfl-corpus/entities/entry/' + quote(entry['id'], safe='')))
+                href='/hfl-corpus/entities/entry/' + quote(entry['id'], safe=''),
+                mention_id=m.get('original_id', m['id']), assignment=m.get('assignment'),
+                assignments=[dict(mention_id=m['original_id'], **m['assignment'])] if m.get('assignment') else []))
             entry_index[entry['id']] = entity['entries'][-1]
     for group in groups.values():
         group['entries'].sort(key=lambda e: e['date'], reverse=True)
@@ -299,11 +332,14 @@ def entity_index(source='', since='', until='', context='', graph_query='', grap
     for decision in decisions:
         if decision['active'] and not decision.get('merge_id'):
             legacy_by_canonical.setdefault(decision['canonical'], []).append(decision)
+    from workflows.hfl.entity_soul import all_souls, empty
+    souls = all_souls()
     for identity, group in groups.items():
         group['merge'] = merged.get(identity)
         group['legacy_decisions'] = legacy_by_canonical.get(identity, [])
         profile = profiles.get(identity)
         group['profile'] = profile
+        group['soul'] = souls.get(identity, empty())
         group['categories'] = profile.get('categories', []) if profile else []
         if profile:
             group['label'] = profile['name']

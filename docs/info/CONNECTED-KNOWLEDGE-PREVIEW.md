@@ -1,5 +1,8 @@
 # Activity Corpus entities — local review
 
+For versioned Markdown souls, identity rules, entity relationships, journal notes,
+and immediate mention resolution, see [Entity souls](ENTITY-SOUL.md).
+
 This branch replaces the standalone Connected Knowledge product with Graph and Entities inside Activity Corpus.
 
 ## Open locally

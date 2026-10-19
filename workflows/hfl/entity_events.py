@@ -23,6 +23,8 @@ def dispatch_pending():
         return {'state': 'disabled'}
     from workflows.hfl.entity_matching import dispatch_pending as dispatch_matches
     dispatch_matches()
+    from workflows.hfl.entity_resolution import dispatch_pending as dispatch_resolutions
+    dispatch_resolutions()
     from core.apps.sprout.app.celery import SPROUT
     store = get_store()
     with store.connection() as db:
