@@ -204,7 +204,8 @@
         const updateSoul=el('button','Update soul');updateSoul.type='button';updateSoul.className='update-soul-button';
         updateSoul.onclick=()=>window.EntityConnections.open(e,async()=>{await load();});soulActions.append(updateSoul);
         const supporting = el('details'); supporting.className = 'entity-section'; supporting.append(el('summary', 'Supporting activity'));
-        card.append(typeFeedback,soulActions,supporting,audit);
+        management.insertBefore(soulActions,mergeActions);
+        card.append(typeFeedback,supporting,audit);
         if (!e.entries.length) supporting.append(el('p', 'No current supporting entries. Your saved profile remains available.'));
         for (const entry of e.entries) {
           const row = el('div'), link = el('a', entry.date.slice(0, 10) + ' · ' + entry.title); link.href = entry.href; link.target = '_blank'; link.rel = 'noopener noreferrer';

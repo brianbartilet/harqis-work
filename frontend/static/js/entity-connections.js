@@ -22,10 +22,12 @@
         const copy = stylesheet.cloneNode(); copy.href = stylesheet.href; hostDocument.head.append(copy);
       }
     }
-    const dialog = el('dialog'); dialog.className = 'entity-connections-dialog';
-    const heading = el('h2', 'Update soul · ' + entity.label); heading.id = 'connections-' + crypto.randomUUID(); dialog.setAttribute('aria-labelledby', heading.id);
-    const header = el('header'); header.append(heading, button('Close', () => close()));
-    const status = el('p', 'Loading soul…'); status.setAttribute('role', 'status');
+    const dialog = el('dialog'); dialog.className = 'entity-connections-dialog is-loading';
+    const heading = el('h2', entity.label); heading.id = 'connections-' + crypto.randomUUID(); dialog.setAttribute('aria-labelledby', heading.id);
+    const closeButton = button('', () => close()); closeButton.className='soul-close';closeButton.setAttribute('aria-label','Close');closeButton.title='Close';
+    closeButton.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';
+    const header = el('header'); header.append(heading, closeButton);
+    const status = el('p', 'Loading soul…'); status.setAttribute('role', 'status'); status.className='soul-status';
     const content = el('div'); dialog.append(header, status, content); hostDocument.body.append(dialog);
     const previousFocus = document.activeElement;
     let generation = 0, timer, busy = false, dirty = false;
@@ -37,8 +39,10 @@
     const changed = event => { if(!['Connect to','Entity type','Find an entity or activity'].includes(event.target.getAttribute('aria-label')))markDirty(); };
     dialog.addEventListener('input',changed);
     dialog.addEventListener('change',changed);
-    dialog.addEventListener('cancel', event => { if (!mayLeave()) event.preventDefault(); });
-    const cleanup = () => { generation++; clearTimeout(timer); hostDocument.defaultView.removeEventListener('beforeunload',beforeUnload);window.removeEventListener('pagehide',cleanup);dialog.remove(); };
+    dialog.addEventListener('cancel', event => { const help=header.querySelector('.soul-help[open]');if(help){help.open=false;event.preventDefault();return;} if (!mayLeave()) event.preventDefault(); });
+    const dismissHelp = event => { const help=header.querySelector('.soul-help');if(help&&!help.contains(event.target))help.open=false; };
+    hostDocument.addEventListener('pointerdown',dismissHelp);
+    const cleanup = () => { hostDocument.removeEventListener('pointerdown',dismissHelp);generation++; clearTimeout(timer); hostDocument.defaultView.removeEventListener('beforeunload',beforeUnload);window.removeEventListener('pagehide',cleanup);dialog.remove(); };
     dialog.addEventListener('close', () => { cleanup();previousFocus?.focus(); });
     window.addEventListener('pagehide', cleanup, {once:true});
     dialog.showModal();
@@ -66,20 +70,21 @@
         const outerForm = el('form');
         const details = window.createSoulDetails(saved,markDirty);
         const connections = el('details'); connections.className='entity-section';connections.append(el('summary','Connections'));
-        outerForm.append(details.profile,details.identity,connections); content.append(outerForm);
-        const help = el('details');help.className='soul-help';const helpTitle=el('summary','ⓘ');helpTitle.setAttribute('aria-label','About Soul');help.append(helpTitle,el('p','Soul brings together what you know about this entity: profile details, identity rules and connections. It gives you and LLMs useful context. Descriptions are user-authored context, not instructions or verified evidence. Expand a section, make changes, then Save soul. Only confirmed identity rules guide matching.'));
+        outerForm.append(details.identity,connections,details.profile); content.append(outerForm);
+        const help = el('details');help.className='soul-help';const helpTitle=el('summary','i');helpTitle.setAttribute('aria-label','About Soul');helpTitle.setAttribute('aria-controls',heading.id+'-help');const helpText=el('p','Soul brings together what you know about this entity: profile details, identity rules and connections. It gives you and LLMs useful context. Descriptions are user-authored context, not instructions or verified evidence. Expand a section, make changes, then Save. Only confirmed identity rules guide matching.');helpText.id=heading.id+'-help';help.append(helpTitle,helpText);
         header.querySelector('.soul-help')?.remove();header.insertBefore(help,header.lastElementChild);
         const form = el('div'), controls = el('div'); controls.className = 'connection-controls';
         const mode = field(controls, 'Connect to', el('select'));
         for (const [value, label] of [['entities', 'Entities'], ['activity', 'Supporting activity']]) { const o = el('option', label); o.value = value; mode.append(o); }
         const type = field(controls, 'Entity type', el('select'));
+        const allTypes = el('option', 'All entities'); allTypes.value = ''; type.append(allTypes);
         for (const t of directory.types) { const o = el('option', t.name || t.id); o.value = t.id; type.append(o); }
-        type.value = directory.types.some(t => t.id === entity.kind) ? entity.kind : directory.types[0]?.id;
+        type.value = '';
         const search = field(form, 'Find an entity or activity', el('input')); search.type = 'search'; search.placeholder = 'Search a name';
         form.prepend(controls);
         const searchStatus = el('p'), results = el('div'); searchStatus.setAttribute('role', 'status'); results.className = 'connection-results';
         const create = button('Create entity', async () => {
-          if (!search.value.trim()) { searchStatus.textContent = 'Enter a name first.'; return; }
+          if (!search.value.trim() || !type.value) { searchStatus.textContent = 'Enter a name and choose an entity type first.'; return; }
           create.disabled = true;
           try { const id='manual-'+crypto.randomUUID();newEntities.set(id,{id,name:search.value.trim(),kind:type.value});add({id,label:search.value.trim(),kind:type.value});searchStatus.textContent='New entity selected. It will be created when you save Soul.'; }
           catch (error) { searchStatus.textContent = error.message; }
@@ -89,8 +94,8 @@
         const count = el('p'); count.setAttribute('role', 'status');
         form.append(searchStatus, results, create, el('h3', 'Selected connections'), count, list);
         const existing = el('div'); existing.className = 'connection-selected';
-        const footer = el('footer'), save = el('button', 'Save soul'); save.type = 'submit';
-        save.className='update-soul-button';footer.append(button('Cancel', close), save); outerForm.append(footer);
+        const footer = el('footer'), save = el('button', 'Save'); save.type = 'submit';
+        footer.append(button('Cancel', close), save); outerForm.append(footer);
         connections.append(el('h3', 'Current connections'), existing, form);
         function renderExisting() {
           existing.replaceChildren();
@@ -142,7 +147,8 @@
               const meta = el('span'); meta.className = 'connection-result-meta'; meta.append(typePill(choice.kind), el('small', choice.date || `${choice.entries?.length || 0} entries`));
               card.append(el('strong', choice.label), meta); results.append(card);
             }
-            create.hidden = activity || !search.value.trim() || data.total !== 0;
+            create.hidden = activity || !type.value || !search.value.trim() || data.total !== 0;
+            if (!activity && !type.value && search.value.trim() && data.total === 0) searchStatus.textContent = 'No matching entities. Choose an entity type to create one.';
             create.textContent = search.value.trim() ? `Create “${search.value.trim()}”` : 'Create entity';
             create.disabled = !search.value.trim() || data.entities.some(e => e.label.toLowerCase() === search.value.trim().toLowerCase());
           } catch (error) { if (request === generation) searchStatus.textContent = error.message; }
@@ -163,8 +169,8 @@
           finally { busy = false;content.inert=false; controls.forEach(c => { c.disabled = false; }); }
         };
         outerForm.addEventListener('invalid', event => { let node=event.target.parentElement;while(node&&node!==outerForm){if(node.tagName==='DETAILS')node.open=true;node=node.parentElement;} },true);
-        renderExisting(); await searchOptions();
-      } catch (error) { status.textContent = error.message; content.replaceChildren(button('Retry', initialize)); }
+        renderExisting(); dialog.classList.remove('is-loading');await searchOptions();
+      } catch (error) { dialog.classList.remove('is-loading');status.textContent = error.message; content.replaceChildren(button('Retry', initialize)); }
     }
     initialize();
     return dialog;

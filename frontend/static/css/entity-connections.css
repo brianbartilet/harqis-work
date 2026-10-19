@@ -30,14 +30,14 @@ dialog.entity-connections-dialog{position:fixed;inset:0;margin:auto;max-width:ca
 .entity-shell .entity-management-row{justify-content:flex-start;align-items:flex-end}
 .entity-shell .entity-management-row .entity-type-controls{flex:0 1 auto}
 .entity-shell .entity-management-row .entity-type-controls>label{flex:0 1 200px;width:200px;margin:0}
-.entity-shell .entity-management-row .merge-card-actions{margin-left:auto}
+.entity-shell .entity-management-row .merge-card-actions{margin-left:0}
 .entity-shell .entity-management-row .merge-card-actions button{background:#422f10;border-color:#eab308;color:#fde68a;min-height:44px}
 .entity-shell .entity-management-row .merge-card-actions button:hover{background:#5c4215}
 @media(max-width:540px){.entity-shell .entity-management-row .entity-type-controls{max-width:100%}.entity-shell .entity-management-row .entity-type-controls>label{width:160px;flex:0 1 160px}}
 
-.entity-soul-actions{display:flex;justify-content:center;margin:20px 0}
-.entity-shell .update-soul-button,.entity-connections-dialog .update-soul-button,.kg-shell #kg-detail>button.update-soul-button{background:#4c1d38;border:1px solid #be537f;color:#fce7f3;border-radius:8px;padding:10px 18px;min-height:44px}
-.entity-shell .update-soul-button:hover,.entity-connections-dialog .update-soul-button:hover,.kg-shell #kg-detail>button.update-soul-button:hover{background:#70264e;border-color:#f18ab6}
+.entity-shell .entity-management-row .entity-soul-actions{display:flex;justify-content:flex-end;margin:0 0 0 auto}
+.entity-shell .update-soul-button,.entity-connections-dialog .update-soul-button,.kg-shell #kg-detail>button.update-soul-button{background:#352b3c;border:1px solid #80677e;color:#e6d5e3;border-radius:8px;padding:10px 18px;min-height:44px}
+.entity-shell .update-soul-button:hover,.entity-connections-dialog .update-soul-button:hover,.kg-shell #kg-detail>button.update-soul-button:hover{background:#45364b;border-color:#a1849c}
 .entity-connections-dialog .entity-section{border:1px solid #334155;border-radius:10px;padding:16px;margin:16px 0;background:#0b1322}
 .entity-connections-dialog .entity-section>summary{cursor:pointer;font-weight:600;list-style:none;padding-right:28px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2360a5fa' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 7.5 5 5 5-5'/%3E%3C/svg%3E") right center/20px no-repeat}
 .entity-connections-dialog .entity-section>summary::-webkit-details-marker{display:none}
@@ -48,9 +48,26 @@ dialog.entity-connections-dialog{position:fixed;inset:0;margin:auto;max-width:ca
 .entity-connections-dialog .entity-soul fieldset{min-width:0;border:1px solid #334155;border-radius:8px;padding:16px;margin:16px 0}
 .entity-connections-dialog .entity-soul section{margin:24px 0}
 .entity-connections-dialog .entity-soul section>p{margin:12px 0 16px}
-.entity-connections-dialog .soul-help{font-size:14px}
-.entity-connections-dialog .soul-help>summary{cursor:pointer;list-style:none;color:#f9a8d4;padding:8px}
-.entity-connections-dialog .soul-help[open]{flex-basis:100%;order:3;border-top:1px solid #334155}
-.entity-connections-dialog footer{position:sticky;bottom:-24px;padding:16px 0;background:#0f172a;z-index:2}
+/* Match the corpus search help popover without changing header layout. */
+.entity-connections-dialog header{position:relative}
+.entity-connections-dialog .soul-help{font-size:12px}
+.entity-connections-dialog .soul-help>summary{box-sizing:border-box;display:flex;align-items:center;justify-content:center;width:16px;height:16px;cursor:pointer;list-style:none;border:1px solid #475569;border-radius:50%;color:#94a3b8;font-size:10px;line-height:1;padding:0}
+.entity-connections-dialog .soul-help>summary::-webkit-details-marker{display:none}
+.entity-connections-dialog .soul-help>summary:hover{border-color:#3b82f6;color:#93c5fd}
+.entity-connections-dialog .soul-help>p{position:absolute;right:0;top:calc(100% + 8px);z-index:5;box-sizing:border-box;width:min(288px,calc(100vw - 80px));margin:0;padding:12px;border:1px solid #1e40af;border-radius:8px;background:#020617;color:#cbd5e1;font-size:12px;line-height:1.6;box-shadow:0 10px 20px #0006}
+.entity-connections-dialog footer{position:static;padding:16px 0 0;background:#0f172a}
+.entity-connections-dialog .soul-contact-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.entity-connections-dialog .soul-contact-fields textarea{height:44px;min-height:44px;resize:vertical}
+.entity-connections-dialog .connection-type-pill{gap:6px;color:var(--entity-color);background:color-mix(in srgb,var(--entity-color) 12%,transparent);border-color:color-mix(in srgb,var(--entity-color) 25%,transparent)}
+.entity-connections-dialog .connection-type-pill::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
+.entity-connections-dialog{min-height:min(420px,90dvh)}
+.entity-connections-dialog .soul-status:empty{display:none}
+.entity-connections-dialog.is-loading .soul-status{display:flex;gap:12px;align-items:center;justify-content:center;min-height:260px;color:#94a3b8}
+.entity-connections-dialog.is-loading .soul-status::before{content:'';width:24px;height:24px;box-sizing:border-box;border:2px solid #334155;border-top-color:#f9a8d4;border-radius:50%;animation:soul-spin .8s linear infinite}
+@keyframes soul-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.entity-connections-dialog.is-loading .soul-status::before{animation:none;border-top-color:#f9a8d4}}
 .entity-connections-dialog .prose{overflow-wrap:anywhere}.entity-connections-dialog .prose pre{white-space:pre-wrap}
-@media(max-width:540px){.entity-connections-dialog .profile-fields{grid-template-columns:1fr}.entity-connections-dialog footer{bottom:-16px;flex-wrap:wrap}}
+@media(max-width:540px){.entity-connections-dialog .profile-fields{grid-template-columns:1fr}.entity-connections-dialog footer{flex-wrap:wrap}.entity-connections-dialog .soul-contact-fields{grid-template-columns:1fr}}
+
+.entity-connections-dialog .soul-close{display:flex;align-items:center;justify-content:center;width:44px;height:44px;padding:12px}
+.entity-connections-dialog .soul-close svg{display:block;width:18px;height:18px}
