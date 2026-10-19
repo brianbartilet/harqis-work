@@ -40,7 +40,8 @@
     dialog.addEventListener('input',changed);
     dialog.addEventListener('change',changed);
     dialog.addEventListener('cancel', event => { const help=header.querySelector('.soul-help[open]');if(help){help.open=false;event.preventDefault();return;} if (!mayLeave()) event.preventDefault(); });
-    const dismissHelp = event => { const help=header.querySelector('.soul-help');if(help&&!help.contains(event.target))help.open=false; };
+    let collapseConnectionEditor = () => {};
+    const dismissHelp = event => { collapseConnectionEditor(event.target); const help=header.querySelector('.soul-help');if(help&&!help.contains(event.target))help.open=false; };
     hostDocument.addEventListener('pointerdown',dismissHelp);
     const cleanup = () => { hostDocument.removeEventListener('pointerdown',dismissHelp);generation++; clearTimeout(timer); hostDocument.defaultView.removeEventListener('beforeunload',beforeUnload);window.removeEventListener('pagehide',cleanup);dialog.remove(); };
     dialog.addEventListener('close', () => { cleanup();previousFocus?.focus(); });
@@ -90,49 +91,90 @@
           catch (error) { searchStatus.textContent = error.message; }
           finally { create.disabled = false; }
         });
-        const list = el('div'); list.className = 'connection-selected';
-        const count = el('p'); count.setAttribute('role', 'status');
-        form.append(searchStatus, results, create, el('h3', 'Selected connections'), count, list);
-        const existing = el('div'); existing.className = 'connection-selected';
+        form.append(searchStatus, results, create);
+        const existing = el('div'); existing.className = 'connection-selected connection-current';
         const footer = el('footer'), save = el('button', 'Save'); save.type = 'submit';
         footer.append(button('Cancel', close), save); outerForm.append(footer);
         connections.append(el('h3', 'Current connections'), existing, form);
+        const cards = new Map();
+        for (const original of saved.connections) {
+          cards.set(original.source_id + ':' + original.id, {record: clean(original), original, label: original.label, kind: original.kind, otherId: original.other_id});
+        }
+        let activeEditor;
+        collapseConnectionEditor = target => {
+          if (activeEditor && !activeEditor.row.contains(target)) {
+            activeEditor.editor.hidden = true;
+            activeEditor.edit.setAttribute('aria-expanded', 'false');
+            activeEditor.row.classList.remove('is-editing');
+            activeEditor.refresh();
+            activeEditor = null;
+          }
+        };
+        function clean(c, remove = false) { return Object.fromEntries(Object.entries({...c, remove}).filter(([k]) => ['id', 'source_id', 'target_id', 'relation', 'since', 'until', 'evidence', 'activity', 'remove'].includes(k))); }
+        function stage(card) {
+          markDirty();
+          if (card.original) changes.set(card.original.source_id + ':' + card.original.id, clean(card.record, card.record.remove));
+        }
         function renderExisting() {
+          activeEditor = null;
           existing.replaceChildren();
-          if (!saved.connections.length) existing.append(el('p', 'No saved connections yet.'));
-          for (const connection of saved.connections) {
+          const visible = [...cards.entries()].filter(([,card]) => !card.record.remove);
+          if (!visible.length) existing.append(el('p', 'No connections yet. Choose an entity or activity below.'));
+          for (const [key, card] of visible) {
+            const {record, original} = card;
             const row = el('div'); row.className = 'connection-card';
-            const key = connection.source_id + ':' + connection.id;
-            row.append(button(connection.label, () => navigate(connection.other_id, connection.activity)), el('small', connection.kind + ' · ' + (connection.incoming ? 'Incoming: ' : '') + connection.relation.replaceAll('_', ' ')));
-            if (connection.since || connection.until) row.append(el('small', (connection.since || 'Any start') + ' — ' + (connection.until || 'No end')));
-            if (connection.evidence) row.append(el('p', connection.evidence));
-            if (!connection.activity) row.append(button('Edit connection', () => {
-              add({id:connection.target_id,label:connection.label,kind:connection.kind}, connection);
+            row.append(button(card.label, () => { if (!newEntities.has(record.target_id)) navigate(card.otherId, record.activity); }));
+            const meta = el('div'); meta.className = 'connection-result-meta';meta.append(typePill(card.kind));
+            const summary = el('small'), pending = el('small');
+            const refresh = () => {
+              summary.textContent = (original?.incoming ? 'Incoming: ' : '') + record.relation.replaceAll('_', ' ') +
+                (record.since || record.until ? ' · ' + (record.since || 'Any start') + ' — ' + (record.until || 'No end') : '');
+              pending.textContent = !original || changes.has(key) ? 'Not saved' : '';
+            };
+            meta.append(pending);row.append(meta,summary);
+            const actions = el('div');actions.className='connection-card-actions';
+            const editor = el('div');editor.className='connection-card-editor';editor.hidden=true;
+            if (!record.activity) {
+              const edit = button('Edit', () => {
+                collapseConnectionEditor(null);
+                editor.hidden=false;row.classList.add('is-editing');edit.setAttribute('aria-expanded','true');
+                activeEditor={row,editor,edit,refresh};
+                editor.querySelector('select').focus();
+              });
+              edit.setAttribute('aria-expanded','false');actions.append(edit);
+              const grid=el('div');grid.className='connection-controls';
+              const relation=field(grid,'Relationship',el('select'));
+              for(const value of relations){const option=el('option',value.replaceAll('_',' '));option.value=value;relation.append(option);}
+              relation.value=record.relation;
+              relation.onchange=()=>{record.relation=relation.value;stage(card);refresh();};
+              for(const [name,title] of [['since','Since'],['until','Until']]){
+                const input=field(grid,title,el('input'));input.type='date';input.value=record[name];
+                input.oninput=()=>{record[name]=input.value;stage(card);refresh();};
+              }
+              editor.append(grid);
+              const evidence=field(editor,'Basis or supporting activity link (optional)',el('textarea'));
+              evidence.maxLength=2000;evidence.value=record.evidence;
+              evidence.oninput=()=>{record.evidence=evidence.value;stage(card);refresh();};
+              row.addEventListener('focusout',event=>{if(event.relatedTarget&&!row.contains(event.relatedTarget))collapseConnectionEditor(event.relatedTarget);});
+            }
+            actions.append(button('Remove',()=>{
+              if(original){record.remove=true;stage(card);}
+              else{selected.delete(card.otherId);newEntities.delete(record.target_id);cards.delete(key);markDirty();}
+              renderExisting();searchOptions();
             }));
-            row.append(button(changes.has(key) ? 'Undo removal' : 'Remove connection', () => { markDirty(); changes.has(key) ? changes.delete(key) : changes.set(key, clean(connection, true)); renderExisting(); }));
-            existing.append(row);
+            row.append(actions,editor);refresh();existing.append(row);
           }
         }
-        function clean(c, remove = false) { return Object.fromEntries(Object.entries({...c, remove}).filter(([k]) => ['id', 'source_id', 'target_id', 'relation', 'since', 'until', 'evidence', 'activity', 'remove'].includes(k))); }
-        function add(choice, original = null) {
-          const activity = choice.kind === 'entries', key = (activity ? 'entry:' : '') + choice.id;
-          if (selected.has(key)) return;
-          const record = {id: crypto.randomUUID(), source_id: entity.id, target_id: choice.id, relation: 'related_to', since: '', until: '', evidence: '', activity, remove: false};
-          if(original)Object.assign(record,clean(original));
-          selected.set(key, record);markDirty();
-          const row = el('fieldset'); row.className = 'connection-card'; row.append(el('legend', choice.label + ' · ' + choice.kind));
-          if (!activity) {
-            const grid = el('div'); grid.className = 'connection-controls';
-            const relation = field(grid, 'Relationship', el('select'));
-            for (const value of relations) { const o = el('option', value.replaceAll('_', ' ')); o.value = value; relation.append(o); }
-            relation.value=record.relation;
-            relation.onchange = () => { record.relation = relation.value; };
-            for (const [key, title] of [['since', 'Since'], ['until', 'Until']]) { const input = field(grid, title, el('input')); input.type = 'date'; input.value=record[key]; input.oninput = () => { record[key] = input.value; }; }
-            row.append(grid);
-            const evidence = field(row, 'Basis or supporting activity link (optional)', el('textarea')); evidence.maxLength = 2000; evidence.value=record.evidence; evidence.oninput = () => { record.evidence = evidence.value; };
+        function add(choice) {
+          const activity=choice.kind==='entries', key=(activity?'entry:':'')+choice.id;
+          const previous=[...cards.values()].find(card=>card.otherId===key);
+          if(previous){
+            if(previous.record.remove){previous.record.remove=false;stage(previous);renderExisting();searchOptions();}
+            return;
           }
-          row.append(button('Remove selection', () => { selected.delete(key);newEntities.delete(choice.id);markDirty(); row.remove(); count.textContent = selected.size + ' selected'; searchOptions(); }));
-          list.append(row); count.textContent = selected.size + ' selected'; searchOptions();
+          const record={id:crypto.randomUUID(),source_id:entity.id,target_id:choice.id,relation:'related_to',since:'',until:'',evidence:'',activity,remove:false};
+          selected.set(key,record);cards.set(key,{record,label:choice.label,kind:choice.kind,otherId:key});
+          markDirty();renderExisting();searchOptions();
         }
         async function searchOptions() {
           const request = ++generation, activity = mode.value === 'activity';
@@ -141,7 +183,7 @@
             const data = await api(activity ? '/connection-activities?' + new URLSearchParams({q: search.value}) : '?' + new URLSearchParams({q: search.value, kind: type.value, limit: 50}));
             if (request !== generation || !dialog.isConnected) return;
             searchStatus.textContent = `${data.total} matching ${activity ? 'activities' : 'entities'}; showing up to 50. Refine your search.`;
-            const choices = data.entities.filter(e => e.id !== entity.id && !selected.has((activity ? 'entry:' : '') + e.id));
+            const choices = data.entities.filter(e => e.id !== entity.id && ![...cards.values()].some(card => !card.record.remove && card.otherId === (activity ? 'entry:' : '') + e.id));
             for (const choice of choices) {
               const card = button('', () => add(choice)); card.className = 'connection-result-card';
               const meta = el('span'); meta.className = 'connection-result-meta'; meta.append(typePill(choice.kind), el('small', choice.date || `${choice.entries?.length || 0} entries`));
