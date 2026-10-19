@@ -150,6 +150,9 @@ def locked_down_profile_config(model: str) -> dict[str, object]:
         },
         "platform_toolsets": {"api_server": []},
         "platforms": {},
+        # Temporary Hermes compatibility shim: this app requires its own port,
+        # not the host gateway's profile-prefixed shared ingress.
+        "gateway": {"standalone": True},
     }
 
 
@@ -480,9 +483,29 @@ def _check_setup(
     _assert_private_permissions(profile_env)
     _assert_private_permissions(harqis_env)
     _assert_oauth_credentials_private(profile_dir, required=require_oauth)
-    config = json.loads(config_path.read_text(encoding="utf-8"))
-    if config != locked_down_profile_config(args.model):
-        raise RuntimeError("Hermes Share profile config is not locked down.")
+    # Hermes rewrites JSON-compatible YAML as ordinary YAML during migrations.
+    # Only its schema-version metadata is exempt from the strict safety contract.
+    import yaml
+
+    try:
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        if not isinstance(config, dict):
+            raise ValueError("Expected a configuration mapping")
+        version = config.pop("_config_version", 0)
+        if type(version) is not int or version < 0:
+            raise ValueError("Invalid schema version")
+        # JSON comparison also distinguishes booleans from integers (True == 1
+        # in ordinary Python dict equality), keeping the boundary fail-closed.
+        valid = json.dumps(config, sort_keys=True) == json.dumps(
+            locked_down_profile_config(args.model), sort_keys=True
+        )
+    except (yaml.YAMLError, TypeError, ValueError):
+        raise RuntimeError("Hermes Share profile config is not locked down.") from None
+    if not valid:
+        raise RuntimeError(
+            "Hermes Share profile config is not locked down. The dedicated API "
+            "requires gateway.standalone: true; shared-gateway status is not readiness."
+        )
 
     api_key = _env_value(profile_env, "API_SERVER_KEY")
     expected_profile_env = _profile_env_values(args.port, api_key)

@@ -358,7 +358,13 @@ subprocesses receive an allowlisted environment with no messaging/platform
 credentials. Apply is intentionally create-once and refuses every existing
 profile; use `--start` or `--check` after creation. Those checks fail closed on
 permission/ownership drift, extra advertised models, malformed toolset discovery,
-or enabled tools. Printed follow-up commands preserve custom paths and settings.
+or enabled tools. New profiles explicitly set `gateway.standalone: true` to
+preserve the dedicated listener. The checker accepts Hermes-migrated YAML and
+integer `_config_version` metadata without relaxing the safety settings.
+Run `--check` after Hermes updates or gateway migrations; a running gateway is
+not proof that the app's authenticated endpoint is ready. PR CI runs the setup
+regressions, including real loopback HTTP probes and a missing-listener case.
+Printed follow-up commands preserve custom paths and settings.
 Restart the HARQIS frontend after setup. See
 `docs/info/HFL-CORPUS-SHARING.md` for the security boundary and rollback procedure.
 

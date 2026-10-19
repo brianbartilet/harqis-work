@@ -343,6 +343,8 @@ The script:
 - configures OpenAI Codex `gpt-5.6-sol`, with no fallback provider;
 - disables long-term memory and user-profile injection;
 - sets `platform_toolsets.api_server: []` and no messaging platforms;
+- pins `gateway.standalone: true` so the dedicated listener is not silently
+  replaced by shared-gateway ownership (a temporary Hermes compatibility shim);
 - binds the API to literal `127.0.0.1:8643`, disables HTTP proxy inheritance,
   rejects redirects on authenticated checks, and leaves browser CORS unset;
 - passes Hermes subprocesses only an allowlisted environment, excluding inherited
@@ -357,6 +359,34 @@ The script:
 - installs/restarts the isolated profile gateway only after OAuth is ready,
   then verifies `/v1/health`, the exact model alias, disabled live CORS, and an
   empty effective toolset through authenticated API discovery without proxies.
+
+### Upgrade and migration acceptance gate
+
+After every Hermes upgrade or gateway migration, run `--check` against the
+runtime installation (use explicit `--hermes-home` and `--harqis-env` when the
+code checkout is separate). Do not declare the upgrade healthy from
+`hermes gateway status` alone. The check must reach the app's configured
+loopback API, authenticate, and verify the exact agent alias and empty toolset.
+It is read-only and exits nonzero on failure; it does not silently repair or
+restart a service. CI exercises this contract with a real temporary loopback
+server and a reserved port with no listener, without credentials or provider
+calls. CI also proves a nominally successful gateway command cannot bypass API
+readiness.
+
+Hermes may rewrite `config.yaml` into ordinary YAML and add `_config_version`.
+The checker accepts these format/schema changes, but still rejects changes to
+isolation settings or removal of `gateway.standalone: true`. An existing profile
+is never overwritten by `--apply`. If the check reports files under `skills/`,
+`plugins/`, `cron/` or another restricted directory, inspect that drift rather
+than weakening the guard or deleting files automatically. Runtime bookkeeping
+and executable/profile content require separate review.
+
+The standalone setting is a temporary compatibility boundary. Before replacing
+it with multiplexing, add and pass profile-prefixed inference and session-deletion
+tests; never repoint guest traffic to an unprefixed default/private agent. After
+any approved deployment, also run a bounded synthetic chat through the app and
+verify session cleanup. Discovery checks alone do not prove inference works.
+No automatic monitor or updater hook is installed by this script.
 
 Follow-up commands printed after `--apply` preserve every custom profile, model,
 port, context, Hermes-home, and HARQIS-environment argument.

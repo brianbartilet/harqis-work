@@ -43,6 +43,11 @@ jobs:
         docker run --rm harqis-work sh -c \
           'python -m pytest scripts/tests/test_deploy_*.py scripts/tests/test_launch*.py -q'
 
+    - name: Test Share Agent Readiness Contracts
+      run: |
+        docker run --rm harqis-work \
+          python -m pytest scripts/tests/test_setup_hfl_share_hermes.py -q
+
     - name: Run Tests
       run: |
         docker run --rm -e APP_CONFIG_FILE=apps_config.yaml harqis-work \
