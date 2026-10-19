@@ -17,6 +17,19 @@ def digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+def identity_resolver(db):
+    """Resolve aliases from one snapshot without opening nested database readers."""
+    aliases = {row['alias']: row['canonical'] for row in db.execute(
+        'SELECT alias,canonical FROM decisions WHERE active=1')}
+    def resolve(identity):
+        seen = set()
+        while identity in aliases and identity not in seen:
+            seen.add(identity)
+            identity = aliases[identity]
+        return identity
+    return resolve
+
+
 class EntityStore:
     def __init__(self, path):
         self.path = Path(path)

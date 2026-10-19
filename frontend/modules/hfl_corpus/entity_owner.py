@@ -2,7 +2,7 @@
 import json
 from uuid import uuid4
 
-from workflows.hfl.entity_store import get_store
+from workflows.hfl.entity_store import get_store, identity_resolver
 
 
 def owner_name():
@@ -27,9 +27,16 @@ def synchronize(available=None, chosen=None):
     store = get_store()
     available = available or {}
     with store.connection() as db:
+        # Ordinary directory reads must not acquire a writer lock for an unchanged owner.
+        bound = db.execute("SELECT value FROM state WHERE key='owner-entity'").fetchone()
+        if bound and not chosen:
+            identity = identity_resolver(db)(json.loads(bound[0]))
+            previous = db.execute('SELECT data,kind FROM profiles WHERE id=?', (identity,)).fetchone()
+            if previous and previous['kind'] == 'people' and json.loads(previous['data']).get('name') == name:
+                return {'id': identity, 'name': name, 'candidates': []}
         db.execute('BEGIN IMMEDIATE')
         row = db.execute("SELECT value FROM state WHERE key='owner-entity'").fetchone()
-        identity = store.resolve(json.loads(row[0])) if row else None
+        identity = identity_resolver(db)(json.loads(row[0])) if row else None
         candidates = [e for e in available.values() if e['kind'] == 'people' and e['label'].casefold() == name.casefold()]
         if chosen:
             if chosen not in {e['id'] for e in candidates}:

@@ -81,3 +81,7 @@ dialog.entity-connections-dialog{position:fixed;inset:0;margin:auto;max-width:ca
 .entity-connections-dialog .connection-card.is-editing{grid-column:1/-1}
 .entity-connections-dialog .connection-card-editor{border-top:1px solid #334155;margin-top:4px}
 @media(max-width:540px){.entity-connections-dialog .connection-current{grid-template-columns:1fr}}
+
+.entity-connections-dialog.is-saving .soul-status{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:10px;background:#0f172a;padding:12px 0}
+.entity-connections-dialog.is-saving .soul-status::before{content:'';flex:0 0 20px;width:20px;height:20px;box-sizing:border-box;border:2px solid #334155;border-top-color:#f9a8d4;border-radius:50%;animation:soul-spin .8s linear infinite}
+@media(prefers-reduced-motion:reduce){.entity-connections-dialog.is-saving .soul-status::before{animation:none}}

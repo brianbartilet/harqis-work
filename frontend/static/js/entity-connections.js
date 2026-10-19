@@ -2,8 +2,9 @@
 (() => {
   const el = (tag, text = '') => { const n = document.createElement(tag); n.textContent = text; return n; };
   async function api(path, payload) {
-    const response = await fetch('/api/hfl/entities' + path, {method: payload === undefined ? 'GET' : 'POST', headers: {'Content-Type': 'application/json'}, body: payload === undefined ? undefined : JSON.stringify(payload)});
-    const data = await response.json();
+    const response = await fetch('/api/hfl/entities' + path, {method: payload === undefined ? 'GET' : 'POST', headers: {'Content-Type': 'application/json'}, body: payload === undefined ? undefined : JSON.stringify(payload), signal: payload === undefined ? AbortSignal.timeout(30000) : undefined});
+    let data;
+    try { data = await response.json(); } catch (_) { throw Error('The server could not complete the request (HTTP ' + response.status + '). Please retry.'); }
     if (!response.ok) {
       const message=typeof data.detail==='string'?data.detail:Array.isArray(data.detail)?data.detail.map(e=>`${(e.loc||[]).filter(k=>k!=='body').join(' · ')}: ${e.msg}`).join('; '):'Check your details and try again.';
       const error=Error(message);error.validation=[400,422].includes(response.status);throw error;
@@ -30,7 +31,7 @@
     const status = el('p', 'Loading soul…'); status.setAttribute('role', 'status'); status.className='soul-status';
     const content = el('div'); dialog.append(header, status, content); hostDocument.body.append(dialog);
     const previousFocus = document.activeElement;
-    let generation = 0, timer, busy = false, dirty = false;
+    let generation = 0, timer, busy = false, dirty = false, directoryCache;
     const markDirty = () => { dirty = true; };
     const mayLeave = () => !busy && (!dirty || hostDocument.defaultView.confirm('Discard unsaved Soul changes?'));
     const close = () => { if(mayLeave())dialog.close(); };
@@ -54,7 +55,8 @@
     };
     async function initialize() {
       try {
-        const [saved, directory] = await Promise.all([api('/soul-editor/' + encodeURIComponent(entity.id)), api('?limit=1')]);
+        const [saved, directory] = await Promise.all([api('/soul-editor/' + encodeURIComponent(entity.id)), directoryCache || api('?limit=1')]);
+        directoryCache = directory;
         if (!dialog.isConnected) return;
         content.replaceChildren(); if(!status.textContent.startsWith('Soul saved'))status.textContent = '';
         dirty=false;
@@ -198,21 +200,24 @@
         mode.onchange = type.onchange = searchOptions;
         search.oninput = () => { generation++; clearTimeout(timer); timer = setTimeout(searchOptions, 250); };
         outerForm.onsubmit = async event => {
-          event.preventDefault(); if (busy) return; busy = true;content.inert=true;
-          const controls = [...dialog.querySelectorAll('button, input, select, textarea')]; controls.forEach(c => { c.disabled = true; });
-          status.textContent = 'Saving soul…';
+          event.preventDefault(); if (busy) return; busy = true;content.inert=true;dialog.classList.add('is-saving');dialog.setAttribute('aria-busy','true');
+          const controls = [...dialog.querySelectorAll('button, input, select, textarea')].map(control=>[control,control.disabled]); controls.forEach(([control]) => { control.disabled = true; });
+          status.textContent = 'Saving changes…';status.scrollIntoView({block:'nearest'});
           try {
             await api('/soul-editor/' + encodeURIComponent(entity.id), {revision:saved.revision, profile:details.collectProfile(), soul:details.collectIdentity(), connections:{versions: saved.versions, changes: [...changes.values(), ...selected.values()]},new_entities:[...newEntities.values()]});
             dirty=false;
+            status.textContent='Changes saved. Refreshing the view…';
             let savedMessage='Soul saved.';
             try { await onSaved([...selected.values()]); } catch(error) { savedMessage='Soul saved, but the view could not refresh. Refresh the page to see changes.'; }
-            await initialize();status.textContent=savedMessage;
+            status.textContent='Changes saved. Reloading the form…';
+            const loaded=await initialize();
+            status.textContent=loaded?savedMessage:'Changes were saved, but the form could not reload. Use Retry to reload it; your changes do not need to be saved again.';
           } catch (error) { status.textContent = error.message;if(error.validation){details.profile.open=true;details.identity.open=true;connections.open=true;} }
-          finally { busy = false;content.inert=false; controls.forEach(c => { c.disabled = false; }); }
+          finally { busy = false;content.inert=false;dialog.classList.remove('is-saving');dialog.removeAttribute('aria-busy');controls.forEach(([control,disabled])=>{control.disabled=disabled;}); }
         };
         outerForm.addEventListener('invalid', event => { let node=event.target.parentElement;while(node&&node!==outerForm){if(node.tagName==='DETAILS')node.open=true;node=node.parentElement;} },true);
-        renderExisting(); dialog.classList.remove('is-loading');await searchOptions();
-      } catch (error) { dialog.classList.remove('is-loading');status.textContent = error.message; content.replaceChildren(button('Retry', initialize)); }
+        renderExisting(); dialog.classList.remove('is-loading');await searchOptions();return true;
+      } catch (error) { dialog.classList.remove('is-loading');status.textContent = error.message; content.replaceChildren(button('Retry', () => initialize()));return false; }
     }
     initialize();
     return dialog;
