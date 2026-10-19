@@ -116,9 +116,10 @@ def enrich(*, entry_id=None, use_model=True, batch_size=8):
     return result
 
 
-def projection(source='', since='', until='', context='', resolve_mentions=True):
+def projection(source='', since='', until='', context='', resolve_mentions=True, *, entries=None):
     store = get_store()
-    entries = current_entries(context) if context else current_entries()
+    if entries is None:
+        entries = current_entries(context) if context else current_entries()
     cache = store.records()
     from workflows.hfl.entity_connections import activity_links
     manual_links = activity_links()
@@ -312,10 +313,13 @@ def _corpus_graph(source='', since='', until='', limit=100, query='', shared=Fal
                 truncated=total_nodes > len(nodes) or len(edges) > len(bounded_edges))
 
 
-def entity_index(source='', since='', until='', context='', graph_query='', graph_sources=None, resolve_mentions=True):
+def entity_index(source='', since='', until='', context='', graph_query='', graph_sources=None, resolve_mentions=True, *, entries=None):
     groups = {}
     entries_by_entity = {}
-    rows = projection(source, since, until, context) if resolve_mentions else projection(source, since, until, context, resolve_mentions=False)
+    if entries is not None:
+        rows = projection(source, since, until, context, resolve_mentions=resolve_mentions, entries=entries)
+    else:
+        rows = projection(source, since, until, context) if resolve_mentions else projection(source, since, until, context, resolve_mentions=False)
     profiles = get_store().profiles()
     query = graph_query.strip().casefold()
     for entry in rows:

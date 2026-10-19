@@ -73,9 +73,9 @@ class SoulWrite(BaseModel):
         return self
 
 
-def snapshot():
+def snapshot(*, entries=None):
     from modules.hfl_corpus.entities import entity_index
-    return {e['id']: e for e in entity_index()}
+    return {e['id']: e for e in (entity_index(entries=entries) if entries is not None else entity_index())}
 
 
 @router.get('/context/{identity}')
@@ -136,7 +136,7 @@ async def read_connections(request: Request, identity: str):
     return await run_in_threadpool(connection_snapshot, identity)
 
 
-def connection_snapshot(identity, available=None, connection=None):
+def connection_snapshot(identity, available=None, connection=None, entries=None):
     from workflows.hfl.entity_soul import all_souls
     from workflows.hfl.entity_store import get_store
     from workflows.hfl.entity_connections import activity_links
@@ -144,34 +144,37 @@ def connection_snapshot(identity, available=None, connection=None):
     available = snapshot() if available is None else available
     if identity not in available:
         raise HTTPException(404, 'Entity unavailable')
-    store = get_store()
-    souls = all_souls(connection)
-    links = []
-    versions = {identity: souls.get(identity, {}).get('version', 0)}
-    for source, soul in souls.items():
-        if source not in available or store.resolve(source) != source:
-            continue
-        for row in soul['relationships']:
-            target = store.resolve(row['target_id'])
-            if target not in available or identity not in (source, target) or source == target:
+    from contextlib import nullcontext
+    from workflows.hfl.entity_store import identity_resolver
+    entries = {e['id']: e for e in current_entries()} if entries is None else entries
+    with (nullcontext(connection) if connection is not None else get_store().connection()) as db:
+        resolve = identity_resolver(db)
+        souls = all_souls(db)
+        links = []
+        versions = {identity: souls.get(identity, {}).get('version', 0)}
+        for source, soul in souls.items():
+            if source not in available or resolve(source) != source:
                 continue
-            other = available[target if source == identity else source]
-            links.append({**row, 'source_id': source, 'target_id': target, 'label': other['label'],
-                          'kind': other['kind'], 'other_id': other['id'], 'incoming': source != identity, 'activity': False})
-            versions[source] = soul['version']
-    entries = {e['id']: e for e in current_entries()}
-    seen_entries = set()
-    for row in activity_links(connection):
-        if store.resolve(row['entity_id']) != identity or row['entry_id'] not in entries:
-            continue
-        if row['entry_id'] in seen_entries:
-            continue
-        seen_entries.add(row['entry_id'])
-        entry = entries[row['entry_id']]
-        links.append(dict(id='activity:' + entry['id'], source_id=identity, target_id=entry['id'],
-                          other_id='entry:' + entry['id'], label=entry['title'], kind='entries', activity=True,
-                          relation='related_to', since='', until='', evidence='', incoming=False))
-    return {'entity': available[identity], 'connections': links, 'versions': versions}
+            for row in soul['relationships']:
+                target = resolve(row['target_id'])
+                if target not in available or identity not in (source, target) or source == target:
+                    continue
+                other = available[target if source == identity else source]
+                links.append({**row, 'source_id': source, 'target_id': target, 'label': other['label'],
+                              'kind': other['kind'], 'other_id': other['id'], 'incoming': source != identity, 'activity': False})
+                versions[source] = soul['version']
+        seen_entries = set()
+        for row in activity_links(db):
+            if resolve(row['entity_id']) != identity or row['entry_id'] not in entries:
+                continue
+            if row['entry_id'] in seen_entries:
+                continue
+            seen_entries.add(row['entry_id'])
+            entry = entries[row['entry_id']]
+            links.append(dict(id='activity:' + entry['id'], source_id=identity, target_id=entry['id'],
+                              other_id='entry:' + entry['id'], label=entry['title'], kind='entries', activity=True,
+                              relation='related_to', since='', until='', evidence='', incoming=False))
+        return {'entity': available[identity], 'connections': links, 'versions': versions}
 
 
 @router.post('/connections/{identity}')
@@ -242,14 +245,20 @@ def editor_snapshot(identity):
     from workflows.hfl.entity_store import get_store
     from workflows.hfl.entity_soul import all_souls, empty
     from services.markdown import render_markdown
-    available = snapshot()
+    from modules.hfl_corpus.entities import current_entries
+    entries = current_entries()
+    available = snapshot(entries=entries)
+    entries = {e['id']: e for e in entries}
+    from workflows.hfl.entity_types import listing
+    types = listing()
     with get_store().connection() as db:
         db.execute('BEGIN')
-        result = connection_snapshot(identity, available, db)
+        result = connection_snapshot(identity, available, db, entries)
         profile = db.execute('SELECT data FROM profiles WHERE id=?', (identity,)).fetchone()
         if profile:
             import json
             result['entity']['profile'] = json.loads(profile[0])
+        result['types'] = types
         result['soul'] = all_souls(db).get(identity, empty())
         result['soul_html'] = str(render_markdown(result['soul']['markdown']))
         result['revision'] = editor_revision(db, identity)

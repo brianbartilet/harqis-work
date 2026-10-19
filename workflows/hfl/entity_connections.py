@@ -3,7 +3,7 @@ from contextlib import nullcontext
 import json
 from datetime import datetime, timezone
 
-from workflows.hfl.entity_store import get_store
+from workflows.hfl.entity_store import get_store, identity_resolver
 from workflows.hfl.entity_soul import all_souls, empty
 
 
@@ -13,11 +13,12 @@ def activity_links(connection=None):
 
 
 def edit(identity, changes, actor, available, entry_ids, versions, connection=None):
-    store = get_store()
+    store = get_store() if connection is None else None
     with (nullcontext(connection) if connection is not None else store.connection()) as db:
         if connection is None:
             db.execute('BEGIN IMMEDIATE')
-        if identity not in available or store.resolve(identity) != identity:
+        resolve = identity_resolver(db)
+        if identity not in available or resolve(identity) != identity:
             raise ValueError('Entity changed or unavailable; refresh before saving')
         souls = all_souls(db)
         for source in {c.get('source_id') or identity for c in changes}:
@@ -30,33 +31,33 @@ def edit(identity, changes, actor, available, entry_ids, versions, connection=No
             activity = change['activity']
             if source != identity and (target != identity or activity):
                 raise ValueError('Connection does not belong to this entity')
-            if source not in available or store.resolve(source) != source:
+            if source not in available or resolve(source) != source:
                 raise ValueError('Source entity changed; refresh before saving')
             if activity:
                 if target not in entry_ids:
                     raise ValueError('Activity unavailable')
                 owners = [r[0] for r in db.execute('SELECT entity_id FROM entity_activity_links WHERE entry_id=?', (target,))
-                          if store.resolve(r[0]) == source]
+                          if resolve(r[0]) == source]
                 if change['remove']:
                     db.executemany('DELETE FROM entity_activity_links WHERE entity_id=? AND entry_id=?', [(owner, target) for owner in owners])
                 elif not owners:
                     db.execute('INSERT OR IGNORE INTO entity_activity_links VALUES (?,?,?,?)', (source, target, actor, now))
                 continue
-            if target not in available or target == source or store.resolve(target) != target:
+            if target not in available or target == source or resolve(target) != target:
                 raise ValueError('Choose another current entity')
             soul = souls.setdefault(source, empty())
             rows = soul['relationships']
             existing = next((r for r in rows if r['id'] == change['id']), None)
             if change['remove']:
-                if existing and store.resolve(existing['target_id']) != target:
+                if existing and resolve(existing['target_id']) != target:
                     raise ValueError('Connection changed; refresh before removing')
                 soul['relationships'] = [r for r in rows if r['id'] != change['id']]
             else:
                 record = {k: change[k] for k in ('id', 'target_id', 'relation', 'since', 'until', 'evidence')}
-                duplicate = next((r for r in rows if store.resolve(r['target_id']) == target and all(r.get(k, '') == record[k] for k in ('relation', 'since', 'until'))), None)
+                duplicate = next((r for r in rows if resolve(r['target_id']) == target and all(r.get(k, '') == record[k] for k in ('relation', 'since', 'until'))), None)
                 if record['relation'] in {'related_to', 'colleague_of'}:
                     reverse = next((r for r in souls.get(target, {}).get('relationships', [])
-                                    if store.resolve(r['target_id']) == source and all(r.get(k, '') == record[k] for k in ('relation', 'since', 'until'))), None)
+                                    if resolve(r['target_id']) == source and all(r.get(k, '') == record[k] for k in ('relation', 'since', 'until'))), None)
                     duplicate = duplicate or reverse
                 if duplicate and not existing:
                     continue
