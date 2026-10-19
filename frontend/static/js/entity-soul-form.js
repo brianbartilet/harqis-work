@@ -51,14 +51,20 @@
         soul.journal.forEach(r => note(journalList, r));
 
     const identity = section('Identity details'); identity.classList.add('entity-soul'); identity.append(form);
-    const profile = section('Profile details'), grid = el('div'); grid.className='profile-fields'; profile.append(grid);
+    const profile = section('Identity matching helpers'), grid = el('div'); grid.className='profile-fields'; profile.append(grid);
+    const identityFields = el('div'); identityFields.className='profile-fields'; form.prepend(identityFields);
+    const contacts = el('div'); contacts.className='soul-contact-fields profile-wide';
     const fieldsByName = {}, existing = context.entity.profile || {};
     for (const [key,title,multi] of [['name','Display name',false],['aliases','Aliases (one per line)',true],['partial_aliases','Partial matching hints (one per line)',true],['categories','Categories',true],['emails','Email addresses',true],['phones','Phone numbers',true],['references','References',true],['notes','Notes',true]]) {
       const value=key==='name'?(existing.name||context.entity.label):Array.isArray(existing[key])?existing[key].join('\n'):existing[key]||'';
-      const input=field(grid,title,value,multi);fieldsByName[key]=input;
+      const parent = key==='name' ? identityFields : ['phones','references'].includes(key) ? contacts : grid;
+      const input=field(parent,title,value,multi);fieldsByName[key]=input;
+      if(['phones','references'].includes(key)){input.rows=1;input.parentElement.className='';}
+      if(key==='name')input.parentElement.className='profile-wide';
       if(key==='name'){input.required=true;input.maxLength=120;input.readOnly=!!context.entity.is_owner;}
     }
-    if(context.entity.is_owner){const owner=el('a','Corpus owner · Change your name in /profile');owner.href='/profile';owner.target='_blank';owner.rel='noopener';profile.append(owner);}
+    identityFields.append(contacts);
+    if(context.entity.is_owner){const owner=el('a','Corpus owner · Change your name in /profile');owner.href='/profile';owner.target='_blank';owner.rel='noopener';identityFields.append(owner);}
     const preferred=el('input');preferred.type='checkbox';preferred.checked=!!existing.preferred_name;
     const preferLabel=el('label','Prefer this display name during automatic merges');preferLabel.prepend(preferred);profile.append(preferLabel);
     return {profile,identity,collectProfile:()=>Object.fromEntries([...Object.entries(fieldsByName).map(([k,v])=>[k,['name','notes'].includes(k)?v.value:lines(v)]),['preferred_name',preferred.checked]]),collectIdentity:()=>{
