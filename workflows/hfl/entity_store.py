@@ -29,6 +29,11 @@ class EntityStore:
                 CREATE TABLE IF NOT EXISTS profiles(id TEXT PRIMARY KEY, kind TEXT NOT NULL,
                     data TEXT NOT NULL, updated TEXT DEFAULT CURRENT_TIMESTAMP);
                 CREATE TABLE IF NOT EXISTS state(key TEXT PRIMARY KEY, value TEXT);
+                CREATE TABLE IF NOT EXISTS entity_souls(id TEXT PRIMARY KEY, version INTEGER NOT NULL, data TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS entity_resolutions(entry_id TEXT NOT NULL, mention_id TEXT NOT NULL,
+                    target_id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(entry_id,mention_id));
+                CREATE TABLE IF NOT EXISTS entity_resolution_jobs(entry_id TEXT PRIMARY KEY, revision TEXT NOT NULL,
+                    queued_at REAL NOT NULL DEFAULT 0);
                 CREATE TABLE IF NOT EXISTS entity_search_features(id TEXT PRIMARY KEY, input TEXT NOT NULL, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS consolidation_pairs(run_id TEXT NOT NULL, id TEXT NOT NULL,
                     data TEXT NOT NULL, PRIMARY KEY(run_id,id));
@@ -80,6 +85,13 @@ class EntityStore:
         with self.connection() as db:
             db.execute('INSERT OR REPLACE INTO enrichment(id,hash,version,mentions,types_revision) VALUES (?,?,?,?,?)',
                        (identity, content_hash, version, json.dumps(mentions), types_revision))
+            if match:
+                db.execute('INSERT OR REPLACE INTO entity_resolution_jobs(entry_id,revision) VALUES (?,?)',
+                           (identity, content_hash))
+                db.execute('''INSERT OR REPLACE INTO entity_resolution_jobs(entry_id,revision)
+                    SELECT DISTINCT e.id,e.hash FROM entity_resolutions r
+                    JOIN enrichment e ON e.id=r.entry_id, json_each(r.data, '$.evidence_hashes') dependency
+                    WHERE dependency.key=?''', (identity,))
             if match and mentions:
                 from workflows.hfl.entity_matching import enabled
                 owner = db.execute("SELECT value FROM state WHERE key='entity-consolidation-owner'").fetchone()
@@ -168,6 +180,11 @@ class EntityStore:
             db.execute("INSERT INTO profiles(id,kind,data) VALUES (?,?,?) ON CONFLICT(id) "
                        "DO UPDATE SET data=excluded.data, kind=excluded.kind, updated=CURRENT_TIMESTAMP",
                        (identity, kind, json.dumps(data)))
+            db.execute('''INSERT OR REPLACE INTO entity_resolution_jobs(entry_id,revision)
+                SELECT e.id,e.hash FROM enrichment e JOIN entity_resolutions r ON e.id=r.entry_id
+                WHERE r.target_id=?''', (identity,))
+            from workflows.hfl.entity_resolution import invalidate_targets
+            invalidate_targets(db, [identity])
 
     def state(self, key, value=None):
         with self.connection() as db:

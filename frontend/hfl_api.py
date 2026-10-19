@@ -15,6 +15,7 @@ from modules.hfl_corpus.corpus import corpus_index
 from modules.hfl_corpus.remote import close_remote_http_client
 from modules.hfl_corpus.entities_api import router as entities_router
 from modules.hfl_corpus.entity_merge_api import router as entity_merge_router
+from modules.hfl_corpus.entity_soul_api import router as entity_soul_router
 
 
 @asynccontextmanager
@@ -52,6 +53,7 @@ for entity_route in entities_router.routes:
         app.router.routes.append(entity_route)
 # Include nested merge commands once, on both eager and lazy FastAPI routers.
 app.include_router(entity_merge_router)
+app.include_router(entity_soul_router)
 
 
 @app.get("/health", tags=["operations"], summary="Service health")

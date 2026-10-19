@@ -2761,6 +2761,122 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/context/{identity}:
+    get:
+      summary: Read Context
+      operationId: read_context_api_hfl_entities_context__identity__get
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/soul/{identity}:
+    post:
+      summary: Write Soul
+      operationId: write_soul_api_hfl_entities_soul__identity__post
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SoulWrite'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/resolutions/{entry_id}/{mention_id}/undo:
+    post:
+      summary: Undo Resolution
+      operationId: undo_resolution_api_hfl_entities_resolutions__entry_id___mention_id__undo_post
+      parameters:
+      - name: entry_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Entry Id
+      - name: mention_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Mention Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/curated-feed:
+    get:
+      tags:
+      - hfl-corpus-api
+      summary: Curated Feed
+      operationId: curated_feed_api_hfl_curated_feed_get
+      security:
+      - HTTPBearer: []
+      parameters:
+      - name: include_secrets
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Include Secrets
+      - name: secret_tags
+        in: query
+        required: false
+        schema:
+          type: string
+          default: ''
+          title: Secret Tags
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/hfl/entities/profile/{identity}:
     post:
       summary: Save Profile
@@ -5095,6 +5211,141 @@ components:
       - decisions
       - contradictions
       title: ConsolidationGroup
+    IdentityRule:
+      properties:
+        id:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Id
+        observed_name:
+          type: string
+          maxLength: 120
+          minLength: 2
+          title: Observed Name
+        sources:
+          items:
+            type: string
+          type: array
+          maxItems: 30
+          minItems: 1
+          title: Sources
+        required_context:
+          items:
+            type: string
+          type: array
+          maxItems: 20
+          title: Required Context
+        excluded_context:
+          items:
+            type: string
+          type: array
+          maxItems: 20
+          title: Excluded Context
+        enabled:
+          type: boolean
+          title: Enabled
+          default: true
+      additionalProperties: false
+      type: object
+      required:
+      - observed_name
+      - sources
+      title: IdentityRule
+    JournalEntry:
+      properties:
+        id:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Id
+        text:
+          type: string
+          maxLength: 4000
+          minLength: 1
+          title: Text
+      additionalProperties: false
+      type: object
+      required:
+      - text
+      title: JournalEntry
+    Relationship:
+      properties:
+        id:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Id
+        target_id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Target Id
+        relation:
+          type: string
+          enum:
+          - colleague_of
+          - works_at
+          - member_of
+          - owns
+          - uses
+          - related_to
+          title: Relation
+        since:
+          type: string
+          pattern: ^(\d{4}-\d{2}-\d{2})?$
+          title: Since
+          default: ''
+        until:
+          type: string
+          pattern: ^(\d{4}-\d{2}-\d{2})?$
+          title: Until
+          default: ''
+        evidence:
+          type: string
+          maxLength: 2000
+          title: Evidence
+          default: ''
+      additionalProperties: false
+      type: object
+      required:
+      - target_id
+      - relation
+      title: Relationship
+    SoulWrite:
+      properties:
+        version:
+          type: integer
+          minimum: 0.0
+          title: Version
+        markdown:
+          type: string
+          maxLength: 20000
+          title: Markdown
+          default: ''
+        identity_rules:
+          items:
+            $ref: '#/components/schemas/IdentityRule'
+          type: array
+          maxItems: 100
+          title: Identity Rules
+        relationships:
+          items:
+            $ref: '#/components/schemas/Relationship'
+          type: array
+          maxItems: 100
+          title: Relationships
+        journal:
+          items:
+            $ref: '#/components/schemas/JournalEntry'
+          type: array
+          maxItems: 200
+          title: Journal
+      additionalProperties: false
+      type: object
+      required:
+      - version
+      title: SoulWrite
   securitySchemes:
     HTTPBearer:
       type: http

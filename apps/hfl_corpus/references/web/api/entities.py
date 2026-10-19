@@ -6,6 +6,14 @@ from apps.hfl_corpus.references.web.api.extended import ApiServiceHflCorpusExten
 
 class ApiServiceHflCorpusEntities(ApiServiceHflCorpusExtended):
 
+    def get_entity_context(self, identity: str) -> dict:
+        """Read a current entity's soul, identity rules, relationships and bounded activity."""
+        return self._json('GET', f'entities/context/{self._segment(identity)}')
+
+    def update_entity_soul(self, identity: str, soul: dict) -> dict:
+        """Replace soul fields using the version from get_entity_context. Writes remote state."""
+        return self._json('POST', f'entities/soul/{self._segment(identity)}', payload=soul)
+
     def list_entities(
         self,
         query: str = '',

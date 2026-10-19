@@ -191,9 +191,18 @@
         typeSave.onclick = async () => { typeSave.disabled = true; try { await api('/type/' + encodeURIComponent(e.id), {kind:typeSelect.value}); await load(); await matchingStatus(); } catch (err) { typeFeedback.textContent = err.message; } finally { typeSave.disabled = false; } };
         const typeControls = el('div'); typeControls.className = 'entity-type-controls';
         typeLabel.append(typeSelect); typeControls.append(typeLabel, typeSave);
-        card.append(typeControls, typeFeedback, editor(e), el('h2', 'Supporting activity'));
+        card.append(typeControls, typeFeedback, editor(e), window.entitySoulEditor(e, api, load), el('h2', 'Supporting activity'));
         if (!e.entries.length) card.append(el('p', 'No current supporting entries. Your saved profile remains available.'));
-        for (const entry of e.entries) { const row = el('div'), link = el('a', entry.date.slice(0, 10) + ' · ' + entry.title); link.href = entry.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; const meta = el('p', entry.source + ' · ' + entry.method); meta.className = 'entity-meta'; row.append(link, meta, el('blockquote', entry.evidence)); card.append(row); }
+        for (const entry of e.entries) {
+          const row = el('div'), link = el('a', entry.date.slice(0, 10) + ' · ' + entry.title); link.href = entry.href; link.target = '_blank'; link.rel = 'noopener noreferrer';
+          const meta = el('p', entry.source + ' · ' + entry.method); meta.className = 'entity-meta'; row.append(link, meta, el('blockquote', entry.evidence));
+          for (const assignment of entry.assignments || []) {
+            row.append(el('p', `Resolved from “${assignment.original_label}”: ${assignment.reason}`));
+            const undo = el('button', 'Keep this mention separate'); undo.type = 'button';
+            undo.onclick = async () => { undo.disabled = true; try { await api('/resolutions/' + encodeURIComponent(entry.id) + '/' + encodeURIComponent(assignment.mention_id) + '/undo', {}); await load(); } catch (error) { meta.textContent = error.message; undo.disabled = false; } }; row.append(undo);
+          }
+          card.append(row);
+        }
       });
       $('entity-list').append(card);
       if (previous?.open) card.open = true;
@@ -254,10 +263,11 @@
       const e = data.enrichment;
       summary.append(el('p', `Last batch: ${e.processed ?? 0} processed · ${e.pending ?? 0} pending · ${e.removed ?? 0} removed.`));
     }
+    if (data.resolution) summary.append(el('p', `Mention resolution: ${data.resolution.pending} entries pending${data.resolution.enabled === false ? ' · automatic matching is disabled' : ''}.`));
     if (action === 'export') summary.append(el('p', 'Open technical details to review the export result.'));
   }
   async function status() {
-    const data = await api('/status'); showJob({job: data.job, enrichment: data.enrichment});
+    const data = await api('/status'); showJob(data);
   }
   let matchingTimer, matchingInFlight = null;
   function matchingStatus() {

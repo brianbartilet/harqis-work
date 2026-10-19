@@ -12,6 +12,9 @@ def revision(db):
         'profiles': 'SELECT id,kind,data FROM profiles ORDER BY id',
         'decisions': 'SELECT * FROM decisions ORDER BY id',
         'merges': 'SELECT * FROM entity_merges ORDER BY id',
+        'souls': 'SELECT * FROM entity_souls ORDER BY id',
+        'resolutions': 'SELECT * FROM entity_resolutions ORDER BY entry_id,mention_id',
+        'blocks': 'SELECT * FROM entity_match_blocks ORDER BY left_id,right_id',
     }.items()})
 
 
@@ -57,6 +60,11 @@ def commit_merge(preview, request_id, fingerprint, actor):
                    (identity, preview['kind'], preview['name'], json.dumps(members)))
         db.execute('INSERT INTO profiles(id,kind,data) VALUES (?,?,?)',
                    (identity, preview['kind'], json.dumps(preview['profile'])))
+        from workflows.hfl.entity_soul import inherit
+        inherit(db, identity, members)
+        from workflows.hfl.entity_resolution import invalidate_targets
+        invalidate_targets(db, [m['id'] for m in members])
+        db.execute('INSERT OR REPLACE INTO entity_resolution_jobs(entry_id,revision) SELECT id,hash FROM enrichment')
         db.executemany('INSERT INTO decisions(alias,canonical,reason,merge_id) VALUES (?,?,?,?)',
                        [(m['id'], identity, preview['evidence'], identity) for m in members])
         event_id = record_event(db, identity, 'merged', actor, {
@@ -93,6 +101,9 @@ def unmerge(identity, request_id, fingerprint, actor, evidence=''):
         db.execute('UPDATE decisions SET active=0 WHERE merge_id=?', (identity,))
         db.execute('UPDATE entity_merges SET active=0 WHERE id=?', (identity,))
         db.execute('DELETE FROM profiles WHERE id=?', (identity,))
+        from workflows.hfl.entity_resolution import invalidate_targets
+        invalidate_targets(db, [identity])
+        db.execute('INSERT OR REPLACE INTO entity_resolution_jobs(entry_id,revision) SELECT id,hash FROM enrichment')
         result = dict(entity_id=identity, restored_ids=[m['id'] for m in members],
                       event_id=event_id, state='complete', action='unmerged')
         db.execute('INSERT INTO entity_operations VALUES (?,?,?)', (request_id, fingerprint, json.dumps(result)))

@@ -152,3 +152,22 @@ def preferred(entities):
     from workflows.hfl.entity_matching import curated_profile
     return min(entities, key=lambda e: (not (e.get('profile') or {}).get('preferred_name', False),
                                         not curated_profile(e), -activity_count(e), e['id']))
+
+
+def incoming_candidates(entity, index, limit=5):
+    """Reuse a target-only index for a new mention without rebuilding all postings."""
+    values, keys = search_features(feature_input(entity))
+    overlap = Counter()
+    for key in keys:
+        for identity in index.postings.get((entity['kind'], key), ()):
+            overlap[identity] += 100 if key[0] in {'name', 'emails', 'phones', 'references'} else 4 if key[0] == 'word' else 1
+    shortlist = sorted(overlap, key=lambda i: (-overlap[i] / max(1, len(keys) + len(index.keys[i])),
+                                              -index.counts[i], i))[:50]
+    ranked = []
+    for identity in shortlist:
+        target = index.by_id[identity]
+        signals = similarity(entity, target, (values, index.names[identity]), shortlist=True)
+        if signals['exact'] or signals['partial'] or signals['contact'] or signals['fuzzy'] >= .8:
+            ranked.append((-(4*signals['contact'] + 3*signals['exact'] + 2*signals['partial'] + signals['fuzzy']),
+                           -index.counts[identity], identity))
+    return [index.by_id[i] for _, _, i in sorted(ranked)[:limit]]

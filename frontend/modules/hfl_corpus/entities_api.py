@@ -347,8 +347,9 @@ async def entry(request: Request, entry_id: str):
 async def status(request: Request):
     authorize(request)
     store = get_store()
+    from workflows.hfl.entity_resolution import status as resolution_status
     return {'job': store.state('job'), 'enrichment': store.state('enrichment'),
-            'decisions': store.decisions()}
+            'decisions': store.decisions(), 'resolution': resolution_status()}
 
 
 @router.post('/api/hfl/entities/backfill')
@@ -411,3 +412,5 @@ async def export(request: Request):
 
 from modules.hfl_corpus.entity_merge_api import router as entity_merge_router
 router.include_router(entity_merge_router)
+from modules.hfl_corpus.entity_soul_api import router as entity_soul_router
+router.include_router(entity_soul_router)
