@@ -1,4 +1,5 @@
 """Atomic connection edits using the existing soul relationship records."""
+from contextlib import nullcontext
 import json
 from datetime import datetime, timezone
 
@@ -6,15 +7,16 @@ from workflows.hfl.entity_store import get_store
 from workflows.hfl.entity_soul import all_souls, empty
 
 
-def activity_links():
-    with get_store().connection() as db:
+def activity_links(connection=None):
+    with (nullcontext(connection) if connection is not None else get_store().connection()) as db:
         return [dict(r) for r in db.execute('SELECT * FROM entity_activity_links')]
 
 
-def edit(identity, changes, actor, available, entry_ids, versions):
+def edit(identity, changes, actor, available, entry_ids, versions, connection=None):
     store = get_store()
-    with store.connection() as db:
-        db.execute('BEGIN IMMEDIATE')
+    with (nullcontext(connection) if connection is not None else store.connection()) as db:
+        if connection is None:
+            db.execute('BEGIN IMMEDIATE')
         if identity not in available or store.resolve(identity) != identity:
             raise ValueError('Entity changed or unavailable; refresh before saving')
         souls = all_souls(db)

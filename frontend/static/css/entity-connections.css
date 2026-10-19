@@ -34,3 +34,23 @@ dialog.entity-connections-dialog{position:fixed;inset:0;margin:auto;max-width:ca
 .entity-shell .entity-management-row .merge-card-actions button{background:#422f10;border-color:#eab308;color:#fde68a;min-height:44px}
 .entity-shell .entity-management-row .merge-card-actions button:hover{background:#5c4215}
 @media(max-width:540px){.entity-shell .entity-management-row .entity-type-controls{max-width:100%}.entity-shell .entity-management-row .entity-type-controls>label{width:160px;flex:0 1 160px}}
+
+.entity-soul-actions{display:flex;justify-content:center;margin:20px 0}
+.entity-shell .update-soul-button,.entity-connections-dialog .update-soul-button,.kg-shell #kg-detail>button.update-soul-button{background:#4c1d38;border:1px solid #be537f;color:#fce7f3;border-radius:8px;padding:10px 18px;min-height:44px}
+.entity-shell .update-soul-button:hover,.entity-connections-dialog .update-soul-button:hover,.kg-shell #kg-detail>button.update-soul-button:hover{background:#70264e;border-color:#f18ab6}
+.entity-connections-dialog .entity-section{border:1px solid #334155;border-radius:10px;padding:16px;margin:16px 0;background:#0b1322}
+.entity-connections-dialog .entity-section>summary{cursor:pointer;font-weight:600;list-style:none;padding-right:28px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2360a5fa' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 7.5 5 5 5-5'/%3E%3C/svg%3E") right center/20px no-repeat}
+.entity-connections-dialog .entity-section>summary::-webkit-details-marker{display:none}
+.entity-connections-dialog .entity-section[open]>summary{margin-bottom:20px}
+.entity-connections-dialog input[type=checkbox]{display:inline-block;width:16px;min-height:16px;margin:0 8px 0 0;accent-color:#db709f}
+.entity-connections-dialog .profile-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.entity-connections-dialog .profile-wide{grid-column:1/-1}
+.entity-connections-dialog .entity-soul fieldset{min-width:0;border:1px solid #334155;border-radius:8px;padding:16px;margin:16px 0}
+.entity-connections-dialog .entity-soul section{margin:24px 0}
+.entity-connections-dialog .entity-soul section>p{margin:12px 0 16px}
+.entity-connections-dialog .soul-help{font-size:14px}
+.entity-connections-dialog .soul-help>summary{cursor:pointer;list-style:none;color:#f9a8d4;padding:8px}
+.entity-connections-dialog .soul-help[open]{flex-basis:100%;order:3;border-top:1px solid #334155}
+.entity-connections-dialog footer{position:sticky;bottom:-24px;padding:16px 0;background:#0f172a;z-index:2}
+.entity-connections-dialog .prose{overflow-wrap:anywhere}.entity-connections-dialog .prose pre{white-space:pre-wrap}
+@media(max-width:540px){.entity-connections-dialog .profile-fields{grid-template-columns:1fr}.entity-connections-dialog footer{bottom:-16px;flex-wrap:wrap}}

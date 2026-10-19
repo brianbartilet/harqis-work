@@ -662,6 +662,34 @@ def register_hfl_corpus_tools(mcp: FastMCP):
     # --- Canonical frontend operations (also exposed through the shared CLI) ---
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def get_hfl_corpus_entity_soul_editor(identity: str) -> dict:
+        """Read the complete owner Soul editor and its concurrency revision.
+
+        Args:
+            identity: Canonical entity ID.
+        """
+        logger.info("Tool called: get_hfl_corpus_entity_soul_editor")
+        result = ApiServiceHflCorpusEntities(CONFIG).get_entity_soul_editor(identity)
+        logger.info("get_hfl_corpus_entity_soul_editor done")
+        return _dict_result(result)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_soul_editor(identity: str, update: dict) -> dict:
+        """Atomically save profile, identity and connections (destructive remote write).
+
+        Args:
+            identity: Canonical entity ID.
+            update: Editor payload with revision, profile, soul, connections and optional
+                new_entities. Read get_hfl_corpus_entity_soul_editor first. Supply
+                connections.versions and changes; remove server provenance from soul
+                records. Scoped identity rules authorize future mention resolution.
+        """
+        logger.info("Tool called: update_hfl_corpus_entity_soul_editor")
+        result = ApiServiceHflCorpusEntities(CONFIG).update_entity_soul_editor(identity, update)
+        logger.info("update_hfl_corpus_entity_soul_editor done")
+        return _dict_result(result)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
     def get_hfl_corpus_entity_context(identity: str) -> dict:
         """Read an entity's soul, scoped identity rules, relationships and supporting activity."""
         return _dict_result(ApiServiceHflCorpusEntities(CONFIG).get_entity_context(identity))

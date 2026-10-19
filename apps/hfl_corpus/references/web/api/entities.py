@@ -14,6 +14,14 @@ class ApiServiceHflCorpusEntities(ApiServiceHflCorpusExtended):
         """Replace soul fields using the version from get_entity_context. Writes remote state."""
         return self._json('POST', f'entities/soul/{self._segment(identity)}', payload=soul)
 
+    def get_entity_soul_editor(self, identity: str) -> dict:
+        """Read profile, identity, connections and the revision for a coordinated edit."""
+        return self._json('GET', f'entities/soul-editor/{self._segment(identity)}')
+
+    def update_entity_soul_editor(self, identity: str, update: dict) -> dict:
+        """Atomically replace owner-authored fields; remote write requires editor revision."""
+        return self._json('POST', f'entities/soul-editor/{self._segment(identity)}', payload=update)
+
     def list_entities(
         self,
         query: str = '',

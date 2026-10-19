@@ -1,4 +1,5 @@
 """Versioned owner-authored entity knowledge; descriptions never authorize identity."""
+from contextlib import nullcontext
 import json
 from datetime import datetime, timezone
 
@@ -17,7 +18,7 @@ def all_souls(db=None):
             for r in db.execute('SELECT * FROM entity_souls')}
 
 
-def save(identity, payload, actor, available):
+def save(identity, payload, actor, available, connection=None):
     from workflows.hfl.entity_merges import record_event
     if identity not in available:
         raise ValueError('Entity unavailable; refresh the directory')
@@ -25,8 +26,9 @@ def save(identity, payload, actor, available):
         if relationship['target_id'] not in available or relationship['target_id'] == identity:
             raise ValueError('Choose another current entity for each relationship')
     now = datetime.now(timezone.utc).isoformat()
-    with get_store().connection() as db:
-        db.execute('BEGIN IMMEDIATE')
+    with (nullcontext(connection) if connection is not None else get_store().connection()) as db:
+        if connection is None:
+            db.execute('BEGIN IMMEDIATE')
         if db.execute('SELECT 1 FROM decisions WHERE alias=? AND active=1', (identity,)).fetchone():
             raise ValueError('Entity was merged; refresh before editing')
         group = db.execute('SELECT active FROM entity_merges WHERE id=?', (identity,)).fetchone()

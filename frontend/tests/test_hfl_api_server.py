@@ -71,9 +71,9 @@ def test_entity_review_contract_matches_runtime():
     live = app.openapi()
     for suffix in ('types', 'create', 'type/{identity}', 'merges/batch', 'matching', 'backfill',
                    'soul/{identity}', 'context/{identity}', 'resolutions/{entry_id}/{mention_id}/undo',
-                   'connections/{identity}', 'connection-activities', 'owner-binding'):
+                   'connections/{identity}', 'connection-activities', 'owner-binding', 'soul-editor/{identity}'):
         path = '/api/hfl/entities/' + suffix
         assert contract['paths'][path] == live['paths'][path]
     for name in ('TypeWrite', 'TypedProfile', 'KindWrite', 'BatchSubmit', 'MergeSubmit',
-                 'SoulWrite', 'IdentityRule', 'Relationship', 'JournalEntry', 'ConnectionChange', 'ConnectionsWrite', 'OwnerBinding'):
+                 'SoulWrite', 'IdentityRule', 'Relationship', 'JournalEntry', 'ConnectionChange', 'ConnectionsWrite', 'OwnerBinding', 'SoulEditorWrite'):
         assert contract['components']['schemas'][name] == live['components']['schemas'][name]

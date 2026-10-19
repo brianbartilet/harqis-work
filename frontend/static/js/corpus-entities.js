@@ -200,22 +200,11 @@
           const bind = el('button', 'This is my owner profile'); bind.type = 'button';
           bind.onclick = async () => { try { await api('/owner-binding', {identity:e.id}); await load(); } catch(error) { typeFeedback.textContent=error.message; } }; card.append(bind);
         }
-        const connections = el('details'); connections.className = 'entity-section'; connections.append(el('summary', 'Connections'));
-        const connectionList = el('div'); connectionList.className = 'entity-connection-list'; const connect = el('button', 'Create connections'); connect.type = 'button';
-        connect.onclick = () => window.EntityConnections.open(e, async () => { await load(); });
-        connections.append(connect, connectionList);
-        connections.addEventListener('toggle', async () => {
-          if (!connections.open) return;
-          connectionList.textContent = 'Loading connections…';
-          try {
-            const data = await api('/connections/' + encodeURIComponent(e.id)); connectionList.replaceChildren();
-            for (const c of data.connections) { const row=el('p'), link=el('a', c.label); link.href=c.activity?'/hfl-corpus/entities/entry/'+encodeURIComponent(c.target_id):'/hfl-corpus/graph?select='+encodeURIComponent(c.other_id); row.append(link, document.createTextNode(' · '+(c.incoming?'Incoming: ':'')+c.relation.replaceAll('_',' '))); connectionList.append(row); }
-            if(!data.connections.length)connectionList.textContent='No connections yet.';
-          } catch(error) { connectionList.textContent=error.message; }
-        });
+        const soulActions=el('div');soulActions.className='entity-soul-actions';
+        const updateSoul=el('button','Update soul');updateSoul.type='button';updateSoul.className='update-soul-button';
+        updateSoul.onclick=()=>window.EntityConnections.open(e,async()=>{await load();});soulActions.append(updateSoul);
         const supporting = el('details'); supporting.className = 'entity-section'; supporting.append(el('summary', 'Supporting activity'));
-        const profileEditor = editor(e); profileEditor.classList.add('entity-section');
-        card.append(typeFeedback, profileEditor, window.entitySoulEditor(e, api, load), connections, supporting, audit);
+        card.append(typeFeedback,soulActions,supporting,audit);
         if (!e.entries.length) supporting.append(el('p', 'No current supporting entries. Your saved profile remains available.'));
         for (const entry of e.entries) {
           const row = el('div'), link = el('a', entry.date.slice(0, 10) + ' · ' + entry.title); link.href = entry.href; link.target = '_blank'; link.rel = 'noopener noreferrer';

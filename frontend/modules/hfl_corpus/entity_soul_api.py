@@ -136,16 +136,16 @@ async def read_connections(request: Request, identity: str):
     return await run_in_threadpool(connection_snapshot, identity)
 
 
-def connection_snapshot(identity):
+def connection_snapshot(identity, available=None, connection=None):
     from workflows.hfl.entity_soul import all_souls
     from workflows.hfl.entity_store import get_store
     from workflows.hfl.entity_connections import activity_links
     from modules.hfl_corpus.entities import current_entries
-    available = snapshot()
+    available = snapshot() if available is None else available
     if identity not in available:
         raise HTTPException(404, 'Entity unavailable')
     store = get_store()
-    souls = all_souls()
+    souls = all_souls(connection)
     links = []
     versions = {identity: souls.get(identity, {}).get('version', 0)}
     for source, soul in souls.items():
@@ -161,7 +161,7 @@ def connection_snapshot(identity):
             versions[source] = soul['version']
     entries = {e['id']: e for e in current_entries()}
     seen_entries = set()
-    for row in activity_links():
+    for row in activity_links(connection):
         if store.resolve(row['entity_id']) != identity or row['entry_id'] not in entries:
             continue
         if row['entry_id'] in seen_entries:
@@ -214,3 +214,109 @@ async def bind_owner(request: Request, payload: OwnerBinding):
         return await run_in_threadpool(synchronize, available, payload.identity)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
+
+
+class SoulEditorWrite(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    revision: str
+    profile: dict
+    soul: SoulWrite
+    connections: ConnectionsWrite
+    new_entities: list[dict] = Field(default_factory=list, max_length=100)
+
+
+def editor_revision(db, identity):
+    """Include incoming relationships and activity links in the conflict token."""
+    import json
+    from workflows.hfl.entity_store import digest
+    profile = db.execute('SELECT kind,data FROM profiles WHERE id=?', (identity,)).fetchone()
+    related = []
+    for row in db.execute('SELECT id,version,data FROM entity_souls ORDER BY id'):
+        if row['id'] == identity or any(r['target_id'] == identity for r in json.loads(row['data'])['relationships']):
+            related.append(tuple(row))
+    links = [tuple(r) for r in db.execute('SELECT * FROM entity_activity_links WHERE entity_id=? ORDER BY entry_id', (identity,))]
+    return digest([tuple(profile) if profile else None, related, links])
+
+
+def editor_snapshot(identity):
+    from workflows.hfl.entity_store import get_store
+    from workflows.hfl.entity_soul import all_souls, empty
+    from services.markdown import render_markdown
+    available = snapshot()
+    with get_store().connection() as db:
+        db.execute('BEGIN')
+        result = connection_snapshot(identity, available, db)
+        profile = db.execute('SELECT data FROM profiles WHERE id=?', (identity,)).fetchone()
+        if profile:
+            import json
+            result['entity']['profile'] = json.loads(profile[0])
+        result['soul'] = all_souls(db).get(identity, empty())
+        result['soul_html'] = str(render_markdown(result['soul']['markdown']))
+        result['revision'] = editor_revision(db, identity)
+        return result
+
+
+@router.get('/soul-editor/{identity}')
+async def read_soul_editor(request: Request, identity: str):
+    from modules.hfl_corpus.entities_api import authorize
+    authorize(request)
+    return await run_in_threadpool(editor_snapshot, identity)
+
+
+def save_editor(identity, payload, actor):
+    from modules.hfl_corpus.entities_api import Profile, TypedProfile, validated_profile
+    from modules.hfl_corpus.entities import current_entries
+    from workflows.hfl.entity_store import get_store
+    from workflows.hfl import entity_soul, entity_connections, entity_types
+    from pydantic import ValidationError
+    try:
+        profile = validated_profile(Profile(**payload.profile))
+        new_entities = [(r['id'], TypedProfile(**{k:v for k,v in r.items() if k != 'id'})) for r in payload.new_entities]
+    except (ValidationError, KeyError) as exc:
+        raise HTTPException(422, 'Check Profile details and new entity names.') from exc
+    available = snapshot()
+    if identity not in available:
+        raise ValueError('Entity unavailable; reopen the dialog.')
+    if available[identity].get('is_owner') and profile['name'] != available[identity]['label']:
+        raise ValueError('Update your owner name in /profile.')
+    entry_ids = {e['id'] for e in current_entries()}
+    kinds = {t['id'] for t in entity_types.listing()}
+    store = get_store()
+    with store.connection() as db:
+        db.execute('BEGIN IMMEDIATE')
+        if editor_revision(db, identity) != payload.revision:
+            raise ValueError('Entity details changed. Your edits are retained; reopen the dialog to load the latest values.')
+        for new_id, item in new_entities:
+            import re
+            if not re.fullmatch(r'manual-[0-9a-f-]{36}', new_id) or new_id in available or item.kind not in kinds:
+                raise ValueError('New entity changed or has an invalid type.')
+            data = validated_profile(Profile(**item.model_dump(exclude={'kind'})))
+            if any(e['kind'] == item.kind and e['label'].casefold() == data['name'].casefold() for e in available.values()):
+                raise ValueError('A matching entity now exists; choose it in Connections.')
+            store.save_profile(new_id, item.kind, data, actor, connection=db)
+            available[new_id] = dict(id=new_id, label=data['name'], kind=item.kind)
+        store.save_profile(identity, available[identity]['kind'], profile, actor, connection=db)
+        # Connection edits preserve relationship provenance; identity saves read their final values.
+        entity_connections.edit(identity, [c.model_dump() for c in payload.connections.changes], actor,
+                                available, entry_ids, payload.connections.versions, connection=db)
+        latest = entity_soul.all_souls(db).get(identity, entity_soul.empty())
+        data = payload.soul.model_dump()
+        if payload.soul.version != payload.connections.versions.get(identity):
+            raise ValueError('Identity details changed; reopen the dialog.')
+        data['version'] = latest['version']
+        data['relationships'] = [{k:v for k,v in r.items() if k != 'provenance'} for r in latest['relationships']]
+        entity_soul.save(identity, data, actor, available, connection=db)
+    return {'saved': True}
+
+
+@router.post('/soul-editor/{identity}')
+async def write_soul_editor(request: Request, identity: str, payload: SoulEditorWrite, background_tasks: BackgroundTasks):
+    from modules.hfl_corpus.entities_api import authorize
+    from workflows.hfl.entity_resolution import dispatch_pending
+    actor = authorize(request)
+    try:
+        result = await run_in_threadpool(save_editor, identity, payload, actor)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    background_tasks.add_task(dispatch_pending)
+    return result

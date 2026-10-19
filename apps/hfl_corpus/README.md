@@ -449,3 +449,17 @@ before persisting or returning recipient data. See
 [workspace sharing](../../docs/info/HFL-CORPUS-SHARING.md#workspace-context-sharing).
 Older canonical servers support ordinary sharing through the existing filtered
 snapshot; mixed secret-backed sharing requires the updated service endpoint.
+
+
+### Unified entity Soul tools
+
+| Tool | Purpose |
+|---|---|
+| `get_hfl_corpus_entity_soul_editor` | Read profile, identity, connections and concurrency revision. |
+| `update_hfl_corpus_entity_soul_editor` | Atomically save all three sections (destructive remote write). |
+
+*Show the Soul details for this entity.*
+*Update the entity profile and connections together using its current revision.*
+
+The save payload follows the canonical SoulEditorWrite schema; conflicts leave all
+sections unchanged. Existing entity context and soul tools remain available.

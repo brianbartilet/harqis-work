@@ -660,7 +660,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     if(n?.href&&n.kind==='entries') {const button=document.createElement('button');button.textContent='Open entry';button.className='kg-open-entry';button.onclick=()=>openEntry(n.id.replace(/^entry:/,''),n.locator);$('detail').append(button);}
     if(!exampleMode)window.HflIdeas?.inspect(n,$('detail'),data.edges);
     if(n?.resolution&&!exampleMode&&!readOnly&&!window.HflIdeas?.maps.current){
-      const connect=document.createElement('button');connect.textContent='Create connections';
+      const connect=document.createElement('button');connect.textContent='Update soul';connect.className='update-soul-button';
       connect.onclick=()=>window.EntityConnections.open(n,async added=>{
         const response=await fetch('/api/hfl/entities/graph?'+(appliedParams||requestParams().toString()),{cache:'no-store'});
         if(!response.ok)throw Error('Saved, but graph refresh failed. Use Refresh to retry.');
@@ -683,7 +683,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       const root=$('detail');
       const status=root.querySelector('.idea-inspector-status-row');
       if(status)root.insertBefore(status,description);
-      const commonOrder=['Add','Create connections','Start board','Focus','Clear selection','Back to overview'];
+      const commonOrder=['Add','Update soul','Start board','Focus','Clear selection','Back to overview'];
       const specificOrder=['Open entry','Promote','Create connected action','Clone','Edit','Dismiss','Restore','Manage links'];
       const controls=[...root.children].filter(child=>child.tagName==='BUTTON'||child.classList.contains('idea-add-menu'));
       const label=control=>control.classList.contains('idea-add-menu')?'Add':control.textContent;

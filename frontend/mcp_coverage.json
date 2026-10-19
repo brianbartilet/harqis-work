@@ -3518,6 +3518,26 @@
       "status": "deferred",
       "tools": [],
       "reason": "Compatibility route for session-authenticated App Settings including secrets PIN changes; shares the /settings handler, whose machine-facing contract remains deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/entities/soul-editor/{identity}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_entity_soul_editor"
+      ],
+      "reason": "Dedicated owner Soul editor read and atomic revision-checked save.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.get_entity_soul_editor"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/soul-editor/{identity}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_soul_editor"
+      ],
+      "reason": "Dedicated owner Soul editor read and atomic revision-checked save.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_soul_editor"
     }
   ]
 }

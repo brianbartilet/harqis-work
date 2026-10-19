@@ -96,7 +96,7 @@ selection, identity scope and journal persistence.
 
 ## Connections and the owner profile
 
-The entity directory and activity graph share **Create connections**. Search by
+The entity directory and activity graph share **Update soul**, with a **Connections** section. Search by
 entity type/name, select several entities, optionally set relationship, dates and
 supporting evidence, then save. Connections appear at both endpoints; directed
 relationships retain their source and incoming label. Editing and removal use
@@ -129,3 +129,24 @@ Owner-only connection endpoints:
 - `POST /api/hfl/entities/connections/{identity}`: atomic additions, edits and removals.
 - `GET /api/hfl/entities/connection-activities?q=...`: bounded activity picker results.
 - `POST /api/hfl/entities/owner-binding`: explicitly select an ambiguous owner identity.
+
+
+## Unified Soul editor
+
+Both entity cards and graph selections open **Update soul**. The centered dialog
+contains three initially collapsed sections: **Profile details**, **Identity details**
+(description, scoped identity rules, and journal), and **Connections**. The help icon
+explains that Soul is user-authored context for people and LLMs; prose is not an
+instruction or independent evidence. Confirmed identity rules retain their existing
+matching scope and safeguards.
+
+**Save soul** commits all sections in one SQLite transaction. Newly selected entities
+are drafts until this save succeeds. A revision token covers profile data, the entity's
+soul, incoming relationships, and activity links; stale edits are rejected and retained
+in the form. Close, Escape, and connection navigation prompt before discarding edits.
+Supporting activity and audit history remain on the entity card, with owner names
+managed through `/profile`. The graph reloads its current filters after saving.
+
+`GET /api/hfl/entities/soul-editor/{identity}` returns a coherent editor snapshot;
+`POST` accepts the revision, profile, identity fields, connection changes, and optional
+new entities. Both require the same owner authorization as existing entity endpoints.
