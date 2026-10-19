@@ -123,7 +123,7 @@
           for (const [key, card] of visible) {
             const {record, original} = card;
             const row = el('div'); row.className = 'connection-card';
-            row.append(button(card.label, () => { if (!newEntities.has(record.target_id)) navigate(card.otherId, record.activity); }));
+            const cardHeader=el('div');cardHeader.className='connection-card-heading';cardHeader.append(el('strong',card.label));row.append(cardHeader);
             const meta = el('div'); meta.className = 'connection-result-meta';meta.append(typePill(card.kind));
             const summary = el('small'), pending = el('small');
             const refresh = () => {
@@ -131,7 +131,7 @@
                 (record.since || record.until ? ' · ' + (record.since || 'Any start') + ' — ' + (record.until || 'No end') : '');
               pending.textContent = !original || changes.has(key) ? 'Not saved' : '';
             };
-            meta.append(pending);row.append(meta,summary);
+            meta.append(summary,pending);row.append(meta);
             const actions = el('div');actions.className='connection-card-actions';
             const editor = el('div');editor.className='connection-card-editor';editor.hidden=true;
             if (!record.activity) {
@@ -162,7 +162,7 @@
               else{selected.delete(card.otherId);newEntities.delete(record.target_id);cards.delete(key);markDirty();}
               renderExisting();searchOptions();
             }));
-            row.append(actions,editor);refresh();existing.append(row);
+            cardHeader.append(actions);row.append(editor);refresh();existing.append(row);
           }
         }
         function add(choice) {

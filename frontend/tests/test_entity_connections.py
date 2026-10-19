@@ -198,7 +198,7 @@ def test_connection_picker_browser(soul_data, authenticated_client, tmp_path, wi
             graph_dialog.get_by_role('button', name='Save', exact=True).click()
             playwright.expect(graph_dialog.get_by_text('Soul saved.',exact=True)).to_be_visible()
             graph_dialog.get_by_text('Connections', exact=True).click()
-            playwright.expect(graph_dialog.get_by_role('button', name='New Team', exact=True)).to_be_visible()
+            playwright.expect(graph_dialog.locator('.connection-current strong').filter(has_text='New Team')).to_be_visible()
             graph_dialog.get_by_role('button', name='Close', exact=True).click()
             reveal = page.locator('#kg-detail').get_by_role('button', name='Show connected entities', exact=True)
             playwright.expect(reveal).to_be_visible()

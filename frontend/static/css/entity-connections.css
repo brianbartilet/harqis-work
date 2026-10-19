@@ -74,7 +74,10 @@ dialog.entity-connections-dialog{position:fixed;inset:0;margin:auto;max-width:ca
 
 .entity-connections-dialog .connection-current{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
 .entity-connections-dialog .connection-current .connection-card{padding:12px;gap:8px}
-.entity-connections-dialog .connection-card-actions{display:flex;gap:8px;flex-wrap:wrap}
+.entity-connections-dialog .connection-card-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.entity-connections-dialog .connection-card-heading>strong{min-width:0;overflow-wrap:anywhere;color:#e2e8f0}
+.entity-connections-dialog .connection-card-actions{display:flex;gap:6px;flex-shrink:0;margin-left:auto}
+.entity-connections-dialog .connection-card-actions button{font-size:12px;line-height:1.5;padding:5px 8px;min-height:30px}
 .entity-connections-dialog .connection-card.is-editing{grid-column:1/-1}
 .entity-connections-dialog .connection-card-editor{border-top:1px solid #334155;margin-top:4px}
 @media(max-width:540px){.entity-connections-dialog .connection-current{grid-template-columns:1fr}}
