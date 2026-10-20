@@ -74,6 +74,7 @@ for these boundaries and the September 15–16 recovery plan.
 
 | Task | What it does | Express target | Schedule (when active) |
 | --- | --- | --- | --- |
+| `ingest_nothing_essential_space_activity` | One entry per Essential Space Markdown export revision; bounded collection, optional Haiku, durable submission and local receipts. Read-only preview: `nothing_essential_space_activity`. | `file:activity-corpus+es:hfl-entries` | Disabled scaffold; proposed daily 23:25 on `hfl`. See [setup and limitations](NOTHING-ESSENTIAL-SPACE.md). |
 | `capture_hfl_entry` | Appends one structured entry to today's corpus file. Empty `moment` is a no-op. | `file:hfl_corpus` | Adhoc — invoked via `.delay()`, an MCP tool, an agent, or a hotkey. The scheduled slot fires Sunday 03:33 with empty kwargs (i.e. is a no-op). |
 | `retrieve_hfl_corpus` | Substring + tag scan over the corpus, optional date filter. Returns up to `k` entries, most recent first. | `es_log` (callers consume the return value) | Adhoc — same pattern as capture. |
 | `summarize_hfl_week` | Weekly Haiku 4.5 rollup of the past N days; writes `YYYY-Www-rollup.md` with searchable tags aggregated from its source entries. | `file:hfl_summary+es_log` | Sundays 21:00 local. |

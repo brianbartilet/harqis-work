@@ -475,6 +475,25 @@ WORKFLOW_HFL = {
         },
     },
 
+    # Disabled scaffold: configure NOTHING_ESSENTIAL_SPACE_EXPORT_DIR and verify
+    # a manual preview before uncommenting. One Beat/worker host owns the inbox.
+    # 'run-job--ingest_nothing_essential_space_activity': {
+    #     'task': 'workflows.hfl.tasks.ingest_nothing_essential_space.ingest_nothing_essential_space_activity',
+    #     'schedule': crontab(hour=23, minute=25),
+    #     'kwargs': {
+    #         'cfg_id__anthropic': 'ANTHROPIC',
+    #         'model': 'claude-haiku-4-5-20251001',
+    #         'window_days': 7, 'max_captures': 25, 'max_scan': 5000,
+    #         'synthesize': False,
+    #     },
+    #     'options': {'queue': WorkflowQueue.HFL, 'expires': 60 * 60 * 12},
+    #     'manifesto': {
+    #         'code_role': 'capture+distill+express', 'para_bucket': 'area',
+    #         'express_target': 'file:activity-corpus+es:hfl-entries',
+    #         'review_artifact': 'es_log+file', 'hfl_signal': True,
+    #     },
+    # },
+
     # Weekly YouTube upload archive — Mondays at 06:00 local. Scans the previous
     # seven days for own uploads and
     # external-video playlist additions, downloads each video plus a curated

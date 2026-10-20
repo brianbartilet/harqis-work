@@ -1439,6 +1439,34 @@ def register_memory_tools(mcp: FastMCP):
         }
 
     @mcp.tool()
+    def nothing_essential_space_activity(
+        period: str = "", since: str = "", until: str = "", max_captures: int = 25,
+    ) -> dict:
+        """Preview configured Essential Space exports; no model or storage writes.
+
+        This HARQIS tool is distinct from Nothing's upstream MCP service.
+        Export text is returned as source evidence, not a verified transcript.
+        """
+        from workflows.hfl.tasks.ingest_nothing_essential_space import (
+            collect_nothing_essential_space_activity,
+        )
+        start, end, label = _resolve_window(period, since, until)
+        end_d = end or _today()
+        start_d = start or end_d - timedelta(days=6)
+        try:
+            activity = collect_nothing_essential_space_activity(
+                since=start_d, until=end_d, max_captures=max_captures)
+            # Bound the preview payload independently from on-disk artifact size.
+            previews = [{**capture, "export_text": capture["export_text"][:4000],
+                         "text_truncated": len(capture["export_text"]) > 4000}
+                        for capture in activity["captures"]]
+            return {**activity, "captures": previews, "found": bool(previews),
+                    "period": _period_dict(start_d, end_d, label)}
+        except Exception as exc:
+            return {"found": False, "captures": [], "error": type(exc).__name__,
+                    "period": _period_dict(start_d, end_d, label)}
+
+    @mcp.tool()
     def plaud_activity(
         period: str = "",
         since: str = "",
