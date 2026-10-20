@@ -239,6 +239,75 @@ class ConsolidationDecision(BaseModel):
     facts: list[ConsolidationFact] = Field(default_factory=list, max_length=8)
     aliases: list[str] = Field(default_factory=list, max_length=30)
     partial_aliases: list[str] = Field(default_factory=list, max_length=30)
+    reason_code: Literal['insufficient-evidence', 'conflicting-identity', 'different-identities'] | None = None
+
+
+class IntegrityReview(BaseModel):
+    required: bool
+    reason: str = Field(min_length=1, max_length=10000)
+    operation_ids: list[str] = Field(default_factory=list, max_length=50)
+
+
+class SeparationReversal(BaseModel):
+    left_id: str = Field(min_length=1, max_length=500)
+    right_id: str = Field(min_length=1, max_length=500)
+    reason: str = Field(min_length=1, max_length=10000)
+
+
+@router.post('/separations/reverse')
+async def separation_reverse(request: Request, payload: SeparationReversal):
+    actor = owner(request)
+    from workflows.hfl.entity_integrity import reverse_separation
+    return await call(reverse_separation, payload.left_id, payload.right_id, payload.reason, actor)
+
+
+@router.post('/integrity/{identity}')
+async def integrity_review(request: Request, identity: str, payload: IntegrityReview):
+    actor = owner(request)
+    from workflows.hfl.entity_integrity import set_review
+    return await call(set_review, identity, payload.required, payload.reason, payload.operation_ids, actor)
+
+
+@router.get('/resolution')
+async def resolution_health(request: Request):
+    owner(request)
+    from workflows.hfl.entity_resolution import status
+    return await call(status)
+
+
+@router.post('/resolution/{entry_id}/retry')
+async def resolution_retry(request: Request, entry_id: str):
+    owner(request)
+    from workflows.hfl.entity_resolution import retry_failed
+    return await call(retry_failed, entry_id)
+
+
+class ExecutionStart(BaseModel):
+    execution_id: str = Field(min_length=1, max_length=100, pattern=r'^[a-zA-Z0-9_-]+$')
+    max_pairs: int = Field(default=40, ge=1, le=200)
+    seconds: int = Field(default=900, ge=30, le=3600)
+
+
+class ExecutionClose(BaseModel):
+    reason: Literal['budget', 'exhausted', 'provider-failure', 'integrity-concern']
+    errors: list[str] = Field(default_factory=list, max_length=20)
+
+
+@router.post('/consolidation/{run_id}/executions')
+async def execution_start(request: Request, run_id: str, payload: ExecutionStart):
+    owner(request)
+    from workflows.hfl.entity_executions import start
+    return await call(start, run_id, payload.execution_id, payload.max_pairs, payload.seconds)
+
+
+@router.post('/consolidation/{run_id}/executions/{execution_id}/close')
+async def execution_close(request: Request, run_id: str, execution_id: str, payload: ExecutionClose):
+    owner(request)
+    from workflows.hfl.entity_executions import close
+    from workflows.hfl.entity_consolidation import dispatch_reports
+    result = await call(close, run_id, execution_id, payload.reason, payload.errors)
+    await call(dispatch_reports, result['report_id'])
+    return result
 
 
 class ConsolidationBatch(BaseModel):

@@ -16,6 +16,9 @@ def deliver(run_id):
         run = load(run_id)
         if run['state'] != 'complete':
             raise ValueError('Finish the run before delivering its summary')
+        # Execution reports own their receipts; a later global finish must not notify them again.
+        report_pairs = {i: p for i, p in run['pairs'].items()
+                        if not p.get('reported_in') or run.get('execution_report')}
         delivery = run['delivery']
         if not delivery.get('hfl'):
             entry = HflEntry(when=datetime.fromisoformat(run['created']),
@@ -33,13 +36,13 @@ def deliver(run_id):
             return delivery
         if delivery.get('telegram_state') == 'sending':
             raise ValueError('Telegram outcome uncertain; reconcile before retrying to avoid duplicate notification')
-        if not any(pair['state'] == 'merged' for pair in run['pairs'].values()):
+        if not any(pair['state'] == 'merged' for pair in report_pairs.values()):
             delivery['telegram_state'] = 'suppressed'
             delivery.pop('error', None)
             save(run)
             return delivery
         groups = {}
-        for pair in run['pairs'].values():
+        for pair in report_pairs.values():
             groups.setdefault(pair['kind'], []).append(pair)
         from workflows.hfl.entity_consolidation import merged_group_count
         text = 'Daily entity consolidation — ' + run_id + '\n'

@@ -129,6 +129,9 @@ def projection(source='', since='', until='', context='', resolve_mentions=True,
         links_by_entry.setdefault(link['entry_id'], []).append(link)
     decisions = [d for d in store.decisions() if d['active']]
     aliases = {d['alias']: d['canonical'] for d in decisions}
+    from workflows.hfl.entity_integrity import flagged, isolated_mention
+    with store.connection() as db:
+        quarantine = flagged(db)
     def resolve(identity):
         visited = set()
         while identity in aliases and identity not in visited:
@@ -147,12 +150,20 @@ def projection(source='', since='', until='', context='', resolve_mentions=True,
         for link in links_by_entry.get(entry['id'], []):
             identity = resolve(link['entity_id'])
             profile = manual_profiles.get(identity)
-            if link['entry_id'] == entry['id'] and profile and identity not in {resolve(m['id']) for m in mentions}:
+            if link['entry_id'] == entry['id'] and profile and (
+                    identity in quarantine or identity not in {resolve(m['id']) for m in mentions}):
                 mentions.append(dict(id=identity, label=profile['name'], kind=profile['kind'],
                                      resolution='curated', method='user-confirmed', evidence='Manually linked supporting activity'))
         labels.update({m['id']: m['label'] for m in mentions})
-        rows.append({**entry, 'mentions': [{**m, 'id': resolve(m['id'])} for m in mentions],
-                     'enriched': valid and cached.get('version') == VERSION})
+        projected = []
+        for m in mentions:
+            target = resolve(m['id'])
+            if target in quarantine and m.get('method') != 'user-confirmed':
+                projected.append({**m, 'id': isolated_mention(entry['id'], m['id']),
+                                  'resolution': 'integrity-review', 'integrity_target': target})
+            else:
+                projected.append({**m, 'id': target})
+        rows.append({**entry, 'mentions': projected, 'enriched': valid and cached.get('version') == VERSION})
     reviewed = {resolve(d['canonical']) for d in decisions}
     profiles = store.profiles()
     from workflows.hfl import entity_soul, entity_resolution

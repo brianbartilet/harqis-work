@@ -540,12 +540,14 @@ def test_alias_editor_saves_partial_hints_and_preference(corpus, authenticated_c
             page.goto('https://entities.test/hfl-corpus/entities')
             card = page.locator('#entity-list > details').first
             card.locator(':scope > summary').click()
-            card.locator('.profile-editor > summary').click()
-            card.locator('[name=aliases]').fill('Kevin H.\nKevin Hildgendorff')
-            card.locator('[name=partial_aliases]').fill('Hildgend')
-            card.get_by_label('Prefer this display name during automatic merges').check()
-            card.get_by_role('button', name='Save profile').click()
-            playwright.expect(page.locator('#entity-status')).to_contain_text('Profile saved.')
+            card.get_by_role('button', name='Update soul').click()
+            dialog = page.locator('.entity-connections-dialog')
+            dialog.get_by_text('Identity matching helpers', exact=True).click()
+            dialog.get_by_label('Aliases (one per line)', exact=True).fill('Kevin H.\nKevin Hildgendorff')
+            dialog.get_by_label('Partial matching hints (one per line)', exact=True).fill('Hildgend')
+            dialog.get_by_label('Prefer this display name during automatic merges').check()
+            dialog.get_by_role('button', name='Save', exact=True).click()
+            playwright.expect(dialog.locator('[role=status]').first).to_contain_text('Soul saved.')
             stored = next(p for p in get_store().profiles().values() if p.get('aliases'))
             assert stored['aliases'] == ['Kevin H.', 'Kevin Hildgendorff']
             assert stored['partial_aliases'] == ['Hildgend'] and stored['preferred_name']

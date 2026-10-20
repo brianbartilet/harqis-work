@@ -31,6 +31,13 @@ def reconcile(run, live):
     run.setdefault('discovery_snapshots', dict(run['snapshots']))
     changed = {i for i, value in run['snapshots'].items() if signatures.get(i) != value}
     runs.invalidate(run, changed)
+    from workflows.hfl.entity_integrity import flagged
+    with get_store().connection() as db:
+        quarantine = flagged(db)
+    for pair in run['pairs'].values():
+        if pair['state'] == 'pending' and set(pair['ids']).intersection(quarantine):
+            pair.update(state='deferred', reason_code='conflicting-identity',
+                        note='Identity review required', next_step='Integrity review')
     # Upgrade legacy evidence only when the underlying entity is unchanged.
     for pair in run['pairs'].values():
         if pair['state'] == 'pending':
@@ -110,6 +117,8 @@ def claim_work(run_id, options):
         run = runs.load(run_id)
         if run['state'] != 'running':
             raise ValueError('Run is closed')
+        from workflows.hfl.entity_executions import check
+        check(run, [])
         live, _ = runs.live_snapshot(run)
         signatures = reconcile(run, live)
         changed = {i for i, value in signatures.items() if run['discovery_snapshots'].get(i) != value}
@@ -129,7 +138,8 @@ def claim_work(run_id, options):
                 runs.save(run)
                 return packet(run, claim)
         busy = {i for c in run['claims'].values() for i in c['entity_ids']}
-        pending = sorted((p for p in run['pairs'].values() if p['state'] == 'pending'
+        scope = set(run['executions'][run['execution']]['pair_ids']) if run.get('execution') else None
+        pending = sorted((p for p in run['pairs'].values() if p['state'] == 'pending' and (scope is None or p['id'] in scope)
                           and not busy.intersection(p['ids'])), key=runs.pair_priority)
         if not pending:
             runs.save(run)
@@ -147,7 +157,7 @@ def claim_work(run_id, options):
             added += discover(run, live, signatures, {anchor}, index)
             expansions[anchor] = signatures[anchor]
         run['checkpoint'].update(added=added, counts=runs.view(run, limit=0)['counts'])
-        edges = sorted((p for p in run['pairs'].values() if p['state'] == 'pending'
+        edges = sorted((p for p in run['pairs'].values() if p['state'] == 'pending' and (scope is None or p['id'] in scope)
                         and anchor in p['ids'] and not busy.intersection(p['ids'])), key=runs.pair_priority)
         if sequence % 5 == 0:
             edges = [seed] + [p for p in edges if p['id'] != seed['id']]

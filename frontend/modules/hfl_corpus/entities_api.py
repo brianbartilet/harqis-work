@@ -138,7 +138,9 @@ async def index(request: Request, source: str = '', since: str = '', until: str 
     counts = {t['id']: sum(e['kind'] == t['id'] for e in rows) for t in types}
     rows = [e for e in rows if (not kind or e['kind'] == kind) and
             all(word in str([e['label'], e.get('categories'), e.get('profile')]).casefold() for word in q.casefold().split())]
-    return {'entities': rows[offset:offset + limit] if limit else rows[offset:], 'total': len(rows), 'counts': counts, 'types': types}
+    from workflows.hfl.entity_directory_status import annotate
+    page = rows[offset:offset + limit] if limit else rows[offset:]
+    return {'entities': await run_in_threadpool(annotate, page), 'total': len(rows), 'counts': counts, 'types': types}
 
 
 class Profile(BaseModel):
@@ -179,11 +181,38 @@ def validate_kind(kind):
         raise HTTPException(400, 'Choose an existing entity type.')
 
 
+class CreateProfile(TypedProfile):
+    confirm_distinct: bool = False
+
+
+def creation_suggestions(payload):
+    from workflows.hfl.entity_candidates import CandidateIndex, incoming_candidates
+    from workflows.hfl.entity_integrity import flagged
+    rows = [r for r in entities.entity_index() if r['kind'] == payload.kind
+            and not r['id'].startswith('integrity-mention-')]
+    probe = dict(id='creation-probe', kind=payload.kind, label=payload.name, profile=payload.model_dump(), entries=[])
+    with get_store().connection() as db:
+        quarantine = flagged(db)
+    return [dict(id=r['id'], name=r['label'], kind=r['kind'], entries=len(r['entries']),
+                 integrity_review=r['id'] in quarantine)
+            for r in incoming_candidates(probe, CandidateIndex(rows), limit=10)]
+
+
+@router.post('/api/hfl/entities/possible-existing')
+async def possible_existing(request: Request, payload: TypedProfile):
+    authorize(request)
+    validate_kind(payload.kind)
+    return {'suggestions': await run_in_threadpool(creation_suggestions, payload)}
+
+
 @router.post('/api/hfl/entities/create')
-async def create_entity(request: Request, payload: TypedProfile):
+async def create_entity(request: Request, payload: CreateProfile):
     from uuid import uuid4
     actor = authorize(request)
     validate_kind(payload.kind)
+    suggestions = await run_in_threadpool(creation_suggestions, payload)
+    if suggestions and not payload.confirm_distinct:
+        return {'state': 'possible-existing', 'suggestions': suggestions}
     identity = 'manual-' + uuid4().hex
     data = validated_profile(Profile(**payload.model_dump()))
     await run_in_threadpool(get_store().save_profile, identity, payload.kind, data, actor)
