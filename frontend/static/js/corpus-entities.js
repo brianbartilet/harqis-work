@@ -4,7 +4,7 @@
   let loadVersion = 0;
   const pageSize = 50;
   const selectedEntities = new Set();
-  let typeBusy = false, typeSelection = [], typeSource = '';
+  let typeBusy = false, typeSelection = [];
   let matchingItems = [], mergeBusy = false, mergePreview = null, mergeTarget = null, mergeRequest = '', submittedPayload = null;
   const selectedKinds = new Set(), selectedCategories = new Set(), selectedSources = new Set();
   let suggestions = [], suggestionEntities = [], visibleSuggestions = [], suggestionLimit = 100, batchGroups = [], batchBusy = false;
@@ -113,10 +113,12 @@
     const filtered = items.filter(matchesFilters).sort(compareEntities);
     renderSuggestions();
     matchingItems = filtered;
-    const selectionKind = items.find(e => selectedEntities.has(e.id))?.kind;
-    $('selection-count').textContent = `${selectedEntities.size} selected${selectionKind ? ' · ' + kinds[selectionKind] : ''}`;
-    $('merge-selected').disabled = selectedEntities.size < 2;
-    $('change-type-selected').disabled = !selectedEntities.size || items.filter(e => selectedEntities.has(e.id)).length !== selectedEntities.size || new Set(items.filter(e => selectedEntities.has(e.id)).map(e => e.kind)).size !== 1;
+    const selectedItems = items.filter(e => selectedEntities.has(e.id));
+    const selectionKinds = new Set(selectedItems.map(e => e.kind));
+    const selectionKind = selectionKinds.size === 1 ? selectedItems[0].kind : '';
+    $('selection-count').textContent = `${selectedEntities.size} selected${selectionKind ? ' · ' + kinds[selectionKind] : selectionKinds.size > 1 ? ' · Mixed types' : ''}`;
+    $('merge-selected').disabled = selectedEntities.size < 2 || selectionKinds.size !== 1 || selectedItems.length !== selectedEntities.size;
+    $('change-type-selected').disabled = !selectedEntities.size || selectedItems.length !== selectedEntities.size;
     const pages = Math.max(1, Math.ceil(filtered.length / pageSize)); page = Math.max(0, Math.min(page, pages - 1));
     $('entity-status').textContent = `${filtered.length} matching entities · ${items.length} of ${total} loaded · ${pageSize} per page`;
     $('page-number').textContent = `Page ${page + 1} of ${pages}`; $('previous').disabled = page === 0; $('next').disabled = page + 1 >= pages;
@@ -127,13 +129,13 @@
       const previous = previousCards.get(e.id), signature = JSON.stringify([e, kinds]);
       const dirty = previous && [...previous.querySelectorAll('input:not([type=checkbox]),textarea')].some(input => input.value !== input.defaultValue);
       if (previous && (previous.dataset.signature === signature || dirty)) {
-        const checkbox = previous.querySelector('.entity-select'); checkbox.checked = selectedEntities.has(e.id); checkbox.disabled = Boolean(selectionKind && selectionKind !== e.kind);
+        const checkbox = previous.querySelector('.entity-select'); checkbox.checked = selectedEntities.has(e.id);
         $('entity-list').append(previous); continue;
       }
       const card = el('details'); card.className = 'entity-card'; card.dataset.entityId = e.id; card.dataset.signature = signature;
       const summary = el('summary'), title = el('span'); title.className = 'entity-title-row';
       const checkbox = el('input'); checkbox.type = 'checkbox'; checkbox.className = 'entity-select';
-      checkbox.checked = selectedEntities.has(e.id); checkbox.disabled = Boolean(selectionKind && selectionKind !== e.kind);
+      checkbox.checked = selectedEntities.has(e.id);
       checkbox.setAttribute('aria-label', 'Select ' + e.label);
       checkbox.addEventListener('click', event => event.stopPropagation());
       checkbox.onchange = () => { checkbox.checked ? selectedEntities.add(e.id) : selectedEntities.delete(e.id); render(); };
@@ -579,11 +581,8 @@
   $('backfill').onclick = () => run(async () => { showJob(await api('/backfill', {}), 'backfill'); });
   $('export').onclick = () => run(async () => { showJob(await api('/export', {}), 'export'); });
   function selectMany(rows) {
-    const kind = items.find(e => selectedEntities.has(e.id))?.kind;
-    const eligible = kind ? rows.filter(e => e.kind === kind) : rows;
-    if (new Set(eligible.map(e => e.kind)).size > 1) { $('selection-feedback').textContent = 'Filter to one entity type or select one entity first.'; return; }
-    eligible.forEach(e => selectedEntities.add(e.id));
-    $('selection-feedback').textContent = kind ? `Selected matching ${kinds[kind].toLowerCase()}; other types were excluded.` : '';
+    rows.forEach(e => selectedEntities.add(e.id));
+    $('selection-feedback').textContent = '';
     render();
   }
   $('select-page').onclick = () => selectMany(matchingItems.slice(page * pageSize, (page + 1) * pageSize));
@@ -596,11 +595,11 @@
   }
   $('change-type-selected').onclick = () => {
     typeSelection = items.filter(e => selectedEntities.has(e.id));
-    if (!typeSelection.length || new Set(typeSelection.map(e => e.kind)).size !== 1) return;
-    typeSource = typeSelection[0].kind;
+    if (!typeSelection.length) return;
+    const typeSource = new Set(typeSelection.map(e => e.kind)).size === 1 ? typeSelection[0].kind : '';
     choices('batch-type-kind', Object.entries(kinds).filter(([kind]) => kind !== typeSource), 'Choose a type');
     $('batch-type-kind').value = '';
-    $('batch-type-description').textContent = `Change ${typeSelection.length} ${kinds[typeSource]} entities, including selections on other pages or hidden by filters. Profiles and connections are preserved.`;
+    $('batch-type-description').textContent = `Change ${typeSelection.length} ${typeSource ? kinds[typeSource] : 'mixed-type'} entities, including selections on other pages or hidden by filters. Profiles and connections are preserved. Entities already of the chosen type stay unchanged.`;
     $('batch-type-feedback').textContent = '';
     typeWaiting(false); $('entity-type-dialog').showModal();
   };
@@ -612,7 +611,7 @@
     const kind = $('batch-type-kind').value;
     typeWaiting(true); $('batch-type-feedback').textContent = 'Changing selected entity types…';
     try {
-      const result = await api('/types/batch', {entity_ids:typeSelection.map(e => e.id), source_kind:typeSource, kind});
+      const result = await api('/types/batch', {entity_ids:typeSelection.map(e => e.id), source_kinds:Object.fromEntries(typeSelection.map(e => [e.id, e.kind])), kind});
       typeSelection.forEach(e => selectedEntities.delete(e.id));
       $('entity-type-dialog').close();
       try { await load(); } catch (err) { $('entity-status').textContent = 'Types changed, but the directory could not refresh: ' + err.message; }

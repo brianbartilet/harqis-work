@@ -226,7 +226,8 @@ class KindWrite(BaseModel):
 
 class BatchKindWrite(KindWrite):
     entity_ids: list[str] = Field(min_length=1, max_length=10000)
-    source_kind: str
+    source_kind: str | None = None
+    source_kinds: dict[str, str] = Field(default_factory=dict)
 
 
 def change_selected_types(payload, actor):
@@ -239,21 +240,23 @@ def change_selected_types(payload, actor):
         if any(identity not in available for identity in ids):
             raise HTTPException(404, 'Entity unavailable; refresh the directory.')
         selected = [available[identity] for identity in ids]
-        if any(e['kind'] != payload.source_kind for e in selected):
-            raise HTTPException(409, 'Selected entities must still have the same original type. Refresh the directory.')
+        if any(e['kind'] != payload.source_kinds.get(e['id'], payload.source_kind or e['kind']) for e in selected):
+            raise HTTPException(409, 'An entity type changed. Refresh the directory.')
         if any(e.get('is_owner') for e in selected) and payload.kind != 'people':
             raise HTTPException(409, 'The corpus owner must remain a People entity.')
         try:
             for entity in selected:
                 current = db.execute('SELECT kind,data FROM profiles WHERE id=?', (entity['id'],)).fetchone()
-                if current and current['kind'] != payload.source_kind:
+                if current and current['kind'] != entity['kind']:
                     raise HTTPException(409, 'An entity type changed. Refresh the directory.')
+                if entity['kind'] == payload.kind:
+                    continue
                 profile = json.loads(current['data']) if current else entity.get('profile') or {'name': entity['label']}
                 data = validated_profile(Profile(**profile))
                 store.save_profile(entity['id'], payload.kind, data, actor, connection=db)
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
-    return {'kind': payload.kind, 'updated': len(ids)}
+    return {'kind': payload.kind, 'updated': sum(e['kind'] != payload.kind for e in selected)}
 
 
 @router.post('/api/hfl/entities/types/batch')

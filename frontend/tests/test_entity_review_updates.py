@@ -105,6 +105,25 @@ def test_batch_type_change_validation_and_rollback(review_data, authenticated_cl
     assert get_store().profiles()['c'] == before['c']
 
 
+def test_batch_type_change_accepts_mixed_types_and_preserves_existing_target(review_data, authenticated_client):
+    client = authenticated_client
+    before = get_store().profiles()
+    body = dict(entity_ids=['a', 'p'], source_kinds={'a': 'people', 'p': 'pets'}, kind='pets')
+    stale = client.post('/api/hfl/entities/types/batch',
+                        json={**body, 'source_kinds': {'a': 'tools', 'p': 'pets'}})
+    assert stale.status_code == 409
+    assert get_store().profiles() == before
+    result = client.post('/api/hfl/entities/types/batch', json=body)
+    assert result.status_code == 200, result.text
+    assert result.json()['updated'] == 1
+    after = get_store().profiles()
+    assert after['a']['kind'] == 'pets'
+    assert after['a']['notes'] == before['a']['notes']
+    assert after['p'] == before['p']
+    assert client.post('/api/hfl/entities/types/batch',
+                       json=dict(entity_ids=['b', 'q'], kind='tools')).status_code == 200
+
+
 def test_batch_disjoint_merges_survive_unrelated_changes_and_retry(review_data, authenticated_client):
     client=authenticated_client
     groups=[payload(client,['a','b','c'],'Alex'),payload(client,['p','q'],'Fido')]

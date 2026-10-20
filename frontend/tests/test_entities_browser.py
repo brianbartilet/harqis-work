@@ -126,7 +126,7 @@ def test_bulk_selection_merge_and_unmerge(authenticated_client, monkeypatch, tmp
             page.get_by_role('checkbox', name='Select Topic 00', exact=True).check()
             assert page.locator('#selection-count').inner_text() == '1 selected · Topics'
             page.click('#next')
-            assert page.get_by_role('checkbox', name='Select Zoe', exact=True).is_disabled()
+            assert page.get_by_role('checkbox', name='Select Zoe', exact=True).is_enabled()
             page.get_by_role('checkbox', name='Select Topic 50', exact=True).check()
             page.fill('#entity-query', 'Topic 01')
             assert page.locator('#selection-count').inner_text() == '2 selected · Topics'
@@ -134,12 +134,13 @@ def test_bulk_selection_merge_and_unmerge(authenticated_client, monkeypatch, tmp
             assert page.locator('#selection-count').inner_text() == '3 selected · Topics'
             page.click('#clear-filters')
             page.click('#select-matching')
-            assert page.locator('#selection-count').inner_text() == '60 selected · Topics'
+            assert page.locator('#selection-count').inner_text() == '61 selected · Mixed types'
+            assert page.locator('#merge-selected').is_disabled()
             page.click('#change-type-selected')
-            assert '60 Topics entities' in page.locator('#batch-type-description').inner_text()
+            assert '61 mixed-type entities' in page.locator('#batch-type-description').inner_text()
             page.screenshot(path=str(tmp_path / 'batch-type-desktop.png'))
             page.keyboard.press('Escape')
-            assert page.locator('#selection-count').inner_text() == '60 selected · Topics'
+            assert page.locator('#selection-count').inner_text() == '61 selected · Mixed types'
             page.click('#change-type-selected')
             assert page.locator('#batch-type-kind').input_value() == ''
             page.select_option('#batch-type-kind', 'tools')
@@ -148,9 +149,18 @@ def test_bulk_selection_merge_and_unmerge(authenticated_client, monkeypatch, tmp
             page.screenshot(path=str(tmp_path / 'batch-type-mobile.png'))
             page.click('#batch-type-confirm')
             page.wait_for_selector('#entity-type-dialog', state='hidden')
-            page.wait_for_function("document.querySelector('#selection-feedback').textContent.includes('60 entities changed to Tools')")
+            page.wait_for_function("document.querySelector('#selection-feedback').textContent.includes('61 entities changed to Tools')")
             assert all(get_store().profiles()[f'topic-{i}']['kind'] == 'tools' for i in range(60))
+            assert get_store().profiles()['person']['kind'] == 'tools'
             assert page.locator('#change-type-selected').is_disabled()
+            page.fill('#entity-query', 'Zoe')
+            page.click('#select-page')
+            page.click('#change-type-selected')
+            page.select_option('#batch-type-kind', 'people')
+            page.click('#batch-type-confirm')
+            page.wait_for_selector('#entity-type-dialog', state='hidden')
+            page.wait_for_function("document.querySelector('#selection-feedback').textContent.includes('1 entities changed to People')")
+            page.fill('#entity-query', 'Topic')
             page.get_by_role('checkbox', name='Select Topic 00', exact=True).check()
             page.click('#select-matching')
             page.click('#change-type-selected')
@@ -160,6 +170,7 @@ def test_bulk_selection_merge_and_unmerge(authenticated_client, monkeypatch, tmp
             page.wait_for_function("document.querySelector('#selection-feedback').textContent.includes('60 entities changed to Topics')")
             page.get_by_role('checkbox', name='Select Topic 00', exact=True).check()
             page.click('#select-matching')
+            page.click('#clear-filters')
             page.click('#merge-selected')
             page.fill('#merge-name', 'Combined topics')
             page.fill('#merge-evidence', 'Same subject across aliases')
