@@ -76,7 +76,9 @@ def _stop_group(proc, grace):
     """TERM then KILL the session, including children outliving the leader."""
     try:
         os.killpg(proc.pid, signal.SIGTERM)
-    except ProcessLookupError:
+    except (ProcessLookupError, PermissionError):
+        # macOS can deny group operations while a process is exiting. Always
+        # reap and verify disappearance below before declaring cleanup complete.
         pass
     deadline = time.monotonic() + grace
     while time.monotonic() < deadline:
@@ -85,6 +87,8 @@ def _stop_group(proc, grace):
             os.killpg(proc.pid, 0)
         except ProcessLookupError:
             break
+        except PermissionError:
+            pass
         time.sleep(min(.05, max(0, deadline - time.monotonic())))
     try:
         os.killpg(proc.pid, signal.SIGKILL)
@@ -103,7 +107,7 @@ def _stop_group(proc, grace):
             except ProcessLookupError:
                 return True
             except PermissionError:
-                return False
+                pass  # Retry within the bounded window; denial is not absence.
             # A remaining group may be live, blocked in kernel I/O, or zombies.
             # Do not claim confirmed cleanup merely because KILL was delivered.
             if time.monotonic() >= deadline:
