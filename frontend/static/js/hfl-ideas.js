@@ -88,7 +88,7 @@ window.HflObjectDescription = (item = {}) => {
         <dl class="board-guide-routes">
           <div><dt>This board</dt><dd>Thoughts, layout, membership, and board-only connections stay here. Edits autosave; Save now flushes pending changes.</dd></div>
           <div><dt>Activity Graph</dt><dd>Shared ideas, actions, goals, and shared connections are available beyond this board. Actions also appear in your action list.</dd></div>
-          <div><dt>HFL history</dt><dd>Creating or changing thoughts and goals queues an HFL memory entry with a link back. It appears after background delivery; moving nodes does not create an entry.</dd></div>
+          <div><dt>HFL history</dt><dd>Creating ideas, thoughts, or goals and changing their content queues an HFL memory entry with a link back. Checklist text and checkbox changes are included. Entries appear under manual-entry after background delivery; moving nodes does not create an entry.</dd></div>
         </dl>
       </section>`;
   }

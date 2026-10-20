@@ -199,7 +199,10 @@ async def paste_board(request: Request, identity: str):
                     checklist = copy_lists([original['checklist']])[0]
                     checklist['title'] = name(checklist['title'])
                     new_id = 'list:' + uuid.uuid4().hex
-                    db.execute('INSERT INTO intent_lists VALUES (?,?)', (new_id, json.dumps(dict(id=new_id, checklist=checklist, version=1, updated_at=isoformat()))))
+                    copied = dict(id=new_id, checklist=checklist, version=1, updated_at=isoformat())
+                    db.execute('INSERT INTO intent_lists VALUES (?,?)', (new_id, json.dumps(copied)))
+                    from workflows.hfl.board_memory import record_checklist_memories
+                    record_checklist_memories(db, copied, {}, owner_kind='list')
                     members.append(new_id)
                 else:
                     kind, original = shared[old_id]
@@ -276,4 +279,6 @@ async def save_list(request: Request, identity: str | None = None):
                 raise HTTPException(409, 'The list changed. Reopen before saving.')
             item = dict(id=identity, checklist=checklist, version=(old['version'] if old else 0) + 1, updated_at=isoformat())
             db.execute('INSERT INTO intent_lists VALUES (?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload', (identity, json.dumps(item)))
+            from workflows.hfl.board_memory import record_checklist_memories
+            record_checklist_memories(db, item, old or {}, owner_kind='list')
     return {'item': require_list(identity)}

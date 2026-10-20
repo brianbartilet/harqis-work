@@ -14,6 +14,86 @@ def memories(store):
                 for r in db.execute('SELECT payload FROM board_memories ORDER BY rowid')]
 
 
+def test_idea_and_checklist_memories_skip_retries_and_unrelated_edits(ideas):
+    from test_hfl_ideas import payload
+    raw = payload()
+    idea = ideas.save_idea(raw, 'owner')
+    ideas.save_idea(raw, 'owner')
+    assert len(memories(ideas)) == 2
+    idea = ideas.save_idea({'version': 1, 'status': 'dismissed'}, 'owner', idea['id'])
+    assert len(memories(ideas)) == 2
+    idea = ideas.save_idea({'version': 2, 'title': 'Revised idea'}, 'owner', idea['id'])
+    assert len(memories(ideas)) == 3
+    lists = idea['checklists']
+    lists[0]['items'][0]['done'] = False
+    ideas.save_idea({'version': 3, 'checklists': lists}, 'owner', idea['id'])
+    entries = [e.entry for e in memories(ideas)]
+    assert len(entries) == 4
+    assert all(e.source == 'manual-entry' for e in entries)
+    assert 'select=idea%3A' in entries[0].references[0]
+    assert 'Completed: False' in entries[-1].what_happened
+    from workflows.hfl.intent_reuse import list_graph
+    nodes, _ = list_graph({'ideas': [idea]})
+    thought = next(n for n in nodes if n['kind'] == 'thoughts')
+    assert thought['id'] in entries[1].what_happened
+
+
+def test_idea_memory_failure_rolls_back_and_stale_edit_has_no_memory(ideas, monkeypatch):
+    from test_hfl_ideas import payload
+    from workflows.hfl import board_memory
+    from workflows.hfl.timeline_store import FollowUpConflict
+    idea = ideas.save_idea(payload(), 'owner')
+    with pytest.raises(FollowUpConflict):
+        ideas.save_idea({'version': 0, 'title': 'Stale'}, 'owner', idea['id'])
+    def fail(*args, **kwargs):
+        raise OSError('Disk full')
+    monkeypatch.setattr(board_memory, 'record_memory', fail)
+    with pytest.raises(OSError):
+        ideas.save_idea({'version': 1, 'title': 'Lost'}, 'owner', idea['id'])
+    assert ideas.idea(idea['id'])['title'] == idea['title']
+    assert len(memories(ideas)) == 2
+
+
+def test_action_checklist_records_without_initializing_ideas_store(tmp_path):
+    from workflows.hfl.timeline_store import FollowUpStore
+    from test_hfl_ideas import payload
+    store = FollowUpStore(tmp_path / 'actions.sqlite3')
+    raw = payload(expected_outcome='A useful result')
+    item, _ = store.create(raw, actor='owner')
+    store.create(raw, actor='owner')
+    with store.connect() as db:
+        assert db.execute('SELECT count(*) FROM board_memories').fetchone()[0] == 1
+    lists = item['checklists']
+    lists[0]['items'][0]['text'] = 'Choose two shelves'
+    store.update(item['id'], {'version': 1, 'checklists': lists}, actor='owner')
+    with store.connect() as db:
+        assert db.execute('SELECT count(*) FROM board_memories').fetchone()[0] == 2
+
+
+def test_standalone_list_memories_and_replay(ideas, authenticated_client):
+    from test_hfl_ideas import BASE, payload
+    raw = {'request_id': str(uuid4()), 'checklist': payload()['checklists'][0]}
+    response = authenticated_client.post(BASE + '/lists', json=raw)
+    assert response.status_code == 200, response.text
+    item = response.json()['item']
+    assert authenticated_client.post(BASE + '/lists', json=raw).status_code == 200
+    assert len(memories(ideas)) == 1
+    item['checklist']['items'][0]['text'] = 'A revised thought'
+    response = authenticated_client.patch(BASE + '/lists/' + item['id'],
+        json={'version': item['version'], 'checklist': item['checklist']})
+    assert response.status_code == 200, response.text
+    assert len(memories(ideas)) == 2
+
+
+def test_promoted_idea_has_one_memory_on_retry(ideas):
+    board = ideas.save_map(board_payload())
+    result = ideas.promote_draft(board['id'], 'draft:seed', board['version'], 'owner')
+    ideas.promote_draft(board['id'], 'draft:seed', board['version'], 'owner')
+    entries = [e.entry for e in memories(ideas)]
+    assert len(entries) == 2
+    assert 'idea:' + result['idea_id'] in entries[-1].what_happened
+
+
 def test_thought_revisions_ignore_layout_and_retries(ideas):
     raw = board_payload()
     board = ideas.save_map(raw)

@@ -28,6 +28,8 @@ This comparison remains a model judgment, not a guarantee of perfect semantic ma
 
 ## Persistence and deployment
 
+Saving an idea (including promotion from a board thought) queues a `manual-entry` memory for creation and title/body changes. Checklist thoughts in ideas, actions, and standalone lists queue memories for creation, text changes, and checkbox changes. These snapshots share the owner's database transaction and use the existing HFL outbox for background delivery. Unchanged content, layout-only changes, and replayed creation requests do not add memories. Existing records are not automatically backfilled, and deleting a checklist item does not create a deletion memory.
+
 The canonical frontend/API and HOST worker must share `HFL_TIMELINE_STORE_PATH`, defaulting to `<HARQIS_DATA_ROOT or repository/.harqis-data>/runtime/hfl-timeline.sqlite3`. Back up this database with the corpus. Owner routes `/hfl-corpus/timeline/*` proxy to the configured canonical `/api/hfl/timeline/*` API. Owner sessions protect browser routes; the existing HFL API bearer token protects canonical routes.
 
 `HFL_TIMELINE_LOCAL_PREVIEW=1` keeps timeline writes in the local preview database and runs explicit exploration in a background thread, while evidence remains canonical. Preview completions remain local and do not submit corpus entries. This switch is for development only; production uses Celery on HOST. On this branch, localhost uses `.harqis-data/preview-followups/timeline.sqlite3`.

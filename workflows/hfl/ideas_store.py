@@ -135,6 +135,8 @@ class IdeasStore(BoardStoreMixin):
             encoded = json.dumps(item)
             db.execute('INSERT INTO idea_edits VALUES (?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,payload=excluded.payload', (identity, item['version'], encoded))
             db.execute('INSERT INTO idea_history VALUES (?,?,?,?)', (identity, item['version'], str(actor), encoded))
+            from workflows.hfl.board_memory import record_idea_memories
+            record_idea_memories(db, item, previous)
             db.execute('UPDATE timeline_suggestions SET status=? WHERE id=?', (item['status'], identity))
         return item
 

@@ -57,6 +57,12 @@ class FollowUpStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             db.executescript("""
+                CREATE TABLE IF NOT EXISTS board_memories (
+                    event_id TEXT PRIMARY KEY, entry_id TEXT NOT NULL,
+                    object_id TEXT NOT NULL, board_id TEXT NOT NULL,
+                    day TEXT NOT NULL, payload TEXT NOT NULL,
+                    staged INTEGER NOT NULL DEFAULT 0
+                );
                 CREATE TABLE IF NOT EXISTS followups (
                     id TEXT PRIMARY KEY,
                     request_id TEXT NOT NULL UNIQUE,
@@ -194,6 +200,8 @@ class FollowUpStore:
             prepend_action(db, item['id'])
             db.execute("INSERT INTO followup_history VALUES (?, ?, ?, ?, ?)",
                        (item["id"], 1, actor, now, encoded))
+            from workflows.hfl.board_memory import record_checklist_memories
+            record_checklist_memories(db, item, {}, owner_kind='actionable')
             if suggestion_id:
                 db.execute("UPDATE timeline_suggestions SET status='adopted',followup_id=? WHERE id=?", (item['id'],suggestion_id))
         return item, False
@@ -235,6 +243,8 @@ class FollowUpStore:
                        (item["version"], item["status"], item["updated_at"], encoded, followup_id))
             db.execute("INSERT INTO followup_history VALUES (?, ?, ?, ?, ?)",
                        (followup_id, item["version"], actor, item["updated_at"], encoded))
+            from workflows.hfl.board_memory import record_checklist_memories
+            record_checklist_memories(db, item, old, owner_kind='actionable')
             if item["status"] == "done" and old["status"] != "done":
                 db.execute("INSERT INTO timeline_receipts(followup_id,version,state) VALUES (?,?,'pending')", (followup_id,item["version"]))
                 if item.get('recurrence'):

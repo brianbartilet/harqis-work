@@ -237,6 +237,8 @@ class BoardStoreMixin(ConnectionStoreMixin):
             encoded = json.dumps(idea)
             db.execute('INSERT INTO idea_edits VALUES (?,?,?)', (shared_id, 1, encoded))
             db.execute('INSERT INTO idea_history VALUES (?,?,?,?)', (shared_id, 1, str(actor), encoded))
+            from workflows.hfl.board_memory import record_idea_memories
+            record_idea_memories(db, idea, {})
             db.execute('INSERT INTO board_promotions VALUES (?,?,?)', (identity, draft_id, shared_id))
             board['drafts'] = [d for d in board['drafts'] if d['id'] != draft_id]
             board['members'] = list(dict.fromkeys([*board['members'], shared_node]))

@@ -1,6 +1,7 @@
 """Transactional thought/Goal memories, delivered by the existing HFL outbox job."""
 import json
 import logging
+import uuid
 from datetime import datetime
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
@@ -12,14 +13,16 @@ GOAL_FIELDS = ('title', 'body', 'success_criteria', 'status', 'target_date',
 
 def record_memory(db, item, previous, *, kind, revision, timestamp, board=None):
     """Record the immutable envelope in the owner's transaction; no network I/O."""
-    fields = THOUGHT_FIELDS if kind == 'thought' else GOAL_FIELDS
+    fields = GOAL_FIELDS if kind == 'goal' else THOUGHT_FIELDS
+    if kind == 'thought' and 'done' in item:
+        fields = (*fields, 'done')
     changed = [key for key in fields if item.get(key, '') != previous.get(key, '')]
     if previous and not changed:
         return
     from workflows.hfl.dto import HflEntry
     from workflows.hfl.persistence import make_envelope
 
-    node = item['id'] if kind == 'thought' else 'goal:' + item['id']
+    node = item['id'] if kind == 'thought' else kind + ':' + item['id']
     scope = board['id'] if board else ''
     event = f'{kind}:{scope}:{node}:{revision}'
     params = {'select': node}
@@ -28,6 +31,8 @@ def record_memory(db, item, previous, *, kind, revision, timestamp, board=None):
     url = '/hfl-corpus/graph?' + urlencode(params)
     action = 'Updated' if previous else 'Created'
     parts = [f'{action} {kind}: {item["title"]}', item.get('body', '')]
+    if 'done' in item:
+        parts.append(f'Completed: {item["done"]}')
     if board:
         parts.append(f'Board: {board["name"]}\nBoard purpose: {board["purpose"]}')
     if kind == 'goal':
@@ -49,6 +54,28 @@ def record_memory(db, item, previous, *, kind, revision, timestamp, board=None):
     db.execute('INSERT INTO board_memories(event_id,entry_id,object_id,board_id,day,payload) VALUES (?,?,?,?,?,?)',
                (event, envelope.entry.entry_id, node, scope, when.date().isoformat(),
                 json.dumps(envelope.to_payload())))
+
+
+def record_checklist_memories(db, item, previous, *, owner_kind):
+    """Capture list items using the same stable thought IDs as the graph."""
+    def thoughts(value):
+        lists = [value['checklist']] if 'checklist' in value else value.get('checklists', [])
+        return {task['id']: task for checklist in lists for task in checklist['items']}
+
+    old = thoughts(previous)
+    owner = item['id'] if owner_kind == 'list' else owner_kind + ':' + item['id']
+    for identity, task in thoughts(item).items():
+        node = 'thought:' + uuid.uuid5(uuid.NAMESPACE_URL, owner + ':' + identity).hex
+        def snapshot(value):
+            return dict(id=node, title=value['text'], body=value['text'], done=value.get('done', False))
+        record_memory(db, snapshot(task), snapshot(old[identity]) if identity in old else {},
+                      kind='thought', revision=item['version'], timestamp=item['updated_at'])
+
+
+def record_idea_memories(db, item, previous):
+    record_memory(db, item, previous, kind='idea', revision=item['version'],
+                  timestamp=item['updated_at'])
+    record_checklist_memories(db, item, previous, owner_kind='idea')
 
 
 def stage_pending_memories(store=None, *, limit=100):
