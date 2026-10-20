@@ -320,6 +320,21 @@ auto_retry = false
 backfill = "manual"
 
 [[sources]]
+key = "persona-audit"
+kind = "operation"
+monitor_mode = "scheduled"
+task = "workflows.hfl.tasks.persona_audit.persona_audit"
+# Its receipt is private (tagged secrets). Task success requires both the audit
+# and receipt to complete; do not use public corpus parity for this operation.
+entry_sources = []
+schedule = "Sunday 09:00 Asia/Singapore by default; HFL_PERSONA_AUDIT_DAY/HOUR/MINUTE overrides; canonical host"
+task_max_age_hours = 192
+expects_entry = false
+allow_empty = true
+auto_retry = false
+backfill = "manual"
+
+[[sources]]
 key = "pending-captures"
 kind = "operation"
 monitor_mode = "scheduled"

@@ -77,6 +77,15 @@ def test_duplicate_review_uses_same_truncation_recovery(model):
     assert len(calls) == 2
 
 
+def test_idea_review_bounds_combined_json_and_reference_recovery(model):
+    calls, replies = model
+    invalid = response('{"decisions":[{"id":"candidate:0","duplicate_of":"unknown"}]}')
+    replies.extend([response('', 'max_tokens'), invalid] * 2)
+    with pytest.raises(timeline.TimelineModelError, match='Both duplicate-review attempts failed'):
+        timeline.review_ideas([{'title': 'Proposal'}], [{'id': 'idea:old'}])
+    assert [call['max_tokens'] for call in calls] == [4096, 8192, 4096, 8192]
+
+
 def test_celery_records_failure_after_elasticsearch_logs_it(monkeypatch):
     from core.apps.es_logging.app import elasticsearch
     from workflows.hfl.tasks import timeline_suggestions as task

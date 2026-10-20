@@ -74,6 +74,29 @@ def test__registry_covers_every_active_hfl_task():
     }
 
 
+@pytest.mark.parametrize('age_hours, failed, expected', [
+    (1, False, 'healthy'), (191, False, 'healthy'),
+    (193, False, 'failed'), (1, True, 'failed'),
+])
+def test__persona_audit_monitors_task_without_public_receipt(age_hours, failed, expected):
+    _, policies = load_source_registry()
+    policy = next(item for item in policies if item.key == 'persona-audit')
+    assert policy.task == 'workflows.hfl.tasks.persona_audit.persona_audit'
+    assert policy.monitor_mode == 'scheduled'
+    assert not policy.expects_entry
+    assert not policy.entry_sources
+    assert not policy.auto_retry
+    when = NOW - timedelta(hours=age_hours)
+    result = evaluate_source(
+        policy, now=NOW, corpus={}, elasticsearch={},
+        tasks={policy.task: TaskEvidence(
+            when=when, last_failed=when if failed else None,
+            passed=0 if failed else 1, failed=int(failed),
+        )},
+    )
+    assert result.status == expected
+
+
 def test__weekly_summary_is_intentionally_unscheduled():
     from workflows.hfl.source_health import configured_hfl_tasks
 

@@ -143,7 +143,27 @@ def review_ideas(candidates, existing):
     payload = redact_secrets(json.dumps({'candidates': compact, 'existing_intents': existing}, ensure_ascii=False))
     if len(payload) > 250000:
         raise TimelineModelError('Idea duplicate-check context exceeds the review limit; cached ideas were preserved.')
-    decisions = model_json(payload, load_prompt('timeline_idea_review'), 'decisions')['decisions']
+    system = load_prompt('timeline_idea_review')
+    for attempt in range(2):
+        decisions = model_json(payload, system, 'decisions')['decisions']
+        try:
+            return _validate_idea_review(candidates, existing, compact, decisions)
+        except TimelineModelError as exc:
+            if attempt:
+                raise TimelineModelError(
+                    f'{exc} Both duplicate-review attempts failed.'
+                ) from exc
+            # Only our safe validation diagnosis is echoed, never model output.
+            system = load_prompt('timeline_idea_review') + (
+                '\nThe previous review failed validation: ' + str(exc)
+                + '\nRe-review all candidates against the supplied IDs. Return a complete '
+                'corrected decisions list. Do not invent IDs or keep a duplicate merely '
+                'to avoid a validation error.'
+            )
+
+
+def _validate_idea_review(candidates, existing, compact, decisions):
+    """Validate the entire review before returning any cards for persistence."""
     expected = {item['id'] for item in compact}
     if len(decisions) != len(expected) or any(not isinstance(d, dict) or not isinstance(d.get('id'), str) for d in decisions):
         raise TimelineModelError('Incomplete idea duplicate review; cached ideas were preserved.')
@@ -162,7 +182,22 @@ def review_ideas(candidates, existing):
             kept.append(candidate)
             targets.add(identity)
         elif not isinstance(duplicate, str) or duplicate not in targets:
-            raise TimelineModelError('Invalid idea duplicate target; cached ideas were preserved.')
+            if not isinstance(duplicate, str):
+                reason = 'non-string reference'
+            elif duplicate == identity:
+                reason = 'self reference'
+            elif duplicate in expected:
+                reason = ('forward reference' if int(duplicate.split(':')[1]) > index
+                          else 'reference to a suppressed candidate')
+            else:
+                reason = 'unknown ID'
+            # The candidate ID is generated locally. Never expose the rejected
+            # model value: it could contain private evidence or arbitrary text.
+            raise TimelineModelError(
+                f'Invalid idea duplicate target for {identity}: {reason}; '
+                'duplicate_of must reference an existing intent or an earlier retained '
+                'candidate, not a date. Cached ideas were preserved.'
+            )
     return kept, len(candidates) - len(kept)
 
 
