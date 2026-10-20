@@ -64,6 +64,47 @@ def test_type_backfill_is_explicit_and_preserves_existing_projection(review_data
     assert entities.projection()[0]['mentions'][0]['kind']=='pets'
 
 
+def test_batch_type_change_validation_and_rollback(review_data, authenticated_client, monkeypatch):
+    client = authenticated_client
+    body = dict(entity_ids=['a', 'b'], source_kind='people', kind='tools')
+    before = get_store().profiles()
+    for patch, status in [
+        ({'entity_ids': []}, 422), ({'kind': 'unknown'}, 400),
+        ({'entity_ids': ['a', 'missing']}, 404),
+        ({'entity_ids': ['a', 'p']}, 409), ({'source_kind': 'pets'}, 409),
+    ]:
+        assert client.post('/api/hfl/entities/types/batch', json={**body, **patch}).status_code == status
+        assert get_store().profiles() == before
+    store_class = type(get_store())
+    original = store_class.save_profile
+
+    def fail_second(self, identity, *args, **kwargs):
+        if identity == 'b':
+            raise ValueError('Entity was merged; refresh before editing its profile')
+        return original(self, identity, *args, **kwargs)
+
+    monkeypatch.setattr(store_class, 'save_profile', fail_second)
+    assert client.post('/api/hfl/entities/types/batch', json=body).status_code == 409
+    assert get_store().profiles() == before
+    monkeypatch.setattr(store_class, 'save_profile', original)
+    result = client.post('/api/hfl/entities/types/batch', json=body)
+    assert result.status_code == 200, result.text
+    assert result.json()['updated'] == 2
+    after = get_store().profiles()
+    for identity in ['a', 'b']:
+        assert after[identity]['kind'] == 'tools'
+        assert after[identity]['notes'] == before[identity]['notes']
+        assert after[identity]['categories'] == before[identity]['categories']
+    assert after['p'] == before['p']
+    rows = entities.entity_index()
+    next(e for e in rows if e['id'] == 'c')['is_owner'] = True
+    monkeypatch.setattr(entities, 'entity_index', lambda: rows)
+    protected = client.post('/api/hfl/entities/types/batch',
+                            json=dict(entity_ids=['c'], source_kind='people', kind='tools'))
+    assert protected.status_code == 409
+    assert get_store().profiles()['c'] == before['c']
+
+
 def test_batch_disjoint_merges_survive_unrelated_changes_and_retry(review_data, authenticated_client):
     client=authenticated_client
     groups=[payload(client,['a','b','c'],'Alex'),payload(client,['p','q'],'Fido')]
@@ -219,6 +260,7 @@ def test_type_and_batch_endpoints_require_owner(review_data, authenticated_clien
     with TestClient(app) as anonymous:
         for path, body in [('/types', dict(name='Birds',color='#aabbcc',description='Named birds')),
                            ('/create',dict(name='Fido',kind='pets')),('/type/a',{'kind':'pets'}),
+                           ('/types/batch', dict(entity_ids=['a'],source_kind='people',kind='pets')),
                            ('/merges/batch',{'groups':[payload(authenticated_client,['a','b'],'Alex')]}),
                            ('/backfill?include_new_types=true',{})]:
             assert anonymous.post('/api/hfl/entities'+path,json=body).status_code==401

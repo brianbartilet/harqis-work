@@ -4,6 +4,7 @@
   let loadVersion = 0;
   const pageSize = 50;
   const selectedEntities = new Set();
+  let typeBusy = false, typeSelection = [], typeSource = '';
   let matchingItems = [], mergeBusy = false, mergePreview = null, mergeTarget = null, mergeRequest = '', submittedPayload = null;
   const selectedKinds = new Set(), selectedCategories = new Set(), selectedSources = new Set();
   let suggestions = [], suggestionEntities = [], visibleSuggestions = [], suggestionLimit = 100, batchGroups = [], batchBusy = false;
@@ -115,6 +116,7 @@
     const selectionKind = items.find(e => selectedEntities.has(e.id))?.kind;
     $('selection-count').textContent = `${selectedEntities.size} selected${selectionKind ? ' · ' + kinds[selectionKind] : ''}`;
     $('merge-selected').disabled = selectedEntities.size < 2;
+    $('change-type-selected').disabled = !selectedEntities.size || items.filter(e => selectedEntities.has(e.id)).length !== selectedEntities.size || new Set(items.filter(e => selectedEntities.has(e.id)).map(e => e.kind)).size !== 1;
     const pages = Math.max(1, Math.ceil(filtered.length / pageSize)); page = Math.max(0, Math.min(page, pages - 1));
     $('entity-status').textContent = `${filtered.length} matching entities · ${items.length} of ${total} loaded · ${pageSize} per page`;
     $('page-number').textContent = `Page ${page + 1} of ${pages}`; $('previous').disabled = page === 0; $('next').disabled = page + 1 >= pages;
@@ -587,6 +589,38 @@
   $('select-page').onclick = () => selectMany(matchingItems.slice(page * pageSize, (page + 1) * pageSize));
   $('select-matching').onclick = () => selectMany(matchingItems);
   $('clear-selection').onclick = () => { selectedEntities.clear(); $('selection-feedback').textContent = ''; render(); };
+  function typeWaiting(busy) {
+    typeBusy = busy;
+    for (const id of ['batch-type-close', 'batch-type-kind', 'batch-type-confirm']) $(id).disabled = busy;
+    $('batch-type-form').setAttribute('aria-busy', String(busy));
+  }
+  $('change-type-selected').onclick = () => {
+    typeSelection = items.filter(e => selectedEntities.has(e.id));
+    if (!typeSelection.length || new Set(typeSelection.map(e => e.kind)).size !== 1) return;
+    typeSource = typeSelection[0].kind;
+    choices('batch-type-kind', Object.entries(kinds).filter(([kind]) => kind !== typeSource), 'Choose a type');
+    $('batch-type-kind').value = '';
+    $('batch-type-description').textContent = `Change ${typeSelection.length} ${kinds[typeSource]} entities, including selections on other pages or hidden by filters. Profiles and connections are preserved.`;
+    $('batch-type-feedback').textContent = '';
+    typeWaiting(false); $('entity-type-dialog').showModal();
+  };
+  $('batch-type-close').onclick = () => { if (!typeBusy) $('entity-type-dialog').close(); };
+  $('entity-type-dialog').addEventListener('cancel', event => { if (typeBusy) event.preventDefault(); });
+  $('batch-type-form').onsubmit = async event => {
+    event.preventDefault();
+    if (typeBusy || !$('batch-type-form').reportValidity()) return;
+    const kind = $('batch-type-kind').value;
+    typeWaiting(true); $('batch-type-feedback').textContent = 'Changing selected entity types…';
+    try {
+      const result = await api('/types/batch', {entity_ids:typeSelection.map(e => e.id), source_kind:typeSource, kind});
+      typeSelection.forEach(e => selectedEntities.delete(e.id));
+      $('entity-type-dialog').close();
+      try { await load(); } catch (err) { $('entity-status').textContent = 'Types changed, but the directory could not refresh: ' + err.message; }
+      $('selection-feedback').textContent = `${result.updated} entities changed to ${kinds[kind]}. Clear search or filters if they are not visible.`;
+      run(matchingStatus);
+    } catch (err) { $('batch-type-feedback').textContent = err.message; }
+    finally { typeWaiting(false); }
+  };
   function waiting(busy, message = '') {
     mergeBusy = busy; $('merge-wait').hidden = !busy; $('merge-wait-text').textContent = message;
     for (const id of ['merge-close','merge-review','merge-name','merge-evidence']) $(id).disabled = busy;

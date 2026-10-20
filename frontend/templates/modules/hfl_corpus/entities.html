@@ -101,6 +101,14 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 .entity-shell .entity-type-controls{display:flex;align-items:flex-end;gap:10px}
 .entity-shell .entity-type-controls>label{flex:1;min-width:0}
 .entity-shell .entity-type-controls>button{flex-shrink:0;min-height:44px;white-space:nowrap}
+.entity-shell #change-type-selected,#batch-type-confirm{background:#2563eb;border:1px solid #3b82f6;color:#dbe5ef}
+#entity-type-dialog{margin:auto}
+#entity-type-dialog button{padding:8px 14px;border-radius:6px;cursor:pointer}
+#entity-type-dialog button:disabled,#entity-type-dialog select:disabled{opacity:.4;cursor:default}
+#entity-type-dialog .batch-type-label{display:block;position:relative;font-size:14px}
+#batch-type-kind{display:block;box-sizing:border-box;width:100%;min-height:44px;margin-top:6px;padding:10px 42px 10px 12px;appearance:none;background:#020617;color:#cbd5e1;border:1px solid #334155;border-radius:8px;font:inherit}
+.batch-type-label svg{position:absolute;right:12px;bottom:12px;width:20px;height:20px;pointer-events:none}
+#entity-type-dialog :focus-visible{outline:2px solid #3b82f6;outline-offset:2px}
 </style>{% endblock %}
 
 {% block content %}
@@ -178,8 +186,8 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 </details>
 
 <div class="entity-selection" role="region" aria-label="Merge entities">
-  <div><strong id="selection-count" role="status">0 selected</strong><p>Select entities of one type to combine their profiles and connections. Selections stay across pages and filters.</p></div>
-  <div class="selection-buttons"><button id="select-page" type="button">Select this page</button><button id="select-matching" type="button">Select all matching</button><button id="clear-selection" type="button">Clear selection</button><button id="merge-selected" type="button" disabled>Merge selected</button></div>
+  <div><strong id="selection-count" role="status">0 selected</strong><p>Select entities of one type to merge them or change their type. Selections stay across pages and filters.</p></div>
+  <div class="selection-buttons"><button id="select-page" type="button">Select this page</button><button id="select-matching" type="button">Select all matching</button><button id="clear-selection" type="button">Clear selection</button><button id="merge-selected" type="button" disabled>Merge selected</button><button id="change-type-selected" type="button" disabled>Change type selected</button></div>
   <p id="selection-feedback" role="status"></p>
 </div>
 
@@ -187,6 +195,15 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 <div id="entity-list" class="space-y-4" aria-busy="true"></div><nav class="pagination" aria-label="Directory pages"><button id="previous">Previous</button><span id="page-number"></span><button id="next">Next</button></nav>
 
 </section>
+<dialog id="entity-type-dialog" class="entity-merge-dialog" aria-labelledby="entity-type-title">
+<form id="batch-type-form">
+  <header><h2 id="entity-type-title">Change selected entity type</h2><button id="batch-type-close" type="button" aria-label="Close type dialog">×</button></header>
+  <p id="batch-type-description"></p>
+  <label class="batch-type-label">New entity type<select id="batch-type-kind" required></select><svg viewBox="0 0 20 20" fill="none" stroke="#67e8f9" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 8 4 4 4-4"/></svg></label>
+  <p id="batch-type-feedback" role="status" aria-live="polite"></p>
+  <footer><button id="batch-type-confirm" type="submit">Confirm type change</button></footer>
+</form>
+</dialog>
 <dialog id="entity-merge-dialog" class="entity-merge-dialog" aria-labelledby="entity-merge-title">
 <form id="entity-merge-form">
   <header><h2 id="entity-merge-title">Merge entities</h2><button id="merge-close" type="button" aria-label="Close merge dialog">×</button></header>

@@ -1,5 +1,6 @@
 """Owner-only Activity Corpus graph, entity timelines, and enrichment controls."""
 from pathlib import Path
+import json
 import os
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import RedirectResponse
@@ -221,6 +222,44 @@ async def create_entity(request: Request, payload: CreateProfile):
 
 class KindWrite(BaseModel):
     kind: str
+
+
+class BatchKindWrite(KindWrite):
+    entity_ids: list[str] = Field(min_length=1, max_length=10000)
+    source_kind: str
+
+
+def change_selected_types(payload, actor):
+    validate_kind(payload.kind)
+    store = get_store()
+    available = {e['id']: e for e in entities.entity_index()}
+    with store.connection() as db:
+        db.execute('BEGIN IMMEDIATE')
+        ids = list(dict.fromkeys(payload.entity_ids))
+        if any(identity not in available for identity in ids):
+            raise HTTPException(404, 'Entity unavailable; refresh the directory.')
+        selected = [available[identity] for identity in ids]
+        if any(e['kind'] != payload.source_kind for e in selected):
+            raise HTTPException(409, 'Selected entities must still have the same original type. Refresh the directory.')
+        if any(e.get('is_owner') for e in selected) and payload.kind != 'people':
+            raise HTTPException(409, 'The corpus owner must remain a People entity.')
+        try:
+            for entity in selected:
+                current = db.execute('SELECT kind,data FROM profiles WHERE id=?', (entity['id'],)).fetchone()
+                if current and current['kind'] != payload.source_kind:
+                    raise HTTPException(409, 'An entity type changed. Refresh the directory.')
+                profile = json.loads(current['data']) if current else entity.get('profile') or {'name': entity['label']}
+                data = validated_profile(Profile(**profile))
+                store.save_profile(entity['id'], payload.kind, data, actor, connection=db)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+    return {'kind': payload.kind, 'updated': len(ids)}
+
+
+@router.post('/api/hfl/entities/types/batch')
+async def change_types(request: Request, payload: BatchKindWrite):
+    actor = authorize(request)
+    return await run_in_threadpool(change_selected_types, payload, actor)
 
 
 @router.post('/api/hfl/entities/type/{identity}')
