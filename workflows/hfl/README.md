@@ -1183,7 +1183,85 @@ returned `next_cursor`; if empty, replay the window from its start. Partial
 persistence failures must replay the original run's cursor, not a later page.
 Late-processed/shared notes outside the window need a wider manual backfill.
 
-Activation checklist:
+### First-time setup and import
+
+Use an existing configured HARQIS host with its repository virtual environment,
+machine configuration, and HFL persistence services. Run these PowerShell
+examples from the repository root. Each example loads `.env/apps.env` and the
+machine overrides **before** importing app/workflow configuration. On macOS or
+Linux, run the Python bodies with `.venv/bin/python` instead.
+
+1. Create a Granola API key as described in the
+   [app configuration](../../apps/granola/README.md#configuration), and set
+   `GRANOLA_API_KEY` in the host's ignored `.env/apps.env`.
+2. List accessible folders:
+
+```powershell
+@'
+from scripts.launch import setup_env
+setup_env()
+import json
+from apps.granola.config import CONFIG
+from apps.granola.references.web.api.notes import ApiServiceGranolaNotes
+print(json.dumps(ApiServiceGranolaNotes(CONFIG).list_folders(page_size=20), indent=2))
+'@ | .venv/Scripts/python.exe -
+```
+
+Set `GRANOLA_FOLDER_ID` to the selected `fol_...` ID in `.env/apps.env`.
+If the folder page has `hasMore=true`, repeat with its returned `cursor`.
+Configure the same values on the canonical HFL worker before scheduled use.
+
+3. Preview up to five summaries created today in Singapore, without HFL writes
+   or a model call. Replace the dates with the desired inclusive ISO date window
+   if today's notes are empty:
+
+```powershell
+@'
+from scripts.launch import setup_env
+setup_env()
+import json
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from workflows.hfl.tasks.ingest_granola import collect_granola_activity
+day = datetime.now(ZoneInfo("Asia/Singapore")).date()
+preview = collect_granola_activity(since=day, until=day, max_notes=5, max_pages=1)
+print(json.dumps(preview, indent=2, default=str))
+'@ | .venv/Scripts/python.exe -
+```
+
+The Memory MCP tool `granola_activity` provides the same read-only collection
+path. Review the selected summaries and any `errors` or `partial` result before
+importing.
+
+4. On the canonical HFL host, run the first bounded import. **This command writes
+   HFL entries.** It runs synchronously, so it does not need a Celery worker to
+   consume a queued task. Existing HFL persistence/index configuration is required:
+
+```powershell
+@'
+from scripts.launch import setup_env
+setup_env()
+import json
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from workflows.hfl.tasks.ingest_granola import ingest_granola_activity
+day = datetime.now(ZoneInfo("Asia/Singapore")).date().isoformat()
+receipt = ingest_granola_activity(
+    since=day, until=day, max_notes=5, max_pages=1, synthesize=False,
+)
+print(json.dumps(receipt, indent=2, default=str))
+'@ | .venv/Scripts/python.exe -
+```
+
+Inspect each item in `results`: `forwarded` or `outbox` is not confirmation of
+canonical persistence or indexing. Confirm the resulting `source=granola`
+entries through normal HFL recall and inspect indexing receipts. Repeating the
+same import should retain the existing entries without creating duplicates.
+Use the same explicit window as the preview when testing historical notes.
+
+### Scheduled activation
+
+The schedule remains disabled until these steps are completed:
 
 1. Set the key and selected folder; verify a read-only preview.
 2. Manually ingest a small window with `synthesize=False`, inspect canonical
@@ -1193,6 +1271,21 @@ Activation checklist:
 4. Uncomment `run-job--ingest_granola_activity` in `tasks_config.py`, regenerate
    the frontend registry, and restart Beat plus the canonical HFL worker.
 5. Reconnect the CLI/MCP client to refresh tool discovery.
+
+Generate the registry with `python frontend/generate_registry.py` after loading
+the host environment. Follow the existing [host lifecycle instructions](../../scripts/README.md)
+for restarting the configured services; avoid starting a second Beat instance.
+
+### Troubleshooting
+
+| Result | Next step |
+| --- | --- |
+| `skipped: no token` / `no folder` | Set the missing variable on the executing host, then restart long-running consumers to reload it. |
+| No notes | Check folder access, child-folder selection, processing status, and the note **creation-date** window. |
+| HTTP 401/403 | Check the API key, plan entitlement, and permitted note scope. |
+| HTTP 429 | Wait before retrying; the adapter has no automatic rate-limit retry. |
+| `partial: true` | Follow the cursor/window recovery instructions above before scheduling. |
+| `forwarded`, `outbox`, or failed delivery | Inspect the canonical HFL service and existing outbox recovery; do not count these as indexed entries. |
 
 Run verification with the repository virtual environment **after loading the
 machine environment**:

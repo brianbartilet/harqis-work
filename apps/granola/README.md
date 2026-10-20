@@ -70,6 +70,11 @@ note access scopes needed. Use `list_granola_folders` to select the HFL import
 folder; ingestion requires a folder, while service tools can read anything the
 key permits. Folder filtering includes child folders and is not a security scope.
 
+For copyable environment-loading, folder-discovery, preview, and first-import
+commands, follow [first-time HFL setup](../../workflows/hfl/README.md#first-time-setup-and-import).
+That guide also covers scheduled activation, delivery verification, and
+troubleshooting. The checked-in schedule is disabled by default.
+
 `config.py` uses `app_name_for` and `get_ws_config`. The transport inherits
 `BaseFixtureServiceRest`, uses the configured timeout, enforces TLS and the
 official origin, rejects redirects, and preserves explicit HTTP errors.
