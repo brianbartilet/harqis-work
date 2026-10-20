@@ -1,7 +1,7 @@
 # Granola HFL ingestion: first implementation
 
 Implementation record dated 2026-10-20. The broader research and conversation
-memory design is published in [thesis PR #157](https://github.com/brianbartilet/harqis-work/pull/157).
+memory design is included in the [conversation memory thesis](CONVERSATION-MEMORY-GRANOLA-NOTES-PLAUD.md).
 This code delivery implements its optional capture adapter as explicitly
 requested, independently of the proposed evidence-projection and briefing phases.
 

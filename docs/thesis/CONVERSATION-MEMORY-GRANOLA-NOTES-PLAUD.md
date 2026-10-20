@@ -7,6 +7,11 @@
 > were checked against official documentation; no authenticated Granola account
 > or live API response was tested.
 
+The accompanying [Granola HFL implementation record](GRANOLA-HFL-INGEST-IMPLEMENTATION.md)
+documents the capture adapter now included alongside this design, its setup,
+validation, and limitations. Broader evidence and briefing proposals below remain
+future work.
+
 ## 1. Recommendation and intended outcome
 
 Improve the value of conversations already captured through `write-notes` and
