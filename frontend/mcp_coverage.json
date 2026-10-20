@@ -3538,6 +3538,76 @@
       ],
       "reason": "Dedicated owner Soul editor read and atomic revision-checked save.",
       "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_soul_editor"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/possible-existing",
+      "status": "covered",
+      "tools": [
+        "search_hfl_corpus_entity_duplicates"
+      ],
+      "reason": "Suggest existing identities before manual creation.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.search_entity_duplicates"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/entities/resolution",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_entity_resolution_health"
+      ],
+      "reason": "Read resolver throughput, pending age, failures and outcomes.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.get_entity_resolution_health"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/resolution/{entry_id}/retry",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_resolution_retry"
+      ],
+      "reason": "Requeue one investigated failed resolver job. Destructive: writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_resolution_retry"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/integrity/{identity}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_integrity"
+      ],
+      "reason": "Set or clear an audited identity-review flag. Destructive: writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_integrity"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/separations/reverse",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_separation_reverse"
+      ],
+      "reason": "Reverse a consolidation separation while preserving unmerge vetoes. Destructive: writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_separation_reverse"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/consolidation/{run_id}/executions",
+      "status": "covered",
+      "tools": [
+        "create_hfl_corpus_entity_consolidation_execution"
+      ],
+      "reason": "Start or recover a bounded consolidation execution. Destructive: writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.create_entity_consolidation_execution"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/consolidation/{run_id}/executions/{execution_id}/close",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_consolidation_execution_close"
+      ],
+      "reason": "Close a bounded execution and dispatch its canonical report. Destructive: writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_consolidation_execution_close"
     }
   ]
 }

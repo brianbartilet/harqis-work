@@ -224,10 +224,14 @@ class ApiServiceHflCorpusEntities(ApiServiceHflCorpusExtended):
 
     def create_entity(self, name: str, kind: str, categories: list[str] | None = None,
                       emails: list[str] | None = None, phones: list[str] | None = None,
-                      references: list[str] | None = None, notes: str = '') -> dict:
-        """Create a manual entity of a configured type with optional profile details."""
+                      references: list[str] | None = None, notes: str = '', confirm_distinct: bool = False) -> dict:
+        """Create a manual entity or return possible-existing suggestions.
+
+        Set confirm_distinct only after choosing a genuinely distinct identity.
+        Destructive: writes remote state.
+        """
         return self._json('POST', 'entities/create', payload=dict(name=name, kind=kind,
-            categories=categories or [], emails=emails or [], phones=phones or [], references=references or [], notes=notes))
+            categories=categories or [], emails=emails or [], phones=phones or [], references=references or [], notes=notes, confirm_distinct=confirm_distinct))
 
     def update_entity_type(self, identity: str, kind: str) -> dict:
         """Change an existing entity to a configured type without discarding its profile."""
@@ -316,3 +320,66 @@ class ApiServiceHflCorpusEntities(ApiServiceHflCorpusExtended):
             run_id: Consolidation run ID; unfinished decisions prevent completion.
         """
         return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/finish')
+
+    def search_entity_duplicates(self, name: str, kind: str) -> dict:
+        """Suggest existing identities before manual creation.
+
+        Args:
+            name: Proposed display name.
+            kind: Registered entity kind.
+        """
+        return self._json('POST', 'entities/possible-existing', payload=dict(name=name, kind=kind))
+
+    def get_entity_resolution_health(self) -> dict:
+        """Read resolver throughput, pending age, failures and outcomes.
+        """
+        return self._json('GET', 'entities/resolution')
+
+    def update_entity_resolution_retry(self, entry_id: str) -> dict:
+        """Requeue one investigated failed resolver job. Destructive: writes remote state.
+
+        Args:
+            entry_id: Failed source entry ID.
+        """
+        return self._json('POST', f'entities/resolution/{self._segment(entry_id)}/retry')
+
+    def update_entity_integrity(self, identity: str, review: dict) -> dict:
+        """Set or clear an audited identity-review flag. Destructive: writes remote state.
+
+        Args:
+            identity: Active established identity ID.
+            review: Object with required boolean, evidence-backed reason, and optional originating operation_ids.
+        """
+        return self._json('POST', f'entities/integrity/{self._segment(identity)}', payload=review)
+
+    def update_entity_separation_reverse(self, left_id: str, right_id: str, reason: str) -> dict:
+        """Reverse a consolidation separation while preserving unmerge vetoes. Destructive: writes remote state.
+
+        Args:
+            left_id: First identity ID.
+            right_id: Second identity ID.
+            reason: Evidence supporting reversal.
+        """
+        return self._json('POST', 'entities/separations/reverse', payload=dict(left_id=left_id, right_id=right_id, reason=reason))
+
+    def create_entity_consolidation_execution(self, run_id: str, execution_id: str, max_pairs: int = 40, seconds: int = 900) -> dict:
+        """Start or recover a bounded consolidation execution. Destructive: writes remote state.
+
+        Args:
+            run_id: Durable consolidation run ID.
+            execution_id: Stable caller ID reused on retry.
+            max_pairs: Fixed selection size, 1-200 comparisons.
+            seconds: Execution budget, 30-3600 seconds.
+        """
+        return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/executions', payload=dict(execution_id=execution_id, max_pairs=max_pairs, seconds=seconds))
+
+    def update_entity_consolidation_execution_close(self, run_id: str, execution_id: str, reason: str, errors: list[str] | None = None) -> dict:
+        """Close a bounded execution and dispatch its canonical report. Destructive: writes remote state.
+
+        Args:
+            run_id: Durable consolidation run ID.
+            execution_id: Execution ID returned at start.
+            reason: budget, exhausted, provider-failure, or integrity-concern.
+            errors: Optional sanitized operational errors; reuse identical values on replay.
+        """
+        return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/executions/{self._segment(execution_id)}/close', payload=dict(reason=reason, errors=errors or []))
