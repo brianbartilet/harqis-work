@@ -157,25 +157,50 @@ Do not substitute IDs, bypass rejections or force stale approvals through.
 
 ## Completion, reporting and schedule
 
-Call `finish` only when pending count is zero. This checkpoints the run and queues
-the canonical grouped HFL report. Telegram is sent only for actual merges. Count
-unique operation/event IDs as merged groups: `counts.merged` counts approved pair
-records and can exceed `merged_groups` after one N-way merge. Pending pairs are not
-a count of proven duplicates or unique unresolved entities.
+When `bounded-executions-v1` is advertised, use one execution per invocation:
 
-Poll status until HFL persistence and `delivery.telegram_state` of `sent` or
-`suppressed` confirm completion. Deferred-only/empty runs persist HFL but are silent
-on Telegram. `sending` is uncertain: reconcile, do not blindly resend. Calling
-`finish` again on a completed run recovers undelivered reporting, not new decisions.
-Do not send extra Telegram messages or per-merge HFL entries; undo/audit are per operation.
+```text
+<python> .agents/skills/auto-merge-entities/scripts/consolidate.py start-execution RUN_ID --execution-id STABLE_ID --execution-pairs 40 --seconds 900
+<python> .agents/skills/auto-merge-entities/scripts/consolidate.py close-execution RUN_ID --execution-id STABLE_ID --stop-reason exhausted
+```
 
-The existing finish/report gate still requires the entire pending queue to be resolved.
-Partial checkpoint counts and timings are available through status; they are not
-completion reports. Fresh discovery can now proceed inside an unfinished run.
-If stopped with pending work or unconfirmed reporting, report **partial/incomplete**,
-not success. A cron output for incomplete/failed work must start with `[CRON_FAILURE]`
-and retain run ID, verified progress, pending count and the blocker. Never fabricate
-reviews merely to obtain a successful finish.
+Checkpoint before starting to discover changed evidence. Persist the execution ID before
+calling start; reuse it after lost responses. The server selects a fixed candidate set
+and enforces its pair and time budget. Review successive claim packets within that set.
+New discoveries wait for later executions. Do not add parallel reviewers.
+
+Close with `exhausted` when selected work is resolved, `budget` when the execution
+window ends, `provider-failure` for unavailable providers, or `integrity-concern` for a
+systemic correctness problem. For errors supply `--file ERRORS.json` containing
+`{"errors":["sanitized operational explanation"]}`. Release abandoned claims and
+retain exact decision payloads for uncertain commit recovery before closing.
+A suspect identity should be recorded through the authenticated integrity-review API
+with evidence and originating operation IDs; do not expand it or undo it speculatively.
+Use `consolidate.py review-identity ENTITY_ID --file REVIEW.json` with
+`{"required":true,"reason":"Specific contradictory evidence","operation_ids":[]}`.
+The `resolution-health` command is read-only; `retry-resolution ENTRY_ID` explicitly
+requeues a failed entry and must follow investigation of its failure.
+Continue unrelated eligible work. A review decision may include `reason_code`:
+`insufficient-evidence`, `conflicting-identity`, or `different-identities`.
+
+Close returns a durable `report_id`. Poll status on that ID until HFL persistence and
+`delivery.telegram_state` of `sent` or `suppressed` confirm delivery. The canonical
+notifier sends Telegram only for actual new merge operations. Never send an extra
+message. `sending` is uncertain and requires reconciliation, not blind resending.
+An execution with safe deferrals can complete successfully but must report zero
+cleanup if it made no merges. Pending pairs are candidates, not proven duplicates.
+
+A successful bounded execution does not require an empty global backlog. Report
+execution ID, stop reason, verified operation count, deferrals, remaining eligible
+work and report delivery. Execution failures or unconfirmed reporting must still be
+reported as incomplete with `[CRON_FAILURE]`; ordinary budget stops with verified
+reporting are successful partial batches. Never mark unseen candidates reviewed.
+
+Legacy servers without bounded execution support retain the old contract: checkpoint
+partial work, call `finish` only at zero pending, and report unfinished global work as
+`[CRON_FAILURE]`. Do not claim bounded completion on an unsupported server. Global
+`finish` remains available after all work is resolved and the execution is closed;
+receipts already owned by an execution report are not notified again.
 
 Read the installed scheduler for actual cadence. `scripts/agents/hfl/setup_entity_consolidation.py`
 is the reconciliation helper; do not run it or change schedule settings under an

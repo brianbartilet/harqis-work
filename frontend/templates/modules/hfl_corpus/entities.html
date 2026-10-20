@@ -90,6 +90,7 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 .entity-shell #entity-type-manager button{font-size:13px;line-height:20px}
 .entity-shell #entity-type-manager .type-backfill-hint{font-size:12px;line-height:1.6;color:#94a3b8;margin:16px 0 10px}
 .entity-shell #entity-type-manager #entity-create-form{border-top:1px solid #334155;padding-top:16px;margin-top:20px}
+.entity-shell #create-entity-suggestions[hidden]{display:none}
 .entity-shell #entity-type-manager #type-feedback{font-size:12px;line-height:1.6;margin:12px 0 0}
 .entity-shell #entity-type-manager #type-feedback:empty{display:none}
 .entity-shell #entity-type-manager input[type=color]{height:44px;width:80px}
@@ -120,6 +121,7 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
   <p class="type-backfill-hint">New types are used for future enrichment. Use backfill to extract them from historical activity.</p>
   <button id="types-backfill" type="button">Backfill history with current types</button>
   <form id="entity-create-form"><div class="profile-fields"><label>Entity name<input name="name" required maxlength="120"></label><label>Type<select name="kind" id="create-entity-kind"></select></label></div><button type="submit">Add entity</button></form>
+  <div id="create-entity-suggestions" class="merge-card-actions" aria-live="polite" hidden></div>
   <p id="type-feedback" role="status"></p>
 </details>
 <fieldset id="entity-filters" disabled inert aria-busy="true">

@@ -58,6 +58,19 @@ def test_cli_compact_rejects_old_server_format(helper, alias_group, monkeypatch,
     assert 'unsupported' in json.loads(capsys.readouterr().out)['error']
 
 
+def test_cli_bounded_execution(helper, alias_group, monkeypatch, capsys):
+    from workflows.hfl import entity_consolidation
+    monkeypatch.setattr(entity_consolidation, 'dispatch_reports', lambda *args: [])
+    run, _ = alias_group
+    assert helper('start-execution', run['id'], '--execution-id', 'cli-window', '--execution-pairs', '1') == 0
+    assert len(json.loads(capsys.readouterr().out)['pair_ids']) == 1
+    assert helper('close-execution', run['id'], '--execution-id', 'cli-window', '--stop-reason', 'budget') == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result['state'] == 'complete' and result['remaining_selected'] == 1
+    assert helper('status', result['report_id']) == 0
+    assert json.loads(capsys.readouterr().out)['execution_report']['stop_reason'] == 'budget'
+
+
 def test_cli_non_json_error_is_safe(helper, alias_group, monkeypatch, authenticated_client, capsys):
     run, _ = alias_group
     monkeypatch.setattr(authenticated_client, 'get', lambda *a, **k: httpx.Response(502, text='private proxy body'))

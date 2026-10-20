@@ -93,7 +93,7 @@ def resolve_corpus_entities(self):
     frontend = str(Path(__file__).resolve().parents[3] / 'frontend')
     if frontend not in sys.path:
         sys.path.insert(0, frontend)
-    from workflows.hfl.entity_resolution import process_batch
+    from workflows.hfl.entity_resolution import process_pending
     from workflows.hfl.entity_store import get_store
     lock = FileLock(str(get_store().path) + '.resolution.lock', timeout=0)
     try:
@@ -103,9 +103,11 @@ def resolve_corpus_entities(self):
                          retries=self.request.retries)
         return {'state': 'deferred'}
     try:
-        result = process_batch()
+        result = process_pending()
         if result['pending']:
             self.apply_async(queue=os.environ.get('HARQIS_ENTITIES_QUEUE', 'hfl'), countdown=2)
+        elif result.get('retry_after'):
+            self.apply_async(queue=os.environ.get('HARQIS_ENTITIES_QUEUE', 'hfl'), countdown=result['retry_after'])
         return result
     except Exception as exc:
         raise self.retry(exc=exc, countdown=min(300, 15 * 2 ** self.request.retries))

@@ -27,7 +27,10 @@ def current_entities():
     rows = entity_index()
     with get_store().connection() as db:
         groups = {r['id']: json.loads(r['members']) for r in db.execute('SELECT id,members FROM entity_merges')}
+        integrity = {r['id']: json.loads(r['data']) for r in db.execute('SELECT * FROM entity_integrity')}
     for row in rows:
+        if row['id'] in integrity:
+            row['integrity_review'] = integrity[row['id']]
         row['entries'] = [e for e in row['entries'] if e.get('source') not in AUDIT_SOURCES]
         # Legacy merged groups predate the editable alias property.
         if row['id'] in groups:
@@ -163,7 +166,9 @@ def view(run, offset=0, limit=20):
     pending = sorted((p for p in pairs if p['state'] == 'pending'), key=pair_priority) if limit else []
     return {k: run[k] for k in ('id', 'state', 'initial', 'delivery')} | {
         'capabilities': ['atomic-anchor-groups-v1', 'anchor-packets-v1',
-                         'claimed-anchor-packets-v1', 'consolidation-batch-v2'],
+                         'claimed-anchor-packets-v1', 'consolidation-batch-v2', 'bounded-executions-v1'],
+        'execution': run.get('executions', {}).get(run.get('execution')),
+        'execution_report': run.get('execution_report'),
         'metrics': run.get('metrics', {}), 'checkpoint': run.get('checkpoint'),
         'merged_groups': merged_group_count(pairs),
         'counts': counts, 'pairs': pending[offset:offset+limit], 'pending_total': counts['pending']}
@@ -296,11 +301,33 @@ def _decide(run, pair_id, decision, claim_token=None):
         return pair
     if run['state'] != 'running':
         raise ValueError('Run is closed')
+    from workflows.hfl.entity_executions import check
+    check(run, [pair_id])
     from workflows.hfl.entity_consolidation_work import check_claim
     check_claim(run, pair['ids'], claim_token)
     pair['decision'] = decision
     if decision['decision'] != 'merge':
         pair['state'] = 'separate' if decision['decision'] == 'separate' else 'deferred'
+        pair['reason_code'] = decision.get('reason_code') or ('different-identities' if pair['state'] == 'separate'
+                                                            else 'conflicting-identity' if decision.get('contradictions')
+                                                            else 'insufficient-evidence')
+        pair['next_step'] = ('Owner reversal required' if pair['state'] == 'separate' else
+                             'Integrity review' if pair['reason_code'] == 'conflicting-identity' else
+                             'Reconsider when evidence changes')
+        if pair['state'] == 'separate':
+            live, observed_revision = live_snapshot(run)
+            if any(i not in live or signature(live[i]) != run['snapshots'][i] for i in pair['ids']):
+                pair.update(state='stale', note='Evidence changed; reconsider before keeping separate')
+                return pair
+            with get_store().connection() as db:
+                db.execute('BEGIN IMMEDIATE')
+                if entity_merges.revision(db) != observed_revision:
+                    raise ValueError('Entities changed; review fresh evidence before keeping separate')
+                matching.block_members(db, pair['ids'], 'consolidation-separate')
+                entity_merges.record_event(db, pair['ids'][0], 'kept-separate', 'entity-matcher:hermes',
+                                          dict(ids=pair['ids'], reason=decision['reason'], snapshots=pair.get('snapshots')), deliver=False)
+                # The block and its decision become durable together, including crash recovery.
+                write_run(db, run)
         return pair
     live, observed_revision = live_snapshot(run)
     ids = pair['ids']
@@ -311,7 +338,9 @@ def _decide(run, pair_id, decision, claim_token=None):
         if pair[side].get('evidence_version') != 2:
             pair[side] = evidence(live[pair[side]['id']])
     if decision.get('contradictions') or not corroborated(decision, pair):
-        pair.update(state='deferred', note='Insufficient corroboration or conflicting evidence')
+        pair.update(state='deferred', note='Insufficient corroboration or conflicting evidence',
+                    reason_code='conflicting-identity' if decision.get('contradictions') else 'insufficient-evidence',
+                    next_step='Integrity review' if decision.get('contradictions') else 'Reconsider when evidence changes')
     else:
         selected = [live[i] for i in ids]
         curated = [e for e in selected if matching.curated_profile(e)]
@@ -339,7 +368,8 @@ def _decide(run, pair_id, decision, claim_token=None):
                     validated['notes'] += '\n\n' + other['profile']['notes']
             preview['profile'] = validated
             preview['automatic'] = dict(run_id=run_id, policy=POLICY, skill_hash=run['skill_hash'],
-                decision=decision, input_hash=digest(pair), protected_profile=bool(curated))
+                decision=decision, input_hash=digest(pair), protected_profile=bool(curated),
+                execution_id=run.get('execution'), pair_ids=[pair_id])
             started = time.perf_counter()
             receipt = entity_merges.commit_merge(preview, request_id, fingerprint, 'entity-matcher:hermes')
             metric(run, 'merge_commit', time.perf_counter() - started)
@@ -369,6 +399,8 @@ def merge_group(run_id, payload, claim_token=None):
         fingerprint = digest(payload)
         receipt = entity_merges.operation(group_id, fingerprint)
         if not receipt:
+            from workflows.hfl.entity_executions import check
+            check(run, decisions)
             from workflows.hfl.entity_consolidation_work import check_claim
             check_claim(run, ids, claim_token)
             if run['state'] != 'running' or any(p['state'] != 'pending' for p in pairs):
@@ -416,7 +448,8 @@ def merge_group(run_id, payload, claim_token=None):
                     if (e.get('profile') or {}).get('notes'))
             preview['profile'] = validated
             preview['automatic'] = dict(run_id=run_id, policy=POLICY, skill_hash=run['skill_hash'],
-                group=payload, input_hash=digest(pairs), protected_profile=bool(curated))
+                group=payload, input_hash=digest(pairs), protected_profile=bool(curated),
+                execution_id=run.get('execution'), pair_ids=sorted(decisions))
             started = time.perf_counter()
             receipt = entity_merges.commit_merge(preview, group_id, fingerprint, 'entity-matcher:hermes')
             metric(run, 'merge_commit', time.perf_counter() - started)
@@ -437,6 +470,8 @@ def finish(run_id):
         run = load(run_id)
         if run['state'] == 'complete':
             return view(run)
+        if run.get('execution'):
+            raise ValueError('Close the bounded execution first')
         if any(p['state'] == 'pending' for p in run['pairs'].values()):
             raise ValueError('Record decisions for pending pairs before finishing')
         run['state'] = 'complete'
@@ -459,8 +494,18 @@ def merged_group_count(pairs):
 
 def report(run):
     lines = [f"# Entity consolidation — {run['id']}", f"Run: {run['state']}; policy: {run['policy']}"]
+    if run.get('execution_report'):
+        summary = run['execution_report']
+        lines += [f"Execution: {summary['state']}; stop: {summary['stop_reason']}; verified: {summary['verified']}",
+                  f"Persisted operations: {', '.join(summary['operation_ids']) or 'none'}",
+                  f"Selected work remaining: {summary['remaining_selected']}; follow up in the parent backlog",
+                  f"Remaining eligible: {summary['remaining_eligible']}; newly discovered: {summary['discovered']}",
+                  f"Integrity exceptions: {json.dumps(summary['integrity_exceptions'], ensure_ascii=False)}",
+                  f"Errors: {json.dumps(summary['errors'], ensure_ascii=False)}"]
     groups = {}
     for pair in run['pairs'].values():
+        if pair.get('reported_in') and not run.get('execution_report'):
+            continue
         groups.setdefault(pair['kind'], []).append(pair)
     if not groups:
         lines.append('No new matching candidates; no changes.')

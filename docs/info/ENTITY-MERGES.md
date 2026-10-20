@@ -91,12 +91,64 @@ Agent endpoints under `/api/hfl/entities/consolidation`:
 | `POST /{run_id}/decisions/{pair_id}` | Record an evidence-grounded merge, review or separate decision. |
 | `POST /{run_id}/decisions` | Up to 20 decisions keyed by pair ID; independent results. |
 | `POST /{run_id}/finish` | Checkpoint resolved work and enqueue grouped report delivery. Safe to repeat. |
+| `POST /{run_id}/executions` | Start/recover a bounded selection using `execution_id`, `max_pairs` (1–200, default 40), and `seconds` (30–3600, default 900). |
+| `POST /{run_id}/executions/{execution_id}/close` | Persist a receipt-reconciled execution report and dispatch its canonical delivery, even with global work pending. |
 
 The helper `.agents/skills/auto-merge-entities/scripts/consolidate.py` handles
 machine configuration and authentication without exposing credentials. Exact decision
 replays recover receipts; changed replays conflict. Snapshots are revalidated before
-commit. Review/separate outcomes defer future reconsideration until evidence changes;
-only explicit Keep separate/unmerge creates a permanent exclusion.
+commit. Review outcomes defer future reconsideration until evidence changes.
+Consolidation `separate`, explicit Keep separate and unmerge create shared durable
+exclusions respected by incoming resolution and future automatic consolidation.
+An owner can reverse only a consolidation separation through
+`POST /api/hfl/entities/separations/reverse` with `left_id`, `right_id`, and an
+evidence-backed `reason`. This leaves unmerge/dismissal vetoes intact and records
+an audit event before reopening work.
+
+Servers advertising `bounded-executions-v1` keep the backlog open across executions.
+Checkpoint before starting a new execution; claims and commits are restricted to
+its fixed selection and deadline. Newly discovered candidates wait for a subsequent
+execution. Close with `reason` equal to `budget`, `exhausted`, `provider-failure`, or
+`integrity-concern`, plus optional sanitized `errors`. Reuse the execution ID and
+identical close payload after a lost response. The returned `report_id` is a normal
+consolidation status resource, including canonical HFL/Telegram delivery state.
+Safe deferrals are successful work accounting, not merged duplicates. Reports
+include actual operation and audit event IDs, verification, stop reason, remaining
+eligible work, discoveries, and integrity exceptions. Merge receipts are recovered
+from the audit if committing succeeded before the run was saved. A later global
+finish does not notify operations already owned by an execution report.
+
+### Resolver health and identity review
+
+`GET /api/hfl/entities/resolution` exposes last success/error, dispatch error,
+oldest pending age, pending/failed work, received/completed job counters and persisted
+mention outcomes. Counters start at migration and received includes requeued jobs;
+legacy pending ages begin at first observation because original arrival times were
+not stored. Outcomes describe the latest assessment, not proof of resolved identity.
+Unchanged unresolved work stays out of the queue; relevant target/source changes
+reopen it. The worker processes up to eight entries independently, backs failures
+off for 30 seconds up to one hour, and parks each after five attempts.
+`POST /api/hfl/entities/resolution/{entry_id}/retry` explicitly requeues failed work.
+Existing queued jobs preserve retry state when merges or profile edits enqueue work.
+
+`POST /api/hfl/entities/integrity/{identity}` accepts `required`, an evidence-backed
+`reason`, and optional originating `operation_ids`. This is an audited owner action.
+Flagged identities are excluded from automatic merge/assignment targets, with
+transactional revision checks preventing an in-flight evaluation from committing
+after a flag changes. Existing assignments remain recorded but are withheld from
+projection while flagged; clearing the flag does not undo merges. Investigate the
+outer identity and use separately authorized targeted reversals for confirmed errors.
+Automatic alias and stable-ID projections are likewise isolated per entry while
+their target is flagged, preventing new source mentions from bypassing the resolver.
+Explicitly user-linked activity remains visible. Original merge and assignment
+records remain intact.
+
+`POST /api/hfl/entities/possible-existing` provides bounded same-type suggestions
+for manual creation. `/create` returns `state: possible-existing` when suggestions
+exist unless `confirm_distinct: true` is supplied. The directory and Soul connection
+editor offer existing-identity reuse and an explicit distinct-identity choice.
+Directory `identity_status` explains queued work, ambiguity, integrity review,
+failed work and intentional separation. No health notification channel is added.
 
 Each completed run produces one HFL report grouped by type. A concise Telegram
 summary linking to it is sent only when at least one actual outcome is `merged`.

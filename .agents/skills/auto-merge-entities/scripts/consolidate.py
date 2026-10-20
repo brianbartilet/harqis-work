@@ -19,7 +19,9 @@ def main():
     import httpx
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['begin', 'status', 'decide', 'batch', 'group', 'finish',
-                                            'claim', 'renew', 'release', 'checkpoint', 'evidence'])
+                                            'claim', 'renew', 'release', 'checkpoint', 'evidence',
+                                            'start-execution', 'close-execution', 'review-identity',
+                                            'resolution-health', 'retry-resolution'])
     parser.add_argument('run_id', nargs='?')
     parser.add_argument('pair_id', nargs='?')
     parser.add_argument('--file', type=Path)
@@ -30,6 +32,10 @@ def main():
     parser.add_argument('--max-pairs', type=int, default=8)
     parser.add_argument('--max-bytes', type=int, default=100000)
     parser.add_argument('--lease-seconds', type=int, default=900)
+    parser.add_argument('--execution-id')
+    parser.add_argument('--execution-pairs', type=int, default=40)
+    parser.add_argument('--seconds', type=int, default=900)
+    parser.add_argument('--stop-reason', choices=['budget', 'exhausted', 'provider-failure', 'integrity-concern'])
     args = parser.parse_args()
     if args.compact and args.command not in {'begin', 'status'}:
         parser.error('--compact is only valid with begin/status')
@@ -47,9 +53,33 @@ def main():
         parser.error('Configure HFL_CORPUS_API_URL (or the owning HFL_AGENT_BRIDGE_URL) and HFL_CORPUS_API_TOKEN')
     path = '/consolidation/begin' if args.command == 'begin' else '/consolidation/' + (args.run_id or '')
     body = {}
-    if args.command != 'begin' and not args.run_id:
+    if args.command not in {'begin', 'resolution-health'} and not args.run_id:
         parser.error('run_id required')
-    if args.command in {'batch', 'group', 'evidence'}:
+    if args.command == 'resolution-health':
+        path = '/resolution'
+    elif args.command == 'retry-resolution':
+        from urllib.parse import quote
+        path = '/resolution/' + quote(args.run_id, safe='') + '/retry'
+    elif args.command == 'review-identity':
+        from urllib.parse import quote
+        if not args.file:
+            parser.error('--file required')
+        path = '/integrity/' + quote(args.run_id, safe='')
+        body = json.loads(args.file.read_text(encoding='utf-8'))
+    elif args.command in {'start-execution', 'close-execution'}:
+        if not args.execution_id:
+            parser.error('--execution-id required')
+        if args.command == 'start-execution':
+            path += '/executions'
+            body = dict(execution_id=args.execution_id, max_pairs=args.execution_pairs, seconds=args.seconds)
+        else:
+            if not args.stop_reason:
+                parser.error('--stop-reason required')
+            path += '/executions/' + args.execution_id + '/close'
+            body = dict(reason=args.stop_reason)
+            if args.file:
+                body['errors'] = json.loads(args.file.read_text(encoding='utf-8'))['errors']
+    elif args.command in {'batch', 'group', 'evidence'}:
         if not args.file:
             parser.error('--file required')
         path += {'group': '/groups', 'batch': '/decisions', 'evidence': '/evidence'}[args.command]
@@ -82,7 +112,7 @@ def main():
                 params['compact'] = 'true'
             if args.limit:
                 params['limit'] = args.limit
-            response = client.get(url, params=params) if args.command == 'status' else client.post(url, params=params, json=body)
+            response = client.get(url, params=params) if args.command in {'status', 'resolution-health'} else client.post(url, params=params, json=body)
             try:
                 result = response.json()
             except ValueError:

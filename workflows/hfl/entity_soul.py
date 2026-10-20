@@ -64,7 +64,7 @@ def save(identity, payload, actor, available, connection=None):
         record_event(db, identity, 'soul-edited', actor,
                      {'name': available[identity]['label'], 'before': old, 'soul': data}, deliver=False)
         # Source hashes and rule revisions invalidate old assignments immediately.
-        db.execute('INSERT OR REPLACE INTO entity_resolution_jobs(entry_id,revision) SELECT id,hash FROM enrichment')
+        db.execute('INSERT OR IGNORE INTO entity_resolution_jobs(entry_id,revision) SELECT id,hash FROM enrichment')
     return {**data, 'version': old['version'] + 1}
 
 

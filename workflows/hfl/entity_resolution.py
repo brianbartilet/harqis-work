@@ -18,8 +18,9 @@ def dispatch_pending():
         return
     from core.apps.sprout.app.celery import SPROUT
     with get_store().connection() as db:
-        rows = list(db.execute('SELECT entry_id,revision FROM entity_resolution_jobs WHERE queued_at < ? LIMIT 8',
-                               (time.time() - 600,)))
+        rows = list(db.execute("""SELECT entry_id,revision FROM entity_resolution_jobs
+            WHERE state='pending' AND next_attempt<=? AND queued_at < ? ORDER BY created_at,entry_id LIMIT 8""",
+                               (time.time(), time.time() - 600)))
     if not rows:
         return
     try:
@@ -27,8 +28,10 @@ def dispatch_pending():
         with get_store().connection() as db:
             db.executemany('UPDATE entity_resolution_jobs SET queued_at=? WHERE entry_id=? AND revision=?',
                            [(time.time(), r['entry_id'], r['revision']) for r in rows])
+        get_store().state('resolution-last-dispatch', time.time())
     except Exception as exc:
         logging.getLogger(__name__).warning('Entity resolution intent retained: %s', type(exc).__name__)
+        get_store().state('resolution-dispatch-error', dict(at=time.time(), error=type(exc).__name__))
 
 
 def target_signature(entity, soul):
@@ -83,7 +86,7 @@ def assignments(entries, profiles, souls, db):
     return result
 
 
-def process_batch(use_model=True):
+def process_batch(use_model=True, entry_id=None):
     if not matching.enabled():
         return {'state': 'disabled', 'processed': 0, 'pending': 0}
     from modules.hfl_corpus import entities
@@ -91,7 +94,9 @@ def process_batch(use_model=True):
     from workflows.hfl.entity_consolidation import corroborated, evidence
     store = get_store()
     with store.connection() as db:
-        jobs = list(db.execute('SELECT * FROM entity_resolution_jobs ORDER BY rowid LIMIT 8'))
+        jobs = list(db.execute("""SELECT * FROM entity_resolution_jobs
+            WHERE state='pending' AND next_attempt<=? AND (? IS NULL OR entry_id=?)
+            ORDER BY created_at,entry_id LIMIT 8""", (time.time(), entry_id, entry_id)))
         observed_revision = entity_merges.revision(db)
     if not jobs:
         return {'processed': 0, 'pending': 0}
@@ -106,6 +111,8 @@ def process_batch(use_model=True):
     souls = entity_soul.all_souls()
     with store.connection() as db:
         already_resolved = assignments(list(entries.values()), store.profiles(), souls, db)
+        from workflows.hfl.entity_integrity import flagged
+        quarantine = flagged(db)
     plans, model_pairs, pair_plans = [], [], {}
     for job in jobs:
         entry = entries.get(job['entry_id'])
@@ -116,12 +123,21 @@ def process_batch(use_model=True):
         for mention in record.get('mentions', []):
             if (entry['id'], mention['id']) in already_resolved:
                 continue
+            canonical = store.resolve(mention['id'])
+            if canonical in quarantine:
+                plans.append(dict(entry=entry, mention=mention, matches=[], pairs=[], suspect=[canonical]))
+                continue
             if store.resolve(mention['id']) != mention['id'] or mention['id'] in target_ids:
                 continue
             new = {**mention, 'entries': [dict(id=entry['id'], evidence=entry['text'][:16000],
                    source=entry['source'], date=entry['date'], title=entry['title'])]}
             pool = [e for e in targets if e['kind'] == mention['kind'] and e['id'] != mention['id']]
-            plan = dict(entry=entry, mention=mention, matches=[], pairs=[])
+            suspect = {t['id'] for t in incoming_candidates(new, candidate_index) if t['id'] in quarantine}
+            suspect.update(t['id'] for t in pool if t['id'] in quarantine and any(
+                rule_matches(rule, entry, mention, t)
+                for rule in souls.get(t['id'], entity_soul.empty())['identity_rules']))
+            suspect = sorted(suspect)
+            plan = dict(entry=entry, mention=mention, matches=[], pairs=[], suspect=suspect)
             with store.connection() as db:
                 pool = [e for e in pool if not matching.blocked(db, [mention['id'], e['id']])]
             # Explicit exclusions remain vetoes even if the model would suggest a match.
@@ -181,6 +197,18 @@ def process_batch(use_model=True):
             entry, mention = plan['entry'], plan['mention']
             if entry['id'] not in latest or entities.entry_hash(latest[entry['id']]) != entities.entry_hash(entry):
                 continue
+            uncertain = bool(plan['matches']) or any(decisions[p].get('decision') != 'separate' for p in plan['pairs'])
+            outcome = 'integrity-review' if plan['suspect'] else ('ambiguous' if uncertain else 'no-candidate')
+            outcome_data = dict(candidate_ids=sorted({t['id'] for t, _ in plan['matches']} |
+                                                     {pair_plans[p][1]['id'] for p in plan['pairs']} |
+                                                     set(plan['suspect'])),
+                                next_step='Reconsider when source evidence or candidate identities change')
+            evidence_version = digest([entities.entry_hash(entry), observed_revision, POLICY])
+            db.execute('INSERT OR REPLACE INTO entity_resolution_outcomes VALUES (?,?,?,?,?,?)',
+                       (entry['id'], mention['id'], outcome, evidence_version, json.dumps(outcome_data), time.time()))
+            # A quarantined plausible candidate is not evidence that a different candidate is correct.
+            if plan['suspect']:
+                continue
             # A second plausible candidate vetoes automatic contextual resolution.
             if len(plan['matches']) != 1:
                 continue
@@ -208,11 +236,48 @@ def process_batch(use_model=True):
             entity_merges.record_event(db, target['id'], 'mention-resolved', 'entity-resolver',
                                       {'name': target['label'], 'entry_id': entry['id'], 'mention_id': mention['id'],
                                        'before': previous_data, 'resolution': data}, deliver=False)
+            db.execute("UPDATE entity_resolution_outcomes SET outcome='resolved',data=? WHERE entry_id=? AND mention_id=?",
+                       (json.dumps(dict(target_id=target['id'])), entry['id'], mention['id']))
         for job in jobs:
             db.execute('DELETE FROM entity_resolution_jobs WHERE entry_id=? AND revision=?',
                        (job['entry_id'], job['revision']))
         pending = db.execute('SELECT count(*) FROM entity_resolution_jobs').fetchone()[0]
     return {'processed': len(jobs), 'pending': pending}
+
+
+def process_pending(use_model=True):
+    """Bounded worker: a bad entry backs off without starving later entries."""
+    if not matching.enabled():
+        return dict(state='disabled', processed=0, pending=0)
+    store = get_store()
+    store.state('resolution-last-started', time.time())
+    with store.connection() as db:
+        jobs = list(db.execute("""SELECT * FROM entity_resolution_jobs WHERE state='pending'
+            AND next_attempt<=? ORDER BY created_at,entry_id LIMIT 8""", (time.time(),)))
+    processed, errors = 0, []
+    for job in jobs:
+        try:
+            processed += process_batch(use_model=use_model, entry_id=job['entry_id'])['processed']
+            store.state('resolution-last-success', time.time())
+        except Exception as exc:
+            attempts = job['attempts'] + 1
+            error = type(exc).__name__  # Avoid persisting provider credentials or source payloads.
+            with store.connection() as db:
+                db.execute("""UPDATE entity_resolution_jobs SET attempts=?,next_attempt=?,state=?,error=?
+                    WHERE entry_id=? AND revision=?""",
+                    (attempts, time.time() + min(3600, 30 * 2 ** (attempts - 1)),
+                     'failed' if attempts >= 5 else 'pending', error, job['entry_id'], job['revision']))
+            store.state('resolution-last-error', dict(at=time.time(), error=error, entry_id=job['entry_id']))
+            errors.append(dict(entry_id=job['entry_id'], error=error))
+    with store.connection() as db:
+        db.execute("""INSERT INTO state VALUES ('resolution-completed',?) ON CONFLICT(key)
+            DO UPDATE SET value=CAST(CAST(value AS INTEGER)+? AS TEXT)""", (str(processed), processed))
+        ready = db.execute("SELECT count(*) FROM entity_resolution_jobs WHERE state='pending' AND next_attempt<=?",
+                           (time.time(),)).fetchone()[0]
+        next_attempt = db.execute("SELECT min(next_attempt) FROM entity_resolution_jobs WHERE state='pending'").fetchone()[0]
+    store.state('resolution-last-finished', time.time())
+    return dict(processed=processed, pending=ready, errors=errors,
+                retry_after=max(2, min(3600, int(next_attempt-time.time())+1)) if next_attempt and not ready else None)
 
 
 def undo(entry_id, mention_id, actor):
@@ -233,8 +298,29 @@ def undo(entry_id, mention_id, actor):
 
 def status():
     with get_store().connection() as db:
-        pending = db.execute('SELECT count(*) FROM entity_resolution_jobs').fetchone()[0]
-    return {'pending': pending, 'policy': POLICY, 'enabled': matching.enabled()}
+        pending = db.execute("SELECT count(*) FROM entity_resolution_jobs WHERE state='pending'").fetchone()[0]
+        failed = db.execute("SELECT count(*) FROM entity_resolution_jobs WHERE state='failed'").fetchone()[0]
+        oldest = db.execute("SELECT min(created_at) FROM entity_resolution_jobs WHERE state='pending'").fetchone()[0]
+        retrying = db.execute("SELECT count(*) FROM entity_resolution_jobs WHERE state='pending' AND attempts>0").fetchone()[0]
+        outcomes = dict(db.execute('SELECT outcome,count(*) FROM entity_resolution_outcomes GROUP BY outcome'))
+        failures = [dict(r) for r in db.execute("""SELECT entry_id,attempts,error,next_attempt,state
+            FROM entity_resolution_jobs WHERE attempts>0 ORDER BY created_at LIMIT 20""")]
+    store = get_store()
+    return dict(pending=pending, failed=failed, retrying=retrying, oldest_pending_at=oldest,
+                oldest_pending_age_seconds=max(0, time.time()-oldest) if oldest else None,
+                policy=POLICY, enabled=matching.enabled(), outcomes=outcomes, failures=failures,
+                last_success=store.state('resolution-last-success'), last_error=store.state('resolution-last-error'),
+                last_started=store.state('resolution-last-started'), last_finished=store.state('resolution-last-finished'),
+                last_dispatch=store.state('resolution-last-dispatch'),
+                dispatch_error=store.state('resolution-dispatch-error'),
+                received=store.state('resolution-received') or 0, completed=store.state('resolution-completed') or 0)
+
+
+def retry_failed(entry_id):
+    with get_store().connection() as db:
+        count = db.execute("""UPDATE entity_resolution_jobs SET state='pending',attempts=0,next_attempt=0,queued_at=0
+            WHERE entry_id=? AND state='failed'""", (entry_id,)).rowcount
+    return {'requeued': count}
 
 
 def invalidate_targets(db, identities):

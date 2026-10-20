@@ -3471,7 +3471,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TypedProfile'
+              $ref: '#/components/schemas/CreateProfile'
         required: true
       responses:
         '200':
@@ -4125,6 +4125,176 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SoulEditorWrite'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/possible-existing:
+    post:
+      summary: Possible Existing
+      operationId: possible_existing_api_hfl_entities_possible_existing_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TypedProfile'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/separations/reverse:
+    post:
+      summary: Separation Reverse
+      operationId: separation_reverse_api_hfl_entities_separations_reverse_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SeparationReversal'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/integrity/{identity}:
+    post:
+      summary: Integrity Review
+      operationId: integrity_review_api_hfl_entities_integrity__identity__post
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IntegrityReview'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/resolution:
+    get:
+      summary: Resolution Health
+      operationId: resolution_health_api_hfl_entities_resolution_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/hfl/entities/resolution/{entry_id}/retry:
+    post:
+      summary: Resolution Retry
+      operationId: resolution_retry_api_hfl_entities_resolution__entry_id__retry_post
+      parameters:
+      - name: entry_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Entry Id
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/consolidation/{run_id}/executions:
+    post:
+      summary: Execution Start
+      operationId: execution_start_api_hfl_entities_consolidation__run_id__executions_post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecutionStart'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/consolidation/{run_id}/executions/{execution_id}/close:
+    post:
+      summary: Execution Close
+      operationId: execution_close_api_hfl_entities_consolidation__run_id__executions__execution_id__close_post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: execution_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Execution Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecutionClose'
       responses:
         '200':
           description: Successful Response
@@ -5335,6 +5505,15 @@ components:
           type: array
           maxItems: 30
           title: Partial Aliases
+        reason_code:
+          anyOf:
+          - type: string
+            enum:
+            - insufficient-evidence
+            - conflicting-identity
+            - different-identities
+          - type: 'null'
+          title: Reason Code
       additionalProperties: false
       type: object
       required:
@@ -5606,6 +5785,169 @@ components:
       required:
       - version
       title: SoulWrite
+    Body_hfl_api_update_entry_api_hfl_entry_edit__relative_path__post:
+      properties:
+        payload:
+          type: string
+          title: Payload
+        files:
+          items:
+            type: string
+            contentMediaType: application/octet-stream
+          type: array
+          title: Files
+          default: []
+      type: object
+      required:
+      - payload
+      title: Body_hfl_api_update_entry_api_hfl_entry_edit__relative_path__post
+    CreateProfile:
+      properties:
+        name:
+          type: string
+          maxLength: 120
+          minLength: 1
+          title: Name
+        aliases:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Aliases
+        partial_aliases:
+          items:
+            type: string
+          type: array
+          maxItems: 100
+          title: Partial Aliases
+        preferred_name:
+          type: boolean
+          title: Preferred Name
+          default: false
+        categories:
+          items:
+            type: string
+          type: array
+          title: Categories
+        emails:
+          items:
+            type: string
+          type: array
+          title: Emails
+        phones:
+          items:
+            type: string
+          type: array
+          title: Phones
+        references:
+          items:
+            type: string
+          type: array
+          title: References
+        notes:
+          type: string
+          title: Notes
+          default: ''
+        kind:
+          type: string
+          title: Kind
+        confirm_distinct:
+          type: boolean
+          title: Confirm Distinct
+          default: false
+      type: object
+      required:
+      - name
+      - kind
+      title: CreateProfile
+    ExecutionClose:
+      properties:
+        reason:
+          type: string
+          enum:
+          - budget
+          - exhausted
+          - provider-failure
+          - integrity-concern
+          title: Reason
+        errors:
+          items:
+            type: string
+          type: array
+          maxItems: 20
+          title: Errors
+      type: object
+      required:
+      - reason
+      title: ExecutionClose
+    ExecutionStart:
+      properties:
+        execution_id:
+          type: string
+          maxLength: 100
+          minLength: 1
+          pattern: ^[a-zA-Z0-9_-]+$
+          title: Execution Id
+        max_pairs:
+          type: integer
+          maximum: 200.0
+          minimum: 1.0
+          title: Max Pairs
+          default: 40
+        seconds:
+          type: integer
+          maximum: 3600.0
+          minimum: 30.0
+          title: Seconds
+          default: 900
+      type: object
+      required:
+      - execution_id
+      title: ExecutionStart
+    IntegrityReview:
+      properties:
+        required:
+          type: boolean
+          title: Required
+        reason:
+          type: string
+          maxLength: 10000
+          minLength: 1
+          title: Reason
+        operation_ids:
+          items:
+            type: string
+          type: array
+          maxItems: 50
+          title: Operation Ids
+      type: object
+      required:
+      - required
+      - reason
+      title: IntegrityReview
+    SeparationReversal:
+      properties:
+        left_id:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Left Id
+        right_id:
+          type: string
+          maxLength: 500
+          minLength: 1
+          title: Right Id
+        reason:
+          type: string
+          maxLength: 10000
+          minLength: 1
+          title: Reason
+      type: object
+      required:
+      - left_id
+      - right_id
+      - reason
+      title: SeparationReversal
   securitySchemes:
     HTTPBearer:
       type: http

@@ -50,6 +50,10 @@ class EntityStore:
                     target_id TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(entry_id,mention_id));
                 CREATE TABLE IF NOT EXISTS entity_resolution_jobs(entry_id TEXT PRIMARY KEY, revision TEXT NOT NULL,
                     queued_at REAL NOT NULL DEFAULT 0);
+                CREATE TABLE IF NOT EXISTS entity_resolution_outcomes(entry_id TEXT NOT NULL, mention_id TEXT NOT NULL,
+                    outcome TEXT NOT NULL, evidence_version TEXT NOT NULL, data TEXT NOT NULL,
+                    updated REAL NOT NULL, PRIMARY KEY(entry_id,mention_id));
+                CREATE TABLE IF NOT EXISTS entity_integrity(id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS entity_search_features(id TEXT PRIMARY KEY, input TEXT NOT NULL, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS consolidation_pairs(run_id TEXT NOT NULL, id TEXT NOT NULL,
                     data TEXT NOT NULL, PRIMARY KEY(run_id,id));
@@ -78,6 +82,26 @@ class EntityStore:
                 db.execute('ALTER TABLE decisions ADD COLUMN merge_id TEXT')
             if 'queued_at' not in {r[1] for r in db.execute('PRAGMA table_info(pending)')}:
                 db.execute('ALTER TABLE pending ADD COLUMN queued_at REAL DEFAULT 0')
+            columns = {r[1] for r in db.execute('PRAGMA table_info(entity_resolution_jobs)')}
+            for name, definition in {
+                'created_at': 'REAL NOT NULL DEFAULT 0',
+                'attempts': 'INTEGER NOT NULL DEFAULT 0',
+                'next_attempt': 'REAL NOT NULL DEFAULT 0',
+                'state': "TEXT NOT NULL DEFAULT 'pending'",
+                'error': "TEXT NOT NULL DEFAULT ''",
+            }.items():
+                if name not in columns:
+                    db.execute(f'ALTER TABLE entity_resolution_jobs ADD COLUMN {name} {definition}')
+            # Legacy age is unknown: timestamp its first observation, not its last dispatch.
+            db.execute("UPDATE entity_resolution_jobs SET created_at=unixepoch() WHERE created_at=0")
+            db.executescript('''
+                CREATE TRIGGER IF NOT EXISTS resolution_job_created AFTER INSERT ON entity_resolution_jobs
+                BEGIN
+                    UPDATE entity_resolution_jobs SET created_at=unixepoch() WHERE entry_id=NEW.entry_id AND created_at=0;
+                    INSERT INTO state(key,value) VALUES ('resolution-received','1')
+                    ON CONFLICT(key) DO UPDATE SET value=CAST(CAST(value AS INTEGER)+1 AS TEXT);
+                END;
+            ''')
 
     @contextmanager
     def connection(self):
@@ -99,15 +123,31 @@ class EntityStore:
 
     def save(self, identity, content_hash, mentions, version=VERSION, match=False, types_revision=''):
         with self.connection() as db:
+            previous = db.execute('SELECT hash,version,mentions,types_revision FROM enrichment WHERE id=?', (identity,)).fetchone()
+            encoded_mentions = json.dumps(mentions)
+            changed = previous is None or tuple(previous) != (content_hash, version, encoded_mentions, types_revision)
             db.execute('INSERT OR REPLACE INTO enrichment(id,hash,version,mentions,types_revision) VALUES (?,?,?,?,?)',
-                       (identity, content_hash, version, json.dumps(mentions), types_revision))
-            if match:
+                       (identity, content_hash, version, encoded_mentions, types_revision))
+            if changed:
+                db.execute('''DELETE FROM entity_resolution_outcomes WHERE entry_id=? AND mention_id NOT IN
+                    (SELECT json_extract(value,'$.id') FROM json_each(?))''', (identity, encoded_mentions))
+            if match and changed:
                 db.execute('INSERT OR REPLACE INTO entity_resolution_jobs(entry_id,revision) VALUES (?,?)',
                            (identity, content_hash))
-                db.execute('''INSERT OR REPLACE INTO entity_resolution_jobs(entry_id,revision)
+                db.execute('''INSERT OR IGNORE INTO entity_resolution_jobs(entry_id,revision)
                     SELECT DISTINCT e.id,e.hash FROM entity_resolutions r
                     JOIN enrichment e ON e.id=r.entry_id, json_each(r.data, '$.evidence_hashes') dependency
                     WHERE dependency.key=?''', (identity,))
+                # Reopen unresolved comparisons whose candidate acquired changed source evidence.
+                targets = {m['id'] for m in mentions}
+                if previous:
+                    targets |= {m['id'] for m in json.loads(previous['mentions'])}
+                resolve = identity_resolver(db)
+                targets |= {resolve(i) for i in targets}
+                for row in db.execute("SELECT entry_id,data FROM entity_resolution_outcomes WHERE outcome!='resolved'"):
+                    if targets.intersection(json.loads(row['data']).get('candidate_ids', [])):
+                        db.execute('''INSERT OR IGNORE INTO entity_resolution_jobs(entry_id,revision)
+                            SELECT id,hash FROM enrichment WHERE id=?''', (row['entry_id'],))
             if match and mentions:
                 from workflows.hfl.entity_matching import enabled
                 owner = db.execute("SELECT value FROM state WHERE key='entity-consolidation-owner'").fetchone()
@@ -121,6 +161,8 @@ class EntityStore:
             old = {r[0] for r in db.execute('SELECT id FROM enrichment')}
             removed = old - set(current_ids)
             db.executemany('DELETE FROM enrichment WHERE id=?', [(i,) for i in removed])
+            db.executemany('DELETE FROM entity_resolution_jobs WHERE entry_id=?', [(i,) for i in removed])
+            db.executemany('DELETE FROM entity_resolution_outcomes WHERE entry_id=?', [(i,) for i in removed])
         return len(removed)
 
     def decisions(self):
@@ -181,7 +223,7 @@ class EntityStore:
             group = db.execute('SELECT * FROM entity_merges WHERE id=?', (identity,)).fetchone()
             if group and not group['active']:
                 raise ValueError('Entity was unmerged; refresh before editing its profile')
-            previous = db.execute('SELECT data FROM profiles WHERE id=?', (identity,)).fetchone()
+            previous = db.execute('SELECT data,kind FROM profiles WHERE id=?', (identity,)).fetchone()
             old_sources = json.loads(previous[0]).get('alias_sources', {}) if previous else {}
             data = dict(data)
             data['alias_sources'] = {v: old_sources.get(v, 'user') for k in ('aliases', 'partial_aliases') for v in data.get(k, [])}
@@ -197,11 +239,24 @@ class EntityStore:
             db.execute("INSERT INTO profiles(id,kind,data) VALUES (?,?,?) ON CONFLICT(id) "
                        "DO UPDATE SET data=excluded.data, kind=excluded.kind, updated=CURRENT_TIMESTAMP",
                        (identity, kind, json.dumps(data)))
-            db.execute('''INSERT OR REPLACE INTO entity_resolution_jobs(entry_id,revision)
+            db.execute('''INSERT OR IGNORE INTO entity_resolution_jobs(entry_id,revision)
                 SELECT e.id,e.hash FROM enrichment e JOIN entity_resolutions r ON e.id=r.entry_id
                 WHERE r.target_id=?''', (identity,))
             from workflows.hfl.entity_resolution import invalidate_targets
             invalidate_targets(db, [identity])
+            # A new or edited target can resolve previously unmatched mentions.
+            if not previous or previous['kind'] != kind or json.loads(previous[0]) != data:
+                from workflows.hfl.entity_candidates import similarity
+                target = dict(id=identity, kind=kind, label=data['name'], profile=data, entries=[])
+                for row in db.execute('''SELECT o.entry_id,o.mention_id,o.data,e.mentions
+                    FROM entity_resolution_outcomes o JOIN enrichment e ON e.id=o.entry_id
+                    WHERE o.outcome IN ('ambiguous','no-candidate','integrity-review')'''):
+                    candidate_ids = json.loads(row['data']).get('candidate_ids', [])
+                    mention = next((m for m in json.loads(row['mentions']) if m['id'] == row['mention_id']), None)
+                    signals = similarity(mention, target) if mention and mention['kind'] == kind else {}
+                    if identity in candidate_ids or signals.get('exact') or signals.get('partial') or signals.get('contact') or signals.get('fuzzy', 0) >= .8:
+                        db.execute('''INSERT OR IGNORE INTO entity_resolution_jobs(entry_id,revision)
+                            SELECT id,hash FROM enrichment WHERE id=?''', (row['entry_id'],))
 
     def state(self, key, value=None):
         with self.connection() as db:

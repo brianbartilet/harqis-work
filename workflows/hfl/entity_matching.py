@@ -32,11 +32,17 @@ def leaves(db, identity, seen=None):
 def block_members(db, ids, reason):
     groups = [leaves(db, identity) for identity in ids]
     for left, right in itertools.combinations(groups, 2):
-        db.executemany('INSERT OR IGNORE INTO entity_match_blocks VALUES (?,?,?)',
+        db.executemany("""INSERT INTO entity_match_blocks VALUES (?,?,?)
+                       ON CONFLICT(left_id,right_id) DO UPDATE SET reason=CASE
+                       WHEN entity_match_blocks.reason='consolidation-separate' THEN excluded.reason
+                       ELSE entity_match_blocks.reason END""",
                        [(*sorted((a, b)), reason) for a in left for b in right if a != b])
 
 
 def blocked(db, ids):
+    from workflows.hfl.entity_integrity import flagged
+    if any(identity.startswith('integrity-mention-') for identity in ids) or set(ids).intersection(flagged(db)):
+        return True
     groups = [leaves(db, identity) for identity in ids]
     blocks = {tuple(r) for r in db.execute('SELECT left_id,right_id FROM entity_match_blocks')}
     return any(tuple(sorted((a, b))) in blocks for left, right in itertools.combinations(groups, 2)

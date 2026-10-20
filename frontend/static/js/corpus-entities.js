@@ -141,6 +141,9 @@
       const meta = el('span'); meta.className = 'entity-detail-row';
       const count = el('span', `${e.entries.length} ${e.entries.length === 1 ? 'entry' : 'entries'}`); count.className = 'entity-count';
       meta.append(count, pill(e.resolution.replaceAll('-', ' ')));
+      for (const status of e.identity_status || []) {
+        const badge = pill(status.state.replaceAll('-', ' ')); badge.title = status.reason; meta.append(badge);
+      }
       for (const category of e.categories.length ? e.categories : ['Uncategorized']) meta.append(pill(category));
       title.append(meta);
       summary.append(title, kindPill, checkbox); card.append(summary);
@@ -509,7 +512,45 @@
   for (const [id, path] of [['entity-type-form','/types'], ['entity-create-form','/create']]) {
     $(id).onsubmit = async event => {
       event.preventDefault(); const button = $(id).querySelector('button[type=submit]'); button.disabled = true;
-      try { await api(path, Object.fromEntries(new FormData($(id)))); $(id).reset(); await load(); $('type-feedback').textContent = id === 'entity-type-form' ? 'Type added. Future enrichment will use it; historical backfill is optional.' : 'Entity added. Open its profile to add details.'; }
+      $('type-feedback').textContent = 'Checking…';
+      try {
+        const payload = Object.fromEntries(new FormData($(id)));
+        const result = await api(path, payload);
+        if (result.state === 'possible-existing') {
+          if (JSON.stringify(Object.fromEntries(new FormData($(id)))) !== JSON.stringify(payload)) {
+            $('type-feedback').textContent = 'The form changed. Check for existing entities again.'; return;
+          }
+          $('type-feedback').textContent = '';
+          const panel = $('create-entity-suggestions'); panel.replaceChildren(); panel.hidden = false;
+          panel.append(el('p', 'Possible existing entities. Open one to reuse it, or confirm this is a different identity.'));
+          for (const candidate of result.suggestions) {
+            const reuse = el('button', `${candidate.name} · ${candidate.entries} entries${candidate.integrity_review ? ' · identity review required' : ''}`);
+            reuse.type = 'button';
+            reuse.onclick = () => {
+              $('entity-query').value = candidate.name; selectedKinds.clear(); selectedCategories.clear(); selectedSources.clear();
+              $('filter-contact').value = ''; page = 0; facets(); render();
+              const card = [...$('entity-list').children].find(node => node.dataset.entityId === candidate.id);
+              if (card) { card.open = true; card.scrollIntoView({block:'center'}); card.querySelector('summary')?.focus(); }
+              $('type-feedback').textContent = 'Existing entity selected. No new entity created.';
+            };
+            panel.append(reuse);
+          }
+          const distinct = el('button', 'Create a distinct entity'); distinct.type = 'button';
+          distinct.onclick = async () => {
+            distinct.disabled = true;
+            try {
+              if (JSON.stringify(Object.fromEntries(new FormData($(id)))) !== JSON.stringify(payload)) {
+                panel.hidden = true; $('type-feedback').textContent = 'The form changed. Check for existing entities again.'; return;
+              }
+              await api(path, {...payload, confirm_distinct:true}); panel.hidden = true; $(id).reset(); await load();
+              $('type-feedback').textContent = 'Distinct entity created.';
+            } catch (err) { $('type-feedback').textContent = err.message; } finally { distinct.disabled = false; }
+          };
+          panel.append(distinct); return;
+        }
+        $(id).reset(); if (id === 'entity-create-form') $('create-entity-suggestions').hidden = true;
+        await load(); $('type-feedback').textContent = id === 'entity-type-form' ? 'Type added. Future enrichment will use it; historical backfill is optional.' : 'Entity added. Open its profile to add details.';
+      }
       catch (err) { $('type-feedback').textContent = err.message; } finally { button.disabled = false; }
     };
   }

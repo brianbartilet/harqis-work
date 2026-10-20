@@ -1892,10 +1892,14 @@ def register_hfl_corpus_tools(mcp: FastMCP):
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
     def create_hfl_corpus_entity(name: str, kind: str, categories: list[str] | None = None,
                                  emails: list[str] | None = None, phones: list[str] | None = None,
-                                 references: list[str] | None = None, notes: str = '') -> dict:
-        """Create a manual entity of a configured type with optional profile details."""
+                                 references: list[str] | None = None, notes: str = '', confirm_distinct: bool = False) -> dict:
+        """Create a manual entity or return possible-existing suggestions.
+
+        Set confirm_distinct only after choosing a genuinely distinct identity.
+        Destructive: writes remote state.
+        """
         return _dict_result(ApiServiceHflCorpusEntities(CONFIG).create_entity(name=name, kind=kind,
-            categories=categories, emails=emails, phones=phones, references=references, notes=notes))
+            categories=categories, emails=emails, phones=phones, references=references, notes=notes, confirm_distinct=confirm_distinct))
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
     def update_hfl_corpus_entity_type(identity: str, kind: str) -> dict:
@@ -2066,4 +2070,109 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         result = ApiServiceHflCorpusEntities(CONFIG).create_entity_consolidation_group(run_id=run_id, anchor_id=anchor_id, decisions=decisions, contradictions=contradictions, claim_token=claim_token)
         output = _dict_result(result)
         logger.info("create_hfl_corpus_entity_consolidation_group done")
+        return output
+
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def search_hfl_corpus_entity_duplicates(name: str, kind: str) -> dict:
+        """Suggest existing identities before manual creation.
+
+        Args:
+            name: Proposed display name.
+            kind: Registered entity kind.
+        """
+        logger.info("Tool called: search_hfl_corpus_entity_duplicates")
+        result = ApiServiceHflCorpusEntities(CONFIG).search_entity_duplicates(name=name, kind=kind)
+        output = _dict_result(result)
+        logger.info("search_hfl_corpus_entity_duplicates done")
+        return output
+
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def get_hfl_corpus_entity_resolution_health() -> dict:
+        """Read resolver throughput, pending age, failures and outcomes.
+        """
+        logger.info("Tool called: get_hfl_corpus_entity_resolution_health")
+        result = ApiServiceHflCorpusEntities(CONFIG).get_entity_resolution_health()
+        output = _dict_result(result)
+        logger.info("get_hfl_corpus_entity_resolution_health done")
+        return output
+
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_resolution_retry(entry_id: str) -> dict:
+        """Requeue one investigated failed resolver job. Destructive: writes remote state.
+
+        Args:
+            entry_id: Failed source entry ID.
+        """
+        logger.info("Tool called: update_hfl_corpus_entity_resolution_retry")
+        result = ApiServiceHflCorpusEntities(CONFIG).update_entity_resolution_retry(entry_id=entry_id)
+        output = _dict_result(result)
+        logger.info("update_hfl_corpus_entity_resolution_retry done")
+        return output
+
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_integrity(identity: str, review: dict) -> dict:
+        """Set or clear an audited identity-review flag. Destructive: writes remote state.
+
+        Args:
+            identity: Active established identity ID.
+            review: Object with required boolean, evidence-backed reason, and optional originating operation_ids.
+        """
+        logger.info("Tool called: update_hfl_corpus_entity_integrity")
+        result = ApiServiceHflCorpusEntities(CONFIG).update_entity_integrity(identity=identity, review=review)
+        output = _dict_result(result)
+        logger.info("update_hfl_corpus_entity_integrity done")
+        return output
+
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_separation_reverse(left_id: str, right_id: str, reason: str) -> dict:
+        """Reverse a consolidation separation while preserving unmerge vetoes. Destructive: writes remote state.
+
+        Args:
+            left_id: First identity ID.
+            right_id: Second identity ID.
+            reason: Evidence supporting reversal.
+        """
+        logger.info("Tool called: update_hfl_corpus_entity_separation_reverse")
+        result = ApiServiceHflCorpusEntities(CONFIG).update_entity_separation_reverse(left_id=left_id, right_id=right_id, reason=reason)
+        output = _dict_result(result)
+        logger.info("update_hfl_corpus_entity_separation_reverse done")
+        return output
+
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def create_hfl_corpus_entity_consolidation_execution(run_id: str, execution_id: str, max_pairs: int = 40, seconds: int = 900) -> dict:
+        """Start or recover a bounded consolidation execution. Destructive: writes remote state.
+
+        Args:
+            run_id: Durable consolidation run ID.
+            execution_id: Stable caller ID reused on retry.
+            max_pairs: Fixed selection size, 1-200 comparisons.
+            seconds: Execution budget, 30-3600 seconds.
+        """
+        logger.info("Tool called: create_hfl_corpus_entity_consolidation_execution")
+        result = ApiServiceHflCorpusEntities(CONFIG).create_entity_consolidation_execution(run_id=run_id, execution_id=execution_id, max_pairs=max_pairs, seconds=seconds)
+        output = _dict_result(result)
+        logger.info("create_hfl_corpus_entity_consolidation_execution done")
+        return output
+
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_consolidation_execution_close(run_id: str, execution_id: str, reason: str, errors: list[str] | None = None) -> dict:
+        """Close a bounded execution and dispatch its canonical report. Destructive: writes remote state.
+
+        Args:
+            run_id: Durable consolidation run ID.
+            execution_id: Execution ID returned at start.
+            reason: budget, exhausted, provider-failure, or integrity-concern.
+            errors: Optional sanitized operational errors; reuse identical values on replay.
+        """
+        logger.info("Tool called: update_hfl_corpus_entity_consolidation_execution_close")
+        result = ApiServiceHflCorpusEntities(CONFIG).update_entity_consolidation_execution_close(run_id=run_id, execution_id=execution_id, reason=reason, errors=errors)
+        output = _dict_result(result)
+        logger.info("update_hfl_corpus_entity_consolidation_execution_close done")
         return output

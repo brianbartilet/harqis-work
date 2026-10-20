@@ -15,6 +15,7 @@ def revision(db):
         'souls': 'SELECT * FROM entity_souls ORDER BY id',
         'resolutions': 'SELECT * FROM entity_resolutions ORDER BY entry_id,mention_id',
         'blocks': 'SELECT * FROM entity_match_blocks ORDER BY left_id,right_id',
+        'integrity': 'SELECT * FROM entity_integrity ORDER BY id',
     }.items()})
 
 
@@ -64,7 +65,7 @@ def commit_merge(preview, request_id, fingerprint, actor):
         inherit(db, identity, members)
         from workflows.hfl.entity_resolution import invalidate_targets
         invalidate_targets(db, [m['id'] for m in members])
-        db.execute('INSERT OR REPLACE INTO entity_resolution_jobs(entry_id,revision) SELECT id,hash FROM enrichment')
+        db.execute('INSERT OR IGNORE INTO entity_resolution_jobs(entry_id,revision) SELECT id,hash FROM enrichment')
         db.executemany('INSERT INTO decisions(alias,canonical,reason,merge_id) VALUES (?,?,?,?)',
                        [(m['id'], identity, preview['evidence'], identity) for m in members])
         event_id = record_event(db, identity, 'merged', actor, {
@@ -103,7 +104,7 @@ def unmerge(identity, request_id, fingerprint, actor, evidence=''):
         db.execute('DELETE FROM profiles WHERE id=?', (identity,))
         from workflows.hfl.entity_resolution import invalidate_targets
         invalidate_targets(db, [identity])
-        db.execute('INSERT OR REPLACE INTO entity_resolution_jobs(entry_id,revision) SELECT id,hash FROM enrichment')
+        db.execute('INSERT OR IGNORE INTO entity_resolution_jobs(entry_id,revision) SELECT id,hash FROM enrichment')
         result = dict(entity_id=identity, restored_ids=[m['id'] for m in members],
                       event_id=event_id, state='complete', action='unmerged')
         db.execute('INSERT INTO entity_operations VALUES (?,?,?)', (request_id, fingerprint, json.dumps(result)))

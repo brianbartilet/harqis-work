@@ -156,6 +156,8 @@ def test_prose_does_not_authorize_and_jobs_survive_model_error(soul_data, authen
     resolution.process_batch(use_model=False)
     assert entities.projection()[0]['mentions'][0]['id'] == soul_data[1]['id']
     rows, mention = soul_data
+    # Unchanged ambiguity is no longer requeued; new source evidence reopens it.
+    rows[0]['text'] += ' Additional migration context.'
     get_store().save(rows[0]['id'], entities.entry_hash(rows[0]), [mention], match=True)
     monkeypatch.setattr(entity_matching, 'evaluate', lambda pairs, **kwargs: (_ for _ in ()).throw(RuntimeError('provider offline')))
     with pytest.raises(RuntimeError): resolution.process_batch()

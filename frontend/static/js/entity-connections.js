@@ -89,7 +89,25 @@
         const create = button('Create entity', async () => {
           if (!search.value.trim() || !type.value) { searchStatus.textContent = 'Enter a name and choose an entity type first.'; return; }
           create.disabled = true;
-          try { const id='manual-'+crypto.randomUUID();newEntities.set(id,{id,name:search.value.trim(),kind:type.value});add({id,label:search.value.trim(),kind:type.value});searchStatus.textContent='New entity selected. It will be created when you save Soul.'; }
+          try {
+            const name=search.value.trim(), kind=type.value;
+            const chooseDistinct=()=>{
+              if(search.value.trim()!==name||type.value!==kind){searchStatus.textContent='The name or type changed. Check again.';return;}
+              const id='manual-'+crypto.randomUUID();newEntities.set(id,{id,name,kind});add({id,label:name,kind});
+              searchStatus.textContent='New entity selected. It will be created when you save Soul.';
+            };
+            const data=await api('/possible-existing',{name,kind});
+            if(!dialog.isConnected||search.value.trim()!==name||type.value!==kind)return;
+            if(data.suggestions.length){
+              searchStatus.replaceChildren(el('span','Possible existing entities: '));
+              for(const candidate of data.suggestions){
+                searchStatus.append(button(candidate.name+(candidate.integrity_review?' · identity review required':''),()=>{
+                  add({id:candidate.id,label:candidate.name,kind:candidate.kind});searchStatus.textContent='Existing entity selected.';
+                }));
+              }
+              searchStatus.append(button('Create a distinct entity',chooseDistinct));
+            }else chooseDistinct();
+          }
           catch (error) { searchStatus.textContent = error.message; }
           finally { create.disabled = false; }
         });

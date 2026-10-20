@@ -463,3 +463,21 @@ snapshot; mixed secret-backed sharing requires the updated service endpoint.
 
 The save payload follows the canonical SoulEditorWrite schema; conflicts leave all
 sections unchanged. Existing entity context and soul tools remain available.
+
+### Entity reliability tools
+
+| Tool | Purpose |
+| --- | --- |
+| `search_hfl_corpus_entity_duplicates` | Suggest existing identities before manual creation. |
+| `get_hfl_corpus_entity_resolution_health` | Read resolver throughput, pending age, failures and outcomes. |
+| `update_hfl_corpus_entity_resolution_retry` | Requeue one investigated failed resolver job. **Destructive: remote write.** |
+| `update_hfl_corpus_entity_integrity` | Set or clear an audited identity-review flag. **Destructive: remote write.** |
+| `update_hfl_corpus_entity_separation_reverse` | Reverse a consolidation separation while preserving unmerge vetoes. **Destructive: remote write.** |
+| `create_hfl_corpus_entity_consolidation_execution` | Start or recover a bounded consolidation execution. **Destructive: remote write.** |
+| `update_hfl_corpus_entity_consolidation_execution_close` | Close a bounded execution and dispatch its canonical report. **Destructive: remote write.** |
+
+Creation may return `possible-existing`; reuse a suggestion or explicitly set `confirm_distinct` on `create_hfl_corpus_entity`. Reuse execution IDs and exact close payloads after transport failures.
+
+*"Show incoming entity-resolution health."*
+
+*"Finish a bounded entity-consolidation execution and verify its report."*
