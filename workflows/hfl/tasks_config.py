@@ -42,6 +42,23 @@ def persona_audit_now():
 
 
 WORKFLOW_HFL = {
+    # Configure GRANOLA_API_KEY + GRANOLA_FOLDER_ID; then enable on the canonical HFL worker.
+    # Initial capture only, seven-day overlap; does not synchronize edits/deletions.
+    # 'run-job--ingest_granola_activity': {
+    #     'task': 'workflows.hfl.tasks.ingest_granola.ingest_granola_activity',
+    #     'schedule': crontab(hour=23, minute=30),
+    #     'kwargs': {
+    #         'cfg_id__anthropic': 'ANTHROPIC',
+    #         'model': 'claude-haiku-4-5-20251001',
+    #         'window_days': 7, 'max_notes': 20, 'max_pages': 5,
+    #     },
+    #     'options': {'queue': WorkflowQueue.HFL, 'expires': 60 * 60 * 12},
+    #     'manifesto': {
+    #         'code_role': 'capture+distill+express', 'para_bucket': 'area',
+    #         'express_target': 'file:activity-corpus+es:hfl-entries',
+    #         'review_artifact': 'es_log+file', 'hfl_signal': True,
+    #     },
+    # },
     'run-job--persona_audit': {
         'task': 'workflows.hfl.tasks.persona_audit.persona_audit',
         'schedule': crontab(day_of_week=os.getenv('HFL_PERSONA_AUDIT_DAY', 'sun'),

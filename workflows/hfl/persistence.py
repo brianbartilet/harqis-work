@@ -372,13 +372,22 @@ def _persist_envelope_locked(
                 temporary.unlink(missing_ok=True)
         else:
             written = 0
+            # A replay can contain different model wording or an edited source.
+            # When Markdown is retained, project that same canonical entry.
+            # Otherwise an unchanged Markdown record and an updated ES record
+            # silently disagree even though this operation reports a duplicate.
+            indexed_entry = next(
+                existing for existing in existing_entries
+                if existing.entry_id == entry.entry_id
+                or _content_signature(existing) == _content_signature(entry)
+            )
 
     from workflows.hfl.es_store import index_hfl_entry
 
     doc_id = index_hfl_entry(
         indexed_entry,
         source=indexed_entry.source,
-        synthesized=envelope.synthesized,
+        synthesized=indexed_entry.synthesized,
         doc_id=envelope.es_doc_id or indexed_entry.entry_id,
     )
     from workflows.hfl.entity_events import notify_change

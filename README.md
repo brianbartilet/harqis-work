@@ -44,6 +44,7 @@ At its core the platform has three layers:
 | `github` | GitHub repos, issues, PRs, commits, branches, file content | REST API | Yes | [API Docs](https://docs.github.com/en/rest) · [Site](https://github.com/) |
 | `google_apps` | Calendar, Gmail, Keep, Sheets, Tasks, Drive, Translation | REST API (OAuth + API key) | Yes | [API Docs](https://developers.google.com/workspace) · [Console](https://console.cloud.google.com/) |
 | `google_drive` | Google Drive — upload, download, export, manage files/folders | REST API (OAuth) | No | [API Docs](https://developers.google.com/drive/api/reference/rest/v3) · [Console](https://console.cloud.google.com/) |
+| `granola` | Granola — read meeting notes, folders, and transcripts; selected summaries to HFL | REST API | Yes | [API Docs](https://docs.granola.ai/introduction) · [Site](https://www.granola.ai/) |
 | `grok` | xAI Grok — chat completions, live web search, X post search, embeddings | REST (native SDK) | Yes | [API Docs](https://docs.x.ai/api-reference) · [Console](https://console.x.ai/) |
 | `hfl_corpus` | Canonical Homework-for-Life Activity Corpus — entry writes, ES projection status, search, documents, and references | REST API | Yes | [OpenAPI](apps/hfl_corpus/openapi.yaml) |
 | `investagrams` | Philippine stock analytics | Web scraping | No | [Site](https://www.investagrams.com/) |
@@ -485,6 +486,7 @@ harqis-work/
 │   ├── github/                     # GitHub repos, issues, PRs, file content
 │   ├── google_apps/                # Google Workspace (Calendar, Gmail, Drive…)
 │   ├── google_drive/               # Google Drive upload/download/export
+│   ├── granola/                    # Meeting notes, folders, transcripts, HFL capture
 │   ├── grok/                       # xAI Grok LLM (chat, web search, X search, embeddings)
 │   ├── hfl_corpus/                 # HFL Activity Corpus REST client + OpenAPI contract
 │   ├── investagrams/               # Philippine stock analytics (web scraping)
@@ -903,6 +905,10 @@ OWN_TRACKS_USERNAME=
 OWN_TRACKS_PASSWORD=
 OWN_TRACKS_DEFAULT_USER=
 OWN_TRACKS_DEFAULT_DEVICE=
+
+# ── Meeting notes (Granola; optional HFL source) ───────────────────────────────
+GRANOLA_API_KEY=
+GRANOLA_FOLDER_ID=                # selected folder; includes descendants
 
 # ── Voice capture (Plaud) ─────────────────────────────────────────────────────
 PLAUD_TOKEN=                      # cloud API bearer token (preferred)

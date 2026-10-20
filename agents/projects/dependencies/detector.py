@@ -81,6 +81,7 @@ class DependencyDetector:
         (r"\bSTRIPE\b",                           "STRIPE_API_KEY"),
         (r"\bYNAB\b",                             "YNAB_ACCESS_TOKEN"),
         # Productivity / project management
+        (r"\bGRANOLA\b",                          "GRANOLA_API_KEY"),
         (r"\bJIRA\b",                             "JIRA_API_TOKEN"),
         (r"\bTRELLO\b",                           "TRELLO_API_TOKEN"),
         (r"\bAIRTABLE\b",                         "AIRTABLE_API_TOKEN"),

@@ -112,6 +112,31 @@ def test_persist_is_locked_and_idempotent(tmp_path, monkeypatch):
     assert len(indexed) == 2  # the ES projection is safely upserted on replay
 
 
+def test_duplicate_replay_indexes_retained_markdown_not_new_model_text(tmp_path, monkeypatch):
+    indexed = []
+    monkeypatch.setattr(
+        "workflows.hfl.es_store.index_hfl_entry",
+        lambda entry, **kwargs: indexed.append((entry, kwargs)) or kwargs["doc_id"],
+    )
+    monkeypatch.setattr("workflows.hfl.entity_events.notify_change", lambda _: None)
+    original = persistence.make_envelope(
+        _entry("Original meeting"), source="granola", machine="canonical",
+        dedup_key="granola:meeting", synthesized=True,
+    )
+    replay = persistence.make_envelope(
+        replace(_entry("Edited meeting"), what_happened="Changed source text"),
+        source="granola", machine="canonical", dedup_key="granola:meeting",
+        synthesized=False,
+    )
+    persistence.persist_envelope(original, corpus_dir=tmp_path)
+    result = persistence.persist_envelope(replay, corpus_dir=tmp_path)
+    assert result["duplicate"]
+    assert indexed[-1][0].moment == "Original meeting"
+    assert indexed[-1][0].what_happened == original.entry.what_happened
+    assert indexed[-1][1]["synthesized"] is True
+    assert "Edited meeting" not in (tmp_path / "2026-07-19.md").read_text(encoding="utf-8")
+
+
 def test_persist_orders_daily_markdown_by_timestamp_descending(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "workflows.hfl.es_store.index_hfl_entry",

@@ -39,6 +39,10 @@ The [`second_brain`](second_brain/README.md) hybrid workflow turns typed context
 and time-bounded manual overrides into a deduplicated advisory feed. Celery is
 the sole schedule owner; optional Hermes interpretation cannot invoke tools.
 
+The existing [`hfl`](hfl/README.md#granola-activation) category also includes
+optional Granola meeting-summary capture. Its daily schedule ships disabled;
+manual preview and ingestion reuse the canonical HFL persistence boundary.
+
 ## Choosing Celery, an agent, or both
 
 Before adding a non-trivial automation, apply
