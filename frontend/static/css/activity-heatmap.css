@@ -26,7 +26,8 @@
   .activity-range-button { flex:1; color:#94a3b8; font:550 .58rem/1.25 ui-monospace,SFMono-Regular,Consolas,monospace; }
   .activity-range-edit { flex:0 0 auto; padding:.35rem .3rem; color:#64748b; font-size:.58rem; }
   .activity-range-edit:hover { color:#e0f2fe; }
-  .activity-pin-add { display:flex; width:100%; flex-shrink:0; align-items:center; justify-content:center; margin-top:.3rem; border:1px dashed #334155; border-radius:.45rem; padding:.38rem; color:#67e8f9; font-size:.62rem; font-weight:650; }
+  .activity-pin-add { display:flex; width:100%; flex-shrink:0; align-items:center; justify-content:center; gap:.35rem; margin-top:.3rem; border:1px dashed #334155; border-radius:.45rem; padding:.38rem; color:#67e8f9; font-size:.62rem; font-weight:650; }
+  .activity-pin-add svg { flex-shrink:0; }
   .activity-year-controls { display:block; min-width:0; }
   .activity-chart-column { display:flex; min-width:0; flex-direction:column; gap:.45rem; }
   .activity-chart-shell { display:flex; min-width:0; align-items:flex-start; gap:.5rem; }
