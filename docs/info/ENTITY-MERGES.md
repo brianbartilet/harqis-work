@@ -131,6 +131,23 @@ off for 30 seconds up to one hour, and parks each after five attempts.
 `POST /api/hfl/entities/resolution/{entry_id}/retry` explicitly requeues failed work.
 Existing queued jobs preserve retry state when merges or profile edits enqueue work.
 
+Matcher responses must finish normally and contain exactly one valid decision for
+each requested pair. Truncated, malformed, or incomplete responses are rejected
+before applying their decisions. Failure diagnostics include the stop reason,
+token counts and JSON location when available, never model output or source text.
+The resolution status includes these diagnostics per failed entry and a
+`last_result` summary. A batch with any entry errors marks its Celery task failed;
+successful entries remain committed and only failed entries retain retry work.
+
+Producers and workers share one durable wakeup reservation under the resolver
+lock. Contending and superseded deliveries exit without creating retry chains.
+New ready work can replace a delayed wakeup; its old token becomes inert. The
+dispatcher can replace a lost reservation ten minutes after its scheduled time.
+Unexpected batch-level exceptions impose a one-minute dispatch cooldown. Deploy
+the updated producers and workers together so every consumer honors these tokens.
+Review failed-entry diagnostics before using the explicit retry endpoint; deployment
+does not automatically reopen entries parked after five failed attempts.
+
 `POST /api/hfl/entities/integrity/{identity}` accepts `required`, an evidence-backed
 `reason`, and optional originating `operation_ids`. This is an audited owner action.
 Flagged identities are excluded from automatic merge/assignment targets, with

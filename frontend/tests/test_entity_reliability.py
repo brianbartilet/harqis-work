@@ -98,9 +98,9 @@ def test_legacy_queue_migration_and_backoff_task_continuation(monkeypatch, tmp_p
         assert row['created_at'] > 0 and row['queued_at'] == 123 and row['attempts'] == 0
     calls = []
     monkeypatch.setattr(resolution, 'process_pending', lambda: dict(pending=0, processed=0, retry_after=60))
-    monkeypatch.setattr(resolve_corpus_entities, 'apply_async', lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(resolution, 'dispatch_pending', lambda: calls.append('dispatch'))
     resolve_corpus_entities.run()
-    assert calls[0]['countdown'] == 60
+    assert calls == ['dispatch']
 
 
 def test_unresolved_work_reopens_when_target_changes(soul_data):

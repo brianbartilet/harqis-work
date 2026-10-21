@@ -179,14 +179,11 @@ def evaluate(pairs, *, immediate=False):
                 'Return JSON {"decisions":[{"id":"pair id","decision":"merge|review|separate",'
                 '"reason":"explanation","contradictions":[],"facts":[{"left_quote":"verbatim excerpt",'
                 '"right_quote":"verbatim excerpt","explanation":"specific shared fact"}]}]}. '
+                'Return exactly one decision for every supplied pair ID, with all fields shown above. '
                 'Quotes must come from the supplied activity or profile values. Do not invent or complete excerpts.' + immediate_policy),
         messages=[{'role':'user','content':json.dumps(pairs, ensure_ascii=False)}])
-    raw = re.sub(r'^```(?:json)?\s*|\s*```$', '', response.content[0].text.strip())
-    data = json.loads(raw)
-    decisions = data.get('decisions')
-    if not isinstance(decisions, list):
-        raise ValueError('Matcher returned no decision list')
-    return decisions, model
+    from workflows.hfl.entity_model_response import parse_decisions
+    return parse_decisions(response, [p['id'] for p in pairs]), model
 
 
 def supported(decision, pair):

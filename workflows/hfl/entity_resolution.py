@@ -14,24 +14,48 @@ POLICY = 'entity-resolution-v1'
 
 
 def dispatch_pending():
+    """Reserve one wakeup under the worker lock; expired reservations recover via the sweeper."""
     if not os.environ.get('HARQIS_ENTITIES_DB') or not matching.enabled():
-        return
+        return {'state': 'disabled'}
+    import math
+    from uuid import uuid4
+    from filelock import FileLock, Timeout
     from core.apps.sprout.app.celery import SPROUT
-    with get_store().connection() as db:
-        rows = list(db.execute("""SELECT entry_id,revision FROM entity_resolution_jobs
-            WHERE state='pending' AND next_attempt<=? AND queued_at < ? ORDER BY created_at,entry_id LIMIT 8""",
-                               (time.time(), time.time() - 600)))
-    if not rows:
-        return
+    store = get_store()
+    lock = FileLock(str(store.path) + '.resolution.lock', timeout=0)
     try:
-        SPROUT.send_task(TASK, queue=os.environ.get('HARQIS_ENTITIES_QUEUE', 'hfl'))
-        with get_store().connection() as db:
-            db.executemany('UPDATE entity_resolution_jobs SET queued_at=? WHERE entry_id=? AND revision=?',
-                           [(time.time(), r['entry_id'], r['revision']) for r in rows])
-        get_store().state('resolution-last-dispatch', time.time())
-    except Exception as exc:
-        logging.getLogger(__name__).warning('Entity resolution intent retained: %s', type(exc).__name__)
-        get_store().state('resolution-dispatch-error', dict(at=time.time(), error=type(exc).__name__))
+        lock.acquire()
+    except Timeout:
+        return {'state': 'coalesced'}
+    try:
+        now = time.time()
+        with store.connection() as db:
+            due = db.execute("SELECT min(next_attempt) FROM entity_resolution_jobs WHERE state='pending'").fetchone()[0]
+        if due is None:
+            return {'state': 'idle'}
+        reservation = store.state('resolution-wakeup') or {}
+        # New ready work may replace a future wakeup. Its old token becomes inert.
+        cooldown = store.state('resolution-task-error') or {}
+        scheduled_at = max(now + 2, due, cooldown.get('retry_at', 0))
+        if reservation.get('expires_at', 0) > now and reservation.get('scheduled_at', 0) <= scheduled_at:
+            return {'state': 'coalesced'}
+        token = uuid4().hex
+        store.state('resolution-wakeup', dict(token=token, scheduled_at=scheduled_at,
+                                             expires_at=scheduled_at + 600))
+        try:
+            SPROUT.send_task(TASK, kwargs={'dispatch_id': token}, task_id=token,
+                            queue=os.environ.get('HARQIS_ENTITIES_QUEUE', 'hfl'),
+                            countdown=max(2, math.ceil(scheduled_at - now)))
+            store.state('resolution-last-dispatch', now)
+            return {'state': 'queued', 'task_id': token}
+        except Exception as exc:
+            # Broker acknowledgement may have been lost. An expired reservation
+            # can be replaced; only its current token is allowed to process work.
+            logging.getLogger(__name__).warning('Entity resolution dispatch failed: %s', type(exc).__name__)
+            store.state('resolution-dispatch-error', dict(at=now, error=type(exc).__name__))
+            return {'state': 'dispatch-uncertain'}
+    finally:
+        lock.release()
 
 
 def target_signature(entity, soul):
@@ -259,6 +283,8 @@ def process_pending(use_model=True):
         try:
             processed += process_batch(use_model=use_model, entry_id=job['entry_id'])['processed']
             store.state('resolution-last-success', time.time())
+            with store.connection() as db:
+                db.execute('DELETE FROM state WHERE key=?', ('resolution-error:' + job['entry_id'],))
         except Exception as exc:
             attempts = job['attempts'] + 1
             error = type(exc).__name__  # Avoid persisting provider credentials or source payloads.
@@ -267,8 +293,12 @@ def process_pending(use_model=True):
                     WHERE entry_id=? AND revision=?""",
                     (attempts, time.time() + min(3600, 30 * 2 ** (attempts - 1)),
                      'failed' if attempts >= 5 else 'pending', error, job['entry_id'], job['revision']))
-            store.state('resolution-last-error', dict(at=time.time(), error=error, entry_id=job['entry_id']))
-            errors.append(dict(entry_id=job['entry_id'], error=error))
+            from workflows.hfl.entity_model_response import EntityModelResponseError
+            details = exc.diagnostics if isinstance(exc, EntityModelResponseError) else {}
+            failure = dict(entry_id=job['entry_id'], error=error, diagnostics=details)
+            store.state('resolution-error:' + job['entry_id'], details)
+            store.state('resolution-last-error', dict(at=time.time(), **failure))
+            errors.append(failure)
     with store.connection() as db:
         db.execute("""INSERT INTO state VALUES ('resolution-completed',?) ON CONFLICT(key)
             DO UPDATE SET value=CAST(CAST(value AS INTEGER)+? AS TEXT)""", (str(processed), processed))
@@ -276,8 +306,11 @@ def process_pending(use_model=True):
                            (time.time(),)).fetchone()[0]
         next_attempt = db.execute("SELECT min(next_attempt) FROM entity_resolution_jobs WHERE state='pending'").fetchone()[0]
     store.state('resolution-last-finished', time.time())
-    return dict(processed=processed, pending=ready, errors=errors,
-                retry_after=max(2, min(3600, int(next_attempt-time.time())+1)) if next_attempt and not ready else None)
+    result = dict(state='partial-failure' if errors and processed else 'failed' if errors else 'complete',
+                  processed=processed, pending=ready, errors=errors,
+                  retry_after=max(2, min(3600, int(next_attempt-time.time())+1)) if next_attempt and not ready else None)
+    store.state('resolution-last-result', dict(at=time.time(), **result))
+    return result
 
 
 def undo(entry_id, mention_id, actor):
@@ -305,6 +338,9 @@ def status():
         outcomes = dict(db.execute('SELECT outcome,count(*) FROM entity_resolution_outcomes GROUP BY outcome'))
         failures = [dict(r) for r in db.execute("""SELECT entry_id,attempts,error,next_attempt,state
             FROM entity_resolution_jobs WHERE attempts>0 ORDER BY created_at LIMIT 20""")]
+        for failure in failures:
+            row = db.execute('SELECT value FROM state WHERE key=?', ('resolution-error:' + failure['entry_id'],)).fetchone()
+            failure['diagnostics'] = json.loads(row[0]) if row else {}
     store = get_store()
     return dict(pending=pending, failed=failed, retrying=retrying, oldest_pending_at=oldest,
                 oldest_pending_age_seconds=max(0, time.time()-oldest) if oldest else None,
@@ -313,6 +349,7 @@ def status():
                 last_started=store.state('resolution-last-started'), last_finished=store.state('resolution-last-finished'),
                 last_dispatch=store.state('resolution-last-dispatch'),
                 dispatch_error=store.state('resolution-dispatch-error'),
+                last_result=store.state('resolution-last-result'),
                 received=store.state('resolution-received') or 0, completed=store.state('resolution-completed') or 0)
 
 
