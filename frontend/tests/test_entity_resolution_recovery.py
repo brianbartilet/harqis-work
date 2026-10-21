@@ -177,3 +177,33 @@ def test_response_error_survives_celery_exception_serialization():
     restored = pickle.loads(pickle.dumps(error))
     assert restored.diagnostics == error.diagnostics
     assert str(restored) == str(error)
+
+
+def test_enrichment_duplicates_leave_durable_work_for_dispatcher(queue, monkeypatch):
+    from types import SimpleNamespace
+    from workflows.hfl import entity_events, entity_matching
+    from workflows.knowledge.tasks.connected_hfl import refresh_corpus_entities
+    from core.apps.sprout.app.celery import SPROUT
+    store, sent = queue
+    with store.connection() as db:
+        db.execute("INSERT INTO pending(id,revision,queued_at) VALUES ('waiting','v1',?)", (time.time(),))
+    store.state('job', {'state': 'running', 'id': 'owner'})
+    monkeypatch.setattr(refresh_corpus_entities, 'apply_async',
+                        lambda **kwargs: pytest.fail('Duplicate created a retry chain'))
+    with FileLock(str(store.path) + '.worker.lock'):
+        for _ in range(20):
+            assert refresh_corpus_entities.run(entry_id='waiting', revision='v1') == {'state': 'coalesced'}
+    assert store.state('job') == {'state': 'running', 'id': 'owner'}
+    with store.connection() as db:
+        assert db.execute("SELECT revision FROM pending WHERE id='waiting'").fetchone()[0] == 'v1'
+        # The existing ten-minute visibility timeout recovers even if the owner dies.
+        db.execute("UPDATE pending SET queued_at=? WHERE id='waiting'", (time.time() - 601,))
+    monkeypatch.setattr(entity_matching, 'dispatch_pending', lambda: None)
+    monkeypatch.setattr(resolution, 'dispatch_pending', lambda: None)
+    monkeypatch.setattr(SPROUT, 'send_task',
+                        lambda *args, **kwargs: sent.append(kwargs) or SimpleNamespace(id='recovered'))
+    assert entity_events.dispatch_pending()['state'] == 'queued'
+    assert len(sent) == 1
+    assert sent[0]['kwargs'] == {'entry_id': 'waiting', 'revision': 'v1'}
+    assert entity_events.dispatch_pending()['state'] == 'pending'
+    assert len(sent) == 1
