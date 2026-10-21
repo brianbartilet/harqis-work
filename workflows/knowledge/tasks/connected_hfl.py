@@ -89,27 +89,40 @@ def match_corpus_entities(self, job_id):
 
 
 @SPROUT.task(bind=True, acks_late=True, reject_on_worker_lost=True, max_retries=4)
-def resolve_corpus_entities(self):
+def resolve_corpus_entities(self, dispatch_id=None):
     frontend = str(Path(__file__).resolve().parents[3] / 'frontend')
     if frontend not in sys.path:
         sys.path.insert(0, frontend)
-    from workflows.hfl.entity_resolution import process_pending
+    from workflows.hfl.entity_resolution import process_pending, dispatch_pending
     from workflows.hfl.entity_store import get_store
-    lock = FileLock(str(get_store().path) + '.resolution.lock', timeout=0)
+    store = get_store()
+    lock = FileLock(str(store.path) + '.resolution.lock', timeout=0)
     try:
         lock.acquire()
     except Timeout:
-        self.apply_async(queue=os.environ.get('HARQIS_ENTITIES_QUEUE', 'hfl'), countdown=30,
-                         retries=self.request.retries)
-        return {'state': 'deferred'}
+        # The owner schedules continuation; duplicate deliveries must not create
+        # independent retry chains. Durable intent survives an owner crash.
+        return {'state': 'coalesced'}
     try:
-        result = process_pending()
-        if result['pending']:
-            self.apply_async(queue=os.environ.get('HARQIS_ENTITIES_QUEUE', 'hfl'), countdown=2)
-        elif result.get('retry_after'):
-            self.apply_async(queue=os.environ.get('HARQIS_ENTITIES_QUEUE', 'hfl'), countdown=result['retry_after'])
-        return result
-    except Exception as exc:
-        raise self.retry(exc=exc, countdown=min(300, 15 * 2 ** self.request.retries))
+        reservation = store.state('resolution-wakeup') or {}
+        if (dispatch_id and dispatch_id != reservation.get('token')) or (not dispatch_id and reservation):
+            return {'state': 'superseded'}
+        store.state('resolution-wakeup', {})
+        try:
+            result = process_pending()
+            store.state('resolution-task-error', {})
+        except Exception as exc:
+            now = time.time()
+            store.state('resolution-task-error', dict(at=now, error=type(exc).__name__, retry_at=now + 60))
+            # Never persist provider messages or source payloads in Celery errors.
+            raise RuntimeError('Entity resolution batch failed: ' + type(exc).__name__) from None
     finally:
         lock.release()
+        dispatch_pending()
+    if result.get('errors'):
+        # Entry retries and continuation are already durable. Raising here makes
+        # Celery FAILURE truthful without replaying successful entries.
+        raise RuntimeError('Entity resolution partial failure: '
+                           + str(len(result['errors'])) + ' entries failed; '
+                           + str(result['processed']) + ' processed; inspect resolution status')
+    return result
