@@ -26,8 +26,13 @@ def refresh_corpus_entities(self, entry_id='*', revision=None, use_model=True):
         try:
             lock.acquire()
         except Timeout:
+            if revision:
+                # The pending row is durable and the owner or outbox dispatcher
+                # will continue it. Broker duplicates must not own retry chains.
+                return {'state': 'coalesced'}
             # Another pool thread/process is doing valid work. Hand off without
             # spending the provider-error retry budget or overwriting its state.
+            # Legacy direct calls have no durable revision for outbox recovery.
             child = self.apply_async(
                 kwargs=dict(entry_id=entry_id, revision=revision, use_model=use_model),
                 queue=os.environ.get('HARQIS_ENTITIES_QUEUE', 'hfl'), countdown=30,

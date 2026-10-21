@@ -148,6 +148,12 @@ the updated producers and workers together so every consumer honors these tokens
 Review failed-entry diagnostics before using the explicit retry endpoint; deployment
 does not automatically reopen entries parked after five failed attempts.
 
+Enrichment deliveries backed by a pending revision also exit on worker-lock
+contention without scheduling duplicates or overwriting the owner's job status.
+Their pending rows remain recoverable by the existing outbox dispatcher after the
+ten-minute visibility timeout. Legacy direct calls without a revision retain their
+handoff behavior because they have no durable pending row to recover.
+
 `POST /api/hfl/entities/integrity/{identity}` accepts `required`, an evidence-backed
 `reason`, and optional originating `operation_ids`. This is an audited owner action.
 Flagged identities are excluded from automatic merge/assignment targets, with
