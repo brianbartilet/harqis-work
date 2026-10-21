@@ -163,6 +163,11 @@ projection while flagged; clearing the flag does not undo merges. Investigate th
 outer identity and use separately authorized targeted reversals for confirmed errors.
 Automatic alias and stable-ID projections are likewise isolated per entry while
 their target is flagged, preventing new source mentions from bypassing the resolver.
+Explicit manual merge groups stay together while flagged: the directory displays
+the identity-review status on the group without splitting its supporting mentions.
+Only an explicit unmerge reverses that owner decision. Review still prevents new
+automatic merges and assignments to the flagged group. Existing manual groups are
+recognized from their audit history, including manual merges of isolated mentions.
 Explicitly user-linked activity remains visible. Original merge and assignment
 records remain intact.
 

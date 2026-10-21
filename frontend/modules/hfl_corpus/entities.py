@@ -132,6 +132,12 @@ def projection(source='', since='', until='', context='', resolve_mentions=True,
     from workflows.hfl.entity_integrity import flagged, isolated_mention
     with store.connection() as db:
         quarantine = flagged(db)
+        # Review may suspend inferred identities, but cannot override an owner's
+        # explicit merge. Read provenance from the durable audit for old groups too.
+        manual_merges = {r['entity_id'] for r in db.execute(
+            "SELECT a.entity_id,a.data FROM entity_audit a "
+            "JOIN entity_integrity i ON i.id=a.entity_id WHERE a.action='merged'")
+            if not json.loads(r['data']).get('automatic')}
     def resolve(identity):
         visited = set()
         while identity in aliases and identity not in visited:
@@ -158,7 +164,8 @@ def projection(source='', since='', until='', context='', resolve_mentions=True,
         projected = []
         for m in mentions:
             target = resolve(m['id'])
-            if target in quarantine and m.get('method') != 'user-confirmed':
+            if (target in quarantine and target not in manual_merges
+                    and m.get('method') != 'user-confirmed'):
                 projected.append({**m, 'id': isolated_mention(entry['id'], m['id']),
                                   'resolution': 'integrity-review', 'integrity_target': target})
             else:

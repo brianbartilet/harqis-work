@@ -61,6 +61,30 @@ def test_quarantine_blocks_alias_projection_for_new_mentions(corpus):
     assert all(m['id'] == merged for row in entities.projection() for m in row['mentions'])
 
 
+@pytest.mark.parametrize('previous_quarantine', [False, True])
+def test_review_preserves_manual_merge_until_explicit_unmerge(corpus, authenticated_client, previous_quarantine):
+    from test_entity_merges import submit_merge
+    from workflows.hfl import entity_merges
+    if previous_quarantine:
+        run = runs.begin()
+        group = runs.decide(run['id'], run['pairs'][0]['id'], decision())['operation']['entity_id']
+        integrity.set_review(group, True, 'Review automatic grouping', [], 'owner')
+    ids = [e['id'] for e in entities.entity_index()]
+    merged = submit_merge(authenticated_client, ids, name='Kevin')[0]['entity_id']
+    integrity.set_review(merged, True, 'Potentially different people; owner review needed', [], 'owner-api')
+    directory = authenticated_client.get('/api/hfl/entities').json()['entities']
+    result = next(e for e in directory if e['id'] == merged)
+    assert len(result['entries']) == 2
+    assert any(s['state'] == 'integrity-review' for s in result['identity_status'])
+    assert all(m['id'] == merged for row in entities.projection() for m in row['mentions'])
+    assert not any(e['id'].startswith('integrity-mention-') for e in directory)
+    with get_store().connection() as db:
+        assert matching.blocked(db, [merged, 'another-target'])
+    # Review remains advisory for the owner's merge, but undo is still explicit.
+    entity_merges.unmerge(merged, str(uuid4()), 'explicit-undo', 'owner')
+    assert all(m['id'] != merged for row in entities.projection() for m in row['mentions'])
+
+
 def test_failed_entry_does_not_starve_next_job_and_attempts_are_durable(soul_data, monkeypatch):
     store = get_store()
     store.save('later', 'revision', [], match=True)
