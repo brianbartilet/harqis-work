@@ -157,6 +157,7 @@
         card.dataset.populated = 'true';
         const mergeActions = el('div'); mergeActions.className = 'merge-card-actions';
         if (e.merge?.active) {
+          const detach = el('button', 'Detach'); detach.type = 'button'; detach.onclick = () => window.EntityDetach.open(e, api, load); mergeActions.append(detach);
           const unmerge = el('button', 'Unmerge'); unmerge.type = 'button'; unmerge.onclick = () => openMerge(e); mergeActions.append(unmerge);
         }
         for (const decision of e.legacy_decisions || []) {
@@ -201,7 +202,7 @@
         typeLabel.append(typeSelect); typeControls.append(typeLabel, typeSave);
         management.prepend(typeControls);
         if (e.is_owner) {
-          const owner = el('a', 'Corpus owner · Managed in /profile'); owner.href = '/profile'; owner.className = 'entity-owner-link'; management.prepend(owner);
+          const owner = el('a', 'Corpus owner'); owner.href = '/profile'; owner.className = 'entity-owner-link entity-pill'; owner.title = 'Manage your owner profile'; management.prepend(owner);
           typeSelect.disabled = true; typeSave.disabled = true;
         } else if (e.owner_candidate) {
           const bind = el('button', 'This is my owner profile'); bind.type = 'button';
