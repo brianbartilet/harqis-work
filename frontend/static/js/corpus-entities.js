@@ -202,7 +202,8 @@
         typeLabel.append(typeSelect); typeControls.append(typeLabel, typeSave);
         management.prepend(typeControls);
         if (e.is_owner) {
-          const owner = el('a', 'Corpus owner'); owner.href = '/profile'; owner.className = 'entity-owner-link entity-pill'; owner.title = 'Manage your owner profile'; management.prepend(owner);
+          const owner = el('a', 'Corpus owner'); owner.href = '/profile'; owner.className = 'entity-owner-link entity-pill'; owner.title = 'Manage your owner profile';
+          const ownerRow = el('div'); ownerRow.className = 'entity-owner-row'; ownerRow.append(owner); card.insertBefore(ownerRow, management);
           typeSelect.disabled = true; typeSave.disabled = true;
         } else if (e.owner_candidate) {
           const bind = el('button', 'This is my owner profile'); bind.type = 'button';

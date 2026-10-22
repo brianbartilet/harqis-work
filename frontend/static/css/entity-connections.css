@@ -19,7 +19,8 @@
 .entity-shell .entity-management-row .entity-type-controls{flex:1 1 240px;min-width:200px}
 .entity-shell .entity-management-row .entity-type-controls label{flex:1;min-width:100px}
 .entity-shell .entity-management-row .entity-type-controls select{width:100%}
-.entity-shell .entity-management-row .entity-owner-link{white-space:nowrap;text-decoration:none;padding:5px 10px;border-radius:999px;background:#112b40;font-size:12px}
+.entity-shell .entity-owner-row{display:flex;align-items:center;margin-top:16px}
+.entity-shell .entity-owner-row .entity-owner-link{white-space:nowrap;text-decoration:none;padding:5px 10px;border-radius:999px;background:#112b40;font-size:12px}
 .entity-shell .entity-management-row .entity-soul-actions,.entity-shell .entity-management-row .merge-card-actions{flex:0 0 auto;display:flex;gap:8px}
 .entity-detach-dialog header{border-bottom:1px solid #334155;padding-bottom:18px}
 .entity-detach-dialog header h2{flex:1}

@@ -142,6 +142,13 @@ def test_detach_dialog_search_activity_and_owner_layout(merge_data, authenticate
             assert card.evaluate('(d) => d.scrollWidth <= d.clientWidth + 1')
             card.locator('.entity-management-row').scroll_into_view_if_needed()
             page.screenshot(path=str(tmp_path / 'owner-controls.png'))
+            for width in (1900, 390):
+                page.set_viewport_size({'width': width, 'height': 1000})
+                owner = card.get_by_role('link', name='Corpus owner', exact=True).bounding_box()
+                controls = card.locator('.entity-management-row').bounding_box()
+                assert owner['y'] + owner['height'] <= controls['y']
+                assert card.evaluate('(d) => d.scrollWidth <= d.clientWidth + 1')
+                card.screenshot(path=str(tmp_path / f'owner-row-{width}.png'))
             page.set_viewport_size({'width':1100,'height':900})
             assert card.evaluate('(d) => d.scrollWidth <= d.clientWidth + 1')
             card.get_by_role('button', name='Detach', exact=True).click()
