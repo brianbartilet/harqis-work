@@ -32,6 +32,29 @@ candidates but does not establish identity. A competing plausible candidate
 prevents assignment. The model uses the existing `HARQIS_ENTITY_MATCH_MODEL`
 fallback; no new provider configuration is required.
 
+Identity edits queue dependent entries rather than the entire corpus. Dependencies
+include raw mentions, previous candidates/assignments, the candidate discovery pool,
+confirmed rule names, merge membership, related identity labels, and supporting
+activity links. New competing identities also reopen completed assignments. The
+discovery pool is deliberately broader than the five evaluated candidates so a
+ranking change cannot silently hide a competitor.
+
+Completed pair comparisons are cached in the local entity database by their exact
+model input, configured model, resolver policy and comparison-policy version.
+Retries reuse unchanged comparisons, including completed batches before a later
+provider failure. Changed evidence is evaluated again. Cached decisions still pass
+current corroboration, competing-candidate, integrity and separation checks.
+When changing the evaluator prompt/contract, bump `entity_resolution.CACHE_POLICY`.
+Only the latest result per pair is retained; corpus pruning removes cache rows older
+than 30 days.
+
+Before committing, the resolver validates the entry's dependency snapshot inside
+the write transaction and rereads relevant activity content/visibility. Unrelated
+entity edits no longer invalidate a completed evaluation. Status exposes cumulative
+`resolution.cached_comparisons` and `resolution.evaluated_comparisons` counters for
+rollout monitoring. Existing queued work is preserved and drains normally; the cache
+starts empty on upgrade, so savings build as comparisons complete.
+
 Original mentions remain intact. `entity_resolutions` stores their reversible
 assignments, reason, source hash, target signature, policy and evidence hashes.
 The directory and graph apply only currently valid assignments. Editing the source,

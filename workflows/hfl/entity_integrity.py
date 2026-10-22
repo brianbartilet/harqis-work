@@ -31,7 +31,8 @@ def set_review(identity, required, reason, operation_ids, actor):
         db.execute('INSERT OR REPLACE INTO entity_integrity VALUES (?,?)', (identity, json.dumps(data)))
         entity_merges.record_event(db, identity, 'identity-review', actor, data, deliver=False)
         # Existing assignments remain in audit but are withheld by projection while flagged.
-        db.execute('INSERT OR IGNORE INTO entity_resolution_jobs(entry_id,revision) SELECT id,hash FROM enrichment')
+        from workflows.hfl.entity_resolution_scope import enqueue_affected
+        enqueue_affected(db, [identity], invalidate=False)
     return data
 
 
@@ -68,5 +69,6 @@ def reverse_separation(left_id, right_id, reason, actor):
                 for identity in (left_id, right_id):
                     value.pop(identity, None)
                 db.execute("UPDATE state SET value=? WHERE key='consolidation-checkpoint'", (json.dumps(value),))
-            db.execute('INSERT OR IGNORE INTO entity_resolution_jobs(entry_id,revision) SELECT id,hash FROM enrichment')
+            from workflows.hfl.entity_resolution_scope import enqueue_affected
+            enqueue_affected(db, [left_id, right_id])
     return {'removed_blocks': removed}

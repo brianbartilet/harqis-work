@@ -53,6 +53,8 @@ class EntityStore:
                 CREATE TABLE IF NOT EXISTS entity_resolution_outcomes(entry_id TEXT NOT NULL, mention_id TEXT NOT NULL,
                     outcome TEXT NOT NULL, evidence_version TEXT NOT NULL, data TEXT NOT NULL,
                     updated REAL NOT NULL, PRIMARY KEY(entry_id,mention_id));
+                CREATE TABLE IF NOT EXISTS entity_resolution_cache(id TEXT PRIMARY KEY, signature TEXT NOT NULL,
+                    data TEXT NOT NULL, model TEXT NOT NULL, updated REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS entity_integrity(id TEXT PRIMARY KEY, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS entity_search_features(id TEXT PRIMARY KEY, input TEXT NOT NULL, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS consolidation_pairs(run_id TEXT NOT NULL, id TEXT NOT NULL,
@@ -134,20 +136,15 @@ class EntityStore:
             if match and changed:
                 db.execute('INSERT OR REPLACE INTO entity_resolution_jobs(entry_id,revision) VALUES (?,?)',
                            (identity, content_hash))
-                db.execute('''INSERT OR IGNORE INTO entity_resolution_jobs(entry_id,revision)
-                    SELECT DISTINCT e.id,e.hash FROM entity_resolutions r
-                    JOIN enrichment e ON e.id=r.entry_id, json_each(r.data, '$.evidence_hashes') dependency
-                    WHERE dependency.key=?''', (identity,))
-                # Reopen unresolved comparisons whose candidate acquired changed source evidence.
+                from workflows.hfl.entity_resolution_scope import enqueue_affected
                 targets = {m['id'] for m in mentions}
                 if previous:
                     targets |= {m['id'] for m in json.loads(previous['mentions'])}
+                targets |= {r[0] for r in db.execute(
+                    'SELECT entity_id FROM entity_activity_links WHERE entry_id=?', (identity,))}
                 resolve = identity_resolver(db)
                 targets |= {resolve(i) for i in targets}
-                for row in db.execute("SELECT entry_id,data FROM entity_resolution_outcomes WHERE outcome!='resolved'"):
-                    if targets.intersection(json.loads(row['data']).get('candidate_ids', [])):
-                        db.execute('''INSERT OR IGNORE INTO entity_resolution_jobs(entry_id,revision)
-                            SELECT id,hash FROM enrichment WHERE id=?''', (row['entry_id'],))
+                enqueue_affected(db, targets)
             if match and mentions:
                 from workflows.hfl.entity_matching import enabled
                 owner = db.execute("SELECT value FROM state WHERE key='entity-consolidation-owner'").fetchone()
@@ -160,9 +157,18 @@ class EntityStore:
         with self.connection() as db:
             old = {r[0] for r in db.execute('SELECT id FROM enrichment')}
             removed = old - set(current_ids)
+            if removed:
+                from workflows.hfl.entity_resolution_scope import enqueue_affected
+                targets = {m['id'] for r in db.execute('SELECT id,mentions FROM enrichment')
+                           if r['id'] in removed for m in json.loads(r['mentions'])}
+                targets |= {r['entity_id'] for r in db.execute('SELECT * FROM entity_activity_links')
+                            if r['entry_id'] in removed}
+                enqueue_affected(db, targets)
             db.executemany('DELETE FROM enrichment WHERE id=?', [(i,) for i in removed])
             db.executemany('DELETE FROM entity_resolution_jobs WHERE entry_id=?', [(i,) for i in removed])
             db.executemany('DELETE FROM entity_resolution_outcomes WHERE entry_id=?', [(i,) for i in removed])
+            # Bound cached decision retention, including pairs for removed entries.
+            db.execute("DELETE FROM entity_resolution_cache WHERE updated < unixepoch()-30*86400")
         return len(removed)
 
     def decisions(self):
@@ -184,6 +190,8 @@ class EntityStore:
             db.execute('UPDATE decisions SET active=0 WHERE alias=?', (alias,))
             row = db.execute('INSERT INTO decisions(alias,canonical,reason) VALUES (?,?,?)',
                              (alias, canonical, reason))
+            from workflows.hfl.entity_resolution_scope import enqueue_affected
+            enqueue_affected(db, [alias, canonical])
             return row.lastrowid
 
     def undo(self, decision_id, actor='owner'):
@@ -206,6 +214,9 @@ class EntityStore:
                     'evidence': row['reason'], 'legacy_decision_id': decision_id,
                 })
             db.execute('UPDATE decisions SET active=0 WHERE id=?', (decision_id,))
+            if row:
+                from workflows.hfl.entity_resolution_scope import enqueue_affected
+                enqueue_affected(db, [row['alias'], row['canonical']])
 
     def profiles(self):
         with self.connection() as db:
@@ -227,6 +238,8 @@ class EntityStore:
             old_sources = json.loads(previous[0]).get('alias_sources', {}) if previous else {}
             data = dict(data)
             data['alias_sources'] = {v: old_sources.get(v, 'user') for k in ('aliases', 'partial_aliases') for v in data.get(k, [])}
+            if previous and previous['kind'] == kind and json.loads(previous[0]) == data:
+                return
             if group:
                 from workflows.hfl.entity_merges import record_event
                 old = db.execute('SELECT data FROM profiles WHERE id=?', (identity,)).fetchone()
@@ -239,24 +252,8 @@ class EntityStore:
             db.execute("INSERT INTO profiles(id,kind,data) VALUES (?,?,?) ON CONFLICT(id) "
                        "DO UPDATE SET data=excluded.data, kind=excluded.kind, updated=CURRENT_TIMESTAMP",
                        (identity, kind, json.dumps(data)))
-            db.execute('''INSERT OR IGNORE INTO entity_resolution_jobs(entry_id,revision)
-                SELECT e.id,e.hash FROM enrichment e JOIN entity_resolutions r ON e.id=r.entry_id
-                WHERE r.target_id=?''', (identity,))
-            from workflows.hfl.entity_resolution import invalidate_targets
-            invalidate_targets(db, [identity])
-            # A new or edited target can resolve previously unmatched mentions.
-            if not previous or previous['kind'] != kind or json.loads(previous[0]) != data:
-                from workflows.hfl.entity_candidates import similarity
-                target = dict(id=identity, kind=kind, label=data['name'], profile=data, entries=[])
-                for row in db.execute('''SELECT o.entry_id,o.mention_id,o.data,e.mentions
-                    FROM entity_resolution_outcomes o JOIN enrichment e ON e.id=o.entry_id
-                    WHERE o.outcome IN ('ambiguous','no-candidate','integrity-review')'''):
-                    candidate_ids = json.loads(row['data']).get('candidate_ids', [])
-                    mention = next((m for m in json.loads(row['mentions']) if m['id'] == row['mention_id']), None)
-                    signals = similarity(mention, target) if mention and mention['kind'] == kind else {}
-                    if identity in candidate_ids or signals.get('exact') or signals.get('partial') or signals.get('contact') or signals.get('fuzzy', 0) >= .8:
-                        db.execute('''INSERT OR IGNORE INTO entity_resolution_jobs(entry_id,revision)
-                            SELECT id,hash FROM enrichment WHERE id=?''', (row['entry_id'],))
+            from workflows.hfl.entity_resolution_scope import enqueue_affected
+            enqueue_affected(db, [identity])
 
     def state(self, key, value=None):
         with self.connection() as db:

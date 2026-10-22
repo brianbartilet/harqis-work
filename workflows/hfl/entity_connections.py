@@ -71,6 +71,8 @@ def edit(identity, changes, actor, available, entry_ids, versions, connection=No
             soul['updated_at'] = now
             soul['version'] += 1
             db.execute('INSERT OR REPLACE INTO entity_souls VALUES (?,?,?)', (source, soul['version'], json.dumps(soul)))
+        from workflows.hfl.entity_resolution_scope import enqueue_affected
+        enqueue_affected(db, {c.get('source_id') or identity for c in changes})
         from workflows.hfl.entity_merges import record_event
         record_event(db, identity, 'connections-edited', actor, {'name': available[identity]['label'], 'changes': changes}, deliver=False)
     return {'saved': True}
