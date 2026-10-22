@@ -51,6 +51,8 @@ def synchronize(available=None, chosen=None):
         if data.get('name') != name or not previous or previous['kind'] != 'people':
             data['name'] = name
             db.execute('INSERT OR REPLACE INTO profiles(id,kind,data) VALUES (?,?,?)', (identity, 'people', json.dumps(data)))
+            from workflows.hfl.entity_resolution_scope import enqueue_affected
+            enqueue_affected(db, [identity])
         if not row or chosen:
             db.execute("INSERT OR REPLACE INTO state VALUES ('owner-entity',?)", (json.dumps(identity),))
         return {'id': identity, 'name': name, 'candidates': []}

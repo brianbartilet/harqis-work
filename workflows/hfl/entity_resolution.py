@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import time
+from copy import deepcopy
 from datetime import datetime, timezone
 
 from workflows.hfl.entity_store import digest, get_store
@@ -11,6 +12,39 @@ from workflows.hfl import entity_matching as matching, entity_merges, entity_sou
 
 TASK = 'workflows.knowledge.tasks.connected_hfl.resolve_corpus_entities'
 POLICY = 'entity-resolution-v1'
+CACHE_POLICY = 'immediate-comparison-v1'  # Bump when the evaluator prompt/contract changes.
+
+
+def evaluate_cached(store, pairs):
+    """Persist completed comparisons even if a later batch or commit must retry."""
+    model = os.environ.get('HARQIS_ENTITY_MATCH_MODEL', os.environ.get(
+        'HARQIS_CONNECTED_ANSWER_MODEL', 'claude-haiku-4-5-20251001'))
+    signatures = {p['id']: digest([p, model, POLICY, CACHE_POLICY]) for p in pairs}
+    found, missing = {}, []
+    with store.connection() as db:
+        for pair in pairs:
+            row = db.execute('SELECT * FROM entity_resolution_cache WHERE id=?', (pair['id'],)).fetchone()
+            if row and row['signature'] == signatures[pair['id']]:
+                found[pair['id']] = (json.loads(row['data']), row['model'])
+            else:
+                missing.append(pair)
+        db.execute("""INSERT INTO state VALUES ('resolution-cache-hits',?) ON CONFLICT(key)
+            DO UPDATE SET value=CAST(CAST(value AS INTEGER)+? AS TEXT)""", (str(len(found)), len(found)))
+    for offset in range(0, len(missing), 8):
+        chunk = missing[offset:offset + 8]
+        evaluated, used_model = matching.evaluate(chunk, immediate=True)
+        decisions = {d.get('id'): d for d in evaluated if isinstance(d, dict)}
+        if set(decisions) != {p['id'] for p in chunk} or len(evaluated) != len(chunk):
+            raise ValueError('Resolver omitted candidates; retry pending work')
+        with store.connection() as db:
+            for pair in chunk:
+                decision = decisions[pair['id']]
+                db.execute('INSERT OR REPLACE INTO entity_resolution_cache VALUES (?,?,?,?,?)',
+                           (pair['id'], signatures[pair['id']], json.dumps(decision), used_model, time.time()))
+                found[pair['id']] = (decision, used_model)
+            db.execute("""INSERT INTO state VALUES ('resolution-comparisons',?) ON CONFLICT(key)
+                DO UPDATE SET value=CAST(CAST(value AS INTEGER)+? AS TEXT)""", (str(len(chunk)), len(chunk)))
+    return found
 
 
 def dispatch_pending():
@@ -116,17 +150,23 @@ def process_batch(use_model=True, entry_id=None):
     from modules.hfl_corpus import entities
     from workflows.hfl.entity_candidates import CandidateIndex, incoming_candidates, similarity
     from workflows.hfl.entity_consolidation import corroborated, evidence
+    from workflows.hfl.entity_resolution_scope import Scope
     store = get_store()
     with store.connection() as db:
+        db.execute('BEGIN')
         jobs = list(db.execute("""SELECT * FROM entity_resolution_jobs
             WHERE state='pending' AND next_attempt<=? AND (? IS NULL OR entry_id=?)
             ORDER BY created_at,entry_id LIMIT 8""", (time.time(), entry_id, entry_id)))
-        observed_revision = entity_merges.revision(db)
-    if not jobs:
-        return {'processed': 0, 'pending': 0}
-    entries = {e['id']: e for e in entities.current_entries()}
+        if not jobs:
+            return {'processed': 0, 'pending': 0}
+        observed_scope = Scope(db)
+    signatures = {j['entry_id']: observed_scope.signature(j['entry_id']) for j in jobs}
+    entries = {e['id']: deepcopy(e) for e in entities.current_entries()}
     records = store.records()
     current = entities.entity_index(resolve_mentions=False)
+    relevant_ids = {i for j in jobs for i in observed_scope.identities(j['entry_id'])}
+    evidence_ids = {e for j in jobs for e in observed_scope.evidence_ids(j['entry_id'])}
+    evidence_ids.update(e['id'] for target in current if target['id'] in relevant_ids for e in target['entries'])
     labels = {e['id']: e['label'] for e in current}
     # Only established profiles are targets. A raw mention is never its own anchor.
     targets = [e for e in current if e.get('profile')]
@@ -192,18 +232,23 @@ def process_batch(use_model=True, entry_id=None):
                     pair_plans[pair_id] = (plan, target, pair)
                     plan['pairs'].append(pair_id)
             plans.append(plan)
-    # Batch pair assessments; provider failures leave durable work untouched.
+    # Check snapshot assembly before paying for any comparisons.
+    with store.connection() as db:
+        db.execute('BEGIN')
+        assembled = Scope(db)
+        if any(assembled.signature(i) != signature for i, signature in signatures.items()):
+            raise ValueError('Entity state changed; resolution will retry with current context')
+    # Reuse only identical model inputs; corroboration and commit vetoes still run.
     decisions = {}
+    evaluated_pairs = evaluate_cached(store, model_pairs)
     for offset in range(0, len(model_pairs), 8):
         chunk = model_pairs[offset:offset + 8]
-        evaluated, model = matching.evaluate(chunk, immediate=True)
-        found = {d.get('id'): d for d in evaluated if isinstance(d, dict)}
-        if any(p['id'] not in found for p in chunk):
-            raise ValueError('Resolver omitted candidates; retry pending work')
+        found = {p['id']: evaluated_pairs[p['id']][0] for p in chunk}
         decisions.update(found)
         for pair in chunk:
             plan, target, original = pair_plans[pair['id']]
             decision = found[pair['id']]
+            model = evaluated_pairs[pair['id']][1]
             if corroborated(decision, original):
                 supporting_ids = sorted({a['id'] for a in original['right']['activity']
                     if any(f.get('right_quote') and f['right_quote'] in a['text']
@@ -211,12 +256,25 @@ def process_batch(use_model=True, entry_id=None):
                            for f in decision.get('facts', []) if isinstance(f, dict))})
                 plan['matches'].append((target, dict(method='contextual', reason=decision['reason'],
                                                     decision=decision, model=model, evidence_entry_ids=supporting_ids)))
-    # Re-read permissions/content before a transactional state revision check.
+    # Re-read all relevant source permissions/content, including competing evidence.
     latest = {e['id']: e for e in entities.current_entries()}
+    def content_signature(entry):
+        return digest([entities.entry_hash(entry), entry.get('title'), entry.get('origin_id')]) if entry else None
+    changed_entries = {i for i in entries.keys() | latest.keys()
+                       if content_signature(entries.get(i)) != content_signature(latest.get(i))}
+    # Explicit repository references can appear before enrichment creates a row.
+    for identity in changed_entries - evidence_ids:
+        if any(observed_scope.resolve(m['id']) in relevant_ids
+               for entry in (entries.get(identity), latest.get(identity)) if entry
+               for m in entities.explicit_mentions(entry)):
+            evidence_ids.add(identity)
     with store.connection() as db:
         db.execute('BEGIN IMMEDIATE')
-        if entity_merges.revision(db) != observed_revision:
+        current_scope = Scope(db)
+        if any(current_scope.signature(i) != signature for i, signature in signatures.items()):
             raise ValueError('Entity state changed; resolution will retry with current context')
+        if changed_entries.intersection(evidence_ids):
+            raise ValueError('Entity evidence changed; resolution will retry with current context')
         for plan in plans:
             entry, mention = plan['entry'], plan['mention']
             if entry['id'] not in latest or entities.entry_hash(latest[entry['id']]) != entities.entry_hash(entry):
@@ -227,7 +285,7 @@ def process_batch(use_model=True, entry_id=None):
                                                      {pair_plans[p][1]['id'] for p in plan['pairs']} |
                                                      set(plan['suspect'])),
                                 next_step='Reconsider when source evidence or candidate identities change')
-            evidence_version = digest([entities.entry_hash(entry), observed_revision, POLICY])
+            evidence_version = digest([entities.entry_hash(entry), signatures[entry['id']], POLICY])
             db.execute('INSERT OR REPLACE INTO entity_resolution_outcomes VALUES (?,?,?,?,?,?)',
                        (entry['id'], mention['id'], outcome, evidence_version, json.dumps(outcome_data), time.time()))
             # A quarantined plausible candidate is not evidence that a different candidate is correct.
@@ -350,6 +408,8 @@ def status():
                 last_dispatch=store.state('resolution-last-dispatch'),
                 dispatch_error=store.state('resolution-dispatch-error'),
                 last_result=store.state('resolution-last-result'),
+                cached_comparisons=store.state('resolution-cache-hits') or 0,
+                evaluated_comparisons=store.state('resolution-comparisons') or 0,
                 received=store.state('resolution-received') or 0, completed=store.state('resolution-completed') or 0)
 
 

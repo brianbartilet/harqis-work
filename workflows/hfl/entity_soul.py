@@ -64,7 +64,8 @@ def save(identity, payload, actor, available, connection=None):
         record_event(db, identity, 'soul-edited', actor,
                      {'name': available[identity]['label'], 'before': old, 'soul': data}, deliver=False)
         # Source hashes and rule revisions invalidate old assignments immediately.
-        db.execute('INSERT OR IGNORE INTO entity_resolution_jobs(entry_id,revision) SELECT id,hash FROM enrichment')
+        from workflows.hfl.entity_resolution_scope import enqueue_affected
+        enqueue_affected(db, [identity])
     return {**data, 'version': old['version'] + 1}
 
 
