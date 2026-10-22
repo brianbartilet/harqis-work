@@ -802,6 +802,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     for(const node of next.nodes)if(node.kind!=='drafts')window.HflIdeas?.maps.cacheNode(node);
     for(const edge of next.edges)if(!edge.local)window.HflIdeas?.maps.sharedEdges.set(JSON.stringify([edge.source,edge.target,edge.relation]),edge);
     const map=window.HflIdeas?.maps.current;
+    if(map&&renderedBoardId!==map.id)for(const node of next.nodes)enabled.add(node.kind);
     if(map){const members=new Set(map.members);next.nodes.filter(n=>members.has(n.list_id)).forEach(n=>members.add(n.id));const drafts=(map.drafts||[]).map(d=>({id:d.id,label:d.title,body:d.body,kind:'drafts',status:'board draft'}));next={...next,nodes:[...next.nodes.filter(n=>members.has(n.id)),...drafts],edges:[...next.edges.filter(e=>members.has(e.source)&&members.has(e.target)),...(map.edges||[]).map(e=>({...e,local:true,method:'board',evidence:'Board-only connection'}))]};next.total_nodes=next.nodes.length;next.truncated=false;}
     data=next;
     if(new URL(location.href).searchParams.get('connections')==='1'){
@@ -949,8 +950,8 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
           for(const [key,edge] of window.HflIdeas.maps.sharedEdges)if(board.members.includes(edge.source)&&board.members.includes(edge.target))window.HflIdeas.maps.sharedEdges.delete(key);
         }
         setLoading(false);configureData(shared,force===true);progress.textContent='Board ready · '+data.nodes.length+' nodes';
-      }catch(error){setLoading(false);showInfo('status',error.message,true);progress.textContent=error.message;}
-      finally{progress.removeAttribute('aria-busy');}
+      }catch(error){if(version===requestVersion){setLoading(false);showInfo('status',error.message,true);progress.textContent=error.message;}}
+      finally{if(version===requestVersion)progress.removeAttribute('aria-busy');}
       return;
     }
     requestController=new AbortController(); setLoading(true);showInfo('status','Loading your graph…',true);
@@ -1111,6 +1112,11 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       return [n.id,{x:point.x,y:point.y}];
     }));
     window.addEventListener('hfl:ideas-updated',event=>{if(event.detail?.boardSwitch){pendingState=null;selected=null;enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts']);}if(event.detail?.selectId)selected=event.detail.selectId;
+      if(event.detail?.boardSwitch){
+        // Selecting a saved board exits the example and refreshes its complete
+        // graph, even when every member already exists in the activity cache.
+        exampleMode=false;showMode();focusId=null;load(true);return;
+      }
       if(event.detail?.refreshShared||window.HflIdeas.maps.current?.members.some(id=>id.startsWith('list:'))){load(true);return;}
       if(event.detail?.boardLocal&&!event.detail?.boardSwitch){
         const board=window.HflIdeas.maps.current;

@@ -13,6 +13,31 @@
 .entity-shell .entity-management-row{display:flex;align-items:flex-end;justify-content:flex-end;gap:12px;flex-wrap:wrap;margin:16px 0}.entity-shell .entity-management-row .merge-card-actions{margin:0}.entity-shell .entity-management-row .entity-type-controls{margin:0;flex:0 1 420px}.entity-shell .entity-section{margin:16px 0;padding:20px;border:1px solid #334155;border-radius:8px;background:#0f172a}.entity-shell .entity-section>summary{font-size:16px;font-weight:600;list-style:none;padding-right:28px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2360a5fa' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 7.5 5 5 5-5'/%3E%3C/svg%3E") right center/20px no-repeat}.entity-section>summary::-webkit-details-marker{display:none}.entity-shell .entity-section[open]>summary{margin-bottom:16px}.entity-owner-link{color:#7dd3fc}
 @media(max-width:540px){.entity-connections-dialog{padding:16px}.connection-controls{grid-template-columns:1fr}.connection-results{gap:8px}.entity-shell .entity-management-row{align-items:stretch}.entity-shell .entity-management-row .entity-type-controls{flex:1 1 100%}}
 
+/* Compact directory actions keep the owner badge and controls on one desktop row. */
+.entity-shell{container-type:inline-size}
+.entity-shell .entity-management-row{align-items:center;gap:10px}
+.entity-shell .entity-management-row .entity-type-controls{flex:1 1 240px;min-width:200px}
+.entity-shell .entity-management-row .entity-type-controls label{flex:1;min-width:100px}
+.entity-shell .entity-management-row .entity-type-controls select{width:100%}
+.entity-shell .entity-management-row .entity-owner-link{white-space:nowrap;text-decoration:none;padding:5px 10px;border-radius:999px;background:#112b40;font-size:12px}
+.entity-shell .entity-management-row .entity-soul-actions,.entity-shell .entity-management-row .merge-card-actions{flex:0 0 auto;display:flex;gap:8px}
+.entity-detach-dialog header{border-bottom:1px solid #334155;padding-bottom:18px}
+.entity-detach-dialog header h2{flex:1}
+.entity-detach-dialog .detach-members{display:flex;flex-direction:column;gap:12px;max-height:48dvh;overflow:auto;padding:3px}
+.entity-detach-dialog .detach-member{padding:14px;border:1px solid #475569;border-radius:8px;background:#18273b;overflow-wrap:anywhere}
+.entity-detach-dialog .detach-member-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.entity-detach-dialog small{display:block;color:#94a3b8;margin:6px 0}
+.entity-detach-dialog details{margin-top:12px}.entity-detach-dialog summary{cursor:pointer;color:#cbd5e1}
+.entity-detach-dialog summary{list-style:none;position:relative;padding-right:28px}
+.entity-detach-dialog summary::-webkit-details-marker{display:none}
+.entity-detach-dialog summary::after{content:'';position:absolute;right:0;top:50%;width:20px;height:20px;transform:translateY(-50%);pointer-events:none;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2360a5fa' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 7.5 5 5 5-5'/%3E%3C/svg%3E") center/20px no-repeat}
+.entity-detach-dialog details[open]>summary::after{transform:translateY(-50%) rotate(180deg)}
+.entity-detach-dialog article{padding:12px 0;border-top:1px solid #334155}.entity-detach-dialog article p{white-space:pre-wrap;overflow-wrap:anywhere}
+.entity-detach-dialog a{color:#7dd3fc}.entity-detach-dialog .detach-pages{display:flex;gap:10px;margin-top:12px}
+.entity-detach-dialog .detach-preview>button{margin:14px 8px 0 0}.entity-detach-dialog .detach-error{color:#fca5a5}
+@container(min-width:700px){.entity-shell .entity-management-row{flex-wrap:nowrap}}
+@media(max-width:540px){.entity-shell .entity-management-row .entity-type-controls{flex-basis:100%}.entity-detach-dialog{padding:16px}}
+
 /* Explicit centering overrides the global dialog reset, including drawer launches. */
 dialog.entity-connections-dialog{position:fixed;inset:0;margin:auto;max-width:calc(100vw - 24px);max-height:90dvh}
 .entity-connections-dialog header{flex-wrap:wrap;justify-content:flex-start}

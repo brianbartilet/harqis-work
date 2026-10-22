@@ -279,6 +279,48 @@ Reversal restores the immediate members. For nested merges, unmerge the outer gr
 first. Edits made to a merged profile remain in audit snapshots and are not distributed
 to its originals. Historical one-to-one decisions appear as **Unmerge previous alias**.
 
+### Detach individual members
+
+Merged entities also expose **Detach**. The dialog lists immediate and nested entity
+members (not individual activity associations), with expandable supporting activities.
+Search matches member names, aliases and the full current supporting activity content
+across all members; the list displays 30 matches per page. Supporting activities are
+derived from original extracted mentions and explicit activity links, before group
+projection combines them. Resolver-only assignments to the outer identity are not
+attributed to an original member without evidence.
+
+Each row's **Detach** opens a confirmation preview. Confirming restores that member
+as a separate identity while preserving the outer group's ID. A detached subgroup
+remains merged. Nested removal updates only its ancestors; empty intermediate groups
+are retired, and a group with one remaining member retains its ID and curated profile.
+Use Unmerge when the selection would empty the outer group.
+
+The preview shows retained membership and inherited profile values being removed.
+Values still contributed by another member, explicit user aliases and later additions
+remain. Unchanged inherited notes and inherited soul rules from the detached branch
+are removed; edited prose and ambiguous shared details need owner review. Supporting
+activities may remain linked to both sides when they mention both identities. Existing
+integrity-review flags are retained. No corpus entry is deleted or rewritten.
+
+The transaction records a `member-detached` audit, before/after profile and soul
+snapshots, and an idempotent receipt. Durable cross-partition exclusions prevent
+automatic reattachment without blocking matching among retained members. Resolver
+assignments to affected identities are invalidated and queued for reassessment.
+Original merge audit events remain intact; a deliberate later merge can reunite the
+identities through the ordinary reviewed merge flow.
+
+Authenticated endpoints beneath `/api/hfl/entities`:
+
+| Method/path | Behavior |
+| --- | --- |
+| `GET /merges/{identity}/members` | All current member rows, ancestry and supporting activities. |
+| `POST /merges/{identity}/detach-preview` | Accepts `member_id`; returns the affected membership/profile changes and a signed preview token. |
+| `POST /merges/{identity}/detach` | Accepts `member_id`, `preview_token`, and UUID `request_id`; atomically detaches the member. |
+
+Previews expire after 15 minutes and bind the selected group/member and merge-tree
+state. Concurrent profile or membership changes return 409. Retry an uncertain submit
+with the same request ID and identical body, or read `/operations/{request_id}`.
+
 ## Authentication and instance
 
 All commands are available on the frontend server and standalone HFL API. Use

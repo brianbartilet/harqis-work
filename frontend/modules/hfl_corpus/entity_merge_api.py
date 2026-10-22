@@ -47,6 +47,16 @@ class Unmerge(BaseModel):
     evidence: str = Field(default='', max_length=10000)
 
 
+class DetachPreview(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    member_id: str = Field(min_length=1, max_length=200)
+
+
+class DetachSubmit(DetachPreview):
+    request_id: UUID
+    preview_token: str
+
+
 def owner(request):
     from modules.hfl_corpus.entities_api import authorize
     return authorize(request)
@@ -168,6 +178,64 @@ async def operation_status(request: Request, request_id: UUID):
 async def history(request: Request, identity: str):
     owner(request)
     return {'events': await run_in_threadpool(merges.history, identity)}
+
+
+def detach_members(identity):
+    from workflows.hfl import entity_detach
+    store = get_store()
+    with store.connection() as db:
+        snapshot = entity_detach.tree(db, identity)
+        links = {}
+        for row in db.execute('SELECT entity_id,entry_id FROM entity_activity_links'):
+            links.setdefault(row['entry_id'], []).append(row['entity_id'])
+    rows = entity_detach.member_rows(snapshot, entities.current_entries(), store.records(), links)
+    with store.connection() as db:
+        if digest(entity_detach.tree(db, identity)) != digest(snapshot):
+            raise ValueError('Members changed while loading; refresh the dialog')
+    return snapshot, rows
+
+
+@router.get('/merges/{identity}/members')
+async def merge_members(request: Request, identity: str):
+    owner(request)
+    _, rows = await call(detach_members, identity)
+    return {'members': rows}
+
+
+@router.post('/merges/{identity}/detach-preview')
+async def detach_preview(request: Request, identity: str, payload: DetachPreview):
+    owner(request)
+    from workflows.hfl import entity_detach
+    snapshot, rows = await call(detach_members, identity)
+    change = await call(entity_detach.plan, snapshot, identity, payload.member_id)
+    member = next(row for row in rows if row['id'] == payload.member_id)
+    result = dict(member=member, changes=change['changes'], retired=change['retired'])
+    result['preview_token'] = signer().dumps(dict(action='detach', identity=identity,
+        member_id=payload.member_id, revision=change['revision']))
+    return result
+
+
+@router.post('/merges/{identity}/detach')
+async def detach_submit(request: Request, identity: str, payload: DetachSubmit, background_tasks: BackgroundTasks):
+    actor = owner(request)
+    from workflows.hfl import entity_detach
+    fingerprint = digest(dict(action='detach', identity=identity, member_id=payload.member_id,
+                              preview_token=payload.preview_token))
+    existing = await call(merges.operation, str(payload.request_id), fingerprint)
+    if existing:
+        background_tasks.add_task(merges.flush_audits)
+        return existing
+    try:
+        token = signer().loads(payload.preview_token, max_age=900)
+    except BadSignature as exc:
+        raise HTTPException(409, 'Preview expired or invalid; review a fresh detach preview') from exc
+    if not isinstance(token, dict) or any(token.get(k) != v for k, v in dict(
+            action='detach', identity=identity, member_id=payload.member_id).items()):
+        raise HTTPException(409, 'Preview does not match the selected member')
+    result = await call(entity_detach.commit, identity, payload.member_id, token['revision'],
+                        str(payload.request_id), fingerprint, actor)
+    background_tasks.add_task(merges.flush_audits)
+    return result
 
 
 @router.get('/matching')
