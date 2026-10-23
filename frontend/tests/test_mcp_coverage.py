@@ -135,7 +135,7 @@ def test_write_classification_and_cli_schema(mcp_tools, tmp_path, monkeypatch):
     from tools.catalog import is_write_tool
     from tools.cli import run
     from agents.projects.permissions.enforcer import PermissionDenied
-    read_posts = {'analyze_hfl_corpus_entity_selection', 'get_hfl_corpus_rendered_markdown', 'search_hfl_corpus_entity_duplicates'}
+    read_posts = {'analyze_hfl_corpus_entity_selection', 'analyze_hfl_corpus_entity_detach', 'get_hfl_corpus_rendered_markdown', 'search_hfl_corpus_entity_duplicates'}
     for row in NEW:
         name = row['tools'][0]
         readonly = (row['method'] == 'GET' and not name.startswith('download_')) or name in read_posts

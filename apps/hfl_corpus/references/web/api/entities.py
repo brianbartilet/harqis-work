@@ -6,6 +6,46 @@ from apps.hfl_corpus.references.web.api.extended import ApiServiceHflCorpusExten
 
 class ApiServiceHflCorpusEntities(ApiServiceHflCorpusExtended):
 
+    def get_entity_connections(self, identity: str) -> dict:
+        """Read entity connections and their edit versions."""
+        return self._json('GET', f'entities/connections/{self._segment(identity)}')
+
+    def update_entity_connections(self, identity: str, changes: list[dict], versions: dict) -> dict:
+        """Apply reviewed connection changes with the versions from the read endpoint."""
+        return self._json('POST', f'entities/connections/{self._segment(identity)}', payload=dict(changes=changes, versions=versions))
+
+    def list_entity_connection_activities(self, query: str = '') -> dict:
+        """Find bounded activity choices for entity connections."""
+        return self._json('GET', 'entities/connection-activities', params={'q': query})
+
+    def update_entity_owner_binding(self, identity: str) -> dict:
+        """Bind the corpus owner to a reviewed existing person identity."""
+        return self._json('POST', 'entities/owner-binding', payload=dict(identity=identity))
+
+    def update_entity_resolution_undo(self, entry_id: str, mention_id: str) -> dict:
+        """Undo one mention assignment and record its exclusion."""
+        return self._json('POST', f'entities/resolutions/{self._segment(entry_id)}/{self._segment(mention_id)}/undo')
+
+    def get_entity_merge_members(self, identity: str) -> dict:
+        """Read merged members available for a detach preview."""
+        return self._json('GET', f'entities/merges/{self._segment(identity)}/members')
+
+    def analyze_entity_detach(self, identity: str, member_id: str) -> dict:
+        """Preview detaching one member and obtain its review token; read-only."""
+        return self._json('POST', f'entities/merges/{self._segment(identity)}/detach-preview', payload=dict(member_id=member_id))
+
+    def update_entity_detach(self, identity: str, member_id: str, request_id: str, preview_token: str) -> dict:
+        """Commit a reviewed detach; reuse the same UUID and payload on retry."""
+        return self._json('POST', f'entities/merges/{self._segment(identity)}/detach', payload=dict(member_id=member_id, request_id=request_id, preview_token=preview_token))
+
+    def update_entity_types_batch(self, entity_ids: list[str], kind: str, source_kinds: dict) -> dict:
+        """Reclassify selected entities after checking their observed source kinds."""
+        return self._json('POST', 'entities/types/batch', payload=dict(entity_ids=entity_ids, kind=kind, source_kinds=source_kinds))
+
+    def update_entity_type_properties(self, identity: str, name: str, color: str, description: str) -> dict:
+        """Edit a type's display and extraction properties without starting backfill."""
+        return self._json('POST', f'entities/types/{self._segment(identity)}/update', payload=dict(name=name, color=color, description=description))
+
     def get_entity_context(self, identity: str) -> dict:
         """Read a current entity's soul, identity rules, relationships and bounded activity."""
         return self._json('GET', f'entities/context/{self._segment(identity)}')

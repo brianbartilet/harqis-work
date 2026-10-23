@@ -3608,6 +3608,157 @@
       ],
       "reason": "Close a bounded execution and dispatch its canonical report. Destructive: writes remote state.",
       "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_consolidation_execution_close"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/curated-feed",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_curated_feed"
+      ],
+      "reason": "Read a filtered, paginated curated feed; protected entries are excluded by default.",
+      "service": "apps.hfl_corpus.references.web.api.timeline.ApiServiceHflCorpusTimeline.get_curated_feed"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/entities/connection-activities",
+      "status": "covered",
+      "tools": [
+        "list_hfl_corpus_entity_connection_activities"
+      ],
+      "reason": "Find bounded activity choices for entity connections.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.list_entity_connection_activities"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/entities/connections/{identity}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_entity_connections"
+      ],
+      "reason": "Read entity connections and their edit versions.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.get_entity_connections"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/connections/{identity}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_connections"
+      ],
+      "reason": "Apply reviewed connection changes with the versions from the read endpoint.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_connections"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/owner-binding",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_owner_binding"
+      ],
+      "reason": "Bind the corpus owner to a reviewed existing person identity.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_owner_binding"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/resolutions/{entry_id}/{mention_id}/undo",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_resolution_undo"
+      ],
+      "reason": "Undo one mention assignment and record its exclusion.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_resolution_undo"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/entities/merges/{identity}/members",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_entity_merge_members"
+      ],
+      "reason": "Read merged members available for a detach preview.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.get_entity_merge_members"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/merges/{identity}/detach-preview",
+      "status": "covered",
+      "tools": [
+        "analyze_hfl_corpus_entity_detach"
+      ],
+      "reason": "Preview detaching one member and obtain its review token; read-only.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.analyze_entity_detach"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/merges/{identity}/detach",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_detach"
+      ],
+      "reason": "Commit a reviewed detach; reuse the same UUID and payload on retry.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_detach"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/types/batch",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_types_batch"
+      ],
+      "reason": "Reclassify selected entities after checking their observed source kinds.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_types_batch"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/types/{identity}/update",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_type_properties"
+      ],
+      "reason": "Edit a type's display and extraction properties without starting backfill.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_type_properties"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/entities/context/{identity}",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_entity_context"
+      ],
+      "reason": "Read a current entity's soul, identity rules, relationships and bounded activity.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.get_entity_context"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/soul/{identity}",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_soul"
+      ],
+      "reason": "Replace soul fields using the version from get_entity_context. Writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_soul"
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/curated-feed",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser-rendered curated feed; canonical data is exposed separately at /api/hfl/curated-feed."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/expression",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser session form for saving expression preferences and redirecting to the selected view."
+    },
+    {
+      "method": "POST",
+      "path": "/settings/quick-tags",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser session and CSRF form for owner quick-tag preferences."
     }
   ]
 }

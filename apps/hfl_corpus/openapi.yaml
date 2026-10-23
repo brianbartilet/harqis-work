@@ -21,6 +21,138 @@ tags:
 - name: hfl-management
   description: Actions, Memory Signal categories, and date pins
 paths:
+  /api/hfl/entities/types/{identity}/update:
+    post:
+      summary: Update Type
+      operationId: update_type_api_hfl_entities_types__identity__update_post
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TypeWrite'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/types/batch:
+    post:
+      summary: Change Types
+      operationId: change_types_api_hfl_entities_types_batch_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchKindWrite'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/merges/{identity}/members:
+    get:
+      summary: Merge Members
+      operationId: merge_members_api_hfl_entities_merges__identity__members_get
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/merges/{identity}/detach-preview:
+    post:
+      summary: Detach Preview
+      operationId: detach_preview_api_hfl_entities_merges__identity__detach_preview_post
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetachPreview'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/merges/{identity}/detach:
+    post:
+      summary: Detach Submit
+      operationId: detach_submit_api_hfl_entities_merges__identity__detach_post
+      parameters:
+      - name: identity
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Identity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetachSubmit'
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /api/hfl/entry-edit/{relative_path}:
     post:
       summary: Update one activity entry and attach files
@@ -4309,6 +4441,66 @@ paths:
                 $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
+    BatchKindWrite:
+      properties:
+        kind:
+          type: string
+          title: Kind
+        entity_ids:
+          items:
+            type: string
+          type: array
+          maxItems: 10000
+          minItems: 1
+          title: Entity Ids
+        source_kind:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Source Kind
+        source_kinds:
+          additionalProperties:
+            type: string
+          type: object
+          title: Source Kinds
+      type: object
+      required:
+      - kind
+      - entity_ids
+      title: BatchKindWrite
+    DetachPreview:
+      properties:
+        member_id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Member Id
+      additionalProperties: false
+      type: object
+      required:
+      - member_id
+      title: DetachPreview
+    DetachSubmit:
+      properties:
+        member_id:
+          type: string
+          maxLength: 200
+          minLength: 1
+          title: Member Id
+        request_id:
+          type: string
+          format: uuid
+          title: Request Id
+        preview_token:
+          type: string
+          title: Preview Token
+      additionalProperties: false
+      type: object
+      required:
+      - member_id
+      - request_id
+      - preview_token
+      title: DetachSubmit
     SoulEditorWrite:
       properties:
         revision:

@@ -6,6 +6,10 @@ from apps.hfl_corpus.references.web.api.extended import ApiServiceHflCorpusExten
 
 class ApiServiceHflCorpusTimeline(ApiServiceHflCorpusExtended):
 
+    def get_curated_feed(self, filters: dict | None = None, include_secrets: bool = False, secret_tags: str = '') -> dict:
+        """Read a filtered, paginated curated feed; protected entries are excluded by default."""
+        return self._json('GET', 'curated-feed', params={**(filters or {}), 'include_secrets': include_secrets, 'secret_tags': secret_tags})
+
     def get_timeline_source(self, path: str, entry_id: str) -> dict:
         """Validate and read the title/date of unprotected entry evidence.
 

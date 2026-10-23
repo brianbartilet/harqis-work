@@ -481,3 +481,22 @@ Creation may return `possible-existing`; reuse a suggestion or explicitly set `c
 *"Show incoming entity-resolution health."*
 
 *"Finish a bounded entity-consolidation execution and verify its report."*
+
+### Entity editing and curated feed tools
+
+`get_hfl_corpus_curated_feed` accepts feed filters and pagination; protected
+entries are excluded unless explicitly requested. Entity connection reads and
+updates use `get_hfl_corpus_entity_connections` and
+`update_hfl_corpus_entity_connections`, preserving the versions returned by the
+read. `list_hfl_corpus_entity_connection_activities` supplies activity choices.
+
+`get_hfl_corpus_entity_merge_members` and `analyze_hfl_corpus_entity_detach`
+provide a read-only detach preview. Commit it with
+`update_hfl_corpus_entity_detach`, its preview token and a stable retry UUID.
+`update_hfl_corpus_entity_resolution_undo` reverses one mention assignment.
+
+`update_hfl_corpus_entity_owner_binding` binds the owner identity.
+`update_hfl_corpus_entity_types_batch` reclassifies selected entities with their
+observed source kinds. `update_hfl_corpus_entity_type_properties` edits type
+names, colors and extraction descriptions without starting a backfill.
+All update tools write remote state.

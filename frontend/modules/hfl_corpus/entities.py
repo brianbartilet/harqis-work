@@ -325,6 +325,7 @@ def _corpus_graph(source='', since='', until='', limit=100, query='', shared=Fal
     bounded_edges = list(edges.values()) if not limit else list(edges.values())[:limit * 4]
     total_nodes = len(candidates) + len(available_targets | curated_ids)
     return dict(nodes=list(nodes.values()), edges=bounded_edges,
+                types=[{key: t[key] for key in ('id', 'name', 'color')} for t in entity_types.listing()],
                 enriched=sum(e['enriched'] for e in rows), entries=len(rows),
                 matching_entries=len(candidates), total_nodes=total_nodes, limit=limit, sources=available_sources,
                 omitted_sources=len({t for t in available_targets if t.startswith('sources:')} - selected_targets),

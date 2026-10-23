@@ -49,9 +49,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   $('info').addEventListener('mouseleave',()=>{infoPaused=false;});
   $('info').addEventListener('focus',()=>{infoPaused=true;});
   $('info').addEventListener('blur',()=>{infoPaused=false;});
-  const kindLabel = kind => ({companies:'organizations', drafts:'thoughts', thoughts:'list thoughts'}[kind] || kind.replaceAll('_', ' '));
+  let configuredTypes = new Map();
+  const kindLabel = kind => configuredTypes.get(kind)?.name || ({companies:'organizations', drafts:'thoughts', thoughts:'list thoughts'}[kind] || kind.replaceAll('_', ' '));
   const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3', ideas:'#f9ca74', actions:'#fb8ca6', goals:'#a7f3d0', drafts:'#c4b5fd', lists:'#5eead4', thoughts:'#c4b5fd', boards:'#93c5fd'};
-  const color = kind => palette[kind] || '#e9c96c';
+  const color = kind => configuredTypes.get(kind)?.color || palette[kind] || '#e9c96c';
   window.HflGraphAppearance = {color, kindLabel};
   const defaultLabelKinds = new Set(['sources', 'people', 'tools', 'companies']);
   let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts']);
@@ -799,6 +800,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     select(byId.has(selected)?selected:null);
   }
   function configureData(next,preserveLayout=false) {
+    if (next.types || exampleMode) configuredTypes = new Map((next.types || []).filter(type => /^#[0-9a-f]{6}$/i.test(type.color)).map(type => [type.id, type]));
     for(const node of next.nodes)if(node.kind!=='drafts')window.HflIdeas?.maps.cacheNode(node);
     for(const edge of next.edges)if(!edge.local)window.HflIdeas?.maps.sharedEdges.set(JSON.stringify([edge.source,edge.target,edge.relation]),edge);
     const map=window.HflIdeas?.maps.current;
@@ -823,9 +825,10 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     legendKinds.forEach(kind=>{
       const item=document.createElement('li'),button=document.createElement('button'),dot=document.createElement('span');
       dot.className='kg-dot';dot.style.background=color(kind);dot.setAttribute('aria-hidden','true');
-      button.type='button';button.dataset.kind=kind;button.title='Show or hide '+(legendLabels[kind]||kindLabel(kind).toLowerCase());
+      const label=configuredTypes.has(kind)?kindLabel(kind).toLowerCase():(legendLabels[kind]||kindLabel(kind).toLowerCase());
+      button.type='button';button.dataset.kind=kind;button.title='Show or hide '+label;
       button.onclick=()=>{enabled.has(kind)?enabled.delete(kind):enabled.add(kind);render();};
-      button.append(dot,document.createTextNode(legendLabels[kind]||kindLabel(kind).toLowerCase()));item.append(button);$('legend').append(item);
+      button.append(dot,document.createTextNode(label));item.append(button);$('legend').append(item);
     });
     [...availableKinds].sort().forEach(kind=>{const label=document.createElement('label'),input=document.createElement('input'),dot=document.createElement('span');input.type='checkbox';input.dataset.kind=kind;input.checked=true;input.onchange=()=>{input.checked?enabled.add(kind):enabled.delete(kind);render();};dot.className='kg-dot';dot.style.background=color(kind);label.append(input,dot,document.createTextNode(kindLabel(kind)));$('types').append(label);});
     render(preserveLayout);

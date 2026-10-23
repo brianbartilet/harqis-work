@@ -245,6 +245,7 @@ def board_graph(request: Request, identity: str, context: str = ''):
     members = set(board['members'])
     members.update(n['id'] for n in shared['nodes'] if n.get('list_id') in members and n['id'] not in board.get('hidden_members', []))
     return {'nodes': [{**available[i], 'outside_workspace': i not in eligible} for i in members if i in available],
+            'types': shared.get('types', []),
             'edges': [e for e in shared['edges'] if e['source'] in members and e['target'] in members
                       and e['source'] in available and e['target'] in available], 'sources': []}
 

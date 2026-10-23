@@ -1915,6 +1915,61 @@ def register_hfl_corpus_tools(mcp: FastMCP):
         """
         return _dict_result(ApiServiceHflCorpusEntities(CONFIG).create_entity_merge_batch(groups=groups))
 
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def get_hfl_corpus_curated_feed(filters: dict | None = None, include_secrets: bool = False, secret_tags: str = '') -> dict:
+        """Read a filtered, paginated curated feed; protected entries are excluded by default."""
+        return _dict_result(ApiServiceHflCorpusTimeline(CONFIG).get_curated_feed(filters=filters, include_secrets=include_secrets, secret_tags=secret_tags))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def list_hfl_corpus_entity_connection_activities(query: str = '') -> dict:
+        """Find bounded activity choices for entity connections."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).list_entity_connection_activities(query=query))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def get_hfl_corpus_entity_connections(identity: str) -> dict:
+        """Read entity connections and their edit versions."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).get_entity_connections(identity=identity))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_connections(identity: str, changes: list[dict], versions: dict) -> dict:
+        """Apply reviewed connection changes with the versions from the read endpoint."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).update_entity_connections(identity=identity, changes=changes, versions=versions))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_owner_binding(identity: str) -> dict:
+        """Bind the corpus owner to a reviewed existing person identity."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).update_entity_owner_binding(identity=identity))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_resolution_undo(entry_id: str, mention_id: str) -> dict:
+        """Undo one mention assignment and record its exclusion."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).update_entity_resolution_undo(entry_id=entry_id, mention_id=mention_id))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def get_hfl_corpus_entity_merge_members(identity: str) -> dict:
+        """Read merged members available for a detach preview."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).get_entity_merge_members(identity=identity))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def analyze_hfl_corpus_entity_detach(identity: str, member_id: str) -> dict:
+        """Preview detaching one member and obtain its review token; read-only."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).analyze_entity_detach(identity=identity, member_id=member_id))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_detach(identity: str, member_id: str, request_id: str, preview_token: str) -> dict:
+        """Commit a reviewed detach; reuse the same UUID and payload on retry."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).update_entity_detach(identity=identity, member_id=member_id, request_id=request_id, preview_token=preview_token))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_types_batch(entity_ids: list[str], kind: str, source_kinds: dict) -> dict:
+        """Reclassify selected entities after checking their observed source kinds."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).update_entity_types_batch(entity_ids=entity_ids, kind=kind, source_kinds=source_kinds))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_type_properties(identity: str, name: str, color: str, description: str) -> dict:
+        """Edit a type's display and extraction properties without starting backfill."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).update_entity_type_properties(identity=identity, name=name, color=color, description=description))
+
     # --- Entity consolidation ---
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
