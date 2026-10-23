@@ -151,6 +151,7 @@ def test_soul_endpoints_require_owner_authentication():
 
 
 def test_prose_does_not_authorize_and_jobs_survive_model_error(soul_data, authenticated_client, monkeypatch):
+    monkeypatch.setenv('HARQIS_ENTITY_REASSESS_HISTORY', '1')
     payload = soul_payload(); payload['identity_rules'] = []
     save(authenticated_client, payload)
     resolution.process_batch(use_model=False)

@@ -46,12 +46,18 @@ def parse_decisions(response, pair_ids):
     decisions = data['decisions']
     seen = set()
     expected = set(pair_ids)
-    for decision in decisions:
+    for index, decision in enumerate(decisions):
         if not isinstance(decision, dict):
             reject('invalid-decision')
         identity = decision.get('id')
-        if not isinstance(identity, str) or identity not in expected or identity in seen:
-            reject('unexpected-or-duplicate-id')
+        # Counts and positions diagnose the contract failure without retaining
+        # provider text, entity names, or arbitrary returned identifiers.
+        if not isinstance(identity, str) or not identity:
+            reject('missing-decision-id', decision_index=index)
+        if identity not in expected:
+            reject('unexpected-decision-id', decision_index=index, expected=len(expected))
+        if identity in seen:
+            reject('duplicate-decision-id', decision_index=index)
         seen.add(identity)
         if (decision.get('decision') not in ('merge', 'review', 'separate')
                 or not isinstance(decision.get('reason'), str)

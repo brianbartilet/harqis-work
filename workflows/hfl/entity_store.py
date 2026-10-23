@@ -134,9 +134,15 @@ class EntityStore:
                 db.execute('''DELETE FROM entity_resolution_outcomes WHERE entry_id=? AND mention_id NOT IN
                     (SELECT json_extract(value,'$.id') FROM json_each(?))''', (identity, encoded_mentions))
             if match and changed:
-                db.execute('INSERT OR REPLACE INTO entity_resolution_jobs(entry_id,revision) VALUES (?,?)',
-                           (identity, content_hash))
-                from workflows.hfl.entity_resolution_scope import enqueue_affected
+                from workflows.hfl.entity_resolution_scope import enqueue_affected, reassess_history
+                if previous is None or reassess_history():
+                    db.execute('INSERT OR REPLACE INTO entity_resolution_jobs(entry_id,revision) VALUES (?,?)',
+                               (identity, content_hash))
+                else:
+                    # Refresh work already in flight, without reopening completed or cleared work.
+                    db.execute("""UPDATE entity_resolution_jobs SET revision=?,attempts=0,
+                        next_attempt=0,error='' WHERE entry_id=? AND state='pending'""",
+                               (content_hash, identity))
                 targets = {m['id'] for m in mentions}
                 if previous:
                     targets |= {m['id'] for m in json.loads(previous['mentions'])}

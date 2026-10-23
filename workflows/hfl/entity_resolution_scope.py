@@ -1,5 +1,6 @@
 """Resolver dependencies shared by targeted scheduling and optimistic validation."""
 import json
+import os
 from collections import defaultdict
 
 from workflows.hfl.entity_store import digest, identity_resolver
@@ -94,8 +95,15 @@ class Scope:
         return digest(selected)
 
 
+def reassess_history():
+    """Historical reassessment is opt-in; incoming activities resolve by default."""
+    return os.environ.get('HARQIS_ENTITY_REASSESS_HISTORY', '0').lower() in {'1', 'true', 'on'}
+
+
 def enqueue_affected(db, identities, *, invalidate=True):
     """Keep pending work coalesced; reopen only entries depending on this identity."""
+    if not reassess_history():
+        return 0
     changed = set(identities)
     scope = Scope(db)
     affected = [i for i in scope.records if changed.intersection(scope.identities(i))]

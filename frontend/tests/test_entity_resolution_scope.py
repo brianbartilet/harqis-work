@@ -11,6 +11,8 @@ from workflows.hfl.entity_resolution_scope import enqueue_affected
 
 @pytest.fixture
 def corpus(monkeypatch):
+    # These tests exercise the explicitly enabled historical reassessment policy.
+    monkeypatch.setenv('HARQIS_ENTITY_REASSESS_HISTORY', '1')
     monkeypatch.setenv('HARQIS_ENTITY_AUTO_MATCH', '1')
     monkeypatch.setattr(matching, 'dispatch_pending', lambda: None)
     fact = 'Brian led the Mercury migration with Priya in Singapore during March 2025.'
@@ -149,7 +151,9 @@ def test_noop_profile_save_does_not_requeue(corpus):
         assert not db.execute("SELECT 1 FROM entity_resolution_jobs WHERE entry_id='source'").fetchone()
 
 
-def test_merge_and_unmerge_do_not_queue_unrelated_entries(corpus, authenticated_client, monkeypatch):
+@pytest.mark.parametrize('history', [True, False])
+def test_merge_and_unmerge_do_not_queue_unrelated_entries(corpus, authenticated_client, monkeypatch, history):
+    monkeypatch.setenv('HARQIS_ENTITY_REASSESS_HISTORY', '1' if history else '0')
     from uuid import uuid4
     from workflows.hfl import entity_merges
     monkeypatch.setattr(entity_merges, 'flush_audits', lambda: None)
@@ -162,13 +166,13 @@ def test_merge_and_unmerge_do_not_queue_unrelated_entries(corpus, authenticated_
         **body, 'request_id': str(uuid4()), 'preview_token': preview.json()['preview_token']})
     assert response.status_code == 200, response.text
     with store.connection() as db:
-        assert {r[0] for r in db.execute('SELECT entry_id FROM entity_resolution_jobs')} == {'source', 'known'}
+        assert {r[0] for r in db.execute('SELECT entry_id FROM entity_resolution_jobs')} == ({'source', 'known'} if history else {'source'})
         db.execute('DELETE FROM entity_resolution_jobs')
     response = authenticated_client.post('/api/hfl/entities/merges/' + response.json()['entity_id'] + '/unmerge',
                                          json={'request_id': str(uuid4())})
     assert response.status_code == 200, response.text
     with store.connection() as db:
-        assert {r[0] for r in db.execute('SELECT entry_id FROM entity_resolution_jobs')} == {'source', 'known'}
+        assert {r[0] for r in db.execute('SELECT entry_id FROM entity_resolution_jobs')} == ({'source', 'known'} if history else set())
 
 
 def test_cached_approval_cannot_bypass_a_new_competitor(corpus, monkeypatch):

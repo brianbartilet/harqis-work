@@ -12,7 +12,9 @@ from workflows.hfl import entity_matching as matching, entity_merges, entity_sou
 
 TASK = 'workflows.knowledge.tasks.connected_hfl.resolve_corpus_entities'
 POLICY = 'entity-resolution-v1'
-CACHE_POLICY = 'immediate-comparison-v1'  # Bump when the evaluator prompt/contract changes.
+# Wire IDs are restored before caching; the identity policy and evidence contract
+# are unchanged, so existing validated decisions remain reusable.
+CACHE_POLICY = 'immediate-comparison-v1'
 
 
 def evaluate_cached(store, pairs):
@@ -354,6 +356,11 @@ def process_pending(use_model=True):
             from workflows.hfl.entity_model_response import EntityModelResponseError
             details = exc.diagnostics if isinstance(exc, EntityModelResponseError) else {}
             failure = dict(entry_id=job['entry_id'], error=error, diagnostics=details)
+            # Preserve a bounded audit across retries and successful recovery;
+            # the per-entry current error is intentionally cleared on success.
+            history = store.state('resolution-error-history') or []
+            history.append(dict(at=time.time(), attempt=attempts, revision=job['revision'], **failure))
+            store.state('resolution-error-history', history[-100:])
             store.state('resolution-error:' + job['entry_id'], details)
             store.state('resolution-last-error', dict(at=time.time(), **failure))
             errors.append(failure)
@@ -404,6 +411,7 @@ def status():
                 oldest_pending_age_seconds=max(0, time.time()-oldest) if oldest else None,
                 policy=POLICY, enabled=matching.enabled(), outcomes=outcomes, failures=failures,
                 last_success=store.state('resolution-last-success'), last_error=store.state('resolution-last-error'),
+                error_history=store.state('resolution-error-history') or [],
                 last_started=store.state('resolution-last-started'), last_finished=store.state('resolution-last-finished'),
                 last_dispatch=store.state('resolution-last-dispatch'),
                 dispatch_error=store.state('resolution-dispatch-error'),

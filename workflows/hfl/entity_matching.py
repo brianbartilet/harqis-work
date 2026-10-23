@@ -162,6 +162,13 @@ def evidence_entity(entity):
 
 
 def evaluate(pairs, *, immediate=False):
+    # The model only copies short request-local IDs; durable IDs never depend on
+    # response order. Reject ambiguous caller input before making a paid request.
+    durable_ids = [p['id'] for p in pairs]
+    if len(set(durable_ids)) != len(durable_ids):
+        raise ValueError('Duplicate comparison IDs')
+    identities = {f'p{i}': identity for i, identity in enumerate(durable_ids, 1)}
+    request_pairs = [{**pair, 'id': short} for short, pair in zip(identities, pairs)]
     from apps.antropic.config import get_config
     from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
     model = os.environ.get('HARQIS_ENTITY_MATCH_MODEL', os.environ.get('HARQIS_CONNECTED_ANSWER_MODEL', 'claude-haiku-4-5-20251001'))
@@ -180,10 +187,12 @@ def evaluate(pairs, *, immediate=False):
                 '"reason":"explanation","contradictions":[],"facts":[{"left_quote":"verbatim excerpt",'
                 '"right_quote":"verbatim excerpt","explanation":"specific shared fact"}]}]}. '
                 'Return exactly one decision for every supplied pair ID, with all fields shown above. '
+                'Copy only the top-level pair ID (p1, p2, etc.) into decision.id, never a left/right entity ID. '
                 'Quotes must come from the supplied activity or profile values. Do not invent or complete excerpts.' + immediate_policy),
-        messages=[{'role':'user','content':json.dumps(pairs, ensure_ascii=False)}])
+        messages=[{'role':'user','content':json.dumps(request_pairs, ensure_ascii=False)}])
     from workflows.hfl.entity_model_response import parse_decisions
-    return parse_decisions(response, [p['id'] for p in pairs]), model
+    decisions = parse_decisions(response, list(identities))
+    return [{**decision, 'id': identities[decision['id']]} for decision in decisions], model
 
 
 def supported(decision, pair):

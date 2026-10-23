@@ -14,7 +14,9 @@ from test_entity_soul import soul_data, save  # noqa: F401
 from test_entity_consolidation import corpus, alias_group, decision  # noqa: F401
 
 
-def test_quarantine_withholds_existing_assignment_and_restores_after_review(soul_data, authenticated_client):
+@pytest.mark.parametrize('history', [True, False])
+def test_quarantine_withholds_existing_assignment_and_restores_after_review(soul_data, authenticated_client, monkeypatch, history):
+    monkeypatch.setenv('HARQIS_ENTITY_REASSESS_HISTORY', '1' if history else '0')
     save(authenticated_client)
     resolution.process_pending(use_model=False)
     assert entities.projection()[0]['mentions'][0]['id'] == 'brian'
@@ -22,7 +24,8 @@ def test_quarantine_withholds_existing_assignment_and_restores_after_review(soul
     assert entities.projection()[0]['mentions'][0]['id'] == soul_data[1]['id']
     resolution.process_pending(use_model=False)
     with get_store().connection() as db:
-        assert db.execute('SELECT outcome FROM entity_resolution_outcomes').fetchone()[0] == 'integrity-review'
+        assert db.execute('SELECT outcome FROM entity_resolution_outcomes').fetchone()[0] == ('integrity-review' if history else 'resolved')
+        assert db.execute('SELECT count(*) FROM entity_resolution_jobs').fetchone()[0] == 0
     integrity.set_review('brian', False, 'Reviewed original evidence', [], 'owner')
     assert entities.projection()[0]['mentions'][0]['id'] == 'brian'
 
@@ -127,7 +130,8 @@ def test_legacy_queue_migration_and_backoff_task_continuation(monkeypatch, tmp_p
     assert calls == ['dispatch']
 
 
-def test_unresolved_work_reopens_when_target_changes(soul_data):
+def test_unresolved_work_reopens_when_target_changes(soul_data, monkeypatch):
+    monkeypatch.setenv('HARQIS_ENTITY_REASSESS_HISTORY', '1')
     resolution.process_batch(use_model=False)
     assert resolution.status()['outcomes']['no-candidate'] == 1
     assert resolution.process_batch(use_model=False)['processed'] == 0

@@ -818,6 +818,14 @@ merged outcomes. Zero-merge runs persist HFL with terminal Telegram state
 
 **Data flow:** entity profiles/activity → Hermes `auto-merge-entities` skill →
 authenticated consolidation API → reversible merges → HFL persistence → Telegram.
+Incoming mention resolution is separate: by default, only an activity's first
+enrichment queues automatic resolution. Changes to profiles, merges, souls, or
+historical enrichment do not reopen completed/cleared activity jobs or broadly
+invalidate their assignments. Pending incoming jobs still refresh their revision
+when their activity changes, and normal retries and stale-link safety checks remain.
+`HARQIS_ENTITY_REASSESS_HISTORY=1` explicitly restores historical reassessment;
+leave it unset or `0` for incoming-only operation. Disabling reassessment does not
+clear already queued work; that requires a deliberate, backed-up queue cleanup.
 Initial runs inspect existing entities and suggestions; later runs use changed
 entity snapshots. Exact aliases and partial hints are editable and retain their
 user/LLM/merged-name provenance. Activity counts rank candidates and names without

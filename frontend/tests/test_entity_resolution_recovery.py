@@ -35,8 +35,9 @@ def test_parser_handles_fences_and_multiple_text_blocks():
     ('[]', 'end_turn', 'invalid-decision-list'),
     ('{}', 'refusal', 'incomplete-response'),
     ('{"decisions":[]}', 'end_turn', 'missing-decisions'),
-    (json.dumps({'decisions': [decision(), decision()]}), 'end_turn', 'unexpected-or-duplicate-id'),
-    (json.dumps({'decisions': [decision('unknown')]}), 'end_turn', 'unexpected-or-duplicate-id'),
+    (json.dumps({'decisions': [decision(), decision()]}), 'end_turn', 'duplicate-decision-id'),
+    (json.dumps({'decisions': [decision('unknown')]}), 'end_turn', 'unexpected-decision-id'),
+    (json.dumps({'decisions': [decision(None)]}), 'end_turn', 'missing-decision-id'),
     (json.dumps({'decisions': [{**decision(), 'facts': [None]}]}), 'end_turn', 'invalid-fact'),
     (json.dumps({'decisions': [{**decision(), 'decision': 'approve'}]}), 'end_turn', 'invalid-decision'),
 ])
@@ -62,6 +63,75 @@ def queue(monkeypatch, tmp_path):
     sent = []
     monkeypatch.setattr(SPROUT, 'send_task', lambda *args, **kwargs: sent.append(kwargs))
     return store, sent
+
+
+def test_matcher_maps_reordered_short_ids_without_changing_evidence(monkeypatch):
+    from workflows.hfl import entity_matching as matching
+    from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
+    pairs = [dict(id='a' * 64, left={'id': 'entity:left', 'activity': ['evidence']}, right={}),
+             dict(id='b' * 64, left={}, right={'id': 'entity:right'})]
+    original = json.dumps(pairs)
+    def send(self, **kwargs):
+        supplied = json.loads(kwargs['messages'][0]['content'])
+        assert [p['id'] for p in supplied] == ['p1', 'p2']
+        assert supplied[0]['left'] == pairs[0]['left']
+        assert supplied[1]['right'] == pairs[1]['right']
+        return response(json.dumps({'decisions': [decision('p2'), decision('p1')]}))
+    monkeypatch.setattr(BaseApiServiceAnthropic, '__init__', lambda *a, **kw: None)
+    monkeypatch.setattr(BaseApiServiceAnthropic, 'send_messages', send)
+    result, _ = matching.evaluate(pairs, immediate=True)
+    assert [d['id'] for d in result] == ['b' * 64, 'a' * 64]
+    assert json.dumps(pairs) == original
+
+
+@pytest.mark.parametrize('returned,reason', [
+    (['entity:left'], 'unexpected-decision-id'),
+    (['p1', 'p1'], 'duplicate-decision-id'),
+    ([], 'missing-decisions'),
+])
+def test_matcher_rejects_bad_local_ids(monkeypatch, returned, reason):
+    from workflows.hfl import entity_matching as matching
+    from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
+    monkeypatch.setattr(BaseApiServiceAnthropic, '__init__', lambda *a, **kw: None)
+    monkeypatch.setattr(BaseApiServiceAnthropic, 'send_messages', lambda *a, **kw:
+                        response(json.dumps({'decisions': [decision(i) for i in returned]})))
+    with pytest.raises(EntityModelResponseError) as caught:
+        matching.evaluate([{'id': 'durable', 'left': {}, 'right': {}}])
+    assert caught.value.diagnostics['reason'] == reason
+    assert 'entity:left' not in json.dumps(caught.value.diagnostics)
+
+
+def test_matcher_rejects_duplicate_inputs_before_provider_call(monkeypatch):
+    from workflows.hfl import entity_matching as matching
+    from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
+    monkeypatch.setattr(BaseApiServiceAnthropic, '__init__', lambda *a, **kw: pytest.fail('Paid call setup'))
+    with pytest.raises(ValueError, match='Duplicate comparison IDs'):
+        matching.evaluate([{'id': 'same'}, {'id': 'same'}])
+
+
+def test_failure_history_is_bounded_and_survives_recovery(queue, monkeypatch):
+    store, _ = queue
+    store.state('resolution-error-history', [{'at': i} for i in range(100)])
+    def fail(**kwargs):
+        parse_decisions(response(json.dumps({'decisions': [decision('private-id')]})), ['p1'])
+    monkeypatch.setattr(resolution, 'process_batch', fail)
+    resolution.process_pending()
+    history = store.state('resolution-error-history')
+    assert len(history) == 100 and history[0] == {'at': 1}
+    assert history[-1]['attempt'] == 1
+    assert history[-1]['revision'] == 'v1'
+    assert history[-1]['diagnostics']['reason'] == 'unexpected-decision-id'
+    assert 'private-id' not in json.dumps(history)
+    with store.connection() as db:
+        db.execute('UPDATE entity_resolution_jobs SET next_attempt=0')
+    def succeed(**kwargs):
+        with store.connection() as db:
+            db.execute('DELETE FROM entity_resolution_jobs')
+        return {'processed': 1}
+    monkeypatch.setattr(resolution, 'process_batch', succeed)
+    resolution.process_pending()
+    assert store.state('resolution-error:entry') is None
+    assert store.state('resolution-error-history') == history
 
 
 def test_dispatch_coalesces_producers_and_recovers_expired_wakeup(queue):
