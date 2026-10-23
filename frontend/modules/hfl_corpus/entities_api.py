@@ -176,6 +176,18 @@ async def create_type(request: Request, payload: TypeWrite):
         raise HTTPException(409, str(exc)) from exc
 
 
+@router.post('/api/hfl/entities/types/{identity}/update')
+async def update_type(request: Request, identity: str, payload: TypeWrite):
+    authorize(request)
+    from workflows.hfl.entity_types import update
+    try:
+        return await run_in_threadpool(update, identity, payload.name, payload.color, payload.description)
+    except KeyError as exc:
+        raise HTTPException(404, 'Entity type not found. Refresh and choose an existing type.') from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
 def validate_kind(kind):
     from workflows.hfl.entity_types import listing
     if kind not in {t['id'] for t in listing()}:

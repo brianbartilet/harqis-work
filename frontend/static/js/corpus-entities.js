@@ -13,6 +13,7 @@
   let suggestionEntityById = new Map(), entityById = new Map();
   const suggestionNodes = new Map();
   const kinds = {people: 'People', companies: 'Organizations', tools: 'Tools', topics: 'Topics', objects: 'Referenced objects'};
+  let typeDefinitions = new Map(), typeEditorBusy = false;
   const kindColors = {people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', objects:'#e9c96c'};
   const sourceValue = entry => String(entry.source || '').trim();
   function pill(text) { const p = el('span', text); p.className = 'pill'; return p; }
@@ -265,6 +266,11 @@
       if(version !== loadVersion) return;
       if (data.types) { for (const key of Object.keys(kinds)) { delete kinds[key]; delete kindColors[key]; } for (const type of data.types) { kinds[type.id] = type.name; kindColors[type.id] = type.color; } }
       choices('create-entity-kind', Object.entries(kinds), 'Choose a type');
+      if (data.types) {
+        typeDefinitions = new Map(data.types.map(type => [type.id, type]));
+        choices('edit-entity-type', data.types.map(type => [type.id, type.name]), 'Add a new type');
+        if (!typeEditorBusy) { $('edit-entity-type').disabled = false; $('save-entity-type').disabled = false; }
+      }
       items = data.entities; entityById = new Map(items.map(e => [e.id, e])); total = data.total ?? items.length;
       const available = new Set(items.map(e => e.id));
       for (const id of selectedEntities) if (!available.has(id)) selectedEntities.delete(id);
@@ -515,7 +521,41 @@
     } catch (err) { $('batch-feedback').textContent = err.message + ' Retry to recover the result safely.'; }
     finally { $('batch-progress').hidden = true; batchWaiting(false); renderSuggestions(); }
   };
-  for (const [id, path] of [['entity-type-form','/types'], ['entity-create-form','/create']]) {
+  function selectTypeEditor() {
+    const form = $('entity-type-form'), type = typeDefinitions.get($('edit-entity-type').value);
+    for (const field of ['name', 'color', 'description']) form.elements[field].value = type?.[field] || (field === 'color' ? '#f9a8d4' : '');
+    $('save-entity-type').textContent = type ? 'Save type changes' : 'Add entity type';
+    $('cancel-entity-type').hidden = !type;
+    $('type-feedback').textContent = '';
+  }
+  $('edit-entity-type').onchange = selectTypeEditor;
+  $('cancel-entity-type').onclick = () => { $('edit-entity-type').value = ''; selectTypeEditor(); $('edit-entity-type').focus(); };
+  $('entity-type-form').onsubmit = async event => {
+    event.preventDefault();
+    const form = $('entity-type-form');
+    if (typeEditorBusy || !form.reportValidity()) return;
+    const identity = $('edit-entity-type').value, payload = Object.fromEntries(new FormData(form));
+    typeEditorBusy = true;
+    form.setAttribute('aria-busy', 'true');
+    for (const control of form.elements) control.disabled = true;
+    $('type-feedback').textContent = 'Saving type…';
+    let saved = false;
+    try {
+      const result = await api(identity ? '/types/' + encodeURIComponent(identity) + '/update' : '/types', payload);
+      saved = true;
+      typeDefinitions.set(result.id, result);
+      choices('edit-entity-type', [...typeDefinitions.values()].map(type => [type.id, type.name]), 'Add a new type');
+      $('edit-entity-type').value = result.id; selectTypeEditor();
+      await load();
+      $('edit-entity-type').value = result.id; selectTypeEditor();
+      $('type-feedback').textContent = identity ? 'Type updated. Historical backfill is optional.' : 'Type added. Future enrichment will use it; historical backfill is optional.';
+    } catch (err) { $('type-feedback').textContent = saved ? 'Type saved, but refreshing the directory failed. Refresh to see the changes.' : err.message; }
+    finally {
+      typeEditorBusy = false; form.setAttribute('aria-busy', 'false');
+      for (const control of form.elements) control.disabled = false;
+    }
+  };
+  for (const [id, path] of [['entity-create-form','/create']]) {
     $(id).onsubmit = async event => {
       event.preventDefault(); const button = $(id).querySelector('button[type=submit]'); button.disabled = true;
       $('type-feedback').textContent = 'Checking…';

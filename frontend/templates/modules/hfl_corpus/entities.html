@@ -109,6 +109,7 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 #batch-type-kind{display:block;box-sizing:border-box;width:100%;min-height:44px;margin-top:6px;padding:10px 42px 10px 12px;appearance:none;background:#020617;color:#cbd5e1;border:1px solid #334155;border-radius:8px;font:inherit}
 .batch-type-label svg{position:absolute;right:12px;bottom:12px;width:20px;height:20px;pointer-events:none}
 #entity-type-dialog :focus-visible{outline:2px solid #3b82f6;outline-offset:2px}
+.type-editor-choice{position:relative}.entity-shell .type-editor-choice::after{content:none}.entity-shell #edit-entity-type{appearance:none;background-image:none;padding-right:42px}.type-editor-choice svg{position:absolute;right:12px;bottom:12px;width:20px;height:20px;pointer-events:none;color:#67e8f9}
 </style>{% endblock %}
 
 {% block content %}
@@ -122,11 +123,12 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 
 <details class="entity-maintenance" id="entity-type-manager"><summary>Manage types and add entities</summary>
   <form id="entity-type-form"><div class="profile-fields">
+    <label class="profile-wide type-editor-choice">Entity type<select id="edit-entity-type" disabled><option value="">Loading types…</option></select><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 8 4 4 4-4"/></svg></label>
     <label>Type name<input name="name" required maxlength="80" placeholder="For example, Vehicles"></label>
     <label>Color<input name="color" type="color" value="#f9a8d4" required></label>
     <label class="profile-wide">Extraction description<textarea name="description" required maxlength="1000" placeholder="Describe which named entities belong to this type"></textarea></label>
-  </div><button type="submit">Add entity type</button></form>
-  <p class="type-backfill-hint">New types are used for future enrichment. Use backfill to extract them from historical activity.</p>
+  </div><button type="submit" id="save-entity-type" disabled>Add entity type</button> <button type="button" id="cancel-entity-type" hidden>Cancel editing</button></form>
+  <p class="type-backfill-hint">Type names and colors update existing entities. Extraction descriptions apply to future enrichment. Use backfill to apply extraction changes to historical activity.</p>
   <button id="types-backfill" type="button">Backfill history with current types</button>
   <form id="entity-create-form"><div class="profile-fields"><label>Entity name<input name="name" required maxlength="120"></label><label>Type<select name="kind" id="create-entity-kind"></select></label></div><button type="submit">Add entity</button></form>
   <div id="create-entity-suggestions" class="merge-card-actions" aria-live="polite" hidden></div>
