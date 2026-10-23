@@ -722,7 +722,16 @@ def generate_tcg_mappings(force_generate=False, limit: Optional[int] = None,
     api_service__tcg_mp_merchant = ApiServiceTcgMpMerchant(cfg__tcg_mp)
     api_service__scryfall_cards = ApiServiceScryfallCards(cfg__scryfall)
 
-    cards_echo = api_service__echo_mtg_inventory.get_all_collection(tradable_only=1)
+    if limit is None or limit < 0:
+        # Preserve full scans (and legacy negative Python-slice semantics).
+        cards_echo = api_service__echo_mtg_inventory.get_all_collection(tradable_only=1)
+    elif limit == 0:
+        cards_echo = []
+    else:
+        # Bounded mapping runs seed newest arrivals, not the oldest full-scan page.
+        cards_echo = api_service__echo_mtg_inventory.get_collection(
+            start=0, limit=limit, sort="i.id", direction="DESC", tradable_only=1,
+        )
     # get_collection is @deserialized(List[dict], child='items'); on a malformed
     # echo response (no 'items' key) the decorator falls back to the raw Response,
     # which then blows up with a cryptic "'Response' object is not iterable" when

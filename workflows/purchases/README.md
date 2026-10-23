@@ -249,7 +249,12 @@ reading it.
 
 Main inputs:
 
-- EchoMTG inventory from `ApiServiceEchoMTGInventory.get_all_collection(tradable_only=1)`.
+- With a positive `limit`, EchoMTG inventory from one bounded
+  `get_collection(start=0, limit=limit, sort="i.id", direction="DESC", tradable_only=1)`
+  request, selecting newest inventory first rather than scanning the full collection.
+  `limit=None` retains complete `get_all_collection(tradable_only=1)` pagination;
+  `limit=0` selects no cards without reading inventory. Negative limits retain the
+  legacy full-read/Python-slice behavior.
 - EchoMTG card metadata from `ApiServiceEchoMTGCardItem.get_card_meta(emid)`.
 - TCG Marketplace product search from `ApiServiceTcgMpProducts.search_card(name)`.
 - Local Scryfall bulk data from `load_scryfall_bulk_data(...)`.
