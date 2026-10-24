@@ -597,3 +597,9 @@
   color:#94a3b8;
 }
 #hud-hotkeys-dialog .context-icon-button:hover { background:#1e293b; color:#7dd3fc; }
+
+/* Keep order metadata and price together, including on narrow HUD sizes. */
+.hud-output.hud-orders-output { white-space: pre; overflow-wrap: normal; }
+
+#hud-catalog .hud-catalog-added { opacity:.5; }
+#hud-catalog button:disabled { cursor:default; background:#0f172a; border-color:#334155; color:#94a3b8; }

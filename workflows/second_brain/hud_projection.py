@@ -252,10 +252,7 @@ def collect_hud_projection(
     captured_at = _parse_datetime(captured_raw)
     stale = captured_at is None or (now - captured_at).total_seconds() > stale_after * 60
     details = text
-    metrics = payload.get("metrics")
-    if isinstance(metrics, Mapping) and metrics:
-        metrics_text = json.dumps(_safe_value(metrics), indent=2, ensure_ascii=False, default=str)
-        details = f"{details}\n\nMetrics\n```json\n{metrics_text[:4_000]}\n```".strip()
+    # Structured metrics remain in the stored projection, not the display text.
     return [
         FeedItem(
             logical_key=f"hud-projection:{operation_id}",
