@@ -227,7 +227,8 @@
   touch-action:none;
   width:20px;
   height:20px;
-  background:linear-gradient(135deg,transparent 55%,#5ab6e1 56%,#5ab6e1 62%,transparent 63%,transparent 75%,#5ab6e1 76%,#5ab6e1 82%,transparent 83%);
+  background:rgba(148,163,184,.08);
+  border-radius:4px;
   border:0!important;
   padding:0!important;
   z-index:2
