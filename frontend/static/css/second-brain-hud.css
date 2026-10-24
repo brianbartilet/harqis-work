@@ -401,7 +401,7 @@
 }
 #hud-catalog {
   margin:auto;
-  width:min(440px,calc(100vw - 24px));
+  width:min(620px,calc(100vw - 24px));
   max-height:72dvh;
   padding:16px;
   background:#0f172a;
@@ -411,8 +411,24 @@
 #hud-catalog .hud-dialog-heading { margin-bottom:10px; }
 #hud-catalog .hud-dialog-heading h2 { font-size:18px; }
 #hud-catalog-search { margin-top:0; padding:7px 9px; font-size:13px; }
-#hud-catalog .hud-catalog-row { gap:8px; padding:9px 0; }
+#hud-catalog-items { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; }
+#hud-catalog .hud-catalog-row {
+  display:flex;
+  flex-wrap:wrap;
+  align-content:space-between;
+  justify-content:flex-end;
+  gap:8px;
+  padding:12px;
+  border:1px solid #334155;
+  border-radius:8px;
+  background:#111e31;
+}
+#hud-catalog .hud-catalog-row>div { flex:1 0 100%; }
+#hud-catalog-items>p { grid-column:1 / -1; }
 #hud-catalog .hud-catalog-row button { padding:5px 8px; font-size:11px; }
+@media(max-width:479px) {
+  #hud-catalog-items { grid-template-columns:minmax(0,1fr); }
+}
 .hud-dialog dl {
   display:grid;
   grid-template-columns:1fr 2fr;
