@@ -165,7 +165,7 @@
   $('hud-refresh').onclick=refresh;
   $('hud-add').onclick=()=>{if(!state)return;catalogRows();$('hud-catalog').showModal();};$('hud-catalog-search').oninput=catalogRows;
   $('hud-fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await root.requestFullscreen();}catch{notice('Full screen is unavailable in this browser.');}};
-  document.addEventListener('fullscreenchange',()=>{$('hud-fullscreen').textContent=document.fullscreenElement?'Exit full screen':'Full screen';rowHeight();});
+  document.addEventListener('fullscreenchange',()=>{const control=$('hud-fullscreen'),active=!!document.fullscreenElement,label=active?'Exit full screen':'Full screen';control.title=label;control.setAttribute('aria-label',label);control.setAttribute('aria-pressed',String(active));control.querySelector('path').setAttribute('d',active?'M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5':'M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5');rowHeight();});
   $('hud-widget-form').onsubmit=async event=>{event.preventDefault();const w=state.layout.widgets.find(x=>x.id===settingsId),form=event.currentTarget;Object.assign(w,{size:form.elements.size.value,animation:form.elements.animation.value,accent:form.elements.accent.value,workspace_ids:selectedChecks($('hud-widget-spaces')),dashboard_url:form.elements.dashboard_url.value});closeSettings();await changed();grid.querySelector(`[data-id="${settingsId}"] .hud-widget-menu-button`)?.focus();};
   $('hud-hide').onclick=()=>{state.layout.widgets.find(w=>w.id===settingsId).hidden=true;closeSettings();changed();};
   $('hud-remove').onclick=()=>{state.layout.widgets=state.layout.widgets.filter(w=>w.id!==settingsId);closeSettings();changed();};
