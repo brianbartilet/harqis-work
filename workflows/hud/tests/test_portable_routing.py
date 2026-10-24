@@ -25,3 +25,22 @@ def test_desktop_and_fulfillment_affinity_and_single_radar_schedule():
             assert entry['options']['os'] == ['windows']
     assert not any('hud_data_only' in entry['task'] for entry in WORKFLOWS_HUD.values())
     assert sum(entry['task'].endswith('.show_daily_radar') for entry in WORKFLOWS_HUD.values()) == 1
+
+
+def test_schedule_export_handles_directory_mount(tmp_path, monkeypatch):
+    from workflows.hud.tasks.hud_logs import _write_schedule_mapping
+    monkeypatch.chdir(tmp_path)
+    mount = tmp_path / 'workflows.mapping'
+    mount.mkdir()
+    target = _write_schedule_mapping('schedule data')
+    assert target == mount / 'workflows.mapping'
+    assert target.read_text() == 'schedule data'
+    assert mount.is_dir()
+
+
+def test_schedule_export_preserves_legacy_file(tmp_path, monkeypatch):
+    from workflows.hud.tasks.hud_logs import _write_schedule_mapping
+    monkeypatch.chdir(tmp_path)
+    target = _write_schedule_mapping('schedule data')
+    assert target == tmp_path / 'workflows.mapping'
+    assert target.read_text() == 'schedule data'
