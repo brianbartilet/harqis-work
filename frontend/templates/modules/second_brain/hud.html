@@ -28,7 +28,7 @@
       <fieldset><legend>Spaces</legend><details id="hud-widget-space-picker"><summary><span id="hud-widget-space-caption">All Spaces</span></summary><div class="hud-space-options"><button type="button" id="hud-widget-spaces-clear">All Spaces</button><div id="hud-widget-spaces"></div><small>No links means visible in every Space.</small></div></details></fieldset>
       <fieldset><legend>Header accent</legend><div class="hud-accent-options"><label title="Default"><input type="radio" name="accent" value="" aria-label="Default accent"><span class="hud-accent-default"></span></label>{% for color in hud_colors %}<label title="{{ color }}"><input type="radio" name="accent" value="{{ color }}" aria-label="Accent {{ color }}"><span style="background:{{ color }}"></span></label>{% endfor %}</div></fieldset>
       <label id="hud-dashboard-field" hidden>Kibana dashboard share URL<input name="dashboard_url" type="url" placeholder="https://…/app/dashboards#/view/…"><small>Uses your Kibana session. Your server must allow embedding.</small></label>
-      <div class="hud-actions"><button type="submit">Save widget</button><button type="button" id="hud-hide">Hide</button><button type="button" id="hud-remove">Remove</button></div>
+      <div class="hud-actions"><button type="button" id="hud-hide">Hide</button><button type="button" id="hud-remove">Remove</button><button type="submit">Save</button></div>
     </form>
   </div>
   <dialog id="hud-builder" class="hud-dialog"><form method="dialog" class="hud-dialog-heading"><h2>Build a HUD widget</h2><button aria-label="Close widget builder">✕</button></form>

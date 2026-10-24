@@ -501,8 +501,8 @@
 .hud-accent-options span { display:block; width:17px; height:17px; border-radius:50%; }
 .hud-accent-options label:has(:checked) { outline:2px solid #d5e7f1; outline-offset:1px; }
 .hud-accent-default { background:linear-gradient(135deg,#101c26 44%,#94adbd 46% 54%,#101c26 56%); border:1px solid #365367; }
-.hud-settings-menu .hud-actions { display:flex; gap:4px; justify-content:space-between; }
-.hud-settings-menu .hud-actions button:first-child { background:#164256; }
+.hud-settings-menu .hud-actions { display:flex; gap:4px; }
+.hud-settings-menu .hud-actions button[type=submit] { margin-left:auto; background:#164256; }
 #hud-dashboard-field { display:block; margin-bottom:12px; font-size:11px; }
 #hud-dashboard-field input { box-sizing:border-box; width:100%; margin:5px 0; padding:6px; border:1px solid #365367; border-radius:4px; background:#0a151e; color:#d5e7f1; }
 #hud-dashboard-field small { color:#94adbd; font-size:10px; }
