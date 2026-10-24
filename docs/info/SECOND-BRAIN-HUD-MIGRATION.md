@@ -180,6 +180,34 @@ The canonical feed UI remains reachable at `/second-brain/feed` for comparison.
 - The configured Kibana dashboard rendered its dashboard panel and chart inside
   the HUD iframe. Typing, pause, reduced-motion switching and marquee scrolling
   passed in the browser.
-- No credentialed source collectors or agent prompts were executed for validation.
-  Existing live captures were read; the explicitly bounded legacy text backfill
-  was the only projection write. Production deployment remains a separate step.
+- Initial UI validation used existing captures and the bounded backfill. The
+  subsequent authorized backend rollout below exercised read-only collectors.
+
+## Backend rollout verification — 2026-10-24
+
+The feature branch was deployed to the macOS host worker, scheduler and frontend;
+the Windows HUD and capture workers were restarted. Live inspection confirmed
+portable task registration on macOS and the original desktop queue subscriptions
+on Windows. Exactly one host Beat process was present. The draft PR remains
+unmerged; the host runtime currently tracks its feature branch.
+
+Nine server collectors produced fresh text-bearing web projections: Calendar,
+YNAB, PC sales, forex, API costs, Jira, failed jobs, schedules and Hermes radar
+refresh. The Windows mouse-binding collector also produced fresh web text. The
+authenticated host HUD endpoint reported no source-read error and included the
+canonical Context feed. A pre-existing directory at `workflows.mapping` blocked
+both job-summary exports; the collector now writes inside that directory when
+present, while preserving the legacy file path otherwise.
+
+Portable output/routing/projection checks passed on Windows (20 tests) and macOS
+(13 tests). The additional routing and directory-mount regression suite passed
+four tests on each platform. These runs overlap and are not additive coverage.
+The frontend task catalogs were regenerated on both hosts; retained portable
+manual aliases use `host`, and the old radar twin is marked manual-only.
+
+The 14-document migration index is retained for slower or not-yet-refreshed
+sources. TCG fulfillment, desktop summaries and daily radar synthesis were not
+manually forced during rollout; their existing schedules remain responsible.
+No sell-cart operation or agent build was manually executed. Legacy Rainmeter
+opt-in is Windows-only and does not relocate host collectors back to Windows;
+full rollback must restore the old routes and scheduler configuration too.
