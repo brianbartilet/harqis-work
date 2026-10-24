@@ -43,7 +43,7 @@ replace category settings or silently mutate their operation bindings.
 
 ## Source audit and data path
 
-See [HUD source inventory](HUD-SOURCE-INVENTORY.md): 19 metered panels, 21 enabled
+See [HUD source inventory](HUD-SOURCE-INVENTORY.md): 19 metered panels, 20 enabled
 schedule entries, including ancillary capture/support work. Eighteen source
 panels have explicit adapters; the nineteenth is the Second Brain Rainmeter
 delivery client and is excluded from recursive ingestion.
@@ -78,8 +78,8 @@ a collector on page load, or reads arbitrary local files. Initial historical
 dump text is capped at 12,000 characters under the existing projection policy.
 
 Windows foreground-window, mouse, AutoHotkey and screenshot sources still need
-the Windows worker. Existing queue/OS routes remain intact; this is a rendering
-migration, not an untested relocation of every collector to Linux. A stopped
+the Windows worker. Portable API collectors now use the host queue, while desktop and TCG fulfillment
+retain Windows affinity. The duplicate radar fallback schedule has been removed. A stopped
 source remains visible as a cached, stale capture. Existing desktop-only profile
 and command launchers become read-only context; the browser does not execute INI
 commands. Hotkeys is a starter control, with desktop bindings available as widgets.
@@ -154,11 +154,11 @@ bridge records run correlation and execution evidence.
 
 ## Rollout and rollback
 
-The branch is a reviewable migration; the production worker/Beat processes are
-not restarted automatically. Deploy the reviewed branch to the frontend and
-existing source workers to start continuous text-bearing captures. Restarting
-Beat is unnecessary unless its schedule configuration changes. No registry
-regeneration is needed here because no task name or schedule was added.
+Deploy this branch to the host worker and Windows worker for text-bearing captures,
+then restart the single host Beat to activate the portable routes. Verify task
+registration before Beat restarts. Keep the migration index until live sources
+have usable text; each fresh live capture automatically supersedes its backfill.
+Rollback requires restoring the previous worker code and Beat configuration together.
 
 Legacy desktop rendering can be restored with `HARQIS_LEGACY_RAINMETER=1`, or
 `render_legacy_hud=True` on a task invocation. Existing skins may stay visible

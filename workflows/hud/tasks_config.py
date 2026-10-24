@@ -46,8 +46,8 @@ WORKFLOWS_HUD = {
             "cfg_id__calendar": "GOOGLE_APPS",
             },
         "options": {
-            "queue": WorkflowQueue.HUD,
-            "os": ["windows"],
+            "queue": WorkflowQueue.HOST,
+            "os": ["any"],
             "expires": 60 * 5
         },
         'manifesto': {
@@ -70,8 +70,8 @@ WORKFLOWS_HUD = {
             "cfg_id__calendar": "GOOGLE_APPS",
             },
         "options": {
-            "queue": WorkflowQueue.HUD,
-            "os": ["windows"],
+            "queue": WorkflowQueue.HOST,
+            "os": ["any"],
             "expires": 60 * 5
         },
         'manifesto': {
@@ -152,8 +152,8 @@ WORKFLOWS_HUD = {
             "structure_id":  616,     # /secure/StructureBoard.jspa?s=
         },
         "options": {
-            "queue": WorkflowQueue.HUD,
-            "os": ["windows"],
+            "queue": WorkflowQueue.HOST,
+            "os": ["any"],
             "expires": 60 * 30,
         },
         'manifesto': {
@@ -214,8 +214,8 @@ WORKFLOWS_HUD = {
             "cfg_id__calendar": "GOOGLE_APPS",
             "cfg_id__elevenlabs": "ELEVEN_LABS"},
         "options": {
-            "queue": WorkflowQueue.HUD,
-            "os": ["windows"],
+            "queue": WorkflowQueue.HOST,
+            "os": ["any"],
             "expires": 60 * 30
         },
         'manifesto': {
@@ -231,8 +231,8 @@ WORKFLOWS_HUD = {
         'task': 'workflows.hud.tasks.hud_logs.get_failed_jobs',
         'schedule': crontab(minute='*/15'),
         "options": {
-            "queue": WorkflowQueue.HUD,
-            "os": ["windows"],
+            "queue": WorkflowQueue.HOST,
+            "os": ["any"],
             "expires": 60 * 15
         },
         'manifesto': {
@@ -313,8 +313,8 @@ WORKFLOWS_HUD = {
             "cfg_id__ynab": "YNAB",
             "cfg_id__calendar": "GOOGLE_APPS"},
         "options": {
-            "queue": WorkflowQueue.HUD,
-            "os": ["windows"],
+            "queue": WorkflowQueue.HOST,
+            "os": ["any"],
             "expires": 60 * 60
         },
         'manifesto': {
@@ -344,8 +344,8 @@ WORKFLOWS_HUD = {
             "date_field": "DATE",
         },
         "options": {
-            "queue": WorkflowQueue.HUD,
-            "os": ["windows"],
+            "queue": WorkflowQueue.HOST,
+            "os": ["any"],
             "expires": 60 * 60,
         },
         'manifesto': {
@@ -375,8 +375,8 @@ WORKFLOWS_HUD = {
             "visible_lines": 10,
         },
         "options": {
-            "queue": WorkflowQueue.HUD,
-            "os": ["windows"],
+            "queue": WorkflowQueue.HOST,
+            "os": ["any"],
             "expires": 60 * 15,
         },
         'manifesto': {
@@ -465,8 +465,8 @@ WORKFLOWS_HUD = {
             "max_hud_lines": 19,
         },
         "options": {
-            "queue": WorkflowQueue.HUD,
-            "os": ["windows"],
+            "queue": WorkflowQueue.HOST,
+            "os": ["any"],
             "expires": 60 * 60 * 2,
         },
         'manifesto': {
@@ -503,9 +503,8 @@ WORKFLOWS_HUD = {
         },
     },
 
-    # Windows render follows five minutes after the hourly exporter to allow
-    # shared-drive sync. It only reads JSON and rewrites the established
-    # DAILYRADAR skin folder; the visible title is HERMES RADAR.
+    # Portable projection follows five minutes after the hourly exporter.
+    # It reads the sanitized JSON snapshot without a model call.
     'run-job--refresh_hermes_radar': {
         'task': 'workflows.hud.tasks.hud_radar.refresh_hermes_radar',
         'schedule': crontab(minute=5),
@@ -513,8 +512,8 @@ WORKFLOWS_HUD = {
             'max_hud_lines': 19,
         },
         'options': {
-            'queue': WorkflowQueue.HUD,
-            'os': ['windows'],
+            'queue': WorkflowQueue.HOST,
+            'os': ['any'],
             'expires': 60 * 10,
         },
         'manifesto': {
@@ -533,8 +532,8 @@ WORKFLOWS_HUD = {
             "cfg_id__calendar": "GOOGLE_APPS",
         },
         "options": {
-            "queue": WorkflowQueue.HUD,
-            "os": ["windows"],
+            "queue": WorkflowQueue.HOST,
+            "os": ["any"],
             "expires": 60 * 60},
         'manifesto': {
             'code_role': 'capture',
@@ -548,50 +547,4 @@ WORKFLOWS_HUD = {
         },
     },
 
-    # ── Data-only fallback twins (host queue) ────────────────────────────────
-    # Mirrors of selected HUD tasks that run on the always-on host (harqis-server)
-    # when the Windows `hud` worker is offline, so the @feed dump + @log_result
-    # ES record keep flowing. Each twin gates on the original's heartbeat
-    # (workflows/hud/fallback.py) and no-ops while Windows is healthy. Routed to
-    # `host` by the hud_data_only.* rule in workflows/config.py (declared above
-    # the `workflows.hud.tasks.*` catch-all). Kept INSIDE WORKFLOWS_HUD (not a
-    # separate dict) so frontend/generate_registry.py — which catalogues only the
-    # first run-job--* dict per file — still lists them on the dashboard.
-    # Generated by /create-data-only-from-hud.
-
-    # Fallback for run-job--show_daily_radar. Same cadence + data kwargs; the
-    # render-only `max_hud_lines` is dropped (the twin doesn't render). The
-    # `model` mirrors the source entry (Haiku 4.5 — cheap, shared Max quota).
-    'run-job--show_daily_radar_data_only': {
-        'task': 'workflows.hud.tasks.hud_data_only.show_daily_radar_data_only',
-        'schedule': crontab(hour='8,12,16,20', minute=0),
-        'kwargs': {
-            "sources": [
-                "gmail",
-                "calendar",
-                "gtasks",
-                "trello",
-                "jira",
-                "github",
-                "owntracks",
-                "es_failed_jobs",
-            ],
-            "cfg_id__anthropic": "ANTHROPIC",
-            "model": "claude-haiku-4-5-20251001",
-            "window_hours": 8,
-        },
-        "options": {
-            "queue": WorkflowQueue.HOST,
-            "expires": 60 * 60 * 2,
-        },
-        'manifesto': {
-            'code_role': 'capture',
-            'para_bucket': 'area',
-            'express_target': 'feed:hud-data-only',
-            'review_artifact': 'es_log+feed',
-            'hfl_signal': False,
-        },
-    },
-
 }
-

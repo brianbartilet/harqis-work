@@ -143,6 +143,14 @@ SPROUT.conf.task_routes = {
     # (first match wins) or the twins would be routed to `hud` and never run
     # when Windows is offline — defeating their purpose.
     "workflows.hud.tasks.hud_data_only.*": {"queue": WorkflowQueue.HOST.value},
+    "workflows.hud.tasks.hud_forex.*": {"queue": WorkflowQueue.HOST.value},
+    "workflows.hud.tasks.hud_calendar.*": {"queue": WorkflowQueue.HOST.value},
+    "workflows.hud.tasks.hud_logs.*": {"queue": WorkflowQueue.HOST.value},
+    "workflows.hud.tasks.hud_finance.*": {"queue": WorkflowQueue.HOST.value},
+    "workflows.hud.tasks.hud_jira.*": {"queue": WorkflowQueue.HOST.value},
+    "workflows.hud.tasks.hud_api_costs.*": {"queue": WorkflowQueue.HOST.value},
+    "workflows.hud.tasks.hud_radar.*": {"queue": WorkflowQueue.HOST.value},
+    "workflows.hud.tasks.hermes_radar_export.*": {"queue": WorkflowQueue.HOST.value},
     "workflows.hud.tasks.*":               {"queue": WorkflowQueue.HUD.value},
     "workflows.second_brain.tasks.deliver.*": {"queue": WorkflowQueue.HOST.value},
     "workflows.second_brain.tasks.*":      {"queue": WorkflowQueue.HOST.value},

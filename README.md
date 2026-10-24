@@ -316,11 +316,11 @@ Declared in `workflows/queues.py` (`WorkflowQueue` enum) and registered with Rab
 |-------|---------|
 | `default` | Catch-all / unrouted tasks; fallback when a task has no `options.queue` |
 | `files` | Catalog scans, package publishing and expiry on the catalog server only |
-| `hud` | Default route for `workflows.hud.tasks.*` — calendar, TCG orders, YNAB, AI logs; broadcast tasks and `hud_data_only.*` use more-specific routes |
+| `hud` | Windows desktop collectors and existing TCG fulfillment; portable HUD collectors and broadcasts use more-specific routes |
 | `peon` | Work-context HUD tasks (Jira boards, calendar focus, etc.) |
 | `tcg` | TCG marketplace pipeline — Scryfall bulk, card matching, listings, pricing |
 | `adhoc` | One-off / manual triggers (no schedule) |
-| `host` | Tasks that must run on the host (Docker, broker access), including `workflows.hud.tasks.hud_data_only.*` and `workflows.second_brain.tasks.*` |
+| `host` | Tasks that must run on the host (Docker, broker access), including portable HUD Calendar/finance/Jira/radar/job-summary collectors and `workflows.second_brain.tasks.*` |
 | `agent` | AI agent task dispatch (Kanban / Hermes worker invocations) |
 | `worker` | Generic background worker pool (cross-app jobs) |
 | `n8n` | n8n container ops (backup / restore / deploy) — pinned to `harqis-server` |

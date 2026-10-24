@@ -75,15 +75,13 @@ def init_meter(
       - bin_path: str (path to Rainmeter.exe)
     """
 
-    # --- Validate required config early
+    # Desktop paths are required only when the legacy renderer is requested.
+    # Portable collectors must import and execute without a Rainmeter installation.
     required = ("skin_name", "static_path", "write_skin_to_path", "bin_path")
     missing = [k for k in required if k not in config or not config[k]]
-    if missing:
-        raise ValueError(f"Missing required config keys: {', '.join(missing)}")
-
-    skin_name = config["skin_name"]
-    static_path = Path(config["static_path"]).resolve()
-    skins_root = Path(config["write_skin_to_path"]).resolve()
+    skin_name = config.get("skin_name") or "harqis"
+    static_path = Path(config.get("static_path") or Path(__file__).resolve().parents[2] / 'static').resolve()
+    skins_root = Path(config.get("write_skin_to_path") or '.').resolve()
 
     skin_dir = skins_root / skin_name
     # `hud_folder_name` lets a skin change its visible title without moving the
@@ -262,6 +260,10 @@ def init_meter(
                         links[label] = match.group(0)
                 result['links'] = links
                 return result
+            if missing:
+                raise ValueError(f"Missing required config keys: {', '.join(missing)}")
+            if sys.platform != 'win32':
+                raise RuntimeError('Legacy Rainmeter rendering requires Windows.')
             with _path_lock(ini_path, timeout=0) as acquired:
                 if not acquired:
                     log.warning(

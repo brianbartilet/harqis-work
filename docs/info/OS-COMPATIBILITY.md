@@ -19,7 +19,7 @@ harqis-work is a multi-platform codebase. Most components are fully cross-platfo
 | `apps/` — REST API integrations (20+ apps)                     | ✅ | ✅ | ✅ | Pure HTTP/SDK; no OS dependencies |
 | `frontend/` — FastAPI + HTMX dashboard                         | ✅ | ✅ | ✅ | Cross-platform |
 | `mcp/` — FastMCP server                                        | ✅ | ✅ | ✅ | Cross-platform |
-| `workflows/hud/` — some integrations with rainmeter             | ✅ | ⚠️ | ⚠️ | Partial — see Windows-specific section |
+| `workflows/hud/` — some integrations with rainmeter             | ✅ | ⚠️ | ⚠️ | Portable API collectors on host; desktop and TCG jobs retain Windows affinity |
 | `workflows/purchases/` — MTG card pipeline                     | ✅ | ✅ | ✅ | Cross-platform |
 | `workflows/desktop/` — git pulls, file sync, window management | ✅ | ⚠️ | ⚠️ | Partial — see Windows-specific section |
 | `apps/rainmeter/` — HUD desktop rendering                      | ✅ | — | — | Windows-only by design |
@@ -85,8 +85,8 @@ Beat schedule entries in `workflows/*/tasks_config.py` may carry an optional `"o
     'task': 'workflows.hud.tasks.hud_jira.show_jira_board',
     'schedule': crontab(...),
     'options': {
-        'queue': WorkflowQueue.HUD,
-        'os': ['windows'],      # ← optional, informational
+        'queue': WorkflowQueue.HOST,
+        'os': ['any'],      # ← optional, informational
         'expires': 60 * 30,
     },
 },
@@ -94,7 +94,7 @@ Beat schedule entries in `workflows/*/tasks_config.py` may carry an optional `"o
 
 Allowed values: `"windows"`, `"macos"`, `"linux"`, or any combination as a list. Omit the key for cross-platform tasks.
 
-**Informational only** — Celery does not enforce this. The `/manage-queues` skill reads it (with a heuristic fallback that scans the task module for `pywin32` / `Rainmeter` / `cmd /c` / `.bat` / etc.) and surfaces `OS-MISMATCH` warnings when a task is routed to a queue whose only consumer is on the wrong OS. Annotated tasks today: all 15 entries in `workflows/hud/tasks_config.py` (`["windows"]`), `set_desktop_hud_to_back` in desktop (`["windows"]`), and `run_n8n_sequence` (`["windows", "macos", "linux"]`).
+**Informational only** — Celery does not enforce this. The `/manage-queues` skill reads it (with a heuristic fallback that scans the task module for `pywin32` / `Rainmeter` / `cmd /c` / `.bat` / etc.) and surfaces `OS-MISMATCH` warnings when a task is routed to a queue whose only consumer is on the wrong OS. HUD schedules currently split into 12 host jobs (cross-platform) and eight Windows jobs (`hud`/`peon`), `set_desktop_hud_to_back` in desktop (`["windows"]`), and `run_n8n_sequence` (`["windows", "macos", "linux"]`).
 
 ## Cross-Platform Notes
 

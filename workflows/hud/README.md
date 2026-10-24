@@ -4,7 +4,7 @@
 
 - Supplies the portable Second Brain web HUD at `/second-brain`; Rainmeter rendering is deprecated and opt-in (`HARQIS_LEGACY_RAINMETER=1`).
 - Aggregates data from Google Calendar, OANDA forex, TCG Marketplace, YNAB budgets, AppSheet (PC INVOICE table), and Elasticsearch logs.
-- 21 enabled schedule entries cover display collectors and support jobs; see the [source audit](../../docs/info/HUD-SOURCE-INVENTORY.md).
+- 20 enabled schedule entries cover display collectors and support jobs; see the [source audit](../../docs/info/HUD-SOURCE-INVENTORY.md).
 - Tasks use the decorator chain: `@SPROUT.task` → `@log_result` → `@init_meter` → `@feed`.
 - Current HUD panels also include `@capture_hud_projection` immediately before
   `@init_meter`. Successful return payloads are redacted and capped before being
@@ -13,9 +13,11 @@
 
 ## Queues
 
-Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for `workflows.hud.tasks.*`). One exception: `take_screenshots_for_gpt_capture` is pinned to `peon` via an explicit `options.queue` override in the beat entry. Existing Windows queue/OS routing is retained for compatibility and Win32 collectors. Web-mode execution no longer writes Rainmeter skins; moving API-backed schedules to other hosts is a separate deployment choice.
+API-backed Calendar, finance, forex, Jira, API costs, job summaries and radar run on `host`, with matching Beat and manual-call routes. These collectors register on every platform and publish portable text without a Rainmeter installation. Desktop inspection, mouse/iCUE, bindings and profile work retain Windows affinity. TCG orders and sell-cart also stay on Windows: they export QR files and may add items to carts, respectively.
 
-**Data-only fallback twins** (`workflows.hud.tasks.hud_data_only.*`) are the exception to the Windows pinning: they run on the always-on host's `host` queue (a more-specific route declared above the `hud` catch-all in `workflows/config.py`) so a HUD task's `@feed` dump + `@log_result` ES record survive while the Windows box is offline. See [Data-only fallback (host)](#data-only-fallback-host) below.
+There are 20 schedules: 12 `host`, seven `hud`, and one screenshot capture on `peon`. Only the host runs Celery Beat. A task is consumed by one worker subscribed to its queue; `os` metadata is descriptive, not a scheduler constraint.
+
+The radar data-only twin remains importable for compatibility but is no longer scheduled, avoiding duplicate synthesis now that the original runs on the host.
 
 ## Scheduled Tasks
 
@@ -33,14 +35,13 @@ Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for
 | `build_summary_mouse_bindings` | Daily at 1am | Summary of daily mouse bindings |
 | `show_hud_profiles` | Daily at midnight | Active iCUE/Rainmeter HUD profiles |
 | `show_ynab_budgets_info` | Every 4 hours | YNAB budget balances |
-| `show_pc_daily_sales` | Every 4 hours | PC DAILY SALES — sums `TOTAL PRICE` per `DATE` from the AppSheet `INVOICE` table for the last 60 days, grouped by month with a 24-dash separator. Same width as OANDA ACCOUNT; height shows 10 rows at a time, the rest scrolls. Queue: `hud`. |
-| `show_api_costs` | Every 2 hours | TOKEN BURN — trailing 3-month LLM API spend grouped per month → service → model. Anthropic from the admin usage API (`ANTHROPIC_ADMIN_KEY`); OpenAI / Gemini stubbed at zero until cost endpoints exist. Service section omitted when its monthly total is 0. Queue: `hud`. |
+| `show_pc_daily_sales` | Every 2 hours | PC DAILY SALES — sums `TOTAL PRICE` per `DATE` from the AppSheet `INVOICE` table for the last 60 days, grouped by month with a 24-dash separator. Same width as OANDA ACCOUNT; height shows 10 rows at a time, the rest scrolls. Queue: `host`. |
+| `show_api_costs` | Every 30 minutes | TOKEN BURN — trailing 3-month LLM API spend grouped per month → service → model. Anthropic from the admin usage API (`ANTHROPIC_ADMIN_KEY`); OpenAI / Gemini stubbed at zero until cost endpoints exist. Service section omitted when its monthly total is 0. Queue: `host`. |
 | `show_ai_helper` | Daily at midnight | AI helper widget initialization |
 | `get_schedules` | Every 4 hours | Upcoming calendar schedule |
-| `show_daily_radar_data_only` | 08:00 / 12:00 / 16:00 / 20:00 (host) | **Data-only fallback twin** of `show_daily_radar`. Runs on the `host` queue and writes the briefing to the `hud-data-only-*` feed + ES **only when** the Windows worker hasn't rendered the radar within ~12h+10min (the overnight inter-fire gap + grace). No Rainmeter render. Gated on the original's `@log_result` heartbeat. Queue: `host`. |
 | `export_hermes_radar_snapshot` | Hourly at :00 (host) | Reads Hermes' scheduled-delivery audit, keeps only Telegram-bound jobs from the last 12h, removes credentials, identifiers, and local paths, then atomically writes `hermes-radar.json` to the shared feed. Conversational replies are never exported. No Telegram poll and no LLM. Queue: `host`. |
-| `refresh_hermes_radar` | Hourly at :05 (Windows) | Rerenders the shared snapshot as a newest-first, timestamped mirror of delivered scheduled Telegram updates from the last 12h. Multiline structure is preserved; secrets, emoji, and unsupported Unicode are removed. No LLM. Queue: `hud`. |
-| `show_daily_radar` | 08:00 / 12:00 / 16:00 / 20:00 daily | **HERMES RADAR** deep synthesis. Keeps the established task name and `DAILYRADAR` Rainmeter folder for feed/heartbeat/forwarder compatibility. The 8-hour Haiku synthesis continues into `feed_text` for HFL/legacy consumers, while the visible dump remains the 12-hour scheduled-delivery mirror. Queue: `hud`. |
+| `refresh_hermes_radar` | Hourly at :05 (host) | Rerenders the shared snapshot as a newest-first, timestamped mirror of delivered scheduled Telegram updates from the last 12h. Multiline structure is preserved; secrets, emoji, and unsupported Unicode are removed. No LLM. Queue: `host`. |
+| `show_daily_radar` | 08:00 / 12:00 / 16:00 / 20:00 daily | **HERMES RADAR** deep synthesis. Keeps the established task name and `DAILYRADAR` Rainmeter folder for feed/heartbeat/forwarder compatibility. The 8-hour Haiku synthesis continues into `feed_text` for HFL/legacy consumers, while the visible dump remains the 12-hour scheduled-delivery mirror. Queue: `host`. |
 
 ## Task Files
 
@@ -116,7 +117,7 @@ The panel has two independent paths that meet only at render time:
    output/status, keeps only Telegram-bound scheduled deliveries, redacts
    sensitive values, converts the content to ASCII while
    preserving line structure, and atomically writes
-   `<shared feed>/hermes-radar.json`. Windows rerenders at :05 so the shared
+   `<shared feed>/hermes-radar.json`. The host refreshes at :05 so the shared
    drive has five minutes to sync after the :00 export.
 2. **Four-hour synthesis path:** `show_daily_radar` keeps its established task,
    feed marker, ES heartbeat, fallback gate, and `DAILYRADAR` folder. It runs the
@@ -205,29 +206,9 @@ Data sources are declared in `daily_radar_agent.py::SOURCE_REGISTRY`. Each entry
 - `source_params={"owntracks": {"user": "brian"}}` — pass source-specific kwargs to a collector. Merged on top of the spec's `default_params`.
 - Drop a name from `sources` to disable that feed; reorder to change which sections the LLM weighs first.
 
-## Data-only fallback (host)
+## Data-only fallback (compatibility)
 
-HUD render tasks run only on the Windows `hud` queue. When that box is offline the task body never executes, so the `@feed` dump and `@log_result` Elasticsearch record are lost — **not** because the sinks are Windows-bound (`@log_result` writes to a network ES service; `@feed` resolves per-OS and the host has the same Google-Drive LOGS mount via `DESKTOP_PATH_FEED_DARWIN`), but because nothing runs. *Data-only twins* close that gap by running the same data computation on the always-on host, skipping the Rainmeter render.
-
-The split (built per task by the `/create-data-only-from-hud` skill):
-
-```
-collectors/<slug>.py   collect_<slug>()  ── win32-free data path (fetch + dump + metrics)
-        ▲                       ▲
-        │ calls                 │ calls
-hud_<slug>.py            hud_data_only.py
-show_<slug>              <fn>_data_only            ── @SPROUT.task / @fallback_gate / @log_result / @feed
- (Windows: hud queue,     (host queue, no render)
-  collector + render)
-```
-
-- **Single source of truth:** both the Windows render task and the host twin call the same `collect_<slug>()`, so they never drift.
-- **Fallback-only gating:** `@fallback_gate(original_task_name, max_staleness_secs)` (in `fallback.py`) reads the original's `@log_result` heartbeat doc (`harqis-elastic-logging`, keyed by `name`, field `date`). If the original ran within the staleness window, the twin short-circuits — **no feed block, no twin ES doc** — so healthy-Windows cycles produce zero duplicates. Staleness = the original's largest inter-fire gap + grace; the twin engages one cadence after Windows genuinely stops. Fails **open** (ES down/missing doc → run the twin).
-- **Routing:** twins live at `workflows.hud.tasks.hud_data_only.*` and are routed to `host` by a rule declared **above** the `workflows.hud.tasks.*` catch-all in `workflows/config.py` (else the catch-all would send them to `hud`). Beat entries are grouped at the bottom of the existing `WORKFLOWS_HUD` dict in `tasks_config.py` — kept in that one dict (not a separate `WORKFLOWS_HUD_DATA_ONLY`) so `frontend/generate_registry.py`, which reads only the first `run-job--*` dict per file, still catalogues them.
-- **Distinct feed file:** twins write `hud-data-only-YYYYMMDD.txt` (the Windows tasks write `hud-logs-*`), so host and Windows dumps never interleave.
-- **Eligibility:** only API/data-backed tasks get a twin. Desktop-capture tasks (`show_mouse_bindings`, `get_desktop_logs`, screenshots, `build_summary_mouse_bindings`, `show_hud_profiles`) read Windows-local state and stay Windows-only. The HERMES RADAR compatibility twin (`show_daily_radar_data_only`) runs the full 8-source sweep minus the DESKTOP LOGS section (that dump.txt is Windows-local; `collect_inputs` reads it as empty on the host).
-
-Manually trigger a twin (bypassing the gate) for testing: pass `force=True`.
+`hud_data_only.show_daily_radar_data_only` and its heartbeat gate remain available for older callers. Its Beat entry has been removed: the primary radar collector now runs on the always-on host, with desktop-local inputs omitted there. Do not re-enable the twin alongside the primary host schedule. New API widgets should use a single portable collector on `host`.
 
 ## Running
 

@@ -1,4 +1,15 @@
 from apps.rainmeter.references.helpers import config_builder as builder
+import pytest
+
+
+def test_portable_collector_needs_no_desktop_configuration(monkeypatch):
+    monkeypatch.delenv('HARQIS_LEGACY_RAINMETER', raising=False)
+    @builder.init_meter({}, hud_item_name='SERVER')
+    def collect(ini, **kwargs):
+        return {'text': 'Server output'}
+    assert collect()['renderer'] == 'web'
+    with pytest.raises(ValueError, match='Missing required config'):
+        collect(render_legacy_hud=True)
 
 
 def test_web_renderer_preserves_output_without_skin_io(monkeypatch, tmp_path):
