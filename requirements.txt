@@ -2,7 +2,7 @@ harqis-core @ git+https://github.com/brianbartilet/harqis-core.git@d2aa596ee89fe
 
 # Shared application/runtime stack. These are direct harqis-work dependencies;
 # they must not arrive accidentally through harqis-core package metadata.
-anthropic>=0.86,<1
+anthropic>=1.17.0,<2
 anyio>=4.7,<5
 cryptography>=46,<47
 Flask>=3.1,<4
