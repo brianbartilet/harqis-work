@@ -146,8 +146,8 @@ async def index(request: Request, source: str = '', since: str = '', until: str 
 
 class Profile(BaseModel):
     name: str = Field(min_length=1, max_length=120)
-    aliases: list[str] = Field(default_factory=list, max_length=100)
-    partial_aliases: list[str] = Field(default_factory=list, max_length=100)
+    aliases: list[str] = Field(default_factory=list, max_length=10000)
+    partial_aliases: list[str] = Field(default_factory=list, max_length=10000)
     preferred_name: bool = False
     categories: list[str] = Field(default_factory=list)
     emails: list[str] = Field(default_factory=list)

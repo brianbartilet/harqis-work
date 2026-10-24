@@ -197,3 +197,36 @@ def test_reviewed_profile_edits_are_saved_atomically(merge_data, authenticated_c
     assert entity_merges.history(identity)[0]['data']['profile']['notes'] == profile['notes']
     assert authenticated_client.post(f'/api/hfl/entities/merges/{identity}/unmerge', json={'request_id': str(uuid4())}).status_code == 200
     assert {get_store().profiles()[i]['notes'] for i in ids} == {'Note 0', 'Note 1', 'Note 2'}
+
+
+def test_large_alias_union_merges_with_reviewed_fields_and_remains_editable(merge_data, authenticated_client):
+    _, ids, _ = merge_data
+    store = get_store()
+    for index, identity in enumerate(ids[:2]):
+        profile = store.profiles()[identity]
+        store.save_profile(identity, 'people', {**profile, 'aliases': [f'Alias {index}-{n}' for n in range(70)]})
+    body = dict(entity_ids=ids[:2], name='HARQIS', evidence='Reviewed aliases')
+    preview = authenticated_client.post('/api/hfl/entities/merge-preview', json=body)
+    assert preview.status_code == 200, preview.text
+    expected = preview.json()['profile']['aliases']
+    assert len(expected) > 100
+    body.update(request_id=str(uuid4()), preview_token=preview.json()['preview_token'], profile={'preferred_name': True})
+    response = authenticated_client.post('/api/hfl/entities/merges', json=body)
+    assert response.status_code == 200, response.text
+    identity = response.json()['entity_id']
+    profile = store.profiles()[identity]
+    assert profile['aliases'] == expected
+    assert authenticated_client.post('/api/hfl/entities/profile/' + identity, json=profile).status_code == 200
+    assert authenticated_client.post('/api/hfl/entities/merges', json=body).json() == response.json()
+
+
+def test_oversized_alias_union_is_rejected_at_preview(merge_data, authenticated_client):
+    _, ids, _ = merge_data
+    store = get_store()
+    for index, identity in enumerate(ids[:2]):
+        store.save_profile(identity, 'people', {**store.profiles()[identity],
+            'aliases': [f'Alias {index}-{n}' for n in range(6000)]})
+    response = authenticated_client.post('/api/hfl/entities/merge-preview',
+        json=dict(entity_ids=ids[:2], name='HARQIS'))
+    assert response.status_code == 409
+    assert '10000' in response.json()['detail']

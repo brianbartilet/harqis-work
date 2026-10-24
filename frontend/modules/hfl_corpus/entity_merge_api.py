@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from itsdangerous import BadSignature, URLSafeTimedSerializer
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from config import get_settings
@@ -25,8 +25,8 @@ class MergePreview(BaseModel):
 
 class MergeFields(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    aliases: list[str] = Field(default_factory=list, max_length=100)
-    partial_aliases: list[str] = Field(default_factory=list, max_length=100)
+    aliases: list[str] = Field(default_factory=list, max_length=10000)
+    partial_aliases: list[str] = Field(default_factory=list, max_length=10000)
     preferred_name: bool = False
     categories: list[str] = Field(default_factory=list)
     emails: list[str] = Field(default_factory=list)
@@ -94,6 +94,8 @@ def build_preview(payload, current=None):
     profile['preferred_name'] = any((e.get('profile') or {}).get('preferred_name') and e['label'] == name for e in selected)
     profile['notes'] = '\n\n'.join(f"### {e['label']}\n{e['profile']['notes']}" for e in selected
                                   if (e.get('profile') or {}).get('notes'))
+    from modules.hfl_corpus.entities_api import Profile, validated_profile
+    profile.update(validated_profile(Profile(**profile)))
     with store.connection() as db:
         if merges.revision(db) != version:
             raise ValueError('Entities changed during preview; try again')
@@ -142,9 +144,12 @@ async def submit(request: Request, payload: MergeSubmit, background_tasks: Backg
     if payload.profile is not None:
         from modules.hfl_corpus.entities_api import Profile, validated_profile
         sources = result['profile'].get('alias_sources', {})
-        result['profile'] = validated_profile(Profile(**{
-            **result['profile'], **payload.profile.model_dump(exclude_unset=True),
-        }))
+        try:
+            result['profile'] = validated_profile(Profile(**{
+                **result['profile'], **payload.profile.model_dump(exclude_unset=True),
+            }))
+        except (ValidationError, ValueError) as exc:
+            raise HTTPException(422, 'Merged profile is invalid; review its fields: ' + str(exc)) from exc
         result['profile']['alias_sources'] = {v: sources.get(v, 'user') for k in ('aliases', 'partial_aliases') for v in result['profile'][k]}
     result = await call(merges.commit_merge, result, str(payload.request_id), fingerprint, actor)
     background_tasks.add_task(merges.flush_audits)

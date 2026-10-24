@@ -5018,13 +5018,13 @@ components:
           items:
             type: string
           type: array
-          maxItems: 100
+          maxItems: 10000
           title: Aliases
         partial_aliases:
           items:
             type: string
           type: array
-          maxItems: 100
+          maxItems: 10000
           title: Partial Aliases
         preferred_name:
           type: boolean
@@ -5148,13 +5148,13 @@ components:
           items:
             type: string
           type: array
-          maxItems: 100
+          maxItems: 10000
           title: Aliases
         partial_aliases:
           items:
             type: string
           type: array
-          maxItems: 100
+          maxItems: 10000
           title: Partial Aliases
         preferred_name:
           type: boolean
@@ -5607,13 +5607,13 @@ components:
           items:
             type: string
           type: array
-          maxItems: 100
+          maxItems: 10000
           title: Aliases
         partial_aliases:
           items:
             type: string
           type: array
-          maxItems: 100
+          maxItems: 10000
           title: Partial Aliases
         preferred_name:
           type: boolean
@@ -6004,13 +6004,13 @@ components:
           items:
             type: string
           type: array
-          maxItems: 100
+          maxItems: 10000
           title: Aliases
         partial_aliases:
           items:
             type: string
           type: array
-          maxItems: 100
+          maxItems: 10000
           title: Partial Aliases
         preferred_name:
           type: boolean
