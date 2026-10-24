@@ -12,7 +12,7 @@
         <div class="hud-popover"><label><input type="checkbox" id="hud-dynamic"> Dynamic mode</label><p>Follow scheduled Spaces across HUD, Kanban and Activity Corpus.</p><div id="hud-space-list"></div><button id="hud-spaces-apply">Apply selection</button><a href="/hfl-corpus">Manage Spaces</a></div>
       </details>
       <button id="hud-add">＋ Add widget</button><button id="hud-build">Build with agent</button>
-      <button id="hud-edit" aria-pressed="false">Arrange</button><button id="hud-hotkeys">Hotkeys</button>
+      <button id="hud-hotkeys">Hotkeys</button>
       <button id="hud-fullscreen">Full screen</button><button id="hud-refresh">Refresh</button><a href="/second-brain/feed">Feed & settings</a>
       <span id="hud-save-state" role="status" aria-live="polite"></span>
     </div>
@@ -35,7 +35,7 @@
     <p>Describe a new widget or a change. Create an action with the HUD skills and current Space links, then continue in the existing agent workspace.</p>
     <form id="hud-build-form"><label>Widget title<input name="title" required maxlength="150" placeholder="Weekly delivery pulse"></label><label>What should it show?<textarea name="prompt" required maxlength="12000" rows="7" placeholder="Sources, information to show, update frequency, and when it should appear…"></textarea></label><button type="submit">Create action & open agent workspace</button><p id="hud-build-status" role="status"></p></form>
   </dialog>
-  <dialog id="hud-hotkeys-dialog" class="hud-dialog"><form method="dialog" class="hud-dialog-heading"><h2>Hotkeys</h2><button aria-label="Close hotkeys">✕</button></form><p>A home for shared shortcuts. More bindings can be added here.</p><dl><dt>Escape</dt><dd>Close a dialog or leave full screen</dd><dt>Tab / Enter</dt><dd>Navigate and activate controls</dd><dt>Arrange → Earlier / Later</dt><dd>Reorder widgets with the keyboard</dd></dl><button id="hud-add-hotkeys">Add desktop bindings widget</button></dialog>
+  <dialog id="hud-hotkeys-dialog" class="hud-dialog"><form method="dialog" class="hud-dialog-heading"><h2>Hotkeys</h2><button aria-label="Close hotkeys">✕</button></form><p>A home for shared shortcuts. More bindings can be added here.</p><dl><dt>Escape</dt><dd>Close a dialog or leave full screen</dd><dt>Tab / Enter</dt><dd>Navigate and activate controls</dd><dt>Drag handle + arrow keys</dt><dd>Reorder widgets with the keyboard</dd></dl><button id="hud-add-hotkeys">Add desktop bindings widget</button></dialog>
   <script type="application/json" id="hud-config">{{ {'catalog': hud_catalog, 'sizes': hud_sizes, 'csrf': hud_csrf}|tojson }}</script>
   <script type="application/json" data-memory-csrf>{{ hud_csrf|tojson }}</script>
 </main>

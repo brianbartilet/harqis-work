@@ -2,7 +2,7 @@
   'use strict';
   const $ = id => document.getElementById(id), root = $('hud-surface'), grid = $('hud-grid');
   const config = JSON.parse($('hud-config').textContent), catalog = new Map(config.catalog.map(x => [x.operation_id, x]));
-  let state, editing = false, settingsId, saving = false, pendingSaves = 0, saveGeneration = 0, loading = false, moving = false, serial = Promise.resolve(), motionFrame;
+  let state, settingsId, saving = false, pendingSaves = 0, saveGeneration = 0, loading = false, moving = false, serial = Promise.resolve(), motionFrame;
   let lastData = '', lastLayout = '', lastActive = '', builderKey = crypto.randomUUID();
   let spaceDraft;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
@@ -117,13 +117,12 @@
     grid.replaceChildren();const widgets=state.layout.widgets.filter(visible);
     for(const w of widgets){
       const card=el('article',null,'hud-widget');card.dataset.id=w.id;card.dataset.animation=w.animation;sized(card,w.size);
-      const header=el('header',null,'hud-widget-header'),drag=button('⠿',()=>{},'Drag widget');drag.className='hud-drag';
+      const header=el('header',null,'hud-widget-header'),drag=button('⠿',()=>{},'Drag widget');drag.className='hud-drag';drag.title='Drag to move · arrow keys to reorder';drag.setAttribute('aria-label','Move '+(catalog.get(w.operation)?.label||'widget')+'; use arrow keys to reorder');drag.addEventListener('keydown',event=>{if(['ArrowLeft','ArrowUp','ArrowRight','ArrowDown'].includes(event.key)){event.preventDefault();reorder(w.id,['ArrowLeft','ArrowUp'].includes(event.key)?-1:1);}});
       if(w.accent){header.style.backgroundColor=`color-mix(in srgb, ${w.accent} 24%, #0f172a)`;header.style.borderBottomColor=w.accent;header.style.boxShadow=`inset 3px 0 ${w.accent}`;}
       const menuButton=button('',event=>settings(w,event.currentTarget),'Settings for '+(catalog.get(w.operation)?.label||'widget'));menuButton.className='hud-widget-menu-button';menuButton.setAttribute('aria-haspopup','dialog');menuButton.setAttribute('aria-expanded','false');menuButton.setAttribute('aria-controls','hud-settings');
       menuButton.innerHTML='<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 5h12M4 10h12M4 15h12"/></svg>';
       header.append(drag,el('h2',catalog.get(w.operation)?.label||w.operation),menuButton);
-      const moves=el('div',null,'hud-reorder');moves.append(button('Earlier',()=>reorder(w.id,-1)),button('Later',()=>reorder(w.id,1)),button(w.size,event=>settings(w,event.currentTarget),'Choose widget size'));
-      card.append(header,moves,el('nav',null,'hud-links'),el('div',null,'hud-widget-body'),el('footer',null,'hud-widget-footer'));
+      card.append(header,el('nav',null,'hud-links'),el('div',null,'hud-widget-body'),el('footer',null,'hud-widget-footer'));
       const handle=button('',()=>{},'Resize widget; use settings for keyboard resizing');handle.className='hud-resize';resize(handle,card,w);card.append(handle);renderBody(card,w);grid.append(card);card.querySelector('.hud-widget-body').scrollTop=scrolls.get(w.id)||0;
     }
     $('hud-empty').hidden=!!widgets.length;grid.setAttribute('aria-busy','false');lastLayout=JSON.stringify(state.layout.widgets);lastData=dataKey();lastActive=JSON.stringify(state.spaces.active);
@@ -164,7 +163,6 @@
   }
   $('hud-refresh').onclick=refresh;
   $('hud-add').onclick=()=>{if(!state)return;catalogRows();$('hud-catalog').showModal();};$('hud-catalog-search').oninput=catalogRows;
-  $('hud-edit').onclick=()=>{editing=!editing;root.classList.toggle('hud-arranging',editing);$('hud-edit').setAttribute('aria-pressed',editing);$('hud-edit').textContent=editing?'Done arranging':'Arrange';};
   $('hud-fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await root.requestFullscreen();}catch{notice('Full screen is unavailable in this browser.');}};
   document.addEventListener('fullscreenchange',()=>{$('hud-fullscreen').textContent=document.fullscreenElement?'Exit full screen':'Full screen';rowHeight();});
   $('hud-widget-form').onsubmit=async event=>{event.preventDefault();const w=state.layout.widgets.find(x=>x.id===settingsId),form=event.currentTarget;Object.assign(w,{size:form.elements.size.value,animation:form.elements.animation.value,accent:form.elements.accent.value,workspace_ids:selectedChecks($('hud-widget-spaces')),dashboard_url:form.elements.dashboard_url.value});closeSettings();await changed();grid.querySelector(`[data-id="${settingsId}"] .hud-widget-menu-button`)?.focus();};
