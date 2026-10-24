@@ -96,7 +96,7 @@
 }
 .hud-widget-header {
   display:flex;
-  gap:6px;
+  gap:2px;
   align-items:center;
   padding:8px 10px;
   background:#0f172a;
@@ -113,8 +113,13 @@
   white-space:nowrap;
   color:#deefff
 }
-.hud-widget-header button {
-  padding:0 5px;
+.hud-surface .hud-widget-header button {
+  display:grid;
+  place-items:center;
+  flex:0 0 22px;
+  width:22px;
+  height:24px;
+  padding:0;
   background:transparent;
   border:0;
   font-size:16px
@@ -127,7 +132,8 @@
 .hud-widget-footer {
   font:10px ui-monospace,monospace;
   color:#92aab7;
-  padding:6px 10px;
+  padding:6px 28px 6px 10px;
+  flex-shrink:0;
   border-top:1px solid #253b47;
   display:flex;
   gap:7px;
@@ -135,7 +141,8 @@
   flex-wrap:wrap
 }
 .hud-widget-footer time {
-  margin-left:auto
+  margin-left:auto;
+  white-space:nowrap
 }
 .hud-health {
   width:5px;
@@ -211,7 +218,7 @@
 .hud-links:empty {
   display:none
 }
-.hud-resize {
+.hud-surface .hud-resize {
   display:block;
   position:absolute;
   bottom:0;
