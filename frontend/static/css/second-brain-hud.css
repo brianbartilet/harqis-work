@@ -431,6 +431,20 @@
 #hud-catalog .hud-catalog-row>div { flex:1 0 100%; }
 #hud-catalog-items>p { grid-column:1 / -1; }
 #hud-catalog .hud-catalog-row button { padding:5px 8px; font-size:11px; }
+#hud-builder {
+  margin:auto;
+  background:#0b1221;
+  color:#e2e8f0;
+  border-color:#334155;
+  border-radius:16px;
+}
+#hud-builder::backdrop { background:rgba(2,6,23,.8); backdrop-filter:none; }
+#hud-builder .hud-dialog-heading { margin:-20px -20px 16px; padding:16px 20px; border-bottom:1px solid #1e293b; }
+#hud-builder input,#hud-builder textarea { background:#0b1728; border-color:#334155; color:#e2e8f0; border-radius:8px; }
+#hud-builder p { color:#94a3b8; }
+#hud-builder button { background:#0f172a; border-color:#334155; border-radius:8px; color:#cbd5e1; }
+#hud-builder button:hover { background:#1e293b; border-color:#38bdf8; color:#e0f2fe; }
+#hud-build-form button[type=submit] { background:#0c4a6e; border-color:#38bdf8; color:#e0f2fe; }
 @media(max-width:479px) {
   #hud-catalog-items { grid-template-columns:minmax(0,1fr); }
 }
