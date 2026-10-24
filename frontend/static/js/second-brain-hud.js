@@ -152,7 +152,6 @@
       if(state&&$('hud-settings').matches(':popover-open'))return;
       state=fresh;renderSpaces();
       if(lastLayout!==JSON.stringify(state.layout.widgets)||lastData!==dataKey()||lastActive!==JSON.stringify(state.spaces.active))render();
-      const modes=state.decision?.effective_modes||[];$('hud-context-status').textContent=(state.automatic_feed?'Automatic context':'Manual context')+(modes.length?' · '+modes.join(' + '):' · awaiting first reconciliation');
       notice(state.source_error);
     }catch(e){notice(e.message);}finally{loading=false;}
   }

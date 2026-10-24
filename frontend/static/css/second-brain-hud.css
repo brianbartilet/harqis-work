@@ -67,22 +67,12 @@
 .hud-surface a {
   color:var(--hud-blue)
 }
-.hud-statusbar {
-  display:flex;
-  align-items:center;
-  gap:14px;
-  min-height:32px;
-  margin-bottom:12px;
-  border-top:1px solid var(--hud-line);
-  padding-top:8px;
+#hud-save-state {
   font:11px ui-monospace,Consolas,monospace;
   color:#8ca9b9
 }
-.hud-statusbar #hud-save-state {
-  margin-left:auto
-}
-.hud-statusbar button {
-  padding:3px 8px
+#hud-save-state:empty {
+  display:none
 }
 .hud-notice {
   padding:10px 12px;
@@ -439,9 +429,6 @@
   .hud-popover {
     left:0;
     right:auto
-  }
-  .hud-statusbar {
-    flex-wrap:wrap
   }
   .hud-resize {
     display:none!important
