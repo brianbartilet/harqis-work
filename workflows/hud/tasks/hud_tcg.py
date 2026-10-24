@@ -252,7 +252,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
         color_identity, cmc = get_scryfall_info(order['first_item'])
 
         # crop long names
-        name = (order['first_item'][:50] + '..') if len(order['first_item']) > 50 else order['first_item']
+        name = (order['first_item'][:41] + '...') if len(order['first_item']) > 44 else order['first_item']
 
         order_detail = service.get_order_detail(order['order_id'])
         foil = order_detail['items'][0]['crd_foil']
@@ -306,7 +306,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
 
         foil = "F" if str(r['foil']) == "1" else "N"
 
-        add = " {0:<2} {1:<2} {5:<2} {6:<2} {2:<60} {3:<4} {4:>7}\n".format(
+        add = " {0:<2} {1:<2} {5:<2} {6:<2} {2:<44.44} {3:<4} {4:>7}\n".format(
             r["color_identity"],
             r["quantity"],
             r["name"],
@@ -342,7 +342,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
 
         for item in r['items']:
             # crop long names
-            name = (item["name"][:50] + '..') if len(item["name"]) > 50 else item["name"]
+            name = (item["name"][:41] + '...') if len(item["name"]) > 44 else item["name"]
 
             color, cmc = get_scryfall_info(item['name'])
 
@@ -351,7 +351,7 @@ def show_tcg_orders(ini=ConfigHelperRainmeter(), **kwargs):
 
             foil = "F" if str(item['crd_foil']) == "1" else "N"
             ctr_lines += 1
-            add = " {0:<2} {1:<2} {3:<2} {5:<2} {2:<60} {4:>14}\n".format(
+            add = " {0:<2} {1:<2} {3:<2} {5:<2} {2:<44.44} {4:>14}\n".format(
                 color,
                 item["quantity"],
                 name,

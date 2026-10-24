@@ -62,6 +62,7 @@
   function output(w,text) {
     const pre=el('pre',null,'hud-output');
     if(w.operation==='hud.hud_calendar.show_calendar_information')pre.classList.add('hud-calendar-output');
+    if(w.operation==='hud.hud_tcg.show_tcg_orders')pre.classList.add('hud-orders-output');
     setOutput(pre,text);return pre;
   }
   function settings(w,anchor) {
