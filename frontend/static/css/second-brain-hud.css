@@ -46,6 +46,13 @@
   font-size:12px;
   cursor:pointer
 }
+.hud-tools #hud-add,.hud-tools #hud-build {
+  height:36px;
+  border:1px solid #334155;
+  border-radius:8px;
+  background:#0f172a;
+  color:#cbd5e1;
+}
 .hud-tools .hud-toolbar-icon {
   display:inline-grid;
   place-items:center;
