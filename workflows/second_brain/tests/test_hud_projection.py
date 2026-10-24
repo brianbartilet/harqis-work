@@ -141,7 +141,8 @@ def test__collect_hud_projection_normalizes_a_fresh_result(monkeypatch):
     assert item.status == "fresh"
     assert item.sensitivity == "restricted"
     assert item.links == {"broker": "https://example.test/account"}
-    assert "Metrics" in item.details
+    assert item.details == "NAV 100.00\nEUR_USD +2.00"
+    assert hud_projection._load_projection(item.source_refs[0])["payload"]["metrics"] == {"nav": 100.0}
 
 
 def test__collect_hud_projection_returns_guidance_before_first_capture(monkeypatch):
