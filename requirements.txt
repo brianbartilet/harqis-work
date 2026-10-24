@@ -62,7 +62,7 @@ python-pptx>=0.6.23
 # explicitly here so the cloud path never depends on it arriving transitively:
 requests>=2.31.0
 requests-toolbelt>=1.0.0,<2
-segno>=1.6,<2
+segno>=1.6.6,<2
 paramiko>=3.5,<5
 
 # workflows/tcg — Pokedex proxy pipeline. beautifulsoup4 parses the pokemondb
