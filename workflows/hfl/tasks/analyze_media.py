@@ -858,7 +858,7 @@ def _analyze_hfl_media(
     if not client.base_client:
         raise RuntimeError("Anthropic client failed to initialize")
 
-    images = videos = entries = skipped = android_items = 0
+    images = videos = entries = skipped = android_items = budget_deferred = 0
     geo_cache: dict = {}  # reverse-geocode cache shared across this run's media
 
     for item in media:
@@ -929,6 +929,11 @@ def _analyze_hfl_media(
                     "the JSON object only."
                 ),
             }
+            if classify_media_source(item.relative) == 'desktop':
+                from workflows.hfl.media_budget import reserve_desktop_attempt
+                if not reserve_desktop_attempt(corpus_dir):
+                    budget_deferred += 1
+                    continue  # Leave this file uncompleted for tomorrow's run.
             response = client.send_messages(
                 messages=[{"role": "user", "content": [*blocks, instruction]}],
                 model=model,
@@ -1016,6 +1021,7 @@ def _analyze_hfl_media(
         "scanned": selected_count,
         "duplicates": duplicates,
         "android_items": android_items,
+        "budget_deferred": budget_deferred,
         "model": model,
         "window_days": window_days,
         "targeted": bool(media_path),

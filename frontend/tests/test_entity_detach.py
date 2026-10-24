@@ -43,6 +43,24 @@ def test_detach_shared_activity_profile_audit_and_retry(merge_data, authenticate
     assert len(get_store().records()) == 2
 
 
+def test_detach_preserves_incoming_queue_without_reopening_history(merge_data, authenticated_client, monkeypatch):
+    monkeypatch.delenv('HARQIS_ENTITY_REASSESS_HISTORY', raising=False)
+    rows, ids, _ = merge_data
+    merged, _, _ = submit_merge(authenticated_client, ids)
+    store = get_store()
+    store.save('unrelated-history', 'v1', [])
+    with store.connection() as db:
+        db.execute('DELETE FROM entity_resolution_jobs')
+        db.execute('INSERT INTO entity_resolution_jobs(entry_id,revision) VALUES (?,?)', ('incoming', 'v1'))
+        db.execute('INSERT INTO entity_resolutions VALUES (?,?,?,?)',
+                   (rows[0]['id'], ids[0], merged['entity_id'], json.dumps({'active': True})))
+    body, result = detach(authenticated_client, merged['entity_id'], ids[1])
+    assert authenticated_client.post(f"/api/hfl/entities/merges/{merged['entity_id']}/detach", json=body).json() == result
+    with store.connection() as db:
+        assert [tuple(r) for r in db.execute('SELECT entry_id,revision FROM entity_resolution_jobs')] == [('incoming', 'v1')]
+        assert not json.loads(db.execute('SELECT data FROM entity_resolutions').fetchone()[0])['active']
+
+
 def test_nested_member_detaches_without_dissolving_groups(merge_data, authenticated_client):
     _, ids, _ = merge_data
     child, _, _ = submit_merge(authenticated_client, ids[:2], 'Inner')

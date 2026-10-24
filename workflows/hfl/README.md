@@ -52,6 +52,14 @@ deduplication happens before quota selection and model calls. Terminal semantic
 skips stay completed; abandoned claims remain retryable. Sustained volume above
 200/day can still accumulate or age out and needs an explicit dated recovery.
 
+All desktop vision entry points also share a persistent daily allowance of 200
+media attempts, including manual reruns and targeted calls. Set
+`HARQIS_DESKTOP_DAILY_MAX_FILES` to change it (0 pauses desktop vision). The
+canonical host's local date controls rollover. Reservations are atomic across
+workers, survive restarts, and count failed attempts; provider transport retries
+within an attempt are still governed by the client retry policy. Budget-deferred
+files remain pending and are reported as `budget_deferred`. Android is separate.
+
 `monitor_pending_captures` runs daily at **06:30 in the configured Celery timezone**
 on `hfl`. It counts eligible desktop and Android captures separately over 14 days,
 excluding completed artifacts and active claims. Per-source thresholds are
@@ -826,6 +834,9 @@ when their activity changes, and normal retries and stale-link safety checks rem
 `HARQIS_ENTITY_REASSESS_HISTORY=1` explicitly restores historical reassessment;
 leave it unset or `0` for incoming-only operation. Disabling reassessment does not
 clear already queued work; that requires a deliberate, backed-up queue cleanup.
+Member detach follows the same policy: it invalidates assignments to changed
+identities for correctness, but never queues the entire corpus. Opt-in historical
+reassessment is limited to activities depending on those identities.
 Initial runs inspect existing entities and suggestions; later runs use changed
 entity snapshots. Exact aliases and partial hints are editable and retain their
 user/LLM/merged-name provenance. Activity counts rank candidates and names without

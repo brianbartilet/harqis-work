@@ -178,7 +178,10 @@ def commit(identity, member_id, expected, request_id, fingerprint, actor):
         entity_matching.block_members(db, [identity, member_id], 'detached')
         affected = [identity, member_id, *snapshot['paths'][member_id]]
         invalidate_targets(db, affected)
-        db.execute('INSERT OR IGNORE INTO entity_resolution_jobs(entry_id,revision) SELECT id,hash FROM enrichment')
+        # Invalidate stale assignments regardless of scheduling policy, but only
+        # reassess affected history when explicitly enabled. Never queue all history.
+        from workflows.hfl.entity_resolution_scope import enqueue_affected
+        enqueue_affected(db, affected, invalidate=False)
         member = next(m for m in snapshot['groups'][parent]['members'] if m['id'] == member_id)
         # A mention with no saved profile still needs a stable, visible restored identity.
         if member_id not in snapshot['profiles']:
