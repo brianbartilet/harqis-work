@@ -24,7 +24,7 @@ available. The main `/second-brain` route opens the new HUD.
 | Capability | Previous Second Brain | Web HUD migration |
 |---|---|---|
 | Context resolution | Calendar, keywords, manual override, optional Hermes | Reused unchanged in Context feed |
-| Presentation | Ranked cards in a feed dialog | Persistent six-column dashboard, eight sizes, scrolling |
+| Presentation | Ranked cards in a feed dialog | Persistent six-column dashboard, ten sizes, scrolling |
 | HUD inputs | 18 read-only projection adapters | All 18 in Add widget, independent of category attachment |
 | Spaces | Separate Second Brain categories | Shared Corpus/Kanban manual/dynamic Space selection; widget membership |
 | Customization | Category operation assignments | Add, hide/restore, remove, drag, keyboard reorder, snap resize |
@@ -93,7 +93,7 @@ selection preferences, CSRF and revision-conflict behavior come from
 `frontend/modules/hfl_corpus/workspace_views.py`. Dialogs use native focus trapping;
 selects use the established blue SVG chevron. Local SortableJS supplies touch drag.
 
-Sizes: 1x1, 1x2, 1x4, 2x1, 2x2, 2x4, 3x3, 3x4. Arrange exposes a drag handle,
+Sizes: 1x1, 1x2, 1x3, 1x4, 2x1, 2x2, 2x4, 3x1, 3x3, 3x4. Arrange exposes a drag handle,
 Earlier/Later controls and a resize corner that snaps to the closest allowed
 size. Settings provides the keyboard/mobile size picker. Widget order packs into
 six columns; overflow extends down the page. Mobile uses one column and preserves
@@ -172,7 +172,7 @@ The canonical feed UI remains reachable at `/second-brain/feed` for comparison.
   migration. A separate Windows process-lock/projection run passed 15 tests; the
   final projection/backfill/web-contract check passed 14 after adding source-alias
   coverage. These runs overlap; they are not additive unique-test counts.
-- Browser validation used the locally installed Edge engine: all eight sizes,
+- Browser validation used the locally installed Edge engine: all eight original sizes,
   authenticated persistence, hide/restore/remove, keyboard reorder, pointer drag,
   snap resize, full screen, mobile stacking/no page overflow, Hotkeys and agent
   handoff. The builder's final action creation was intercepted to avoid creating

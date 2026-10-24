@@ -17,9 +17,9 @@ from modules.second_brain.service import snapshot
 from workflows.second_brain.registry import OPERATIONS
 from workflows.hfl.colors import PIN_COLORS
 
-SIZES = {'1x1': 'Small square', '1x2': 'One column medium', '1x4': 'One column tall',
+SIZES = {'1x1': 'Small square', '1x2': 'One column medium', '1x3': 'One column large', '1x4': 'One column tall',
          '2x1': 'Two column short', '2x2': 'Two column square', '2x4': 'Two column tall',
-         '3x3': 'Large square', '3x4': 'Half screen'}
+         '3x1': 'Three column short', '3x3': 'Large square', '3x4': 'Half screen'}
 ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -27,7 +27,7 @@ class Widget(BaseModel):
     model_config = ConfigDict(extra='forbid')
     id: str = Field(min_length=1, max_length=64, pattern=r'^[a-zA-Z0-9_-]+$')
     operation: str
-    size: Literal['1x1', '1x2', '1x4', '2x1', '2x2', '2x4', '3x3', '3x4'] = '2x2'
+    size: Literal['1x1', '1x2', '1x3', '1x4', '2x1', '2x2', '2x4', '3x1', '3x3', '3x4'] = '2x2'
     hidden: bool = False
     animation: Literal['static', 'marquee', 'typing'] = 'static'
     accent: str = ''

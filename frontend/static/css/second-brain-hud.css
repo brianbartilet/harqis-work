@@ -519,7 +519,7 @@
 
 /* Compact widget controls reuse the Space picker and shared pin palette. */
 .hud-settings-menu {
-  position:fixed; inset:auto; margin:0; width:220px; max-width:calc(100vw - 16px);
+  position:fixed; inset:auto; margin:0; width:280px; max-width:calc(100vw - 16px);
   max-height:calc(100dvh - 16px); overflow:auto; box-sizing:border-box;
   padding:12px; border:1px solid #365367; border-radius:8px;
   background:#101c26; color:#d5e7f1; box-shadow:0 12px 36px #0009;
@@ -531,7 +531,7 @@
 .hud-settings-menu button { border:1px solid #365367; border-radius:4px; padding:6px; background:#142630; color:#d5e7f1; font-size:11px; }
 .hud-settings-menu button:hover { background:#223d4c; }
 .hud-settings-menu :focus-visible { outline:2px solid #67e8f9; outline-offset:2px; }
-.hud-size-options { display:grid; grid-template-columns:repeat(4,1fr); gap:4px; }
+.hud-size-options { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; }
 .hud-size-options label,.hud-motion-options label { position:relative; cursor:pointer; border:1px solid #365367; border-radius:4px; background:#0a151e; }
 .hud-size-options label { display:flex; flex-direction:column; align-items:center; justify-content:end; gap:4px; height:58px; padding:5px; font-size:10px; }
 .hud-size-options input,.hud-motion-options input,.hud-accent-options input { position:absolute; opacity:0; width:1px; height:1px; }
