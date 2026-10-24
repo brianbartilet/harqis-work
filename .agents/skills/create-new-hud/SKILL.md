@@ -42,7 +42,7 @@ Use `frontend/modules/second_brain/hud.py`, `hud_router.py`,
 `templates/modules/second_brain/hud.html`, `static/js/second-brain-hud.js` and
 `static/css/second-brain-hud.css`. Follow `review-frontend-patterns` when available.
 The grid has six columns with four viewport rows and vertical overflow. Supported
-sizes only: 1x1, 1x2, 1x4, 2x1, 2x2, 2x4, 3x3, 3x4. Mobile is one column with the
+sizes only: 1x1, 1x2, 1x3, 1x4, 2x1, 2x2, 2x4, 3x1, 3x3, 3x4. Mobile is one column with the
 same row span. Use persisted layout revisions and the shared Corpus Space IDs and
 selection preferences. No linked Spaces means globally visible.
 

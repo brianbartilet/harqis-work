@@ -49,6 +49,8 @@ def test_hud_page_and_complete_catalog(authenticated_client):
     page = authenticated_client.get('/second-brain')
     assert page.status_code == 200
     assert 'hud-grid' in page.text
+    assert 'value="1x3"' in page.text
+    assert 'value="3x1"' in page.text
     assert '/static/js/second-brain-hud.js?v=' in page.text
     assert '/static/css/second-brain-hud.css?v=' in page.text
     assert 'Build with agent' in page.text
@@ -57,10 +59,11 @@ def test_hud_page_and_complete_catalog(authenticated_client):
     assert next(item for item in catalog if item['operation_id'] == 'hud.hud_calendar.show_calendar_information')['schedules']
 
 
-def test_layout_roundtrip_and_stale_revision(authenticated_client):
+@pytest.mark.parametrize('size', ['1x4', '1x3', '3x1'])
+def test_layout_roundtrip_and_stale_revision(authenticated_client, size):
     client = authenticated_client
     original = client.get('/second-brain/hud/data').json()['layout']
-    original['widgets'][0].update(size='1x4', animation='typing', hidden=True)
+    original['widgets'][0].update(size=size, animation='typing', hidden=True)
     saved = client.put('/second-brain/hud/layout', json=original, headers=headers())
     assert saved.status_code == 200
     assert saved.json()['revision'] == 1
