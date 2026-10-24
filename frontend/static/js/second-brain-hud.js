@@ -51,18 +51,29 @@
     if(!ids.length)target.textContent='All Spaces';
   }
   function closeSettings() { $('hud-settings').hidePopover(); }
+  function desktopLogText(text) {
+    // Legacy snapshots wrap prose at 65 columns. Preserve paragraph and entry boundaries.
+    const lines=text.replace(/\r\n/g,'\n').split('\n'),out=[];
+    const boundary=line=>!line.trim()||/^\s*(?:[=\-]{3,}\s*$|\[|[-*] |\d+[.)] )/.test(line);
+    for(const line of lines){
+      if(out.length&&!boundary(line)&&!boundary(out[out.length-1]))out[out.length-1]+=' '+line.trim();
+      else out.push(line);
+    }
+    return out.join('\n');
+  }
   function setOutput(pre,text) {
-    if(!pre.classList.contains('hud-calendar-output')){pre.textContent=text;return;}
+    if(!pre.classList.contains('hud-calendar-output')&&!pre.classList.contains('hud-desktop-output')){pre.textContent=text;return;}
     // Keep legacy dividers, but clip each to the available width without wrapping.
     pre.replaceChildren();
     text.split(/(^[\t ]*=+[\t ]*\r?$)/gm).forEach(part=>{
-      pre.append(/^[\t ]*=+[\t ]*\r?$/.test(part)?el('span',part,'hud-calendar-divider'):document.createTextNode(part));
+      pre.append(/^[\t ]*=+[\t ]*\r?$/.test(part)?el('span',part,pre.classList.contains('hud-desktop-output')?'hud-desktop-divider':'hud-calendar-divider'):document.createTextNode(part));
     });
   }
   function output(w,text) {
     const pre=el('pre',null,'hud-output');
     if(w.operation==='hud.hud_calendar.show_calendar_information')pre.classList.add('hud-calendar-output');
     if(w.operation==='hud.hud_tcg.show_tcg_orders')pre.classList.add('hud-orders-output');
+    if(w.operation==='hud.hud_gpt.get_desktop_logs'){pre.classList.add('hud-desktop-output');text=desktopLogText(text);}
     setOutput(pre,text);return pre;
   }
   function settings(w,anchor) {
