@@ -399,6 +399,20 @@
   margin:3px 0;
   overflow-wrap:anywhere
 }
+#hud-catalog {
+  margin:auto;
+  width:min(440px,calc(100vw - 24px));
+  max-height:72dvh;
+  padding:16px;
+  background:#0f172a;
+  border-color:#334155;
+  border-radius:12px;
+}
+#hud-catalog .hud-dialog-heading { margin-bottom:10px; }
+#hud-catalog .hud-dialog-heading h2 { font-size:18px; }
+#hud-catalog-search { margin-top:0; padding:7px 9px; font-size:13px; }
+#hud-catalog .hud-catalog-row { gap:8px; padding:9px 0; }
+#hud-catalog .hud-catalog-row button { padding:5px 8px; font-size:11px; }
 .hud-dialog dl {
   display:grid;
   grid-template-columns:1fr 2fr;
