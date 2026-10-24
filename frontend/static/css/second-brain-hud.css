@@ -28,14 +28,6 @@
   font-weight:650;
   margin-top:3px
 }
-.hud-heading h1 span {
-  font:12px ui-monospace,monospace;
-  color:var(--hud-blue);
-  border:1px solid var(--hud-line);
-  padding:3px 6px;
-  margin-left:8px;
-  vertical-align:middle
-}
 .hud-tools,.hud-actions {
   display:flex;
   gap:7px;
