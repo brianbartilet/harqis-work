@@ -108,6 +108,8 @@
 }
 .hud-widget-header h2 {
   font:800 11px ui-monospace,Consolas,monospace;
+  /* Consolas maps 700 and 800 to the same face; add visible emphasis. */
+  -webkit-text-stroke:.25px currentColor;
   letter-spacing:.035em;
   text-transform:uppercase;
   flex:1;
