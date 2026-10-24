@@ -408,3 +408,17 @@ def test_enrichment_propagates_batches_entities_sources_and_dates(corpus, monkey
     updated = entities.graph(source='meetings', since='2026-09-02')
     assert {n['label'] for n in updated['nodes']} == {'Project update','Python','meetings','2026-09-02'}
     assert len(updated['edges']) == 3
+
+
+@pytest.mark.parametrize('source', ['entities-audit', 'entity-consolidation'])
+def test_audit_sources_skip_model_fallback_and_legacy_mentions(corpus, monkeypatch, source):
+    audit = entry('audit', text='org/repo#123', source=source)
+    corpus[:] = [audit]
+    monkeypatch.setattr(entities, 'extract_batch', lambda _: pytest.fail('audit must never reach the model'))
+    assert entities.enrich()['processed'] == 0
+    assert entities.explicit_mentions(audit) == []
+    store = get_store()
+    store.save('audit', entities.entry_hash(audit),
+               [entities.mention(audit, 'people', 'Alex', 'Alex', 'model')])
+    assert entities.projection()[0]['mentions'] == []
+    assert entities.graph()['entries'] == 1  # Audit remains visible as an activity.

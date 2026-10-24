@@ -9,6 +9,7 @@ from urllib.parse import quote
 from modules.hfl_corpus.entity_source import collect_entries
 from workflows.hfl.entity_store import VERSION, digest, get_store
 from workflows.hfl import entity_types
+from workflows.hfl.entity_events import EXCLUDED_SOURCES
 
 
 KINDS = {'people', 'companies', 'tools', 'topics', 'objects'}
@@ -40,6 +41,8 @@ def is_link(label):
 
 
 def explicit_mentions(entry):
+    if entry['source'] in EXCLUDED_SOURCES:
+        return []
     body = entry['text']
     items = []
     # Qualified repository references provide a stable namespace; bare #123 does not.
@@ -92,7 +95,7 @@ def enrich(*, entry_id=None, use_model=True, batch_size=8):
     requested_types = store.state('entity-types-backfill')
     extraction_types = entity_types.revision()
     accepted_versions = {VERSION} if use_model else {VERSION, VERSION + '-explicit'}
-    pending = [e for e in current if e['source'] not in {'entities-audit', 'entity-consolidation'} and (not entry_id or e['id'] == entry_id) and
+    pending = [e for e in current if e['source'] not in EXCLUDED_SOURCES and (not entry_id or e['id'] == entry_id) and
                (records.get(e['id'], {}).get('hash') != entry_hash(e) or
                 records.get(e['id'], {}).get('version') not in accepted_versions or
                 (use_model and requested_types and records.get(e['id'], {}).get('types_revision') != requested_types))]
@@ -151,6 +154,8 @@ def projection(source='', since='', until='', context='', resolve_mentions=True,
         cached = cache.get(entry['id'], {})
         valid = cached.get('hash') == entry_hash(entry) and cached.get('version') in {VERSION, VERSION + '-explicit'}
         mentions = cached['mentions'] if valid else explicit_mentions(entry)
+        if entry['source'] in EXCLUDED_SOURCES:
+            mentions = []  # Ignore legacy automatic extraction; keep explicit owner links below.
         mentions = [m for m in mentions if not is_link(m['label']) and not is_link(m.get('external_id') or '')]
         mentions = list(mentions)
         for link in links_by_entry.get(entry['id'], []):

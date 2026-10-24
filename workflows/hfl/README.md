@@ -837,6 +837,10 @@ clear already queued work; that requires a deliberate, backed-up queue cleanup.
 Member detach follows the same policy: it invalidates assignments to changed
 identities for correctness, but never queues the entire corpus. Opt-in historical
 reassessment is limited to activities depending on those identities.
+`entities-audit` and `entity-consolidation` entries remain in activity history,
+but their persistence does not schedule enrichment. Model extraction, explicit
+reference parsing, and legacy cached automatic mentions exclude these sources;
+owner-created activity links remain available.
 Initial runs inspect existing entities and suggestions; later runs use changed
 entity snapshots. Exact aliases and partial hints are editable and retain their
 user/LLM/merged-name provenance. Activity counts rank candidates and names without

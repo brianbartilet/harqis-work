@@ -7,6 +7,7 @@ from workflows.hfl.entity_store import get_store
 
 log = logging.getLogger(__name__)
 TASK = 'workflows.knowledge.tasks.connected_hfl.refresh_corpus_entities'
+EXCLUDED_SOURCES = frozenset({'entities-audit', 'entity-consolidation'})
 
 
 def request_enrichment(entry_id='*'):

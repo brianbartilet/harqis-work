@@ -381,10 +381,11 @@ def _persist_envelope_locked(
         synthesized=envelope.synthesized,
         doc_id=envelope.es_doc_id or indexed_entry.entry_id,
     )
-    from workflows.hfl.entity_events import notify_change
+    from workflows.hfl.entity_events import EXCLUDED_SOURCES, notify_change
     # Also notify on recovery/deduplication: Markdown may have succeeded before
     # a previous Elasticsearch attempt failed. Hash checks make this idempotent.
-    notify_change(entry.entry_id)
+    if indexed_entry.source not in EXCLUDED_SOURCES:
+        notify_change(entry.entry_id)
     return {
         "entry_id": entry.entry_id,
         "path": str(day_file),

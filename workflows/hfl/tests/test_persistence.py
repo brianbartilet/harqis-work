@@ -230,3 +230,20 @@ def test_flush_forwards_and_removes_outbox_after_broker_acceptance(tmp_path, mon
     assert result == {"found": 1, "delivered": 1, "failed": 0, "invalid": 0}
     assert dispatched == [envelope.entry.entry_id]
     assert not tuple(tmp_path.glob("*.json"))
+
+
+def test_audit_persistence_does_not_schedule_entity_identification(tmp_path, monkeypatch):
+    from workflows.hfl import entity_events
+    notified, indexed = [], []
+    monkeypatch.setattr(entity_events, 'notify_change', lambda identity: notified.append(identity))
+    monkeypatch.setattr('workflows.hfl.es_store.index_hfl_entry',
+        lambda entry, **kwargs: indexed.append(entry) or kwargs['doc_id'])
+    for source in ('entities-audit', 'entity-consolidation', 'notes'):
+        envelope = persistence.make_envelope(_entry(source), source=source, machine='harqis-server')
+        persistence.persist_envelope(envelope, corpus_dir=tmp_path)
+        persistence.persist_envelope(envelope, corpus_dir=tmp_path)
+        if source != 'notes':
+            assert notified == []
+    assert len(indexed) == 6
+    assert len(notified) == 2
+    assert 'entities-audit' in (tmp_path / '2026-07-19.md').read_text(encoding='utf-8')
