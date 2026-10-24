@@ -539,3 +539,12 @@
   .hud-workspace-controls { width:100%; }
   .hud-workspace-controls .workspace-menu-panel { width:288px; max-width:calc(100vw - 24px); }
 }
+
+#hud-hotkeys-dialog .context-icon-button {
+  padding:9px;
+  border:0;
+  border-radius:8px;
+  background:transparent;
+  color:#94a3b8;
+}
+#hud-hotkeys-dialog .context-icon-button:hover { background:#1e293b; color:#7dd3fc; }

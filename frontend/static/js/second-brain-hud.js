@@ -187,7 +187,19 @@
   $('hud-widget-space-picker').addEventListener('keydown',event=>{if(event.key==='Escape'&&event.currentTarget.open){event.preventDefault();event.stopPropagation();event.currentTarget.open=false;event.currentTarget.querySelector('summary').focus();}});
   $('hud-settings').addEventListener('toggle',event=>{if(event.newState==='closed')settingsAnchor?.setAttribute('aria-expanded','false');});
   window.addEventListener('resize',positionSettings);document.addEventListener('scroll',positionSettings,true);
-  $('hud-hotkeys').onclick=()=>$('hud-hotkeys-dialog').showModal();$('hud-add-hotkeys').onclick=()=>{if(!state)return;add('hud.hud_utils.show_ahk_bindings');$('hud-hotkeys-dialog').close();};
+  const hotkeysDialog=$('hud-hotkeys-dialog');
+  $('hud-hotkeys').onclick=()=>hotkeysDialog.showModal();
+  document.addEventListener('keydown',event=>{
+    if(event.defaultPrevented||event.repeat||event.isComposing||event.ctrlKey||event.altKey||event.metaKey||event.shiftKey)return;
+    if(event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],.xterm'))return;
+    const key=event.key.toLowerCase(),dialog=document.querySelector('dialog[open]');
+    if(dialog){if(dialog===hotkeysDialog&&key==='k'){event.preventDefault();hotkeysDialog.close();}return;}
+    if(document.querySelector('[popover]:popover-open,.hud-workspace-controls details[open]'))return;
+    // Preserve native Space activation on focused buttons, links and summaries.
+    if(key===' '&&event.target.closest('button,a,summary,[role="button"]'))return;
+    const id={' ':'hud-motion',a:'hud-add',b:'hud-build',k:'hud-hotkeys',f:'hud-fullscreen',r:'hud-refresh'}[key];
+    if(id){event.preventDefault();$(id).click();}
+  });
   $('hud-build').onclick=()=>$('hud-builder').showModal();
   $('hud-build-form').onsubmit=async event=>{
     event.preventDefault();if(!state)return;const form=event.currentTarget,submit=form.querySelector('button[type=submit]');submit.disabled=true;$('hud-build-status').textContent='Preparing action…';
