@@ -143,7 +143,10 @@
         if(card.dataset.animation==='typing'){
           const pre=body.querySelector('pre[data-full-text]');
           if(pre){
-            const count=Math.floor((now-motionStart)/9),text=pre.dataset.fullText.slice(0,count);
+            const fullText=pre.dataset.fullText,typingDuration=fullText.length*9;
+            // Hold the completed output for three seconds before starting over.
+            const elapsed=(now-motionStart)%(typingDuration+3000);
+            const count=Math.min(fullText.length,Math.floor(elapsed/9)),text=fullText.slice(0,count);
             if(pre.textContent!==text){
               setOutput(pre,text);
               // Follow the typing cursor once the output fills the widget viewport.
