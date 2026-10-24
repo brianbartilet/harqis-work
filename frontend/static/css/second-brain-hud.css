@@ -17,6 +17,9 @@
   flex-wrap:wrap;
   margin-bottom:14px
 }
+.hud-heading {
+  align-self:flex-start;
+}
 .hud-kicker {
   font:10px ui-monospace,Consolas,monospace;
   letter-spacing:.18em;
