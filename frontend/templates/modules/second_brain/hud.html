@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block title %}HARQIS — Second Brain HUD{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ static_asset('css/corpus-workspaces.css') }}">
+<link rel="stylesheet" href="{{ static_asset('css/second-brain-hud.css') }}">
+{% endblock %}
+{% block content %}
+<main class="hud-surface" id="hud-surface">
+  <header class="hud-toolbar">
+    <div class="hud-tools">
+      <button id="hud-add">＋ Add widget</button><button id="hud-build">Build with agent</button>
+      <button id="hud-hotkeys" class="hud-toolbar-icon" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (K)" aria-haspopup="dialog" aria-controls="hud-hotkeys-dialog"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h.01M12 9h.01M17 9h.01M7 12h.01M12 12h.01M17 12h.01M8 16h8"/></svg></button>
+      <button id="hud-fullscreen" class="hud-toolbar-icon" aria-label="Full screen" title="Full screen" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></button>
+      <button id="hud-refresh" class="hud-toolbar-icon" aria-label="Refresh" title="Refresh"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5"/></svg></button>
+      <button id="hud-motion" class="hud-toolbar-icon" aria-label="Stop widget animations" title="Stop widget animations" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6Z"/></svg></button>
+      <span id="hud-save-state" role="status" aria-live="polite"></span>
+      <div class="hud-workspace-controls">
+        <div class="activity-view-context" role="status" aria-live="polite"><span id="hud-active-spaces" class="activity-view-caption"></span><span id="hud-dynamic-badge" class="activity-dynamic-badge">Dynamic OFF</span></div>
+        {% with saved_workspaces={} %}{% include 'modules/hfl_corpus/partials/workspace_views.html' %}{% endwith %}
+      </div>
+    </div>
+  </header>
+  <p class="hud-notice" id="hud-notice" role="status" hidden></p>
+  <section class="hud-grid" id="hud-grid" aria-label="HUD widgets" aria-busy="true"></section>
+  <p id="hud-empty" hidden>No visible widgets in these Spaces. Add a widget or change its Space links.</p>
+  <dialog id="hud-catalog" class="hud-dialog"><form method="dialog" class="hud-dialog-heading"><h2>Add a widget</h2><button aria-label="Close widget catalog">✕</button></form><input id="hud-catalog-search" type="search" placeholder="Search widgets" aria-label="Search widgets"><div id="hud-catalog-items"></div></dialog>
+  <div id="hud-settings" class="hud-settings-menu" popover="auto" role="dialog" aria-label="Widget settings">
+    <form id="hud-widget-form">
+      <fieldset><legend>Size</legend><div class="hud-size-options">{% for key, label in hud_sizes.items() %}<label title="{{ label }} · {{ key }}"><input type="radio" name="size" value="{{ key }}" aria-label="{{ label }} · {{ key }}"><span class="hud-size-preview" style="--size-cols:{{ key[0] }};--size-rows:{{ key[2] }}" aria-hidden="true"></span><span>{{ key }}</span></label>{% endfor %}</div></fieldset>
+      <fieldset><legend>Motion</legend><div class="hud-motion-options">{% for value in ['static', 'marquee', 'typing'] %}<label><input type="radio" name="animation" value="{{ value }}"><span>{{ value|capitalize }}</span></label>{% endfor %}</div></fieldset>
+      <fieldset><legend>Spaces</legend><details id="hud-widget-space-picker"><summary><span id="hud-widget-space-caption">All Spaces</span></summary><div class="hud-space-options"><button type="button" id="hud-widget-spaces-clear">All Spaces</button><div id="hud-widget-spaces"></div><small>No links means visible in every Space.</small></div></details></fieldset>
+      <fieldset><legend>Header accent</legend><div class="hud-accent-options"><label title="Default"><input type="radio" name="accent" value="" aria-label="Default accent"><span class="hud-accent-default"></span></label>{% for color in hud_colors %}<label title="{{ color }}"><input type="radio" name="accent" value="{{ color }}" aria-label="Accent {{ color }}"><span style="background:{{ color }}"></span></label>{% endfor %}</div></fieldset>
+      <label id="hud-dashboard-field" hidden>Kibana dashboard share URL<input name="dashboard_url" type="url" placeholder="https://…/app/dashboards#/view/…"><small>Uses your Kibana session. Your server must allow embedding.</small></label>
+      <div class="hud-actions"><button type="button" id="hud-hide">Hide</button><button type="button" id="hud-remove">Remove</button><button type="submit">Save</button></div>
+    </form>
+  </div>
+  <dialog id="hud-builder" class="hud-dialog"><form method="dialog" class="hud-dialog-heading"><h2>Build a HUD widget</h2><button aria-label="Close widget builder">✕</button></form>
+    <p>Describe a new widget or a change. Create an action with the HUD skills and current Space links, then continue in the existing agent workspace.</p>
+    <form id="hud-build-form"><label>Widget title<input name="title" required maxlength="150" placeholder="Weekly delivery pulse"></label><label>What should it show?<textarea name="prompt" required maxlength="12000" rows="7" placeholder="Sources, information to show, update frequency, and when it should appear…"></textarea></label><button type="submit">Create action & open agent workspace</button><p id="hud-build-status" role="status"></p></form>
+  </dialog>
+  <dialog id="hud-hotkeys-dialog" class="context-help" aria-labelledby="hud-hotkeys-title">
+    <form method="dialog" class="context-help-header"><h2 id="hud-hotkeys-title">Keyboard shortcuts</h2><button class="context-icon-button" aria-label="Close keyboard shortcuts" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></form>
+    <div class="context-help-body"><h3>Page</h3><dl class="activity-hotkey-list">
+      <dt>Space</dt><dd>Toggle animations</dd>
+      <dt>A</dt><dd>Add widget</dd>
+      <dt>B</dt><dd>Build a HUD with agent</dd>
+      <dt>K</dt><dd>Keyboard shortcuts</dd>
+      <dt>F</dt><dd>Toggle full screen</dd>
+      <dt>R</dt><dd>Refresh</dd>
+    </dl></div>
+  </dialog>
+  <script type="application/json" id="hud-config">{{ {'catalog': hud_catalog, 'sizes': hud_sizes, 'csrf': hud_csrf}|tojson }}</script>
+  <script type="application/json" data-memory-csrf>{{ hud_csrf|tojson }}</script>
+</main>
+<script defer src="{{ static_asset('js/second-brain-hud-spaces.js') }}"></script>
+<script defer src="{{ static_asset('js/view-visualizer.js') }}"></script>
+<script defer src="{{ static_asset('js/second-brain-hud.js') }}"></script>
+{% endblock %}

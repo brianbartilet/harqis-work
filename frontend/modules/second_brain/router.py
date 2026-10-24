@@ -97,7 +97,7 @@ def _api_authenticated(request: Request) -> bool:
     return bool(expected and supplied and hmac.compare_digest(expected, supplied))
 
 
-@router.get("/second-brain", response_class=HTMLResponse)
+@router.get("/second-brain/feed", response_class=HTMLResponse)
 async def second_brain_page(request: Request):
     user, redirect = require_user(request)
     if redirect:

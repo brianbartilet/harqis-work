@@ -25,7 +25,7 @@ of truth.
 | `/create-action` | Record standalone or entry-linked Activity Corpus actions with instructions, dates, and supporting files without scheduling execution. |
 | `/create-data-only-from-hud` | Add a host-safe data-only fallback twin for an existing Windows HUD task. |
 | `/create-new-fork-repository` | Produce a clean client/business fork baseline while preserving the platform skeleton. |
-| `/create-new-hud` | Scaffold a Rainmeter HUD task, configuration, imports, documentation, and optional queue wiring. |
+| `/create-new-hud` | Create a portable Second Brain web HUD widget and collector; Rainmeter maintenance is legacy opt-in. |
 | `/create-new-ingest-source-hfl` | Add an HFL/Activity Corpus source with capture, distillation, Markdown, and Elasticsearch persistence. |
 | `/create-new-kanban-board` | Create a Trello board with canonical lists, labels, template card, and registration guidance. |
 | `/create-new-kanban-profile` | Scaffold an agent profile and its manual Trello/env setup checklist. |
@@ -71,7 +71,7 @@ count.
 | Add an external service | `/create-new-service-app` |
 | Add scheduled automation | `/create-new-workflow` |
 | Add tools for an existing app | `/create-new-mcp` |
-| Add a desktop widget | `/create-new-hud` |
+| Add a web HUD widget | `/create-new-hud` |
 | Add an Activity Corpus source | `/create-new-ingest-source-hfl` |
 | Review recent HFL activity | `/activity-radar` |
 | Check HFL source ingestion health | `/check-activity-corpus-sources` |

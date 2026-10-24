@@ -21,6 +21,7 @@ def _hold_path_lock(path, entered, release):
 @pytest.fixture(autouse=True)
 def windows_subprocess_compat(monkeypatch):
     """Provide the Windows subprocess surface when unit tests run elsewhere."""
+    monkeypatch.setenv('HARQIS_LEGACY_RAINMETER', '1')
     if not hasattr(bangs.subprocess, "STARTUPINFO"):
         class StartupInfo:
             def __init__(self):

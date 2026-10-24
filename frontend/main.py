@@ -68,6 +68,7 @@ from modules.manifesto.router import router as manifesto_router
 from modules.profile.router import router as profile_router
 from modules.app_settings.router import router as app_settings_router
 from modules.second_brain.router import router as second_brain_router
+from modules.second_brain.hud_router import router as second_brain_hud_router
 from modules.workflows.router import router as workflows_router
 from web import require_user as _require_auth, templates
 
@@ -288,6 +289,7 @@ app.include_router(spaces_router)
 app.include_router(profile_router)
 app.include_router(app_settings_router)
 app.include_router(second_brain_router)
+app.include_router(second_brain_hud_router)
 
 
 # ── Security headers ──────────────────────────────────────────────────────────

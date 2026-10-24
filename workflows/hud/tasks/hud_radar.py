@@ -8,6 +8,7 @@ feed/HFL consumers, but it is no longer appended to the visible dump.
 """
 
 import os
+import sys
 
 from core.apps.sprout.app.celery import SPROUT
 from core.apps.es_logging.app.elasticsearch import log_result
@@ -39,8 +40,8 @@ _RADAR_HUD_FOLDER = "DAILYRADAR"
 
 def _radar_dump_path() -> str:
     return os.path.join(
-        RAINMETER_CONFIG["write_skin_to_path"],
-        RAINMETER_CONFIG["skin_name"],
+        RAINMETER_CONFIG.get("write_skin_to_path", ""),
+        RAINMETER_CONFIG.get("skin_name", "harqis"),
         _RADAR_HUD_FOLDER,
         "dump.txt",
     )
@@ -112,12 +113,12 @@ def show_daily_radar(ini=ConfigHelperRainmeter(), **kwargs):
     own_dump_path = _radar_dump_path()
 
     desktop_dump_path = os.path.join(
-        RAINMETER_CONFIG["write_skin_to_path"],
-        RAINMETER_CONFIG["skin_name"],
+        RAINMETER_CONFIG.get("write_skin_to_path", ""),
+        RAINMETER_CONFIG.get("skin_name", "harqis"),
         _DESKTOP_LOGS_HUD_FOLDER,
         "dump.txt",
     )
-    result = collect_daily_radar(desktop_dump_path=desktop_dump_path, **kwargs)
+    result = collect_daily_radar(desktop_dump_path=desktop_dump_path if sys.platform == "win32" else None, **kwargs)
     briefing = result["text"]
     snapshot = load_snapshot(kwargs.get("snapshot_path"))
     # Preserve the established synthesis-only feed contract used by HFL and

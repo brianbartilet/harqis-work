@@ -22,6 +22,15 @@ from apps.google_apps.references.constants import ScheduleCategory
 from workflows.second_brain.hud_projection import capture_hud_projection
 
 
+def _write_schedule_mapping(text: str) -> Path:
+    """Keep the legacy export, tolerating a Docker-created mount directory."""
+    output_path = Path.cwd() / "workflows.mapping"
+    if output_path.is_dir():
+        output_path = output_path / "workflows.mapping"
+    output_path.write_text(text, encoding="utf-8")
+    return output_path
+
+
 @SPROUT.task()
 @log_result()
 @capture_hud_projection()
@@ -57,7 +66,6 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
         lines.append("}")
         return "\n".join(lines)
 
-    output_path = Path(os.path.join(os.getcwd(), "workflows.mapping"))
 
     blocks_formatted = []
     for block in workflow_mapping:
@@ -66,7 +74,7 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
 
     text = "\n".join(blocks_formatted).rstrip() + "\n"
 
-    output_path.write_text(text, encoding="utf-8")
+    output_path = _write_schedule_mapping(text)
 
     #  endregion
 
@@ -107,7 +115,7 @@ def get_failed_jobs(ini=ConfigHelperRainmeter()):
     ini['meterLink']['tooltiptext'] = kibana_url
     ini['meterLink']['W'] = '100'
 
-    mapping_file = os.path.join(os.getcwd(), "workflows.mapping")
+    mapping_file = str(output_path)
     ini['meterLink_schedule']['Meter'] = 'String'
     ini['meterLink_schedule']['MeterStyle'] = 'sItemLink'
     ini['meterLink_schedule']['X'] = '(46*#Scale#)'
@@ -204,10 +212,9 @@ def get_schedules(ini=ConfigHelperRainmeter(), **kwargs):
         WORKFLOW_PURCHASES,
     ]
     # save to repo for some other use cases
-    output_path = Path(os.path.join(os.getcwd(), "workflows.mapping"))
     # Use pprint to make it readable
     text = pprint.pformat(workflow_mapping, indent=4, width=120)
-    output_path.write_text(text, encoding="utf-8")
+    output_path = _write_schedule_mapping(text)
 
     # region Set links
     meta = get_decorator_attrs(get_schedules, prefix='')
