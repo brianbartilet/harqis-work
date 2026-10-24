@@ -96,7 +96,7 @@
 }
 .hud-widget-header {
   display:flex;
-  gap:2px;
+  gap:0;
   align-items:center;
   padding:8px 10px;
   background:#0f172a;
@@ -116,9 +116,9 @@
 .hud-surface .hud-widget-header button {
   display:grid;
   place-items:center;
-  flex:0 0 22px;
-  width:22px;
-  height:24px;
+  flex:0 0 18px;
+  width:18px;
+  height:20px;
   padding:0;
   background:transparent;
   border:0;
