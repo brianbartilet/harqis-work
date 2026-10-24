@@ -234,11 +234,18 @@
   const hotkeysDialog=$('hud-hotkeys-dialog');
   $('hud-hotkeys').onclick=()=>hotkeysDialog.showModal();
   document.addEventListener('keydown',event=>{
-    if(event.defaultPrevented||event.repeat||event.isComposing||event.ctrlKey||event.altKey||event.metaKey||event.shiftKey)return;
+    if(event.defaultPrevented||event.repeat||event.isComposing||event.ctrlKey||event.metaKey||event.shiftKey)return;
     if(event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],.xterm'))return;
     const key=event.key.toLowerCase(),dialog=document.querySelector('dialog[open]');
     if(dialog){if(dialog===hotkeysDialog&&key==='k'){event.preventDefault();hotkeysDialog.close();}return;}
     if(document.querySelector('[popover]:popover-open,.hud-workspace-controls details[open]'))return;
+    if(event.altKey){
+      if(key==='`'||event.code==='Backquote'||/^[1-9]$/.test(key)){
+        event.preventDefault();window.HudSpaces.select(key==='`'||event.code==='Backquote'?0:Number(key));
+      }
+      return;
+    }
+    if(key==='n'){event.preventDefault();window.HudSpaces.toggleDynamic();return;}
     // Preserve native Space activation on focused buttons, links and summaries.
     if(key===' '&&event.target.closest('button,a,summary,[role="button"]'))return;
     const id={' ':'hud-motion',a:'hud-add',b:'hud-build',k:'hud-hotkeys',f:'hud-fullscreen',r:'hud-refresh'}[key];

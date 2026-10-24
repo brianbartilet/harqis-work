@@ -34,7 +34,11 @@
     // Keep the open menu's revision so concurrent changes cannot overwrite one another.
     if(menu.open&&current)return;
     current=data;indicators();resetDraft();
-  }};
+  },select(index){
+    if(!current||busy||index>current.views.length)return;
+    resetDraft();
+    return save({manual:index?[current.views[index-1].id]:[],dynamic:false});
+  },toggleDynamic(){if(current&&!busy&&!toggle.disabled)toggle.click();}};
   async function save(changes){
     if(!current||busy)return;busy=true;status.textContent='Saving…';toggle.disabled=true;
     choices.querySelectorAll('input').forEach(el=>el.disabled=true);
