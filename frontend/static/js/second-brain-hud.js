@@ -51,6 +51,15 @@
     if(!ids.length)target.textContent='All Spaces';
   }
   function closeSettings() { $('hud-settings').hidePopover(); }
+  function orderText(text) {
+    // Compact legacy padded rows too; stored snapshots may predate the collector layout.
+    return text.split('\n').map(line=>{
+      const row=line.match(/^(\s*[WUBRGCLMX]\s+\d+\s+[FN]\s+\d+\s+)(.+?)\s{2,}([•*]*\d+)\s+(\d+(?:\.\d+)?)\s*$/);
+      if(!row)return line;
+      const name=row[2].length>44?row[2].slice(0,41)+'...':row[2];
+      return row[1]+name.padEnd(44)+' '+row[3].padStart(8)+' '+Number(row[4]).toFixed(2).padStart(6)+'  ';
+    }).join('\n');
+  }
   function desktopLogText(text) {
     // Legacy snapshots wrap prose at 65 columns. Preserve paragraph and entry boundaries.
     const lines=text.replace(/\r\n/g,'\n').split('\n'),out=[];
@@ -72,7 +81,7 @@
   function output(w,text) {
     const pre=el('pre',null,'hud-output');
     if(w.operation==='hud.hud_calendar.show_calendar_information')pre.classList.add('hud-calendar-output');
-    if(w.operation==='hud.hud_tcg.show_tcg_orders')pre.classList.add('hud-orders-output');
+    if(w.operation==='hud.hud_tcg.show_tcg_orders'){pre.classList.add('hud-orders-output');text=orderText(text);}
     if(w.operation==='hud.hud_gpt.get_desktop_logs'){pre.classList.add('hud-desktop-output');text=desktopLogText(text);}
     setOutput(pre,text);return pre;
   }
