@@ -120,7 +120,7 @@
     $('hud-empty').hidden=!!widgets.length;grid.setAttribute('aria-busy','false');lastLayout=JSON.stringify(state.layout.widgets);lastData=dataKey();lastActive=JSON.stringify(state.spaces.active);
     motionStart=performance.now();
   }
-  let motionStart=performance.now(),lastTick=0,motionPlaying=false;
+  let motionStart=performance.now(),lastTick=0,motionPlaying=true;
   $('hud-motion').onclick=()=>{
     motionPlaying=!motionPlaying;motionStart=performance.now();
     const control=$('hud-motion'),label=motionPlaying?'Stop widget animations':'Play widget animations';
