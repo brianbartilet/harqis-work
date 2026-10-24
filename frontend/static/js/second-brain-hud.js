@@ -5,6 +5,7 @@
   let state, settingsId, saving = false, pendingSaves = 0, saveGeneration = 0, loading = false, moving = false, serial = Promise.resolve(), motionFrame;
   let lastData = '', lastLayout = '', lastActive = '', builderKey = crypto.randomUUID();
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  const typingMsPerCharacter = 15;
   function el(tag, text, cls) { const node = document.createElement(tag); if (text != null) node.textContent = text; if (cls) node.className = cls; return node; }
   function button(text, fn, label) { const b=el('button',text); b.type='button'; if(label)b.setAttribute('aria-label',label); b.addEventListener('click',fn);return b; }
   function notice(message) { $('hud-notice').textContent=message; $('hud-notice').hidden=!message; }
@@ -164,10 +165,10 @@
         if(card.dataset.animation==='typing'){
           const pre=body.querySelector('pre[data-full-text]');
           if(pre){
-            const fullText=pre.dataset.fullText,typingDuration=fullText.length*9;
+            const fullText=pre.dataset.fullText,typingDuration=fullText.length*typingMsPerCharacter;
             // Hold the completed output for three seconds before starting over.
             const elapsed=(now-motionStart)%(typingDuration+3000);
-            const count=Math.min(fullText.length,Math.floor(elapsed/9)),text=fullText.slice(0,count);
+            const count=Math.min(fullText.length,Math.floor(elapsed/typingMsPerCharacter)),text=fullText.slice(0,count);
             if(pre.textContent!==text){
               setOutput(pre,text);
               // Follow the typing cursor once the output fills the widget viewport.
@@ -185,6 +186,18 @@
       const existing=state.layout.widgets.filter(w=>w.operation===item.operation_id),active=existing.find(w=>!w.hidden),hidden=existing.find(w=>w.hidden);
       const row=el('div',null,'hud-catalog-row'),text=el('div');
       text.append(el('strong',item.label),el('small',active?'Already added'+(visible(active)?'':' · in another Space'):hidden?'Hidden · restore to your dashboard':item.schedules.length?'Scheduled collector · '+item.schedules.length+' schedule(s)':item.source_task?'On-demand source':'Built-in view'));
+      const heading=el('div',null,'hud-catalog-heading'),pills=el('span',null,'hud-catalog-spaces');
+      pills.setAttribute('aria-label','Assigned workspaces');
+      const assigned=(active||hidden)?.workspace_ids||[];
+      for(const id of assigned){
+        const space=state.spaces.views.find(view=>view.id===id);
+        if(!space)continue;
+        const pill=el('span',null,'hud-space-pill'),dot=el('span',null,'hud-space-dot');
+        dot.style.backgroundColor=space.color;
+        pill.append(dot,document.createTextNode(space.name));pills.append(pill);
+      }
+      if(!pills.children.length)pills.append(el('span','All Spaces','hud-space-pill'));
+      heading.append(text.firstChild,pills);text.prepend(heading);
       row.append(text);
       if(active){const added=button('Added',()=>{});added.disabled=true;row.classList.add('hud-catalog-added');row.append(added);}
       else if(hidden){row.append(button('Restore',()=>{hidden.hidden=false;changed();$('hud-catalog').close();}));}
