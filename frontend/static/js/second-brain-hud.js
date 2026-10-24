@@ -4,7 +4,6 @@
   const config = JSON.parse($('hud-config').textContent), catalog = new Map(config.catalog.map(x => [x.operation_id, x]));
   let state, settingsId, saving = false, pendingSaves = 0, saveGeneration = 0, loading = false, moving = false, serial = Promise.resolve(), motionFrame;
   let lastData = '', lastLayout = '', lastActive = '', builderKey = crypto.randomUUID();
-  let spaceDraft;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   function el(tag, text, cls) { const node = document.createElement(tag); if (text != null) node.textContent = text; if (cls) node.className = cls; return node; }
   function button(text, fn, label) { const b=el('button',text); b.type='button'; if(label)b.setAttribute('aria-label',label); b.addEventListener('click',fn);return b; }
@@ -20,14 +19,7 @@
   function visible(w) {return !w.hidden&&(!w.workspace_ids.length||w.workspace_ids.some(id=>state.spaces.active.includes(id)));}
   function dataKey(){const display=items=>items.map(({title,summary,details,source_at,status,links})=>({title,summary,details,source_at,status,links}));return JSON.stringify([Object.entries(state.items).map(([id,items])=>[id,display(items)]),display(state.context),state.kibana_url]);}
   function sized(card,size) {const [c,r]=size.split('x').map(Number);card.style.setProperty('--cols',c);card.style.setProperty('--rows',r);}
-  function renderSpaces() {
-    const spaces=state.spaces, names=spaces.active.map(id=>spaces.views.find(v=>v.id===id)?.name).filter(Boolean);
-    $('hud-space-caption').textContent=names.join(', ')||(spaces.preferences.dynamic?'No scheduled Space':'All');
-    if(!$('hud-spaces').open){
-      $('hud-dynamic').checked=spaces.preferences.dynamic;
-      renderChecks($('hud-space-list'),spaces.preferences.manual);
-    }
-  }
+  function renderSpaces() { window.HudSpaces.update(state.spaces); }
   function renderChecks(target,selected) {
     target.replaceChildren();
     if(!state.spaces.views.length)target.append(el('p','Create a Space in Activity Corpus to link widgets.'));
@@ -163,6 +155,7 @@
     }catch(e){notice(e.message);}finally{loading=false;}
   }
   $('hud-refresh').onclick=refresh;
+  document.addEventListener('hud:spaces-changed',refresh);
   $('hud-add').onclick=()=>{if(!state)return;catalogRows();$('hud-catalog').showModal();};$('hud-catalog-search').oninput=catalogRows;
   $('hud-fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await root.requestFullscreen();}catch{notice('Full screen is unavailable in this browser.');}};
   document.addEventListener('fullscreenchange',()=>{const control=$('hud-fullscreen'),active=!!document.fullscreenElement,label=active?'Exit full screen':'Full screen';control.title=label;control.setAttribute('aria-label',label);control.setAttribute('aria-pressed',String(active));control.querySelector('path').setAttribute('d',active?'M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5':'M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5');rowHeight();});
@@ -175,8 +168,6 @@
   $('hud-widget-space-picker').addEventListener('keydown',event=>{if(event.key==='Escape'&&event.currentTarget.open){event.preventDefault();event.stopPropagation();event.currentTarget.open=false;event.currentTarget.querySelector('summary').focus();}});
   $('hud-settings').addEventListener('toggle',event=>{if(event.newState==='closed')settingsAnchor?.setAttribute('aria-expanded','false');});
   window.addEventListener('resize',positionSettings);document.addEventListener('scroll',positionSettings,true);
-  $('hud-spaces').addEventListener('toggle',()=>{if($('hud-spaces').open&&state){spaceDraft=structuredClone(state.spaces.preferences);renderChecks($('hud-space-list'),spaceDraft.manual);$('hud-dynamic').checked=spaceDraft.dynamic;}});
-  $('hud-spaces-apply').onclick=async()=>{if(!state)return;try{await api('/hfl-corpus/view-preferences',{...(spaceDraft||state.spaces.preferences),manual:selectedChecks($('hud-space-list')),dynamic:$('hud-dynamic').checked},'PUT');$('hud-spaces').open=false;try{localStorage.setItem('corpus:workspace-change',Date.now());}catch{}await refresh();}catch(e){notice(e.message);}};
   $('hud-hotkeys').onclick=()=>$('hud-hotkeys-dialog').showModal();$('hud-add-hotkeys').onclick=()=>{if(!state)return;add('hud.hud_utils.show_ahk_bindings');$('hud-hotkeys-dialog').close();};
   $('hud-build').onclick=()=>$('hud-builder').showModal();
   $('hud-build-form').onsubmit=async event=>{
@@ -187,7 +178,6 @@
     }catch(e){$('hud-build-status').textContent=e.message;submit.disabled=false;}
   };
   new Sortable(grid,{handle:'.hud-drag',forceFallback:true,animation:reduced.matches?0:150,ghostClass:'hud-sort-ghost',onStart(){moving=true;},onEnd(event){moving=false;const ids=[...grid.children].map(c=>c.dataset.id),visibleSet=new Set(ids),ordered=ids.map(id=>state.layout.widgets.find(w=>w.id===id));state.layout.widgets=state.layout.widgets.map(w=>visibleSet.has(w.id)?ordered.shift():w);changed();}});
-  document.addEventListener('click',event=>{if(!$('hud-spaces').contains(event.target))$('hud-spaces').open=false;});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});window.addEventListener('storage',event=>{if(event.key==='corpus:workspace-change')refresh();});
   new ResizeObserver(rowHeight).observe(root.querySelector('.hud-toolbar'));window.addEventListener('resize',rowHeight);rowHeight();
   const timer=setInterval(()=>{if(!document.hidden)refresh();},30000);motionFrame=requestAnimationFrame(motion);refresh();

@@ -513,3 +513,27 @@
 #hud-dashboard-field input { box-sizing:border-box; width:100%; margin:5px 0; padding:6px; border:1px solid #365367; border-radius:4px; background:#0a151e; color:#d5e7f1; }
 #hud-dashboard-field small { color:#94adbd; font-size:10px; }
 .hud-widget-menu-button { display:grid; place-items:center; }
+
+/* The same Space menu and status badges used by Activity Kanban. */
+.hud-tools { width:100%; }
+.hud-workspace-controls { display:flex; align-items:center; justify-content:flex-end; gap:10px; margin-left:auto; min-width:0; }
+.hud-workspace-controls .activity-view-context { display:flex; align-items:center; flex-wrap:wrap; justify-content:flex-end; gap:8px; min-width:0; }
+#hud-active-spaces { display:flex; flex-wrap:wrap; gap:4px; }
+.hud-workspace-controls .workspace-menu-panel { max-height:calc(100dvh - 100px); overflow:auto; }
+.hud-workspace-controls .workspace-label-row { justify-content:space-between; }
+.hud-workspace-controls .workspace-help-button { min-width:24px; min-height:24px; padding:0; }
+.hud-workspace-controls .workspace-dynamic-row > button { padding:4px; border:0; background:transparent; color:#7dd3fc; text-decoration:underline; }
+.hud-workspace-controls .workspace-dynamic-toggle { display:flex; align-items:center; }
+.hud-workspace-controls .workspace-share-actions { display:grid; gap:10px; margin-top:16px; }
+.hud-workspace-controls .workspace-share-actions button { min-height:36px; background:#1e293b; color:#bfdbfe; border:1px solid #334155; border-radius:6px; font-weight:600; }
+.hud-workspace-controls .workspace-share-actions [data-corpus-share-generate] { background:#2563eb; color:#fff; }
+.hud-workspace-controls [data-workspace-status]:empty,.hud-workspace-controls [data-adaptive-status]:empty { display:none; }
+.hud-workspace-controls .workspace-menu-panel [data-workspace-help-open] { border:0; background:transparent; }
+.hud-workspace-controls .workspace-view-options label { font-size:12px; }
+.hud-workspace-controls .workspace-view-options .hud-space-dot { flex-shrink:0; margin:0; }
+.hud-workspace-controls .workspace-view-options button { width:100%; text-align:left; }
+.hud-workspace-controls [data-view-picker] > summary { padding-right:32px; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='m5 7 5 5 5-5' fill='none' stroke='%2338bdf8' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-size:20px; }
+@media(max-width:639px) {
+  .hud-workspace-controls { width:100%; }
+  .hud-workspace-controls .workspace-menu-panel { width:288px; max-width:calc(100vw - 24px); }
+}
