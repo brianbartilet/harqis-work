@@ -21,6 +21,7 @@ from core.apps.es_logging.app.elasticsearch import log_result
 from apps.desktop.helpers.feed import feed
 from workflows.hud.fallback import fallback_gate
 from workflows.hud.collectors.daily_radar import collect_daily_radar
+from workflows.second_brain.hud_projection import capture_hud_projection
 
 logger = logging.getLogger("harqis-hud.data_only")
 
@@ -36,6 +37,7 @@ _STALENESS__DAILY_RADAR = 12 * 3600 + 600   # 43800s
 @SPROUT.task(name="workflows.hud.tasks.hud_data_only.show_daily_radar_data_only")
 @fallback_gate("workflows.hud.tasks.hud_radar.show_daily_radar", _STALENESS__DAILY_RADAR)
 @log_result()
+@capture_hud_projection(source_task="workflows.hud.tasks.hud_radar.show_daily_radar")
 @feed(filename_prefix="hud-data-only")
 def show_daily_radar_data_only(**kwargs):
     """Data-only fallback twin of show_daily_radar.

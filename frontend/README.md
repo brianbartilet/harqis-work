@@ -18,7 +18,7 @@ The frontend currently exposes nine modules:
 | Activity Corpus | `/hfl-corpus` | Browses and searches HARQIS activity logs, based on the Homework for Life reflection practice, and their references. |
 | Social | `/sharing` | Builds reviewed, immutable Activity Corpus snapshots and temporary guest portals. |
 | Git Forks | `/git-forks` | Maps fork drift and launches guarded synchronization, regression, and isolated deployment operations. |
-| Second Brain | `/second-brain` | Shows a ranked context-aware advisory feed, manual mode overrides, and opt-in presentation settings. |
+| Second Brain | `/second-brain` | Persistent Space-aware HUD dashboard with fixed sizes, drag/reorder, motion, monitoring and agent handoff; feed and category controls at `/second-brain/feed`. |
 
 `/dashboard` remains as a compatibility redirect to `/home`.
 

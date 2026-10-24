@@ -22,7 +22,7 @@ advisory operation attached to those categories.
 **Runtime:** `hybrid` — Hermes may propose modes; Celery owns execution.
 **Schedule owner:** `Celery Beat`
 **Apps chained:** `apps/jira` supplies recent owner-relevant issue changes.
-Every current legacy HUD panel also publishes its successful return payload to
+Each registered HUD panel publishes its successful portable return payload to
 the dedicated `harqis-second-brain-hud` Elasticsearch projection index; 18
 explicit, code-owned read-only adapters normalize those projections without
 importing or executing Rainmeter tasks on the host.
@@ -71,3 +71,10 @@ transactional source of truth.
 Architecture, privacy controls, interfaces, operational targets, and the future
 approval-gated action plane are documented in
 [`docs/info/SECOND-BRAIN.md`](../../docs/info/SECOND-BRAIN.md).
+
+## Web HUD surface
+
+`/second-brain` now presents the persistent Space-aware dashboard. The canonical
+feed/settings remain at `/second-brain/feed`. See the [migration comparison and
+refresher](../../docs/info/SECOND-BRAIN-HUD-MIGRATION.md), including runtime ownership,
+legacy dump backfill, source limitations, monitoring and rollback.

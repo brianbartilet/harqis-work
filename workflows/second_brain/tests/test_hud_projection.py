@@ -69,6 +69,19 @@ def test__capture_hud_projection_skips_direct_calls(monkeypatch):
     assert sample_task() == {"text": "direct"}
 
 
+def test__fallback_uses_original_source_and_skips_gate_results(monkeypatch):
+    captured = []
+    monkeypatch.setattr(hud_projection, '_should_capture_projection', lambda: True)
+    monkeypatch.setattr(hud_projection, '_publish_projection', lambda source, result: captured.append(source))
+    @hud_projection.capture_hud_projection(source_task='workflows.hud.tasks.hud_radar.show_daily_radar')
+    def fallback(skipped=False):
+        return {'text': 'radar', 'skipped': skipped}
+    fallback(skipped=True)
+    assert not captured
+    fallback()
+    assert captured == ['workflows.hud.tasks.hud_radar.show_daily_radar']
+
+
 def test__capture_hud_projection_does_not_log_projection_error_details(monkeypatch):
     warnings = []
     monkeypatch.setattr(hud_projection, "_should_capture_projection", lambda: True)

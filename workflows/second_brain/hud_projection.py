@@ -1,6 +1,6 @@
 """Read-only bridge from legacy HUD results into portable Second Brain items.
 
-HUD tasks keep their existing Rainmeter behaviour.  After a successful run the
+HUD tasks retain collection with optional legacy Rainmeter rendering. After a successful run the
 ``capture_hud_projection`` decorator writes a bounded, redacted copy of the
 returned payload to Elasticsearch.  Second Brain operations only read that
 projection; they never import or execute Windows/Rainmeter task modules.
@@ -120,23 +120,25 @@ def _should_capture_projection() -> bool:
         return False
 
 
-def capture_hud_projection() -> Callable:
+def capture_hud_projection(*, source_task: str | None = None) -> Callable:
     """Publish a successful HUD return value without affecting HUD execution."""
 
     def decorator(func: Callable) -> Callable:
-        source_task = f"{func.__module__}.{func.__qualname__}"
+        source = source_task or f"{func.__module__}.{func.__qualname__}"
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             result = func(*args, **kwargs)
+            if isinstance(result, Mapping) and result.get('skipped'):
+                return result
             if not _should_capture_projection():
                 return result
             try:
-                _publish_projection(source_task, result)
+                _publish_projection(source, result)
             except Exception as exc:
                 log.warning(
                     "Second Brain HUD projection skipped for %s (%s)",
-                    source_task,
+                    source,
                     type(exc).__name__,
                 )
             return result
@@ -203,6 +205,9 @@ def _summary(payload: dict[str, Any], text: str) -> str:
     return first_line[:360] or "HUD task completed without a textual summary."
 
 
+_UNSET = object()
+
+
 def collect_hud_projection(
     *,
     source_task: str,
@@ -212,9 +217,11 @@ def collect_hud_projection(
     stale_after_minutes: int = 60,
     priority: int = 55,
     sensitivity: str = "internal",
+    projection: Any = _UNSET,
 ) -> list[FeedItem]:
     """Normalize the latest captured HUD result into one advisory feed item."""
-    projection = _load_projection(source_task)
+    if projection is _UNSET:
+        projection = _load_projection(source_task)
     now = datetime.now(timezone.utc)
     stale_after = max(5, min(10_080, int(stale_after_minutes)))
     allowed_clients = ("web", "telegram", "rainmeter", "cli")

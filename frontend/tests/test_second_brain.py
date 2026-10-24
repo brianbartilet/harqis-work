@@ -36,7 +36,7 @@ def test__second_brain_page_requires_authentication():
 
 
 def test__second_brain_page_renders_empty_guidance(authenticated_client):
-    response = authenticated_client.get("/second-brain")
+    response = authenticated_client.get("/second-brain/feed")
     assert response.status_code == 200
     assert ">Second Brain</h1>" in response.text
     assert "Your adaptive briefing" in response.text
@@ -47,7 +47,7 @@ def test__second_brain_page_renders_empty_guidance(authenticated_client):
 def test__second_brain_settings_prioritize_creation_and_offer_hud_adapters(
     authenticated_client,
 ):
-    response = authenticated_client.get("/second-brain")
+    response = authenticated_client.get("/second-brain/feed")
 
     assert response.status_code == 200
     assert response.text.index("Add category") < response.text.index("Manage categories")
@@ -64,7 +64,7 @@ def test__second_brain_settings_prioritize_creation_and_offer_hud_adapters(
 
 
 def test__second_brain_places_ticker_in_dismissible_feed_dialog(authenticated_client):
-    response = authenticated_client.get("/second-brain")
+    response = authenticated_client.get("/second-brain/feed")
     assert response.status_code == 200
     toggle_at = response.text.index('id="brain-automatic-toggle"')
     controls_at = response.text.index('data-controls-panel')
@@ -110,7 +110,7 @@ def test__second_brain_cards_expand_complete_content_in_a_scrollable_panel(authe
         )
     )
 
-    response = authenticated_client.get("/second-brain")
+    response = authenticated_client.get("/second-brain/feed")
 
     assert response.status_code == 200
     assert 'data-card-toggle aria-expanded="false"' in response.text
@@ -158,7 +158,7 @@ def test__automatic_toggle_repairs_an_unavailable_category(authenticated_client,
     assert response.status_code == 200
     payload = authenticated_client.get("/second-brain/api/feed").json()
     assert payload["override"]["modes"] == ["default"]
-    page = authenticated_client.get("/second-brain")
+    page = authenticated_client.get("/second-brain/feed")
     assert 'data-mode-id="notes"' not in page.text
 
 

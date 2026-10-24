@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block title %}HARQIS — Second Brain HUD{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ static_asset('css/second-brain-hud.css') }}">
+{% endblock %}
+{% block content %}
+<main class="hud-surface" id="hud-surface">
+  <header class="hud-toolbar">
+    <div class="hud-heading"><span class="hud-kicker">HARQIS / CONTEXT DESK</span><h1>Second Brain <span>HUD</span></h1></div>
+    <div class="hud-tools">
+      <details class="hud-spaces" id="hud-spaces"><summary>Spaces <span id="hud-space-caption">Loading…</span></summary>
+        <div class="hud-popover"><label><input type="checkbox" id="hud-dynamic"> Dynamic mode</label><p>Follow scheduled Spaces across HUD, Kanban and Activity Corpus.</p><div id="hud-space-list"></div><button id="hud-spaces-apply">Apply selection</button><a href="/hfl-corpus">Manage Spaces</a></div>
+      </details>
+      <button id="hud-add">＋ Add widget</button><button id="hud-build">Build with agent</button>
+      <button id="hud-edit" aria-pressed="false">Arrange</button><button id="hud-hotkeys">Hotkeys</button>
+      <button id="hud-fullscreen">Full screen</button><a href="/second-brain/feed">Feed & settings</a>
+    </div>
+  </header>
+  <div class="hud-statusbar"><span id="hud-context-status">Connecting to your context…</span><span id="hud-save-state" role="status" aria-live="polite"></span><button id="hud-refresh">Refresh</button></div>
+  <p class="hud-notice" id="hud-notice" role="status" hidden></p>
+  <section class="hud-grid" id="hud-grid" aria-label="HUD widgets" aria-busy="true"></section>
+  <p id="hud-empty" hidden>No visible widgets in these Spaces. Add a widget or change its Space links.</p>
+  <dialog id="hud-catalog" class="hud-dialog"><form method="dialog" class="hud-dialog-heading"><h2>Add a widget</h2><button aria-label="Close widget catalog">✕</button></form><input id="hud-catalog-search" type="search" placeholder="Search widgets" aria-label="Search widgets"><div id="hud-catalog-items"></div></dialog>
+  <dialog id="hud-settings" class="hud-dialog"><form method="dialog" class="hud-dialog-heading"><h2 id="hud-settings-title">Widget settings</h2><button aria-label="Close widget settings">✕</button></form>
+    <form id="hud-widget-form"><label>Size<select name="size">{% for key, label in hud_sizes.items() %}<option value="{{ key }}">{{ label }} · {{ key }}</option>{% endfor %}</select></label>
+      <label>Motion<select name="animation"><option value="static">Static / manual scroll</option><option value="marquee">Marquee</option><option value="typing">Typing</option></select></label>
+      <fieldset><legend>Linked Spaces</legend><p>No links means visible in every Space.</p><div id="hud-widget-spaces"></div></fieldset>
+      <label id="hud-dashboard-field" hidden>Kibana dashboard share URL<input name="dashboard_url" type="url" placeholder="https://…/app/dashboards#/view/…"><small>Uses your Kibana session. Your server must allow embedding.</small></label>
+      <div class="hud-actions"><button type="submit">Save widget</button><button type="button" id="hud-hide">Hide</button><button type="button" id="hud-remove">Remove</button></div>
+    </form>
+  </dialog>
+  <dialog id="hud-builder" class="hud-dialog"><form method="dialog" class="hud-dialog-heading"><h2>Build a HUD widget</h2><button aria-label="Close widget builder">✕</button></form>
+    <p>Describe a new widget or a change. Create an action with the HUD skills and current Space links, then continue in the existing agent workspace.</p>
+    <form id="hud-build-form"><label>Widget title<input name="title" required maxlength="150" placeholder="Weekly delivery pulse"></label><label>What should it show?<textarea name="prompt" required maxlength="12000" rows="7" placeholder="Sources, information to show, update frequency, and when it should appear…"></textarea></label><button type="submit">Create action & open agent workspace</button><p id="hud-build-status" role="status"></p></form>
+  </dialog>
+  <dialog id="hud-hotkeys-dialog" class="hud-dialog"><form method="dialog" class="hud-dialog-heading"><h2>Hotkeys</h2><button aria-label="Close hotkeys">✕</button></form><p>A home for shared shortcuts. More bindings can be added here.</p><dl><dt>Escape</dt><dd>Close a dialog or leave full screen</dd><dt>Tab / Enter</dt><dd>Navigate and activate controls</dd><dt>Arrange → Earlier / Later</dt><dd>Reorder widgets with the keyboard</dd></dl><button id="hud-add-hotkeys">Add desktop bindings widget</button></dialog>
+  <script type="application/json" id="hud-config">{{ {'catalog': hud_catalog, 'sizes': hud_sizes, 'csrf': hud_csrf}|tojson }}</script>
+  <script type="application/json" data-memory-csrf>{{ hud_csrf|tojson }}</script>
+</main>
+<script defer src="{{ static_asset('js/second-brain-hud.js') }}"></script>
+{% endblock %}

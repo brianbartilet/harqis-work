@@ -93,7 +93,7 @@ HARQIS-Work includes a reasoning-model agent layer that goes beyond scheduled ta
 | **App integration** — REST API wrapper with CLI-first and compatible MCP adapters | `/create-new-service-app <name> [<openapi_url>]` |
 | **Workflow / scheduled task** — Celery RPA chaining apps with cron + queue routing | `/create-new-workflow [<category>] <description_or_diagram>` |
 | **Visual workflow outside Celery** — n8n flows for branching automations or vendor connectors not in `apps/` | `/create-new-n8n-workflow <description_or_diagram>` |
-| **HUD widget** — Rainmeter desktop display fed by an app or workflow | `/create-new-hud <title> <description_or_screenshot>` |
+| **HUD widget** — portable Second Brain dashboard widget fed by an app or workflow | `/create-new-hud <title> <description_or_screenshot>` |
 | **HUD fallback twin** — keep a HUD task's `@feed`/ES logs flowing on the always-on host when the Windows box is offline | `/create-data-only-from-hud <task_fn>` |
 | **Fork fleet governance** — inspect drift, cherry-pick changes, test, deploy, and publish reviewed PRs across harqis-work forks | `/manage-fork-fleet` |
 | **Fork feature shipping** — preflight a SHA/range/PR across all managed forks, then test and publish an explicitly approved rollout | `/ship-feature-to-forks` |
@@ -369,6 +369,10 @@ def show_calendar_information(**kwargs):
 ---
 
 ## Desktop HUD
+
+The primary HUD surface is now the authenticated **Second Brain web dashboard** at `/second-brain`. It supports persistent layouts, Space-aware visibility, eight snap sizes, mobile stacking, motion, monitoring and agent-assisted creation. See the [migration review and Second Brain refresher](docs/info/SECOND-BRAIN-HUD-MIGRATION.md) and [complete source inventory](docs/info/HUD-SOURCE-INVENTORY.md).
+
+Rainmeter rendering is deprecated and opt-in (`HARQIS_LEGACY_RAINMETER=1`). Existing source tasks and dumps continue; the desktop behavior described below applies when legacy rendering is enabled.
 
 HARQIS drives a live desktop heads-up display using [Rainmeter](https://www.rainmeter.net/) on Windows. Celery tasks in `workflows/hud/` push data from connected services into Rainmeter skin files.
 

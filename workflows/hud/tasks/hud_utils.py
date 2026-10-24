@@ -163,7 +163,7 @@ def show_hud_profiles(ini=ConfigHelperRainmeter()):
     # endregion
 
     return {
-        "text": "",
+        "text": "Legacy desktop layouts: home, office, custom.\nUse Spaces and Arrange in the web HUD to organize widgets.",
         "summary": "3 layout(s) available: home, office, custom",
         "metrics": {
             "profiles": [profile_base, profile_office, profile_custom],
@@ -234,8 +234,16 @@ def show_mouse_bindings(ini=ConfigHelperRainmeter(), **kwargs):
 
     ini['Variables']['TextFile'] = '#CURRENTPATH#dump-{0}.txt'.format(profile)
 
+    profile_dump = (Path(RAINMETER_CONFIG['write_skin_to_path']) / RAINMETER_CONFIG['skin_name']
+                    / str(HUD_NAME_MOUSE_BINDINGS).replace(' ', '').upper() / f'dump-{profile}.txt')
+    if profile_dump.is_file():
+        with profile_dump.open(encoding='utf-8', errors='replace') as stream:
+            binding_text = stream.read(12_000)
+    else:
+        binding_text = 'No binding summary captured for this profile. Run the existing binding summary workflow.'
+
     return {
-        "text": "SUCCESS",
+        "text": f'Profile: {profile}\n{binding_text}',
         "summary": "active app '{0}' → profile '{1}'".format(active_window_app, profile),
         "metrics": {
             "active_app": active_window_app,
@@ -382,7 +390,7 @@ def show_ai_helper(ini=ConfigHelperRainmeter(), **kwargs):
     # endregion
 
     return {
-        "text": "",
+        "text": "Agent shortcuts\nUse Build with agent in the web HUD for skill-driven widget creation.\nExisting voice/chat clients remain available through their own applications.",
         "summary": "n8n at {0} · 3 agent shortcut(s) wired".format(base_url),
         "metrics": {
             "n8n_base_url": base_url,
@@ -445,7 +453,7 @@ def show_ahk_bindings(ini=ConfigHelperRainmeter(), **kwargs):
     ini['Variables']['TextFile'] = '#CURRENTPATH#dump-ahk.txt'
 
     return {
-        "text": "SUCCESS",
+        "text": '\n'.join(lines) or 'No AHK bindings found.',
         "summary": "{0} AHK binding(s) parsed".format(len(bindings)),
         "metrics": {
             "binding_count": len(bindings),

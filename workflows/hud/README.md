@@ -2,18 +2,18 @@
 
 ## Description
 
-- Displays real-time data on a Windows desktop HUD via Rainmeter widgets.
+- Supplies the portable Second Brain web HUD at `/second-brain`; Rainmeter rendering is deprecated and opt-in (`HARQIS_LEGACY_RAINMETER=1`).
 - Aggregates data from Google Calendar, OANDA forex, TCG Marketplace, YNAB budgets, AppSheet (PC INVOICE table), and Elasticsearch logs.
-- 15 scheduled Celery tasks push data to the desktop feed at various intervals.
+- 21 enabled schedule entries cover display collectors and support jobs; see the [source audit](../../docs/info/HUD-SOURCE-INVENTORY.md).
 - Tasks use the decorator chain: `@SPROUT.task` → `@log_result` → `@init_meter` → `@feed`.
 - Current HUD panels also include `@capture_hud_projection` immediately before
   `@init_meter`. Successful return payloads are redacted and capped before being
   projected to Elasticsearch for read-only Second Brain adapters; projection
-  failure never interrupts Rainmeter rendering.
+  failure never interrupts collection. The full dump text and safe header links survive in the portable return payload.
 
 ## Queues
 
-Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for `workflows.hud.tasks.*`). One exception: `take_screenshots_for_gpt_capture` is pinned to `peon` via an explicit `options.queue` override in the beat entry. All HUD tasks carry `options.os = ["windows"]` since they write Rainmeter `.ini` files and use Win32 APIs.
+Most tasks run on the `hud` queue (auto-routed via `SPROUT.conf.task_routes` for `workflows.hud.tasks.*`). One exception: `take_screenshots_for_gpt_capture` is pinned to `peon` via an explicit `options.queue` override in the beat entry. Existing Windows queue/OS routing is retained for compatibility and Win32 collectors. Web-mode execution no longer writes Rainmeter skins; moving API-backed schedules to other hosts is a separate deployment choice.
 
 **Data-only fallback twins** (`workflows.hud.tasks.hud_data_only.*`) are the exception to the Windows pinning: they run on the always-on host's `host` queue (a more-specific route declared above the `hud` catch-all in `workflows/config.py`) so a HUD task's `@feed` dump + `@log_result` ES record survive while the Windows box is offline. See [Data-only fallback (host)](#data-only-fallback-host) below.
 

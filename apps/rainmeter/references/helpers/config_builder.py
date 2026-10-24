@@ -135,6 +135,8 @@ def init_meter(
                     notes_text = raw
                 if not isinstance(notes_text, str):
                     notes_text = str(notes_text)
+                # Portable projections must carry the output, not only a local path.
+                extra_fields['text'] = notes_text
                 rendered_notes = _coerce_text_encoding(
                     notes_text,
                     encoding=notes_encoding,
@@ -230,6 +232,36 @@ def init_meter(
 
         @functools.wraps(func)
         def inner(*args, **kwargs):
+            # Deprecated desktop renderer is opt-in. Keep collection and @feed
+            # running while avoiding skin writes, calendar visibility and bangs.
+            legacy = kwargs.pop('render_legacy_hud', None)
+            if legacy is None:
+                legacy = os.environ.get('HARQIS_LEGACY_RAINMETER', '').lower() in {'1', 'true', 'yes'}
+            if not legacy:
+                cfg = ConfigHelperRainmeter(template_config_file=str(
+                    Path(__file__).resolve().parents[2] / 'static' / template_name))
+                cfg.read_template_configuration()
+                for section, values in (new_sections_dict or {}).items():
+                    if not cfg.has_section(section):
+                        cfg.add_section(section)
+                    for key, value in values.items():
+                        cfg.set(section, key, value)
+                raw = func(ini=cfg, *args, **kwargs)
+                result = dict(raw) if isinstance(raw, dict) else {'text': str(raw or '')}
+                result.update(hud=hud_item_name, renderer='web')
+                # Only web links survive; Rainmeter commands/local paths never do.
+                import re
+                links = dict(result.get('links') or {})
+                for section in cfg.sections():
+                    if not section.lower().startswith('meterlink'):
+                        continue
+                    action = cfg.get(section, 'leftmouseupaction', fallback='', raw=True)
+                    match = re.search(r'https?://[^"\s\]]+', action)
+                    if match:
+                        label = cfg.get(section, 'text', fallback='Source', raw=True).strip('|')
+                        links[label] = match.group(0)
+                result['links'] = links
+                return result
             with _path_lock(ini_path, timeout=0) as acquired:
                 if not acquired:
                     log.warning(

@@ -47,8 +47,8 @@ MODULES: tuple[ModuleDefinition, ...] = (
         key="second_brain",
         label="Second Brain",
         route="/second-brain",
-        description="A context-aware feed of what matters now.",
-        detail="Blend automatic signals with temporary manual modes, then trace every advisory item to its source and freshness.",
+        description="A Space-aware HUD of what matters now.",
+        detail="Arrange live source widgets, follow shared Spaces, and trace the advisory context feed to its source and freshness.",
     ),
     ModuleDefinition(
         key="files", label="Organize", route="/files",
