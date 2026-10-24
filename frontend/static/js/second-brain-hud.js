@@ -91,7 +91,6 @@
     }
     const item=items[0],health=el('span','','hud-health');health.dataset.state=item?.status||'awaiting_source';footer.append(health,el('span',item?.status?.replaceAll('_',' ')||'No captures'));
     if(item?.source_at){const t=el('time',new Date(item.source_at).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}));t.dateTime=item.source_at;t.title=item.source_at;footer.append(t);}
-    if(w.animation!=='static'){const pause=button('Pause',()=>{card.classList.toggle('hud-motion-paused');pause.textContent=card.classList.contains('hud-motion-paused')?'Resume':'Pause';},'Pause or resume widget motion');footer.append(pause);}
   }
   function resize(handle,card,w) {
     handle.addEventListener('pointerdown',event=>{
@@ -121,16 +120,23 @@
     $('hud-empty').hidden=!!widgets.length;grid.setAttribute('aria-busy','false');lastLayout=JSON.stringify(state.layout.widgets);lastData=dataKey();lastActive=JSON.stringify(state.spaces.active);
     motionStart=performance.now();
   }
-  let motionStart=performance.now(),lastTick=0;
+  let motionStart=performance.now(),lastTick=0,motionPlaying=false;
+  $('hud-motion').onclick=()=>{
+    motionPlaying=!motionPlaying;motionStart=performance.now();
+    const control=$('hud-motion'),label=motionPlaying?'Stop widget animations':'Play widget animations';
+    control.title=label;control.setAttribute('aria-label',label);control.setAttribute('aria-pressed',String(motionPlaying));
+    control.querySelector('path').setAttribute('d',motionPlaying?'M6 6h12v12H6Z':'m8 5 11 7-11 7Z');
+    if(!motionPlaying)grid.querySelectorAll('pre[data-full-text]').forEach(pre=>setOutput(pre,pre.dataset.fullText));
+  };
   reduced.addEventListener('change',()=>{if(reduced.matches)grid.querySelectorAll('pre[data-full-text]').forEach(pre=>{setOutput(pre,pre.dataset.fullText);});else motionStart=performance.now();});
   function motion(now){
     if(now-lastTick>90){
       // Recheck here as well as on change: some embedded/browser contexts do
       // not deliver MediaQueryList change events during a live preference swap.
-      if(matchMedia('(prefers-reduced-motion: reduce)').matches){
+      if(!motionPlaying||matchMedia('(prefers-reduced-motion: reduce)').matches){
         grid.querySelectorAll('pre[data-full-text]').forEach(pre=>{if(pre.textContent!==pre.dataset.fullText)setOutput(pre,pre.dataset.fullText);});
       }else{
-      grid.querySelectorAll('.hud-widget:not(.hud-motion-paused)').forEach(card=>{
+      grid.querySelectorAll('.hud-widget').forEach(card=>{
         if(card.matches(':hover,:focus-within'))return;
         const body=card.querySelector('.hud-widget-body');
         if(card.dataset.animation==='marquee'&&body.scrollHeight>body.clientHeight){body.scrollTop+=.65;if(body.scrollTop>=body.scrollHeight-body.clientHeight)body.scrollTop=0;}

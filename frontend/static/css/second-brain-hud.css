@@ -424,9 +424,6 @@
 .hud-widget-body:has(iframe) {
   padding:0
 }
-.hud-motion-paused .hud-output {
-  animation-play-state:paused
-}
 .hud-widget[hidden],.hud-surface [hidden] {
   display:none!important
 }
