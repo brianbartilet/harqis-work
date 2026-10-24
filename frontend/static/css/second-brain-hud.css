@@ -404,13 +404,15 @@
   width:min(620px,calc(100vw - 24px));
   max-height:72dvh;
   padding:16px;
-  background:#0f172a;
+  background:#0b1221;
+  color:#e2e8f0;
   border-color:#334155;
-  border-radius:12px;
+  border-radius:16px;
 }
-#hud-catalog .hud-dialog-heading { margin-bottom:10px; }
+#hud-catalog::backdrop { background:rgba(2,6,23,.8); backdrop-filter:none; }
+#hud-catalog .hud-dialog-heading { margin:-16px -16px 14px; padding:16px; border-bottom:1px solid #1e293b; background:#0b1221; }
 #hud-catalog .hud-dialog-heading h2 { font-size:18px; }
-#hud-catalog-search { margin-top:0; padding:7px 9px; font-size:13px; }
+#hud-catalog-search { margin-top:0; padding:7px 9px; font-size:13px; background:#0b1728; border-color:#334155; color:#e2e8f0; }
 #hud-catalog-items { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:12px; }
 #hud-catalog .hud-catalog-row {
   display:flex;
@@ -419,10 +421,13 @@
   justify-content:flex-end;
   gap:8px;
   padding:12px;
-  border:1px solid #334155;
+  border:1px solid #243448;
   border-radius:8px;
-  background:#111e31;
+  background:#0b1728;
 }
+#hud-catalog button { background:#0f172a; border-color:#334155; border-radius:8px; color:#cbd5e1; }
+#hud-catalog button:hover { background:#1e293b; border-color:#38bdf8; color:#e0f2fe; }
+#hud-catalog .hud-catalog-row small { color:#94a3b8; }
 #hud-catalog .hud-catalog-row>div { flex:1 0 100%; }
 #hud-catalog-items>p { grid-column:1 / -1; }
 #hud-catalog .hud-catalog-row button { padding:5px 8px; font-size:11px; }
