@@ -59,11 +59,18 @@
     if(!ids.length)target.textContent='All Spaces';
   }
   function closeSettings() { $('hud-settings').hidePopover(); }
-  function widgetText(w,text) {
-    // Legacy calendar dumps use fixed-width dividers that wrap in narrow cards.
-    return w.operation==='hud.hud_calendar.show_calendar_information'
-      ? text.replace(/^[\t ]*={3,}[\t ]*\r?$/gm,'').replace(/\n{3,}/g,'\n\n').trim()
-      : text;
+  function setOutput(pre,text) {
+    if(!pre.classList.contains('hud-calendar-output')){pre.textContent=text;return;}
+    // Keep legacy dividers, but clip each to the available width without wrapping.
+    pre.replaceChildren();
+    text.split(/(^[\t ]*=+[\t ]*\r?$)/gm).forEach(part=>{
+      pre.append(/^[\t ]*=+[\t ]*\r?$/.test(part)?el('span',part,'hud-calendar-divider'):document.createTextNode(part));
+    });
+  }
+  function output(w,text) {
+    const pre=el('pre',null,'hud-output');
+    if(w.operation==='hud.hud_calendar.show_calendar_information')pre.classList.add('hud-calendar-output');
+    setOutput(pre,text);return pre;
   }
   function settings(w,anchor) {
     const menu=$('hud-settings');if(menu.matches(':popover-open')){closeSettings();if(settingsId===w.id)return;}
@@ -85,9 +92,9 @@
     const items=w.operation==='context'?state.context:(state.items[w.operation]||[]);
     if(!items.length){const p=el('p',null,'hud-placeholder');p.append(el('strong','Waiting for context'),document.createTextNode('No captured items yet. Feed & settings shows collection status and category controls.'));body.append(p);}
     for(const item of items){
-      if(w.operation==='context'||items.length>1){const section=el('details',null,'hud-context-card');section.append(el('summary',item.title),el('p',item.summary));if(item.details)section.append(el('pre',widgetText(w,item.details),'hud-output'));body.append(section);}
+      if(w.operation==='context'||items.length>1){const section=el('details',null,'hud-context-card');section.append(el('summary',item.title),el('p',item.summary));if(item.details)section.append(output(w,item.details));body.append(section);}
       else if(item.status==='awaiting_source'){const p=el('p',null,'hud-placeholder');p.append(el('strong','Waiting for the first capture'),document.createTextNode('This source has not published a result yet. Its existing workflow will supply this widget on the next successful run.'));body.append(p);}
-      else {const pre=el('pre',widgetText(w,item.details||item.summary||'No output.'),'hud-output');pre.dataset.fullText=pre.textContent;body.append(pre);}
+      else {const pre=output(w,item.details||item.summary||'No output.');pre.dataset.fullText=pre.textContent;body.append(pre);}
       for(const [name,raw] of Object.entries(item.links||{})){const url=safeLink(raw);if(url)links.append(link(name.toUpperCase(),url));}
     }
     const item=items[0],health=el('span','','hud-health');health.dataset.state=item?.status||'awaiting_source';footer.append(health,el('span',item?.status?.replaceAll('_',' ')||'No captures'));
@@ -123,19 +130,19 @@
     motionStart=performance.now();
   }
   let motionStart=performance.now(),lastTick=0;
-  reduced.addEventListener('change',()=>{if(reduced.matches)grid.querySelectorAll('pre[data-full-text]').forEach(pre=>{pre.textContent=pre.dataset.fullText;});else motionStart=performance.now();});
+  reduced.addEventListener('change',()=>{if(reduced.matches)grid.querySelectorAll('pre[data-full-text]').forEach(pre=>{setOutput(pre,pre.dataset.fullText);});else motionStart=performance.now();});
   function motion(now){
     if(now-lastTick>90){
       // Recheck here as well as on change: some embedded/browser contexts do
       // not deliver MediaQueryList change events during a live preference swap.
       if(matchMedia('(prefers-reduced-motion: reduce)').matches){
-        grid.querySelectorAll('pre[data-full-text]').forEach(pre=>{if(pre.textContent!==pre.dataset.fullText)pre.textContent=pre.dataset.fullText;});
+        grid.querySelectorAll('pre[data-full-text]').forEach(pre=>{if(pre.textContent!==pre.dataset.fullText)setOutput(pre,pre.dataset.fullText);});
       }else{
       grid.querySelectorAll('.hud-widget:not(.hud-motion-paused)').forEach(card=>{
         if(card.matches(':hover,:focus-within'))return;
         const body=card.querySelector('.hud-widget-body');
         if(card.dataset.animation==='marquee'&&body.scrollHeight>body.clientHeight){body.scrollTop+=.65;if(body.scrollTop>=body.scrollHeight-body.clientHeight)body.scrollTop=0;}
-        if(card.dataset.animation==='typing'){const pre=body.querySelector('pre[data-full-text]');if(pre){const count=Math.floor((now-motionStart)/9);pre.textContent=pre.dataset.fullText.slice(0,count);}}
+        if(card.dataset.animation==='typing'){const pre=body.querySelector('pre[data-full-text]');if(pre){const count=Math.floor((now-motionStart)/9),text=pre.dataset.fullText.slice(0,count);if(pre.textContent!==text)setOutput(pre,text);}}
       });
       }lastTick=now;
     }motionFrame=requestAnimationFrame(motion);

@@ -177,6 +177,13 @@
   tab-size:4;
   margin:0
 }
+.hud-calendar-divider {
+  display:inline-block;
+  max-width:100%;
+  overflow:hidden;
+  white-space:pre;
+  vertical-align:bottom;
+}
 .hud-placeholder {
   font:12px/1.7 ui-monospace,monospace;
   color:#92aab7
