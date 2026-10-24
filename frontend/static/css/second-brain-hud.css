@@ -6,7 +6,7 @@
   padding:18px 22px 28px;
   color:var(--hud-text);
   min-height:calc(100dvh - 64px);
-  background:radial-gradient(ellipse at 20% 0%,#12292d80,transparent 65%),#091217;
+  background:var(--color-slate-950,#020617);
   font-family:inherit
 }
 .hud-toolbar {
