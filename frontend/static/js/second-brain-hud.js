@@ -59,6 +59,12 @@
     if(!ids.length)target.textContent='All Spaces';
   }
   function closeSettings() { $('hud-settings').hidePopover(); }
+  function widgetText(w,text) {
+    // Legacy calendar dumps use fixed-width dividers that wrap in narrow cards.
+    return w.operation==='hud.hud_calendar.show_calendar_information'
+      ? text.replace(/^[\t ]*={3,}[\t ]*\r?$/gm,'').replace(/\n{3,}/g,'\n\n').trim()
+      : text;
+  }
   function settings(w,anchor) {
     const menu=$('hud-settings');if(menu.matches(':popover-open')){closeSettings();if(settingsId===w.id)return;}
     settingsId=w.id;settingsAnchor=anchor;const form=$('hud-widget-form');
@@ -79,9 +85,9 @@
     const items=w.operation==='context'?state.context:(state.items[w.operation]||[]);
     if(!items.length){const p=el('p',null,'hud-placeholder');p.append(el('strong','Waiting for context'),document.createTextNode('No captured items yet. Feed & settings shows collection status and category controls.'));body.append(p);}
     for(const item of items){
-      if(w.operation==='context'||items.length>1){const section=el('details',null,'hud-context-card');section.append(el('summary',item.title),el('p',item.summary));if(item.details)section.append(el('pre',item.details,'hud-output'));body.append(section);}
+      if(w.operation==='context'||items.length>1){const section=el('details',null,'hud-context-card');section.append(el('summary',item.title),el('p',item.summary));if(item.details)section.append(el('pre',widgetText(w,item.details),'hud-output'));body.append(section);}
       else if(item.status==='awaiting_source'){const p=el('p',null,'hud-placeholder');p.append(el('strong','Waiting for the first capture'),document.createTextNode('This source has not published a result yet. Its existing workflow will supply this widget on the next successful run.'));body.append(p);}
-      else {const pre=el('pre',item.details||item.summary||'No output.','hud-output');pre.dataset.fullText=pre.textContent;body.append(pre);}
+      else {const pre=el('pre',widgetText(w,item.details||item.summary||'No output.'),'hud-output');pre.dataset.fullText=pre.textContent;body.append(pre);}
       for(const [name,raw] of Object.entries(item.links||{})){const url=safeLink(raw);if(url)links.append(link(name.toUpperCase(),url));}
     }
     const item=items[0],health=el('span','','hud-health');health.dataset.state=item?.status||'awaiting_source';footer.append(health,el('span',item?.status?.replaceAll('_',' ')||'No captures'));
