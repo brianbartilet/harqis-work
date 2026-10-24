@@ -161,16 +161,26 @@
   }
   function catalogRows(){
     const target=$('hud-catalog-items'),q=$('hud-catalog-search').value.toLowerCase();target.replaceChildren();
-    for(const item of config.catalog.filter(x=>x.label.toLowerCase().includes(q))){const row=el('div',null,'hud-catalog-row'),text=el('div');text.append(el('strong',item.label),el('small',item.schedules.length?'Scheduled collector · '+item.schedules.length+' schedule(s)':item.source_task?'On-demand source':'Built-in view'));row.append(text,button('Add',()=>add(item.operation_id)));for(const w of state.layout.widgets.filter(w=>w.operation===item.operation_id&&w.hidden))row.append(button('Restore',()=>{w.hidden=false;changed();$('hud-catalog').close();}));target.append(row);}
+    for(const item of config.catalog.filter(x=>x.label.toLowerCase().includes(q))){
+      const existing=state.layout.widgets.filter(w=>w.operation===item.operation_id),active=existing.find(w=>!w.hidden),hidden=existing.find(w=>w.hidden);
+      const row=el('div',null,'hud-catalog-row'),text=el('div');
+      text.append(el('strong',item.label),el('small',active?'Already added'+(visible(active)?'':' · in another Space'):hidden?'Hidden · restore to your dashboard':item.schedules.length?'Scheduled collector · '+item.schedules.length+' schedule(s)':item.source_task?'On-demand source':'Built-in view'));
+      row.append(text);
+      if(active){const added=button('Added',()=>{});added.disabled=true;row.classList.add('hud-catalog-added');row.append(added);}
+      else if(hidden){row.append(button('Restore',()=>{hidden.hidden=false;changed();$('hud-catalog').close();}));}
+      else row.append(button('Add',()=>add(item.operation_id)));
+      target.append(row);
+    }
     if(!target.children.length)target.append(el('p','No widgets match this search.'));
   }
-  function add(operation){state.layout.widgets.push({id:crypto.randomUUID(),operation,size:'2x2',hidden:false,animation:'static',workspace_ids:[...state.spaces.active],dashboard_url:''});changed();$('hud-catalog').close();}
+  function add(operation){if(state.layout.widgets.some(w=>w.operation===operation)){catalogRows();return;}state.layout.widgets.push({id:crypto.randomUUID(),operation,size:'2x2',hidden:false,animation:'static',workspace_ids:[...state.spaces.active],dashboard_url:''});changed();$('hud-catalog').close();}
   async function refresh(){
     if(loading||moving||saving)return;loading=true;
     try {const fresh=await api('/second-brain/hud/data');if(moving||saving)return;
       if(state&&$('hud-settings').matches(':popover-open'))return;
       state=fresh;renderSpaces();
       if(lastLayout!==JSON.stringify(state.layout.widgets)||lastData!==dataKey()||lastActive!==JSON.stringify(state.spaces.active))render();
+      if($('hud-catalog').open)catalogRows();
       notice(state.source_error);
     }catch(e){notice(e.message);}finally{loading=false;}
   }
