@@ -19,7 +19,7 @@ async def page(request: Request):
         return redirect
     return templates.TemplateResponse(request, 'modules/second_brain/hud.html', page_context(
         request, user, 'second_brain', hud_catalog=hud.inventory(), hud_sizes=hud.SIZES,
-        hud_csrf=make_csrf_token(user)))
+        hud_csrf=make_csrf_token(user), hud_colors=hud.PIN_COLORS))
 
 
 @router.get('/second-brain/hud/data')

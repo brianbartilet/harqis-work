@@ -24,6 +24,19 @@ def headers():
     return {'X-CSRF-Token': make_csrf_token('frontend-test-user')}
 
 
+def test_accent_palette_persists_and_rejects_unknown_colors(authenticated_client):
+    payload = hud.defaults()
+    payload['widgets'][0]['accent'] = hud.PIN_COLORS[0]
+    saved = authenticated_client.put('/second-brain/hud/layout', json=payload, headers=headers())
+    assert saved.status_code == 200
+    assert hud.layout()['widgets'][0]['accent'] == hud.PIN_COLORS[0]
+    payload = saved.json()
+    payload['widgets'][0]['accent'] = 'url(https://example.test)'
+    assert authenticated_client.put('/second-brain/hud/layout', json=payload, headers=headers()).status_code == 422
+    payload['widgets'][0]['accent'] = ''
+    assert authenticated_client.put('/second-brain/hud/layout', json=payload, headers=headers()).status_code == 200
+
+
 def test_hud_requires_owner_and_csrf(authenticated_client):
     from main import app
     with TestClient(app) as anonymous:

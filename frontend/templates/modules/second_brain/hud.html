@@ -21,14 +21,16 @@
   <section class="hud-grid" id="hud-grid" aria-label="HUD widgets" aria-busy="true"></section>
   <p id="hud-empty" hidden>No visible widgets in these Spaces. Add a widget or change its Space links.</p>
   <dialog id="hud-catalog" class="hud-dialog"><form method="dialog" class="hud-dialog-heading"><h2>Add a widget</h2><button aria-label="Close widget catalog">✕</button></form><input id="hud-catalog-search" type="search" placeholder="Search widgets" aria-label="Search widgets"><div id="hud-catalog-items"></div></dialog>
-  <dialog id="hud-settings" class="hud-dialog"><form method="dialog" class="hud-dialog-heading"><h2 id="hud-settings-title">Widget settings</h2><button aria-label="Close widget settings">✕</button></form>
-    <form id="hud-widget-form"><label>Size<select name="size">{% for key, label in hud_sizes.items() %}<option value="{{ key }}">{{ label }} · {{ key }}</option>{% endfor %}</select></label>
-      <label>Motion<select name="animation"><option value="static">Static / manual scroll</option><option value="marquee">Marquee</option><option value="typing">Typing</option></select></label>
-      <fieldset><legend>Linked Spaces</legend><p>No links means visible in every Space.</p><div id="hud-widget-spaces"></div></fieldset>
+  <div id="hud-settings" class="hud-settings-menu" popover="auto" role="dialog" aria-label="Widget settings">
+    <form id="hud-widget-form">
+      <fieldset><legend>Size</legend><div class="hud-size-options">{% for key, label in hud_sizes.items() %}<label title="{{ label }} · {{ key }}"><input type="radio" name="size" value="{{ key }}" aria-label="{{ label }} · {{ key }}"><span class="hud-size-preview" style="--size-cols:{{ key[0] }};--size-rows:{{ key[2] }}" aria-hidden="true"></span><span>{{ key }}</span></label>{% endfor %}</div></fieldset>
+      <fieldset><legend>Motion</legend><div class="hud-motion-options">{% for value in ['static', 'marquee', 'typing'] %}<label><input type="radio" name="animation" value="{{ value }}"><span>{{ value|capitalize }}</span></label>{% endfor %}</div></fieldset>
+      <fieldset><legend>Spaces</legend><details id="hud-widget-space-picker"><summary><span id="hud-widget-space-caption">All Spaces</span></summary><div class="hud-space-options"><button type="button" id="hud-widget-spaces-clear">All Spaces</button><div id="hud-widget-spaces"></div><small>No links means visible in every Space.</small></div></details></fieldset>
+      <fieldset><legend>Header accent</legend><div class="hud-accent-options"><label title="Default"><input type="radio" name="accent" value="" aria-label="Default accent"><span class="hud-accent-default"></span></label>{% for color in hud_colors %}<label title="{{ color }}"><input type="radio" name="accent" value="{{ color }}" aria-label="Accent {{ color }}"><span style="background:{{ color }}"></span></label>{% endfor %}</div></fieldset>
       <label id="hud-dashboard-field" hidden>Kibana dashboard share URL<input name="dashboard_url" type="url" placeholder="https://…/app/dashboards#/view/…"><small>Uses your Kibana session. Your server must allow embedding.</small></label>
       <div class="hud-actions"><button type="submit">Save widget</button><button type="button" id="hud-hide">Hide</button><button type="button" id="hud-remove">Remove</button></div>
     </form>
-  </dialog>
+  </div>
   <dialog id="hud-builder" class="hud-dialog"><form method="dialog" class="hud-dialog-heading"><h2>Build a HUD widget</h2><button aria-label="Close widget builder">✕</button></form>
     <p>Describe a new widget or a change. Create an action with the HUD skills and current Space links, then continue in the existing agent workspace.</p>
     <form id="hud-build-form"><label>Widget title<input name="title" required maxlength="150" placeholder="Weekly delivery pulse"></label><label>What should it show?<textarea name="prompt" required maxlength="12000" rows="7" placeholder="Sources, information to show, update frequency, and when it should appear…"></textarea></label><button type="submit">Create action & open agent workspace</button><p id="hud-build-status" role="status"></p></form>

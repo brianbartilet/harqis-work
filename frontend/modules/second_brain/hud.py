@@ -15,6 +15,7 @@ from modules.hfl_corpus.graph_views import connection
 from modules.hfl_corpus import workspace_views
 from modules.second_brain.service import snapshot
 from workflows.second_brain.registry import OPERATIONS
+from workflows.hfl.colors import PIN_COLORS
 
 SIZES = {'1x1': 'Small square', '1x2': 'One column medium', '1x4': 'One column tall',
          '2x1': 'Two column short', '2x2': 'Two column square', '2x4': 'Two column tall',
@@ -29,11 +30,14 @@ class Widget(BaseModel):
     size: Literal['1x1', '1x2', '1x4', '2x1', '2x2', '2x4', '3x3', '3x4'] = '2x2'
     hidden: bool = False
     animation: Literal['static', 'marquee', 'typing'] = 'static'
+    accent: str = ''
     workspace_ids: list[str] = Field(default_factory=list, max_length=30)
     dashboard_url: str = Field(default='', max_length=2000)
 
     @model_validator(mode='after')
     def validate_source(self):
+        if self.accent and self.accent not in PIN_COLORS:
+            raise ValueError('Choose an available accent color.')
         if self.operation not in OPERATIONS and self.operation not in {'context', 'monitoring'}:
             raise ValueError('Choose an available widget.')
         if self.dashboard_url:
