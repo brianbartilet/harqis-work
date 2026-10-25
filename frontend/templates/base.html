@@ -207,24 +207,7 @@
 
       <nav aria-label="Primary navigation"
            class="hidden lg:flex items-center gap-1 rounded-lg bg-slate-900/70 p-1 ring-1 ring-slate-800">
-        {% for module in modules | default([]) %}
-        {% if module.key == "files" %}
-        {% include "partials/files_navigation.html" %}
-        {% elif module.key == "hfl_corpus" %}
-        {% include "partials/activity_navigation.html" %}
-        {% elif module.key == "second_brain" %}
-        {% include "partials/express_navigation.html" %}
-        {% elif module.key == "workflows" %}
-        {% include "partials/build_navigation.html" %}
-        {% elif module.key not in ['applications', 'git_forks', 'sharing'] %}
-        <a href="{{ module.route }}"
-           {% if active_module == module.key %}aria-current="page"{% endif %}
-           class="rounded-md px-3 py-1.5 text-xs font-medium transition
-                  {% if active_module == module.key %}bg-blue-950/70 text-blue-300 ring-1 ring-blue-800/60{% else %}text-slate-400 hover:bg-slate-800 hover:text-blue-200{% endif %}">
-          {{ module.label }}
-        </a>
-        {% endif %}
-        {% endfor %}
+        {% include "partials/primary_navigation.html" %}
       </nav>
 
       <div class="flex items-center gap-4">
@@ -256,24 +239,7 @@
 
     <nav aria-label="Primary navigation"
          class="site-header-mobile-nav mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 pb-2 lg:hidden">
-      {% for module in modules | default([]) %}
-      {% if module.key == "files" %}
-      {% include "partials/files_navigation.html" %}
-      {% elif module.key == "hfl_corpus" %}
-      {% include "partials/activity_navigation.html" %}
-      {% elif module.key == "second_brain" %}
-      {% include "partials/express_navigation.html" %}
-      {% elif module.key == "workflows" %}
-      {% include "partials/build_navigation.html" %}
-      {% elif module.key not in ['applications', 'git_forks', 'sharing'] %}
-      <a href="{{ module.route }}"
-         {% if active_module == module.key %}aria-current="page"{% endif %}
-         class="whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium
-                {% if active_module == module.key %}bg-blue-950/70 text-blue-300 ring-1 ring-blue-800/60{% else %}text-slate-400 bg-slate-900 hover:text-blue-200{% endif %}">
-        {{ module.label }}
-      </a>
-      {% endif %}
-      {% endfor %}
+      {% include "partials/primary_navigation.html" %}
     </nav>
     {% block subnav %}{% endblock %}
   </header>

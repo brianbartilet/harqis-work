@@ -46,10 +46,16 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
             build.press('ArrowDown')
             playwright.expect(tools.get_by_role('link', name='Integrations', exact=True)).to_be_focused()
             tools.get_by_role('link', name='Integrations', exact=True).press('Escape')
-            assert nav.get_by_role('link', name='Distill', exact=True).get_attribute('href') == '/distill'
-            toggle = nav.get_by_role('link', name='Distill', exact=True)
+            assert nav.locator('.activity-navigation > button').all_text_contents() == ['Capture', 'Organize', 'Distill', 'Express', 'Build']
+            capture = nav.get_by_role('button', name='Capture', exact=True)
+            capture.press('ArrowDown')
+            capture_menu = nav.get_by_role('navigation', name='Capture views')
+            playwright.expect(capture_menu.get_by_role('link', name='Activity Corpus')).to_be_focused()
+            assert capture_menu.get_by_role('link', name='Activity Corpus').get_attribute('href') == '/hfl-corpus'
+            capture.press('Escape')
+            toggle = nav.get_by_role('button', name='Distill', exact=True)
             menu = nav.get_by_role('navigation', name='Distill views', include_hidden=True)
-            nav.get_by_role('link', name='Distill', exact=True).hover()
+            nav.get_by_role('button', name='Distill', exact=True).hover()
             playwright.expect(menu).to_be_visible()
             menu.get_by_role('link', name='Actions Kanban').hover()
             page.wait_for_timeout(350)
@@ -59,8 +65,10 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
             toggle.focus()
             toggle.press('ArrowDown')
             playwright.expect(menu).to_be_visible()
-            playwright.expect(menu.get_by_role('link', name='Activity Corpus')).to_be_focused()
-            assert menu.get_by_role('link', name='Activity Corpus').get_attribute('href') == '/hfl-corpus'
+            playwright.expect(menu.get_by_role('link', name='Actions Kanban')).to_be_focused()
+            assert menu.get_by_role('link', name='Activity Corpus').count() == 0
+            toggle.click()
+            assert page.url == 'http://navigation.test/home'
             assert menu.get_by_role('link', name='Actions Kanban').get_attribute('href') == '/hfl-corpus/actions'
             bounds = menu.bounding_box()
             assert bounds['x'] >= 0 and bounds['x'] + bounds['width'] <= width
@@ -83,8 +91,10 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
                 bounds = header.bounding_box()
                 logo = header.get_by_role('link', name='HARQIS home').bounding_box()
                 signout = header.get_by_role('link', name='Sign out').bounding_box()
-                assert logo['x'] == (24 if width >= 1280 else 16)
-                assert width - signout['x'] - signout['width'] == pytest.approx(24 if width >= 1280 else 16, abs=1)
+                # Shared header uses max-w-7xl with responsive horizontal padding.
+                inset = max(0, (width - 1280) / 2) + (32 if width >= 1024 else 24 if width >= 640 else 16)
+                assert logo['x'] == inset
+                assert width - signout['x'] - signout['width'] == pytest.approx(inset, abs=1)
                 if width >= 1280:
                     navigation = header.locator('nav[aria-label="Primary navigation"]:visible').bounding_box()
                     assert navigation['x'] + navigation['width'] / 2 == pytest.approx(width / 2, abs=1)
@@ -116,4 +126,5 @@ def test_activity_navigation_feature_disabled(authenticated_client, monkeypatch)
     response = authenticated_client.get('/home')
     assert response.status_code == 200
     assert 'aria-label="Distill views"' not in response.text
-    assert '>Distill</a>' in response.text
+    assert 'disabled>Distill</button>' in response.text
+    assert 'aria-label="Capture views"' in response.text

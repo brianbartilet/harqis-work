@@ -1,0 +1,16 @@
+{% set module_keys = modules | default([]) | map(attribute='key') | list %}
+{% if 'hfl_corpus' in module_keys %}
+{% include "partials/capture_navigation.html" %}
+{% endif %}
+{% if 'files' in module_keys %}
+{% include "partials/files_navigation.html" %}
+{% endif %}
+{% if 'hfl_corpus' in module_keys %}
+{% include "partials/activity_navigation.html" %}
+{% endif %}
+{% if 'second_brain' in module_keys %}
+{% include "partials/express_navigation.html" %}
+{% endif %}
+{% if 'workflows' in module_keys %}
+{% include "partials/build_navigation.html" %}
+{% endif %}

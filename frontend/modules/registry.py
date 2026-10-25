@@ -24,10 +24,10 @@ MODULES: tuple[ModuleDefinition, ...] = (
     ),
     ModuleDefinition(
         key="hfl_corpus",
-        label="Distill",
-        route="/distill",
-        description="Turn lived activity into useful knowledge and deliberate action.",
-        detail="Review the Activity Corpus, connect ideas in the Graph, and move work forward in Kanban.",
+        label="Capture",
+        route="/hfl-corpus",
+        description="Preserve moments and source evidence.",
+        detail="Review and capture activity from all your sources in the Activity Corpus.",
     ),
     ModuleDefinition(
         key="sharing",

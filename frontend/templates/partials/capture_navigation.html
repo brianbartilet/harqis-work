@@ -1,0 +1,9 @@
+<div class="activity-navigation{% if active_module == 'hfl_corpus' and request.url.path not in ['/hfl-corpus/actions', '/hfl-corpus/graph', '/hfl-corpus/entities'] %} is-active{% endif %}">
+  <button type="button" aria-haspopup="true" aria-expanded="false">Capture</button>
+  <details class="activity-navigation-menu">
+    <summary hidden>Capture navigation</summary>
+    <nav class="activity-navigation-options" aria-label="Capture views">
+      <a href="/hfl-corpus" {% if request.url.path == '/hfl-corpus' %}aria-current="page"{% endif %}>Activity Corpus</a>
+    </nav>
+  </details>
+</div>

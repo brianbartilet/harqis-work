@@ -1,10 +1,9 @@
-<div class="activity-navigation{% if active_module == 'hfl_corpus' %} is-active{% endif %}">
-  <a href="{{ module.route }}" {% if request.url.path == '/distill' %}aria-current="page"{% endif %}>Distill</a>
+<div class="activity-navigation{% if request.url.path in ['/hfl-corpus/actions', '/hfl-corpus/graph', '/hfl-corpus/entities'] %} is-active{% endif %}">
+  <button type="button" {% if corpus_entities_enabled %}aria-haspopup="true" aria-expanded="false"{% else %}disabled{% endif %}>Distill</button>
   {% if corpus_entities_enabled %}
   <details class="activity-navigation-menu">
     <summary hidden>Distill navigation</summary>
     <nav class="activity-navigation-options" aria-label="Distill views">
-      <a href="/hfl-corpus" {% if request.url.path == '/hfl-corpus' %}aria-current="page"{% endif %}>Activity Corpus</a>
       <a href="/hfl-corpus/actions" data-followups-open {% if request.url.path == '/hfl-corpus/actions' %}aria-current="page"{% endif %}>Actions Kanban</a>
       <a href="/hfl-corpus/graph" {% if request.url.path == '/hfl-corpus/graph' %}aria-current="page"{% endif %}>Activity Graph</a>
     </nav>

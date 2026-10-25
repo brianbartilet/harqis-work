@@ -13,6 +13,7 @@ def test_distill_requires_login(authenticated_client):
     assert response.headers['location'] == '/login'
 
 
+@pytest.mark.skip(reason='Distill landing page temporarily disabled; retained for reactivation')
 @pytest.mark.parametrize('width', [390, 1440])
 def test_distill_navigation_actions_and_retry(agenda, authenticated_client, monkeypatch, tmp_path, width):
     from modules.hfl_corpus import router
@@ -125,6 +126,7 @@ def test_distill_navigation_actions_and_retry(agenda, authenticated_client, monk
         browser.close()
 
 
+@pytest.mark.skip(reason='Distill landing page temporarily disabled; retained for reactivation')
 @pytest.mark.parametrize('saved_selection', ['none', 'preferences', 'last_used'])
 def test_distill_signal_all_activity_and_auth(authenticated_client, monkeypatch, saved_selection):
     from modules.hfl_corpus import router
@@ -156,3 +158,9 @@ def test_distill_signal_all_activity_and_auth(authenticated_client, monkeypatch,
     corpus_response = authenticated_client.get('/hfl-corpus?views=&scope=&dynamic=0')
     assert 'activity-indicator-legend' in corpus_response.text
     assert '>In Review / Ready</span>' in corpus_response.text
+
+
+def test_distill_temporarily_redirects_to_capture(authenticated_client):
+    response = authenticated_client.get('/distill', follow_redirects=False)
+    assert response.status_code == 307
+    assert response.headers['location'] == '/hfl-corpus'

@@ -1,7 +1,7 @@
 """Routes for the Home module."""
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from modules.registry import MODULES, module_by_key
 from web import page_context, require_user, templates
@@ -15,13 +15,8 @@ async def distill(request: Request):
     user, redirect = require_user(request)
     if redirect:
         return redirect
-    from modules.hfl_corpus.router import hfl_corpus_page
-
-    # Explicit All activity bypasses Corpus's saved-view landing redirects.
-    clean_request = Request({**request.scope, 'query_string': b'views=&scope=&dynamic=0'})
-    corpus = await hfl_corpus_page(clean_request)
-    context = {**corpus.context, 'activity_readonly': True}
-    return templates.TemplateResponse(request, 'modules/distill/index.html', context)
+    # Temporarily retire the landing page while keeping existing bookmarks useful.
+    return RedirectResponse('/hfl-corpus', status_code=307)
 
 
 @router.get("/home", response_class=HTMLResponse)

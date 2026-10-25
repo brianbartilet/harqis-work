@@ -512,11 +512,11 @@ def test_public_share_body_limit_rejects_malformed_scope_headers(invalid_headers
 def test_module_registry_has_fixed_primary_navigation():
     assert [module.key for module in MODULES] == [
         "home",
-        "files",
         "hfl_corpus",
         "sharing",
         "manifesto",
         "second_brain",
+        "files",
         "workflows",
         "applications",
         "git_forks",
@@ -524,7 +524,7 @@ def test_module_registry_has_fixed_primary_navigation():
     manifesto = module_by_key("manifesto")
     assert manifesto is not None
     assert manifesto.route == "/manifesto"
-    assert module_by_key("hfl_corpus").route == "/distill"
+    assert module_by_key("hfl_corpus").route == "/hfl-corpus"
     assert module_by_key("sharing").label == "Share Activity"
     assert "manifesto" not in {module.key for module in PRIMARY_MODULES}
     assert "home" not in {module.key for module in PRIMARY_MODULES}
