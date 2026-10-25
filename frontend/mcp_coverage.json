@@ -3787,6 +3787,16 @@
       "status": "ui",
       "tools": [],
       "reason": "Browser session and CSRF form for owner quick-tag preferences."
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/github-updates/sync",
+      "status": "covered",
+      "tools": [
+        "sync_hfl_github_updates"
+      ],
+      "reason": "Bounded bearer-authenticated owner PR reconciliation, exposed through a dedicated mutating tool; uses the existing personal connector.",
+      "service": "apps.hfl_corpus.references.web.api.github_updates.ApiServiceHflGithubUpdates.sync_github_updates"
     }
   ]
 }

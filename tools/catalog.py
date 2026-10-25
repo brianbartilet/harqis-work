@@ -115,6 +115,7 @@ _WRITE_VERBS = frozenset({
 })
 
 _EXPLICIT_WRITE_TOOLS = frozenset({
+    "sync_hfl_github_updates",
     "complete_google_task",
     "device_connect",
     "device_mirror",

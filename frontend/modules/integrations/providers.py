@@ -1,5 +1,6 @@
 """Bounded provider requests using explicit connector credentials, never host config."""
 import re
+import time
 from urllib.parse import quote
 
 import httpx
@@ -69,8 +70,17 @@ class Provider:
                         404: 'Resource unavailable or not permitted.', 429: 'Provider rate limit reached. Wait before retrying.',
                         400: 'Provider rejected this operation. Check required fields and workflow rules.',
                         422: 'Provider rejected the operation. Check for an existing branch/PR, missing commits, or invalid fields.'}
+            retry_headers = None
+            if response.status_code in {403, 429}:
+                delay = response.headers.get('Retry-After', '')
+                reset = response.headers.get('X-RateLimit-Reset', '')
+                if not delay.isdigit() and response.headers.get('X-RateLimit-Remaining') == '0' and reset.isdigit():
+                    delay = str(max(1, int(reset) - int(time.time())))
+                if delay.isdigit() or response.status_code == 429:
+                    retry_headers = {'Retry-After': str(max(1, min(3600, int(delay) if delay.isdigit() else 300)))}
             raise HTTPException(502 if response.status_code >= 500 else response.status_code,
-                                messages.get(response.status_code, 'Provider request failed. Refresh before retrying.'))
+                                messages.get(response.status_code, 'Provider request failed. Refresh before retrying.'),
+                                headers=retry_headers)
         if response.status_code == 204:
             return {}
         try:

@@ -101,10 +101,15 @@ def github_pr(user, identity, raw):
         if not str(number).isdigit():
             raise HTTPException(422, 'Enter a pull request number.')
         pr = client.request('GET', prefix+'/'+str(number))
-        if pr['head']['ref'] != head or pr['head'].get('repo', {}).get('full_name') != repo:
+        if pr['head']['ref'] != head or (pr['head'].get('repo') or {}).get('full_name') != link.get('head_repository', repo):
             raise HTTPException(422, 'Choose a PR whose head matches the linked repository and branch.')
     else:
-        found = client.request('GET', prefix, params={'state':'all','head':repo.split('/')[0]+':'+head,'base':base,'per_page':100})
+        if link.get('pr_number'):
+            return link
+        head_repository = link.get('head_repository', repo)
+        if head_repository != repo:
+            raise HTTPException(422, 'Link an existing fork pull request by number.')
+        found = client.request('GET', prefix, params={'state':'all','head':head_repository.split('/')[0]+':'+head,'base':base,'per_page':100})
         # Refuse to create a second PR after an ambiguous previous result, even if closed.
         pr = found[0] if found else client.request('POST', prefix, json={'title':card['title'], 'body':raw.get('body', '')[:10000], 'head':head, 'base':base, 'draft':True})
     link.update(pr_number=pr['number'], pr_url='https://github.com/'+repo+'/pull/'+str(pr['number']), pr_state='merged' if pr.get('merged_at') else pr['state'], draft=pr.get('draft', False))

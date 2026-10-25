@@ -42,6 +42,19 @@ def persona_audit_now():
 
 
 WORKFLOW_HFL = {
+    # Approved owner workflow: Beat is the sole recurring initiator.
+    'run-job--sync_github_pull_requests': {
+        'task': 'workflows.hfl.tasks.github_updates.sync_github_pull_requests',
+        'schedule': crontab(minute='*/15'),
+        'kwargs': {},
+        'options': {'queue': WorkflowQueue.HOST, 'expires': 900},
+        'manifesto': {
+            'code_role': 'capture+organize+express', 'para_bucket': 'area',
+            'express_target': 'file:hfl_corpus+es:hfl-entries+api:hfl-actions',
+            'review_artifact': 'es_log+github_update_prs+timeline_history',
+            'hfl_signal': True,
+        },
+    },
     'run-job--persona_audit': {
         'task': 'workflows.hfl.tasks.persona_audit.persona_audit',
         'schedule': crontab(day_of_week=os.getenv('HFL_PERSONA_AUDIT_DAY', 'sun'),

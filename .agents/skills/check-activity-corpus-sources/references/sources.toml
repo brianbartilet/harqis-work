@@ -442,3 +442,16 @@ expects_entry = true
 allow_empty = true
 auto_retry = false
 backfill = "manual"
+
+[[sources]]
+key = "github-updates"
+kind = "source"
+monitor_mode = "scheduled"
+task = "workflows.hfl.tasks.github_updates.sync_github_pull_requests"
+entry_sources = ["github-updates"]
+schedule = "every 15 minutes"
+task_max_age_hours = 2
+expects_entry = false
+allow_empty = true
+auto_retry = true
+backfill = "task-window"

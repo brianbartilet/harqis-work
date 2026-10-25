@@ -500,3 +500,11 @@ provide a read-only detach preview. Commit it with
 observed source kinds. `update_hfl_corpus_entity_type_properties` edits type
 names, colors and extraction descriptions without starting a backfill.
 All update tools write remote state.
+
+### GitHub PR review intake
+
+`sync_hfl_github_updates(pages=5, limit=10, run_id="")` invokes the bounded owner
+PR reconciliation API. It creates entries/actions, updates GitHub card links, and
+reconciles closure; it is a mutating tool. It uses the owner’s enabled personal
+GitHub connector, not the separate host GitHub token. See
+[workflow behavior and activation](../../workflows/hfl/README.md#sync_github_pull_requests).

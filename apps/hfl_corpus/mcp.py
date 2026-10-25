@@ -16,6 +16,7 @@ from apps.hfl_corpus.references.web.api.graph_views import ApiServiceHflCorpusGr
 from apps.hfl_corpus.references.web.api.ideas import ApiServiceHflCorpusIdeas
 from apps.hfl_corpus.references.web.api.timeline import ApiServiceHflCorpusTimeline
 from apps.hfl_corpus.references.web.api.roles import ApiServiceHflCorpusRoles
+from apps.hfl_corpus.references.web.api.github_updates import ApiServiceHflGithubUpdates
 
 logger = logging.getLogger("harqis-mcp.hfl_corpus")
 
@@ -29,6 +30,21 @@ def _dict_result(result) -> dict:
 
 
 def register_hfl_corpus_tools(mcp: FastMCP):
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def sync_hfl_github_updates(pages: int = 5, limit: int = 10, run_id: str = '') -> dict:
+        """Import/reconcile published PRs from the owner's enabled GitHub connector.
+
+        Writes github-updates entries, peon review actions and GitHub card links;
+        completes merged actions and dismisses closed-unmerged ones. No GitHub
+        writes or agent execution. Reuses durable progress across retries.
+        Requires an enabled connector and exactly one peon Space on the owner API.
+        Args:
+            pages: Discovery request budget, 1–10.
+            limit: Pending/refresh PR budget, 1–25.
+            run_id: Optional correlation ID, at most 100 characters.
+        """
+        return ApiServiceHflGithubUpdates(CONFIG).sync_github_updates(pages, limit, run_id)
 
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
     def get_hfl_corpus_role_history(identity: str) -> dict:

@@ -1164,3 +1164,76 @@ the frontend owning the role/Space profile; `HFL_CORPUS_API_TOKEN` authenticates
 `HFL_PERSONA_QUEUE` optionally changes the owner UI manual queue. The frontend needs
 existing Anthropic credentials. See [Roles and Spaces](../../docs/info/ROLES-AND-SPACES.md)
 for limits, failure handling, extraction, and local review.
+
+
+## `sync_github_pull_requests`
+
+**Goal:** turn every published PR accessible to the enabled owner GitHub connector
+into a `github-updates` activity entry and a review action in the `peon` Space.
+
+**Runtime:** Celery. **Schedule owner:** Celery Beat, active every 15 minutes.
+**Queue:** `WorkflowQueue.HOST`. **OS:** cross-platform; canonical owner API required.
+The schedule is active because activation and migration were explicitly approved.
+The task is also callable on demand for backfill; it uses the same durable cursor.
+
+**Apps/data flow:** existing GitHub connector `Provider` → paginated repositories
+and open non-draft PRs → connector PR inbox → canonical HFL Markdown/Elasticsearch
+→ ordinary action → existing GitHub repository/branch/PR card links.
+This deliberately reuses personal connector credentials rather than the separate
+host-configured `GITHUB` token. No new app, package, secret, or AI prompt is needed.
+
+**Configuration:** the owner has an enabled GitHub connector and exactly one Space
+named `peon` (case-insensitive). Existing `HFL_CORPUS_API_TOKEN` authenticates the
+worker command. `HFL_PERSONA_API_URL`, then `HFL_CORPUS_API_URL`, selects the owner
+API; on the canonical host only, the fallback is loopback `HFL_API_PORT` (8082).
+The API must share the owner profile/connector database and cannot be a remote
+corpus reader. No new `CONFIG_MANAGER` key is required.
+
+The source selector adds `github-updates` to peon's existing sources. An empty
+selector already includes all sources and remains unchanged; other filters and
+Space schedules are preserved. Actions explicitly join peon, without removing
+existing memberships. Entries use `git`, `github`, `review`, `pull-request` tags
+and retain the PR URL in References. PR bodies are bounded to 30,000 characters.
+
+**Outputs:** initial PR entries are immutable; later polling updates link metadata,
+not user-authored card content. Actions start In Review with agent execution off.
+Repository settings refer to the existing GitHub card controls (target repository,
+head repository/branch, base branch, PR number/URL). Machine-local agent checkout
+paths are not guessed from GitHub URLs. Fork PRs retain both repository identities.
+
+**Failure behavior:** an account-scoped lease prevents overlapping import runs;
+repository/PR pagination cursors survive restarts. An immutable creation payload
+and stable request ID recover an action after an ambiguous write. Entry persistence
+and indexing must succeed before creating a card. Existing PR-linked cards are
+reused; conflicting multiple cards require owner resolution. Per-PR failures stay
+pending, are attempted fairly, and emit redacted stage/error receipts. Inaccessible
+repositories are reported and revisited on the next sweep. Rate limits retain
+progress and honor bounded Retry-After/reset delays. A task processes at most 20
+batches, with a ten-minute soft budget; API requests have a 900-second timeout.
+Unfinished scans continue on a later run. A missing/disconnected connector or
+missing/ambiguous Space fails visibly without importing elsewhere.
+
+Merged PRs complete still-open actions; closed-unmerged PRs dismiss them. Reopened
+PRs keep terminal action decisions. Manual completion/dismissal and authored notes
+are preserved. Completed actions use the existing HFL completion receipt path.
+Tracked PRs are refreshed independently of the open-PR discovery pages; deletion
+or access loss is not interpreted as closure.
+
+**API:** `POST /api/hfl/github-updates/sync`, inherited HFL bearer authentication,
+with bounded `pages` (1–10), `limit` (1–25), and optional `run_id`. This is an internal
+Celery reconciliation command, not an agent-execution endpoint. Successful results
+include `tracked`, `pending`, `applied`, `discovery_complete`, action IDs and errors.
+The journal remains in `connectors.sqlite3` and task results go to Elasticsearch.
+
+**Backfill:** invoke the registered task with `batches=10`; repeat until a complete
+discovery cycle reports zero pending records. The same operation captures old open
+PRs with their original creation dates. Do not clear the cursor or journal on retry.
+Before rollout regenerate `frontend/registry.json`, then restart the owner API,
+frontend (for fork-link support), canonical worker and the sole Beat instance.
+
+**Validation:** `frontend/tests/test_github_updates.py` exercises persistence gates,
+replay, existing links, fork metadata, pagination, status transitions and API auth.
+`workflows/hfl/tests/test_github_updates.py` covers the Celery boundary; its live
+mutation test is opt-in/skipped. Run the existing integration tests and frontend
+route coverage contract after changes. Source health monitors task receipts without
+requiring new entries on every poll.

@@ -666,3 +666,6 @@ router.include_router(management_router)
 
 from modules.roles.router import api as roles_api
 router.include_router(roles_api)
+
+from modules.integrations.github_updates_api import router as github_updates_api
+router.include_router(github_updates_api)

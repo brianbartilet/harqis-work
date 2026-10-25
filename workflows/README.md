@@ -205,3 +205,7 @@ grouped HFL/Telegram reporting. It adds no Beat schedule. See [HFL workflows](hf
 The HFL category also owns the weekly Celery `persona_audit` task: linked-Space
 evidence becomes private role observations and a `persona-audit` HFL receipt.
 See [Roles and Spaces](../docs/info/ROLES-AND-SPACES.md) for ownership and controls.
+
+GitHub PR review intake is part of [HFL](hfl/README.md#sync_github_pull_requests):
+Beat polls every 15 minutes and the owner-connected GitHub account supplies
+repository scope. PRs become `github-updates` entries and linked peon review actions.
