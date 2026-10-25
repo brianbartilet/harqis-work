@@ -256,5 +256,17 @@
 
 <script src="{{ static_asset('js/activity-hotkeys.js') }}"></script>
 <script src="{{ static_asset('js/activity-dialog-dismiss.js') }}"></script>
+{% if user and butler_csrf %}
+<link rel="stylesheet" href="{{ static_asset('css/butler.css') }}">
+<script type="application/json" id="butler-csrf">{{ butler_csrf|tojson }}</script>
+<button type="button" id="butler-launch" aria-controls="butler-panel" aria-expanded="false">✧ Butler</button>
+<section id="butler-panel" hidden aria-label="HARQIS Butler">
+  <header><div><strong>Butler</strong><small>Your HARQIS assistant</small></div><button type="button" id="butler-close" aria-label="Close Butler">✕</button></header>
+  <div id="butler-messages" aria-live="polite"></div>
+  <p id="butler-error" role="alert"></p>
+  <form id="butler-form"><label for="butler-message">Ask about your work or request a change</label><textarea id="butler-message" maxlength="12000" required rows="3"></textarea><div><button id="butler-send">Send</button><a href="/agents?agent=butler">Configure</a></div></form>
+</section>
+<script src="{{ static_asset('js/butler.js') }}" defer></script>
+{% endif %}
 </body>
 </html>

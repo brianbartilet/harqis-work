@@ -55,7 +55,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   const color = kind => configuredTypes.get(kind)?.color || palette[kind] || '#e9c96c';
   window.HflGraphAppearance = {color, kindLabel};
   const defaultLabelKinds = new Set(['sources', 'people', 'tools', 'companies']);
-  let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts']);
+  let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts','agents']);
   let exampleMode=new URLSearchParams(location.search).get('example')==='1';
   let requestVersion=0, requestController=null, backgroundController=null, appliedParams=null, graphSignature='', lastInteraction=0;
   const activePointers=new Set();
@@ -1054,7 +1054,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     window.activityModals?.reset();preset='timeline';setAnimation('off');
     $('search').value='';$('rolling').value='0';$('since').value='';$('until').value='';
     selectedSources.clear();sourceOptions(data.sources||[]);syncDates();$('shared').checked=false;
-    enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts']);selected=null;focusId=null;exampleMode?render():load();
+    enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts','agents']);selected=null;focusId=null;exampleMode?render():load();
   };
 
 
@@ -1098,7 +1098,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(typeof value==='string'&&($(id).tagName!=='SELECT'||[...$(id).options].some(o=>o.value===value)))$(id).value=value;
     }
     $('shared').checked=pendingState.filters.shared===true;
-    enabled=new Set([...pendingState.enabled,'ideas','actions','goals','drafts','boards','lists','thoughts']);pendingState.sources.forEach(s=>selectedSources.add(s));
+    enabled=new Set([...pendingState.enabled,'ideas','actions','goals','drafts','boards','lists','thoughts','agents']);pendingState.sources.forEach(s=>selectedSources.add(s));
     if(PRESETS[pendingState.preset])preset=pendingState.preset;
     if(Number.isFinite(pendingState.layoutSeed))layoutSeed=pendingState.layoutSeed;
     selected=typeof pendingState.selected==='string'?pendingState.selected:null;
@@ -1114,7 +1114,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       const point=window.HflIdeas.maps.current?(layoutTargets.get(n.id)||n):n;
       return [n.id,{x:point.x,y:point.y}];
     }));
-    window.addEventListener('hfl:ideas-updated',event=>{if(event.detail?.boardSwitch){pendingState=null;selected=null;enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts']);}if(event.detail?.selectId)selected=event.detail.selectId;
+    window.addEventListener('hfl:ideas-updated',event=>{if(event.detail?.boardSwitch){pendingState=null;selected=null;enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts','agents']);}if(event.detail?.selectId)selected=event.detail.selectId;
       if(event.detail?.boardSwitch){
         // Selecting a saved board exits the example and refreshes its complete
         // graph, even when every member already exists in the activity cache.

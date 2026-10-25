@@ -39,71 +39,7 @@
     {% if quick_tags_return %}<input type="hidden" name="quick_tags_return" value="{{ quick_tags_return }}">{% endif %}
     <input type="hidden" name="open_sections" value="">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-  <details id="agents" {% if errors.settings or 'agents' in expanded_sections %}open{% endif %} class="settings-section mt-8 rounded-xl border border-slate-700 bg-slate-900 p-6">
-    <summary><span class="text-lg font-semibold">Agents</span><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg></summary>
-  <div class="mt-6 space-y-6">
-    {% if errors.settings %}<p class="profile-error" role="alert">{{ errors.settings }}</p>{% endif %}
-
-    <label class="block">Execution mode
-      <select name="agent_mode" class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" style="appearance:none;padding-right:2.5rem;background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%2367e8f9' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E&quot;);background-repeat:no-repeat;background-position:right .75rem center;background-size:1.1rem">
-        <option value="trusted" {% if values.agent_mode == 'trusted' %}selected{% endif %}>Trusted Hermes</option>
-        <option value="restricted" {% if values.agent_mode == 'restricted' %}selected{% endif %}>Restricted tools</option>
-      </select>
-      <span class="mt-2 block text-sm text-slate-400">Trusted mode loads your Hermes rules, skills, integrations and host environment. Both modes use local shell access; these settings do not isolate the host. Runtime or scheduler changes require an explicit task instruction.</span>
-    </label>
-    <label class="block">Hermes profile
-      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="text" name="hermes_profile" value="{{ values.hermes_profile }}">
-      <span class="mt-2 block text-sm text-slate-400">Leave blank to inherit the worker profile.</span>
-    </label>
-    <label class="block">Toolsets and MCP servers
-      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="text" name="agent_toolsets" value="{{ values.agent_toolsets }}">
-      <span class="mt-2 block text-sm text-slate-400">Leave blank to use the profile defaults. A comma-separated list selects specific toolsets or configured MCP server names.</span>
-    </label>
-    <label class="block">Model override
-      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="text" name="agent_model" value="{{ values.agent_model }}">
-      <span class="mt-2 block text-sm text-slate-400">Leave blank to use the profile model.</span>
-    </label>
-    <label class="block">Provider override
-      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="text" name="agent_provider" value="{{ values.agent_provider }}">
-      <span class="mt-2 block text-sm text-slate-400">Leave blank to use the profile provider.</span>
-    </label>
-    <label class="block">Default email recipient
-      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="email" name="agent_default_recipient" value="{{ values.agent_default_recipient }}">
-      <span class="mt-2 block text-sm text-slate-400">Used when your task says "email me".</span>
-    </label>
-    <label class="block">Execution timeout (seconds)
-      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="number" name="agent_timeout_seconds" value="{{ values.agent_timeout_seconds }}">
-      <span class="mt-2 block text-sm text-slate-400">Maximum 7200 seconds.</span>
-    </label>
-    <label class="block">Maximum agent turns
-      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="number" name="agent_max_turns" value="{{ values.agent_max_turns }}">
-      <span class="mt-2 block text-sm text-slate-400">Maximum 200 turns. Execution slots are shared by automatic tasks and interactive turns.</span>
-    </label>
-
-    <label class="block">Concurrent agent executions
-      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="number" name="agent_concurrency" min="1" max="32" value="{{ values.agent_concurrency }}">
-      <span class="mt-2 block text-sm text-slate-400">Shared by automatic runs and native terminal turns. Idle sessions do not use a slot. Start with 2 on the 10-core, 16 GiB server; tune against measured memory usage.</span>
-    </label>
-    <label class="block">Session inactivity expiry (minutes)
-      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="number" name="agent_session_expiry_minutes" min="1" max="10080" value="{{ values.agent_session_expiry_minutes }}">
-      <span class="mt-2 block text-sm text-slate-400">Default 60 minutes. Idle native terminals close and archive their output. Active turns are not expired. Saved context remains retrievable.</span>
-    </label>
-    {% for key, label in [('agent_repository','Default repository (blank uses the worker checkout)'), ('agent_base_branch','Base branch (blank uses the working checkout HEAD)'), ('agent_host','Worker hostname (blank uses any available worker)')] %}
-    <label class="block">{{ label }}<input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" name="{{ key }}" value="{{ values[key] }}"></label>
-    {% endfor %}
-
-    <label class="block">Actions polling minutes
-      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="number" name="actions_polling_minutes" min="1" max="1440" required value="{{ values.actions_polling_minutes }}">
-      <span class="mt-2 block text-sm text-slate-400">Open actions with a prompt are queued automatically. Reopen an action to run its prompt again.</span>
-    </label>
-    <label class="block">Pinned dates backfill days
-      <input class="mt-2 block w-full rounded border border-slate-600 bg-slate-950 p-2" type="number" name="pin_backfill_days" min="1" max="31" required value="{{ values.pin_backfill_days }}">
-      <span class="mt-2 block text-sm text-slate-400">Catch up missed daily runs within this window. Older gaps create an HFL review entry.</span>
-    </label>
-    <p class="text-sm text-slate-400">Pin hours use Asia/Singapore. The default is 00:00 each day of the pinned period.</p>
-    <p class="text-sm">Hermes worker authentication: {{ 'Configured' if worker_configured else 'Not configured on this host' }}. Credentials and provider configuration are managed on the host.</p>
-  </div>
-  </details>
+  <p class="mt-6 rounded-xl border border-slate-700 bg-slate-900 p-6">Agent settings have moved to <a href="/agents" class="text-cyan-300">Build → Agents</a>. Manage your fleet and shared execution defaults there.</p>
   <details id="activity-corpus" class="settings-section mt-6 rounded-xl border border-slate-700 bg-slate-900 p-6" {% if errors.favorite_tags or errors.secret_tags or errors.current_secret_pin or errors.new_secret_pin or errors.confirm_secret_pin or 'activity-corpus' in expanded_sections %}open{% endif %}>
     <summary><span class="text-lg font-semibold">Activity Corpus</span><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg></summary>
     <div class="mt-6 space-y-6">

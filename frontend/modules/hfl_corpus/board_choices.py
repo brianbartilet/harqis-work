@@ -40,6 +40,8 @@ def catalogue():
     # Reuse intent projection and its permission checks, using the same corpus read.
     snapshot = ideas_api.permitted_snapshot(entries=rows)
     result = ideas_graph.extend({'nodes': list(nodes.values()), 'edges': []}, snapshot, limit=0)
+    from modules.agents.projection import extend as fleet_graph
+    result = fleet_graph(result)
     updates = {prefix + item['id']: item.get('updated_at') or item.get('created_at', '')
                for collection, prefix in [('ideas', 'idea:'), ('actions', 'action:'), ('goals', 'goal:'), ('maps', 'board:')]
                for item in snapshot.get(collection, [])}

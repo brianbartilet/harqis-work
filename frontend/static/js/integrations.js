@@ -38,6 +38,11 @@
       if(item.error)card.append(el('p',item.error));
       const capabilities=el('ul');item.capabilities.forEach(c=>capabilities.append(el('li',c)));card.append(capabilities);
       if(item.enabled&&item.provider==='jira'){const footer=el('footer',undefined,'connector-footer');card.append(footer);button(controls(footer),'Import assigned issues',jiraImport);}
+      if(item.enabled&&item.provider==='n8n'){
+        const footer=el('footer',undefined,'connector-footer');card.append(footer);
+        button(controls(footer),'Discover agents',async()=>{const view=dialog('Discover n8n agents'),query=field(view.body,'Agent search');button(controls(view.body),'Search and synchronize',async()=>{const result=await api('/n8n/sync',{query:query.value});view.body.append(el('p',result.imported+' agents synchronized. '+result.message));link(view.body,'Open agent fleet','/agents');});});
+        button(controls(footer),'Browse workflows',async()=>{const view=dialog('n8n workflows');let cursor='';const next=button(controls(view.body),'Load workflows',async()=>{const data=await api('/n8n/workflows?cursor='+encodeURIComponent(cursor));for(const workflow of data.items)link(view.body,workflow.name+(workflow.active?' · Active':''),item.site+'/workflow/'+encodeURIComponent(workflow.id));cursor=data.cursor;next.hidden=!cursor;});next.click();});
+      }
       root.append(card);
     }}
     document.querySelectorAll('[data-connector-action]').forEach(b=>{b.hidden=!current.some(c=>c.provider==='jira'&&c.enabled);badges(b.parentElement,b.dataset.connectorAction);});
@@ -50,21 +55,25 @@
       body.append(el('p','Create a fine-grained personal access token for the selected repositories. Grant Contents: read/write and Pull requests: read/write for branch and PR operations. Organization approval may be required. Account MFA stays on GitHub.'));
       link(body,'GitHub token setup instructions','https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens');
       body.append(el('p','Alternative for a later release: a GitHub App installation with short-lived tokens.'));
+    }else if(item.provider==='n8n'){
+      body.append(el('p','Use an n8n API key for workflows. Add a separate instance-level MCP token to discover first-class agents. Enable Agents and MCP access in n8n.'));
+      link(body,'n8n connection documentation','https://docs.n8n.io/connect/connect-to-n8n-mcp-server/');
     }else{
       body.append(el('p','Create an Atlassian API token. Your Jira account needs Browse Projects and Transition Issues permissions. API tokens work with two-step verification; do not enter a password or MFA code. Scoped tokens also require your cloud ID.'));
       link(body,'Atlassian token setup instructions','https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/');
       body.append(el('p','Alternative for a later release: OAuth 2.0 authorization with refresh tokens.'));
     }
-    const site=item.provider==='jira'?field(body,'Jira Cloud site','url',item.site||''):null;
+    const site=['jira','n8n'].includes(item.provider)?field(body,item.provider==='n8n'?'n8n instance URL':'Jira Cloud site','url',item.site||''):null;
     const email=item.provider==='jira'?field(body,'Atlassian email','email'):null;
     const cloud=item.provider==='jira'?field(body,'Cloud ID (scoped tokens only)'):null;
     const token=field(body,'API token','password');token.autocomplete='new-password';token.maxLength=4096;
+    const mcp=item.provider==='n8n'?field(body,'MCP token (optional)','password'):null;
     const state=el('span','Not tested','connector-status');state.setAttribute('role','status');state.setAttribute('aria-live','polite');body.append(state);
-    const row=controls(body),inputs=[token,site,email,cloud].filter(Boolean);
+    const row=controls(body),inputs=[token,site,email,cloud,mcp].filter(Boolean);
     let tested=false,busy=false;
     function status(text,tone){state.textContent=text;state.dataset.tone=tone;}
     function lock(value){busy=value;inputs.forEach(input=>input.disabled=value);test.disabled=value;save.disabled=value||!tested;}
-    const payload=()=>({token:token.value,...(site?{site:site.value,email:email.value,cloud_id:cloud.value}:{})});
+    const payload=()=>({token:token.value,...(site?{site:site.value}:{}),...(email?{email:email.value,cloud_id:cloud.value}:{}),...(mcp?{mcp_token:mcp.value}:{})});
     const test=button(row,'Test',async()=>{
       error.textContent='';tested=false;lock(true);status('Testing…','pending');
       try{await api('/connectors/'+item.provider+'/test',payload());tested=true;status('Test passed · Not saved','success');}
@@ -75,7 +84,7 @@
       if(!tested||busy)return;
       error.textContent='';lock(true);status('Saving…','pending');
       try{
-        await api('/connectors/'+item.provider+'/save',payload());token.value='';tested=false;status('Saved · Connected','success');
+        await api('/connectors/'+item.provider+'/save',payload());token.value='';if(mcp)mcp.value='';tested=false;status('Saved · Connected','success');
         lock(true);
         button(row,'Enable connector',async()=>{await api('/connectors/'+item.provider+'/toggle',{enabled:true});d.close();await load();});
         await load();

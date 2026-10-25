@@ -74,7 +74,9 @@ def page_context(
     active_module: str,
     **values: Any,
 ) -> dict[str, Any]:
+    from modules.hfl_shares.security import make_csrf_token
     return {
+        "butler_csrf": make_csrf_token(user),
         "request": request,
         "corpus_entities_enabled": bool(os.environ.get('HARQIS_ENTITIES_DB')),
         "user": user,

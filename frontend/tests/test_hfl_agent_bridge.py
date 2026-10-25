@@ -53,7 +53,8 @@ def test_settings_persist_validate_and_require_owner_csrf(bridge, authenticated_
     assert read_settings()['agent_mode'] == 'trusted'
     assert read_settings()['actions_polling_minutes'] == 30
     page = authenticated_client.get('/settings')
-    assert page.status_code == 200 and 'Actions polling minutes' in page.text
+    assert page.status_code == 200 and 'Agent settings have moved' in page.text
+    assert authenticated_client.get('/agents/api/defaults').json()['actions_polling_minutes'] == 30
     assert 'App Settings' in authenticated_client.get('/profile').text
     values = {'csrf': make_csrf_token('frontend-test-user'), 'actions_polling_minutes': '5', 'pin_backfill_days': '7'}
     assert authenticated_client.post('/settings', data=values).status_code == 200
@@ -302,11 +303,16 @@ def test_browser_settings_and_future_dates(bridge, authenticated_client, monkeyp
             request_route.fulfill(status=response.status_code, headers={'content-type': response.headers.get('content-type', 'text/html')}, body=response.content)
         page.route('**/*', route)
         page.goto('https://bridge.test/settings')
-        page.locator('details.settings-section > summary').filter(has_text='Agents').click()
-        page.get_by_text('Actions polling minutes', exact=False).first.wait_for()
+        page.get_by_text('Agent settings have moved', exact=False).first.wait_for()
         page.locator('summary[aria-label="Profile menu"]').click()
         assert page.locator('nav[aria-label="Profile menu"] a[href="/settings"]').is_visible()
         page.locator('summary[aria-label="Profile menu"]').click()
+        page.goto('https://bridge.test/agents')
+        page.get_by_role('button', name='Execution defaults', exact=True).click()
+        page.get_by_label('actions polling minutes', exact=True).wait_for()
+        page.get_by_label('actions polling minutes', exact=True).fill('12')
+        page.get_by_role('button', name='Save defaults', exact=True).click()
+        assert authenticated_client.get('/agents/api/defaults').json()['actions_polling_minutes'] == 12
         page.screenshot(path=str(tmp_path / 'settings-desktop.png'))
         page.set_viewport_size({'width': 390, 'height': 844})
         page.screenshot(path=str(tmp_path / 'settings-mobile.png'))

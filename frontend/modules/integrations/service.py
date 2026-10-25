@@ -13,6 +13,9 @@ PROVIDERS = {'github': {'name': 'GitHub', 'capabilities': ['Create and link bran
              'jira': {'name': 'Jira Cloud', 'capabilities': ['Import assigned issues to Kanban', 'Update Jira status from action cards', 'Refresh issue status']}}
 
 
+PROVIDERS['n8n'] = {'name': 'n8n', 'capabilities': ['Browse workflows', 'Discover first-class agents through MCP', 'Link agents to the fleet workspace']}
+
+
 def connected(user, provider):
     data = store.get(user, provider, private=True)
     if not data.get('enabled') or data.get('status') != 'Connected':

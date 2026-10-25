@@ -28,6 +28,13 @@ def credentials(provider, raw):
     if not isinstance(token, str) or not 1 <= len(token.strip()) <= 4096 or any(ord(c) < 32 for c in token):
         raise HTTPException(422, 'Enter an API token.')
     result = {'token': token.strip()}
+    if provider == 'n8n':
+        from modules.integrations.n8n import site
+        result['site'] = site(raw.get('site'))
+        mcp = raw.get('mcp_token', '')
+        if not isinstance(mcp, str) or len(mcp) > 4096 or any(ord(c) < 32 for c in mcp):
+            raise HTTPException(422, 'Invalid MCP token.')
+        result['mcp_token'] = mcp.strip()
     if provider == 'jira':
         if any(not isinstance(raw.get(key, ''), str) for key in ('site', 'email', 'cloud_id')):
             raise HTTPException(422, 'Site, email, and cloud ID must be text.')
@@ -45,6 +52,11 @@ def credentials(provider, raw):
 
 
 class Provider:
+    def __new__(cls, provider, credentials):
+        if provider == 'n8n':
+            from modules.integrations.n8n import N8n
+            return N8n(credentials)
+        return super().__new__(cls)
     def __init__(self, provider, credentials):
         self.provider, self.credentials = provider, credentials
 

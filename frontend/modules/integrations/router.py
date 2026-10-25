@@ -16,6 +16,33 @@ def provider_name(provider):
     return provider
 
 
+@api.post('/n8n/sync')
+def sync_n8n(raw: dict, user=Depends(owner_auth)):
+    from modules.integrations.n8n import sync
+    query = raw.get('query', '')
+    if not isinstance(query, str) or len(query) > 200:
+        raise HTTPException(422, 'Keep the search under 200 characters.')
+    return sync(user, query)
+
+
+@api.get('/n8n/workflows')
+def n8n_workflows(cursor: str = '', user=Depends(owner_auth)):
+    _, client = service.connected(user, 'n8n')
+    data = client.request('GET', '/workflows', params={'limit': 100, **({'cursor': cursor} if cursor else {})})
+    return {'items': [{k: w.get(k) for k in ('id', 'name', 'active', 'updatedAt')} for w in data.get('data', [])],
+            'cursor': data.get('nextCursor', '')}
+
+
+@api.post('/n8n/agents/{identity}/refresh')
+def refresh_n8n_agent(identity: str, user=Depends(owner_auth)):
+    from modules.integrations.n8n import refresh_agent
+    from workflows.hfl.agent_fleet_store import FleetConflict
+    try:
+        return refresh_agent(user, identity)
+    except FleetConflict as exc:
+        raise HTTPException(409, str(exc)) from None
+
+
 @router.get('')
 def page(request: Request):
     return RedirectResponse('/applications', status_code=307)
@@ -49,6 +76,8 @@ def connect(provider: str, raw: dict, user=Depends(owner_auth)):
     metadata = {**identity, 'status':'Connected', 'enabled':False, 'connected_since':store.now(),
                 'auth_method':('Fine-grained personal access token' if clean['token'].startswith('github_pat_') else 'Personal access token') if provider == 'github' else 'Email and API token',
                 'expiry':'Unknown', 'site':clean.get('site', '')}
+    if provider == 'n8n':
+        metadata['auth_method'] = 'API key' + (' + MCP token' if clean.get('mcp_token') else '')
     if previous.get('account_id') == identity['account_id'] and previous.get('site','') == metadata['site']:
         metadata['connected_since'] = previous.get('connected_since', metadata['connected_since'])
     return store.save(user, provider, metadata, clean)

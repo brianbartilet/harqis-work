@@ -15,6 +15,9 @@ class ModuleDefinition:
 
 
 MODULES: tuple[ModuleDefinition, ...] = (
+    ModuleDefinition(key="agents", label="Agents", route="/agents",
+                     description="Agent fleet, capabilities and sessions.",
+                     detail="Configure Space-aware agents, trace their work and open the HARQIS butler."),
     ModuleDefinition(
         key="home",
         label="Home",

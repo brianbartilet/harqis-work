@@ -30,10 +30,13 @@ def overrides(value):
     return {key: clean[key] for key in value}
 
 
-def effective(source_id):
+def effective(source_id, require_active=True):
     configs = store().configs()
     card = configs.get('card:' + source_id, {})
     preset = configs.get('preset:' + card.get('preset', ''), {})
+    if card.get('agent_id'):
+        from modules.agents.service import execution
+        return {**execution(card['agent_id'], require_active=require_active), **card.get('overrides', {})}
     return {**read_settings(), **preset.get('overrides', {}), **card.get('overrides', {})}
 
 
@@ -45,12 +48,14 @@ def default_configuration():
 
 @owner.get('/actions/{source_id}/configuration')
 def configuration(source_id: str):
+    from modules.agents.service import initialize
     action = bridge.checked(bridge.action_call, 'GET', '/' + source_id)['item']
     configs = store().configs()
     return {'action': {key: action.get(key, '') for key in ('title','status','prompt','expected_outcome','description','notes','completion_note','due_date','version','checklists')},
             'action_html': {key: str(bridge.render_markdown(action.get(key) or '')) for key in ('prompt','expected_outcome','description','notes','completion_note')},
-            'effective': effective(source_id), 'defaults': read_settings(),
+            'effective': effective(source_id, require_active=False), 'defaults': read_settings(),
             'card': configs.get('card:' + source_id, {'preset': '', 'overrides': {}}),
+            'agents': [a for a in initialize().list() if a['runtime'] == 'hermes'],
             'presets': {key[7:]: value for key, value in configs.items() if key.startswith('preset:')}}
 
 
@@ -60,7 +65,13 @@ def set_configuration(source_id: str, payload: dict):
     selected = payload.get('preset', '')
     if not isinstance(selected, str) or (selected and 'preset:' + selected not in store().configs()):
         raise HTTPException(400, 'Choose an existing preset.')
-    store().configure('card:' + source_id, {'preset': selected, 'overrides': bridge.checked(overrides, payload.get('overrides', {}))})
+    agent_id = payload.get('agent_id', '')
+    if not isinstance(agent_id, str) or len(agent_id) > 100:
+        raise HTTPException(400, 'Choose an existing fleet agent.')
+    if agent_id:
+        from modules.agents.service import execution
+        bridge.checked(execution, agent_id)
+    store().configure('card:' + source_id, {'preset': selected, 'agent_id': agent_id, 'overrides': bridge.checked(overrides, payload.get('overrides', {}))})
     return configuration(source_id)
 
 
@@ -86,15 +97,20 @@ def sessions(source_id: str):
 @owner.post('/actions/{source_id}/sessions')
 def start_session(source_id: str, payload: dict):
     action = bridge.checked(bridge.action_call, 'GET', '/' + source_id)['item']
-    settings = effective(source_id)
+    settings = bridge.checked(effective, source_id)
     settings['initial_context'] = {k: action.get(k, '') for k in ('title','status','prompt','expected_outcome','description','notes','completion_note')}
+    if settings.get('fleet_agent'):
+        settings['initial_context']['agent'] = settings['fleet_agent']
     from modules.hfl_corpus.intent_board_context import context
     settings['initial_context'].update(board_ids=action.get('board_ids', []), available_boards=context())
     previous = bridge.bridge_store().list('actionable:' + source_id, limit=1)
     if previous:
         settings['initial_context']['last_agent_result'] = previous[0]['result'].get('summary', '')
     # Opening a terminal does not execute the Initial prompt a second time.
-    return bridge.checked(store().start_session, source_id, settings, action['title'], payload.get('restore'))
+    session = bridge.checked(store().start_session, source_id, settings, action['title'], payload.get('restore'))
+    from modules.agents.audit import terminal_event
+    terminal_event(session, 'session-started')
+    return session
 
 
 @owner.get('/sessions/{identity}')
@@ -191,6 +207,9 @@ def terminal_poll(identity: str, payload: dict):
     control['input'] = db.read_io(identity, 'in', max(0, int(payload.get('after', 0))))
     control['expiry_minutes'] = read_settings()['agent_session_expiry_minutes']
     session = db.session(identity)
+    from modules.agents.audit import terminal_event
+    if session['state'] in {'closed', 'expired', 'failed'}:
+        terminal_event(session, 'session-' + session['state'], {'state': session['state']})
     action = bridge.checked(bridge.action_call, 'GET', '/' + session['source_id'])['item']
     control['action_closed'] = action['status'] in {'done','dismissed'}
     return control
@@ -231,4 +250,6 @@ async def terminal_file(identity: str, name: str, request: Request):
         await attach_output(session['source_id'], versioned, bytes(content))
         with db.connect() as connection:
             connection.execute('INSERT OR IGNORE INTO action_agent_files VALUES (?,?,?)', (identity,name,digest))
+        from modules.agents.audit import terminal_event
+        terminal_event(session, 'artifact', {'name': versioned, 'sha256': digest}, key='file:' + digest)
     return {'name': versioned}

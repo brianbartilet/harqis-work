@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block body_class %}fleet-page{% endblock %}
+{% block title %}HARQIS â€” Agents{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ static_asset('css/corpus-workspaces.css') }}">
+<link rel="stylesheet" href="{{ static_asset('css/agent-fleet.css') }}">
+{% endblock %}
+{% block content %}
+<main id="agent-fleet" class="fleet-shell" aria-label="Agent fleet"></main>
+<script type="application/json" id="fleet-csrf">{{ csrf|tojson }}</script>
+<script src="{{ static_asset('js/agent-fleet.js') }}" defer></script>
+{% endblock %}
