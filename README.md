@@ -10,7 +10,7 @@
 
 It provides an extensible portfolio of automated routines spanning business operations, developer productivity, personal finance, trading, and lifestyle management. Every integration is a standalone Python module; every routine is a schedulable Celery task; every repetitive job is a candidate for an AI agent. The platform started as a code-first RPA system and has since evolved into AI-driven automation — while still fully supporting traditional scheduled tasks and browser-based RPA workflows where needed.
 
-At its core the platform has three layers:
+At its core the platform has four layers:
 
 - **App integrations** (`apps/`) — REST clients and service wrappers for every connected third-party (Google Workspace, Discord, Jira, Trello, OANDA, YNAB, LinkedIn, Reddit, and more), each exposable as an MCP tool so AI agents can call them directly.
 - **Scheduled workflows** (`workflows/`) — Celery Beat tasks that run on a defined schedule: pushing live data to a desktop HUD, processing MTG card resale pipelines, syncing git repos, posting monthly LinkedIn summaries, and more.
@@ -34,13 +34,13 @@ At its core the platform has three layers:
 | `appsheet` | AppSheet tables — find/add/edit/delete rows via the v2 REST API | REST API | Yes | [API Docs](https://support.google.com/appsheet/answer/10105768) · [Site](https://www.appsheet.com/) |
 | `browser` | HTTP fetching and web scraping (httpx + BeautifulSoup) | Local | No | — |
 | `confluence` | Confluence pages, spaces, full-text search (Cloud and Server / DC) | REST API | Yes | [API Docs](https://developer.atlassian.com/cloud/confluence/rest/) · [Site](https://www.atlassian.com/software/confluence) |
-| `desktop` | Windows desktop automation | Local | No | — |
+| `desktop` | Windows desktop automation | Local | Yes | — |
 | `discord` | Discord bot — messaging, guilds, webhooks | REST API | Yes | [API Docs](https://discord.com/developers/docs/reference) · [Portal](https://discord.com/developers/applications) |
 | `echo_mtg` | MTG collection management | REST API | Yes | [API Docs](https://www.echomtg.com/api/) · [Site](https://www.echomtg.com/) |
 | `file_index` | Metadata file catalog, multi-source discovery, revisioned Drive packages and expiry | Local + provider adapters | Yes | [Deployment](docs/info/FILES-DEPLOYMENT.md) |
 | `filesystem` | Local file and directory operations (pathlib) | Local | No | — |
 | `gemini` | Google Gemini — text generation, token counting, embeddings | REST API | Yes | [API Docs](https://ai.google.dev/api/rest) · [Console](https://aistudio.google.com/) |
-| `git` | Local git repository operations (CLI wrapper) | Local | No | — |
+| `git` | Local git repository operations (CLI wrapper) | Local | Yes | — |
 | `github` | GitHub repos, issues, PRs, commits, branches, file content | REST API | Yes | [API Docs](https://docs.github.com/en/rest) · [Site](https://github.com/) |
 | `google_apps` | Calendar, Gmail, Keep, Sheets, Tasks, Drive, Translation | REST API (OAuth + API key) | Yes | [API Docs](https://developers.google.com/workspace) · [Console](https://console.cloud.google.com/) |
 | `google_drive` | Google Drive — upload, download, export, manage files/folders | REST API (OAuth) | No | [API Docs](https://developers.google.com/drive/api/reference/rest/v3) · [Console](https://console.cloud.google.com/) |
@@ -57,11 +57,11 @@ At its core the platform has three layers:
 | `open_ai` | OpenAI — Responses API, Code Interpreter, Assistants v2 (deprecated) | REST (native SDK) | Yes | [API Docs](https://platform.openai.com/docs/api-reference) · [Site](https://platform.openai.com/) |
 | `orgo` | Cloud VM desktop control for AI agents | REST API | Yes | [API Docs](https://docs.orgo.ai/api-reference/introduction) · [Site](https://orgo.ai/) |
 | `own_tracks` | GPS location tracking | REST API + Docker/MQTT | Yes | [API Docs](https://owntracks.org/booklet/tech/http/) · [Site](https://owntracks.org/) |
-| `perplexity` | Perplexity Sonar — chat with live web search, search API, embeddings | REST API | No | [API Docs](https://docs.perplexity.ai/) · [Site](https://www.perplexity.ai/) |
+| `perplexity` | Perplexity Sonar — chat with live web search, search API, embeddings | REST API | Yes | [API Docs](https://docs.perplexity.ai/) · [Site](https://www.perplexity.ai/) |
 | `plaud` | Plaud AI voice recorder — recordings + transcripts (cloud API, export-folder fallback) | Adapter | Smoke | [Dev API](https://docs.plaud.ai/) · [Site](https://www.plaud.ai/) |
 | `playwright` | Headless browser automation — screenshot, click, fill, evaluate | Local | No | [Docs](https://playwright.dev/python/) |
 | `pokemon_tcg` | Pokemon TCG card database — cards by National Dex number, sets, rarities (+ offline JSON-dump fallback) | REST API | Yes | [API Docs](https://docs.pokemontcg.io) · [Site](https://pokemontcg.io/) |
-| `rainmeter` | Windows desktop HUD skinning | Local | No | [Docs](https://docs.rainmeter.net/) · [Site](https://www.rainmeter.net/) |
+| `rainmeter` | Windows desktop HUD skinning | Local | Yes | [Docs](https://docs.rainmeter.net/) · [Site](https://www.rainmeter.net/) |
 | `reddit` | Reddit — subreddits, posts, comments, inbox | REST API (OAuth2) | Yes | [API Docs](https://www.reddit.com/dev/api/) · [Apps](https://www.reddit.com/prefs/apps) |
 | `scryfall` | MTG card database | REST API | Yes | [API Docs](https://scryfall.com/docs/api) · [Site](https://scryfall.com/) |
 | `spotify` | Spotify listening history — recently-played, top tracks/artists | REST API (OAuth2) | Yes | [API Docs](https://developer.spotify.com/documentation/web-api) · [Dashboard](https://developer.spotify.com/dashboard) |
@@ -169,7 +169,7 @@ ANTHROPIC_API_KEY=...    TRELLO_API_KEY=...    TRELLO_API_TOKEN=...
 
 Board columns: `Backlog → Pending → In Progress → Done / Failed / Blocked`
 
-Tests: `pytest agents/projects/tests/ -m "not integration"` — 290 unit tests, fully offline.
+Tests: `pytest agents/projects/tests/ -m "not integration"` — excludes marked live integration tests.
 
 ---
 
@@ -247,7 +247,7 @@ python -m tools schema trello create_trello_card
 
 The CLI and both MCP surfaces share `tools/catalog.py`; existing MCP names remain compatible.
 
-The `hfl_corpus` adapter covers 134 canonical frontend API operations,
+The `hfl_corpus` adapter covers 157 canonical frontend API operations,
 including entities, timeline, ideas, maps, goals and facets. Internal sharing
 inputs remain protocol-only, not general MCP tools. The
 [endpoint manifest](frontend/mcp_coverage.json) records reviewed routes; the
@@ -295,7 +295,7 @@ Celery-based scheduled automation. Tasks are registered with `@SPROUT.task` and 
 | `files` | Opt-in | 3 | Source discovery, versioned Drive package publication, and expiry; enabled with `FILES_ENABLED=1` |
 | `git_forks` | Active | 1 | Weekly hybrid discovery and drift analysis for harqis-work forks, with one HFL entry per fork instance plus a fleet summary |
 | `notes` | Active | 2 | Repository-backed note sync: editing-machine push → canonical host fast-forward pull; HFL performs the downstream ingest |
-| `knowledge` | Guarded active | 11 | Multi-source RAG ingest, cited answers, cross-link reports, and on-demand topic mapping/scanning |
+| `knowledge` | Guarded active | 12 | Multi-source RAG ingest, cited answers, cross-link reports, on-demand topic mapping/scanning, and corpus entity processing |
 | `dumps` | Active | 3 | Daily dump collection — fanout per-node ship + harqis-server pull (Android/Termux) → analysis |
 | `social` | Active | 1 | Monthly LinkedIn post — git history → Claude → LinkedIn draft + Gmail notification |
 | `tcg` | Manual | 6 | Pokedex proxy-printing pipeline (MPC) — manual/pytest-triggered, ships an empty Beat dict |
@@ -376,7 +376,7 @@ Rainmeter rendering is deprecated and opt-in (`HARQIS_LEGACY_RAINMETER=1`). Exis
 
 HARQIS drives a live desktop heads-up display using [Rainmeter](https://www.rainmeter.net/) on Windows. Celery tasks in `workflows/hud/` push data from connected services into Rainmeter skin files.
 
-> **Offline resilience:** HUD render tasks run only on the Windows `hud` queue. Selected data-backed panels also have **data-only fallback twins** (`workflows/hud/tasks/hud_data_only.py`) that run on the always-on host so their `@feed` + Elasticsearch logs keep flowing when the Windows box is off — they gate on the original's heartbeat and stay silent while Windows is up. Add one with `/create-data-only-from-hud <task_fn>`. See [`workflows/hud/README.md`](workflows/hud/README.md#data-only-fallback-host).
+> **Offline resilience:** Portable Calendar, finance, Jira, radar, and job-summary collectors run on the `host` queue; Windows-specific collectors use `hud` or `peon`, and TCG fulfillment remains on `hud` (see `workflows/config.py` and `workflows/hud/tasks_config.py`). The legacy radar **data-only fallback twin** in `workflows/hud/tasks/hud_data_only.py` is heartbeat-gated. Prefer the portable collectors for current Second Brain panels. See [`workflows/hud/README.md`](workflows/hud/README.md#data-only-fallback-host).
 
 ![HARQIS Desktop HUD](docs/images/windows-hud-sample.png)
 
@@ -409,7 +409,7 @@ Widgets are wired to categories in each task's `@init_meter(..., schedule_catego
 | **Budgeting Info** | Organize block | YNAB — budget balances in PHP and SGD with overspend warnings | Every hour |
 | **API Costs** | Finance + Organize blocks | Anthropic admin usage API (OpenAI / Gemini stubbed) — trailing 3-month LLM spend grouped per month → service → model | Every 30 min |
 | **Jira Board** | Work block | Jira Software — In-Review / In-Progress / Ready / In-Analysis tickets | Weekdays every hour |
-| **Hermes Radar** | Always | Sanitized Hermes Telegram pushes from the last 8h (maximum 10) above the established Claude Haiku productivity synthesis. The host exports an atomic shared JSON snapshot; Windows never opens Hermes state or polls Telegram. The Rainmeter folder/task IDs remain `DAILYRADAR` / `show_daily_radar` for compatibility. | Push snapshot hourly at :00; HUD refresh hourly at :05; synthesis at 08:00, 12:00, 16:00, 20:00 |
+| **Hermes Radar** | Always | Sanitized Hermes Telegram pushes from the last 12h (no item cap) above the established Claude Haiku productivity synthesis, which retains an 8h analysis window. The host exports an atomic shared JSON snapshot and refreshes the portable projection; Windows never opens Hermes state or polls Telegram. The Rainmeter folder/task IDs remain `DAILYRADAR` / `show_daily_radar` for compatibility. | Push snapshot hourly at :00; HUD refresh hourly at :05; synthesis at 08:00, 12:00, 16:00, 20:00 |
 | **Second Brain** | Always when enabled | Canonical redacted advisory feed | Dispatched by reconciliation (every 15 min) when Rainmeter delivery is enabled |
 | **Mouse Bindings** | Organize + Work | iCUE Corsair Scimitar — active macro bindings for the foreground app | Every 60 sec |
 | **TCG Orders** | Play block | TCG Marketplace — open and pending orders with card art | Every hour |
@@ -725,9 +725,10 @@ and import smoke tests, then rolls back automatically if verification fails.
 
 ### Environment Variables (`.env/apps.env`)
 
-This is the canonical list of every env var consumed across the platform. Keep it
-in sync with the actual `.env/apps.env` whenever an app is added — the
-`/create-new-service-app` skill includes this update as a mandatory step.
+These are common configuration variables, not an exhaustive list of every
+runtime option. Consult each app/workflow's documentation and configuration for
+additional settings. Keep this reference current when adding an app via
+`/create-new-service-app`; never copy secret values from `.env/apps.env` into docs.
 
 ```env
 # ── Core / harness ────────────────────────────────────────────────────────────
@@ -934,9 +935,11 @@ RAINMETER_WRITE_FEED_TO_PATH=
 ```
 
 > The actual `.env/apps.env` file is **gitignored** — values shown here are
-> placeholders. Each entry corresponds to a `${ENV_VAR}` reference in
-> `apps_config.yaml`. Apps without a matching env var simply skip registration
-> at MCP server boot (logged as a warning, not an error).
+> placeholders. Variables are consumed by `apps_config.yaml` interpolation or
+> directly by runtime code. MCP registration is filtered by `MCP_ENABLED_APPS`;
+> registrar import/configuration failures are logged as warnings and skipped.
+> Missing credentials do not universally prevent registration: some tools fail
+> only when called.
 
 ### `apps_config.yaml`
 
@@ -966,8 +969,11 @@ pytest -m smoke
 pytest -m sanity
 ```
 
-All app tests are **live integration tests** — no mocking. Requires valid credentials.
-Kanban agent tests are fully offline (290 unit tests, 2 integration tests).
+App suites contain both offline regression tests (including mocks) and live
+integration tests. Live tests require valid credentials and may have side effects;
+inspect the target suite before running it. The `integration` marker excludes
+marked live tests, but is not a universal offline guarantee across all app suites.
+For Kanban tests, use the `-m "not integration"` selection shown above.
 
 ---
 
