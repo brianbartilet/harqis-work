@@ -1120,7 +1120,9 @@ workspace-linked objects may still need individual exclusions.
 Entry filters preserve combined-view rules. Filters can edit those rules or
 explicitly replace inherited workspace scope. Explicit workspace assignments
 retain standalone actions/ideas even without matching entries. Defaults exclude
-completed actions and dismissed ideas. Board members outside the workspace
+completed actions and dismissed actions/ideas. In the Actions tab, Include dismissed
+also enables dismissed members on shared boards and their approved connections;
+Include completed controls other terminal actions independently. Board members outside the workspace
 require per-board opt-in; mapped goals never recursively include other boards.
 Excluded objects remain excluded during live refresh. Source objects are never
 modified by sharing.

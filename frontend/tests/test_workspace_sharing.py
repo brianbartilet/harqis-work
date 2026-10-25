@@ -74,6 +74,26 @@ def test_shared_board_keeps_only_approved_positions_and_sizes(context, sharing_c
     assert graph['node_sizes'] == {'action:a': 7}
 
 
+@pytest.mark.parametrize('include_dismissed', [False, True])
+@pytest.mark.parametrize('include_completed', [False, True])
+def test_dismissed_board_members_follow_dismissed_control(context, sharing_corpus, include_dismissed, include_completed):
+    context['actions'][0]['status'] = 'dismissed'
+    context['ideas'][0]['status'] = 'dismissed'
+    context['maps'][0]['members'].append('idea:i')
+    context['maps'][0]['edges'] = [{'source': 'action:a', 'target': 'idea:i', 'relation': 'related-to'}]
+    context['actions'].append(dict(id='done', title='Finished action', status='done', workspace_ids=['work']))
+    cfg = recipe(activity={'include_dismissed': include_dismissed, 'include_completed': include_completed})
+    snapshot = build_snapshot(cfg, (sharing_corpus,))
+    graph = snapshot.activity['boards'][0]['graph']
+    nodes = {node['id'] for node in graph['nodes']}
+    assert ('action:a' in nodes) == include_dismissed
+    assert ('idea:i' in nodes) == include_dismissed
+    assert ('action:done' in {item['id'] for item in snapshot.activity['actions']}) == include_completed
+    assert any(edge['source'] == 'action:a' and edge['target'] == 'idea:i' for edge in graph['edges']) == include_dismissed
+    excluded = replace(cfg, activity={**cfg.activity, 'excluded_ids': ['action:a']})
+    assert 'Approved action' not in str(build_snapshot(excluded, (sharing_corpus,)).to_record())
+
+
 def test_no_entry_share_does_not_leak_entry_labels(context, sharing_corpus):
     snapshot = build_snapshot(recipe(activity={'sections':['actions','boards','graph']}), (sharing_corpus,))
     assert not snapshot.entries

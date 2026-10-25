@@ -195,8 +195,8 @@ def project(configuration, snapshot, documents, *, allow_secrets=False, secret_t
         pools[kind], eligible[kind] = {}, set()
         for item in data.get(kind, []):
             identity = prefix + item['id']
-            inactive = (kind == 'actions' and item.get('status') in {'done', 'completed', 'cancelled', 'dismissed', 'closed'}
-                        and not controls.include_completed or kind == 'ideas' and item.get('status') == 'dismissed'
+            inactive = (kind == 'actions' and item.get('status') in {'done', 'completed', 'cancelled', 'closed'}
+                        and not controls.include_completed or kind in {'actions', 'ideas'} and item.get('status') == 'dismissed'
                         and not controls.include_dismissed)
             if not allowed(item) or inactive or identity in excluded:
                 continue

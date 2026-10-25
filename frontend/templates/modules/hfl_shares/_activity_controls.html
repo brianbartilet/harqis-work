@@ -37,7 +37,7 @@
 <p class="share-scope-note">Selecting an object shares its description, status, dates, notes, and checklists. Connections include approved content only. Selected boards may also include members here; exclude an object to remove it everywhere.</p>
 {% elif key == 'boards' %}
 <label class="check"><input type="checkbox" name="activity_sections" value="boards" {% if 'boards' in sections %}checked{% endif %} data-activity-control>Include boards and mapped goals</label>
-<p class="share-scope-note">Boards include draft thoughts and eligible members. Outside-workspace members require the per-board option. Goals do not pull in other boards.</p>
+<p class="share-scope-note">Boards include draft thoughts and eligible members. To show dismissed actions and ideas on boards, enable Include dismissed in the Actions tab. Outside-workspace members require the per-board option. Goals do not pull in other boards.</p>
 <div data-outside-board-values>{% for identity in activity.get('outside_board_ids', []) %}<input type="hidden" name="outside_board_ids" value="{{ identity }}">{% endfor %}</div>
 {% elif key == 'plans' %}
 <label class="check"><input type="checkbox" name="activity_sections" value="plans" {% if 'plans' in sections %}checked{% endif %} data-activity-control>Include pinned dates</label>
