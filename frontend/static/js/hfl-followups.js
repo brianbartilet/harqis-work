@@ -15,6 +15,21 @@
   let sequence = 0, pending = false, moving = false, dragging = null, disposed = false;
   let items = new Map(), rendered = '', timer, sorters = [];
   let ideasOpen=false, ideaRows=[];
+  const actionSearch = $('[data-board-search]');
+  const ideaSearch = document.createElement('input');
+  ideaSearch.type='search';ideaSearch.className='board-card-search idea-card-search';
+  ideaSearch.placeholder='Search ideas…';ideaSearch.setAttribute('aria-label','Search ideas');ideaSearch.autocomplete='off';
+  const query = input => (input?.value || '').trim().toLowerCase();
+  const matches = (item, term) => !term || [item.title,item.body,item.description,item.recommendation,item.expected_outcome,
+    ...(item.checklists || []).flatMap(list => [list.title,...(list.items || []).map(task => task.text)])
+  ].filter(Boolean).join('\n').toLowerCase().includes(term);
+  function updateCount(rows) {
+    const total=rows.length, count=rows.filter(item=>matches(item,query(actionSearch))).length;
+    status.textContent=(query(actionSearch)?count+' of '+total:total)+' action'+(total===1?'':'s');
+  }
+  for(const input of [actionSearch,ideaSearch])input?.addEventListener('input',()=>{
+    render([...items.values()]);updateCount([...items.values()]);
+  },{signal:listeners.signal});
   let pointerHeld = false, savingCards = 0;
   lanes.addEventListener('pointerdown',()=>{pointerHeld=true;},{signal:listeners.signal});
   window.addEventListener('pointerup',()=>{pointerHeld=false;},{signal:listeners.signal});
@@ -47,7 +62,9 @@
     return data;
   }
   function render(rows) {
-    const signature=JSON.stringify([rows,ideasOpen,ideaRows]);
+    const actionQuery=query(actionSearch), ideaQuery=query(ideaSearch);
+    const visibleIdeas=ideaRows.filter(item=>matches(item,ideaQuery));
+    const signature=JSON.stringify([rows,ideasOpen,ideaRows,actionQuery,ideaQuery]);
     if(signature===rendered)return;
     const expanded=new Set([...lanes.querySelectorAll('details[open]')].map(el=>el.closest('[data-followup-id]').dataset.followupId+':'+el.querySelector('summary').textContent));
     const scroll=new Map([...lanes.children].map(el=>[el.dataset.status,el.scrollTop]));
@@ -68,7 +85,7 @@
     lanes.replaceChildren();
     for(const state of states){
       const section=node('section',null,'followups-lane');section.dataset.status=state;section.setAttribute('aria-label',label(state));
-      const matching=rows.filter(item=>item.status===state).sort((a,b)=>(a.board_position??2147483647)-(b.board_position??2147483647));
+      const matching=rows.filter(item=>item.status===state&&matches(item,actionQuery)).sort((a,b)=>(a.board_position??2147483647)-(b.board_position??2147483647));
       section.append(node('h3',label(state)+' · '+matching.length));
       for(const item of matching){
         if(oldCards.has(item.id)&&JSON.stringify(oldItems.get(item.id))===JSON.stringify(item)){
@@ -90,7 +107,7 @@
         card.querySelectorAll('details').forEach(el=>el.open=expanded.has(item.id+':'+el.querySelector('summary').textContent));
         section.append(card);
       }
-      if(!matching.length)section.append(node('p','No actions','agenda-description'));
+      if(!matching.length)section.append(node('p',actionQuery?'No matching actions':'No actions','agenda-description'));
       lanes.append(section);section.scrollTop=scroll.get(state)||0;
       sorters.push(new Sortable(section,{
         group:'hfl-actions',draggable:'.agenda-card',filter:'button:not(.action-drag-handle),a,input,summary,textarea,select,label,pre,code,table',preventOnFilter:false,
@@ -107,11 +124,12 @@
     }
     if(ideasOpen){
       const section=node('section',null,'followups-lane ideas-drawer');section.id='board-ideas-drawer';section.dataset.status='ideas';section.setAttribute('aria-label','Ideas');
-      const header=node('div',null,'ideas-drawer-header');header.append(node('h3','Ideas · '+ideaRows.length));
-      section.append(header);
+      const header=node('div',null,'ideas-drawer-header');header.append(node('h3','Ideas · '+(ideaQuery?visibleIdeas.length+' of ':'')+ideaRows.length));
+      section.append(header,ideaSearch);
       const ideaToolbar=node('div',null,'ideas-bulk-toolbar'),ideaBulk=node('div'),ideaRefresh=node('button','Refresh');
       ideaRefresh.type='button';ideaRefresh.onclick=()=>refresh(true);ideaToolbar.append(ideaBulk,ideaRefresh);section.append(ideaToolbar);
-      const newestIdeas=[...ideaRows].sort((a,b)=>(Date.parse(b.created_at)||0)-(Date.parse(a.created_at)||0));
+      const newestIdeas=[...visibleIdeas].sort((a,b)=>(Date.parse(b.created_at)||0)-(Date.parse(a.created_at)||0));
+      if(!newestIdeas.length)section.append(node('p',ideaQuery?'No matching ideas':'No ideas','agenda-description'));
       for(const item of newestIdeas){
         const oldCard=oldIdeaCards.get(item.id), itemSignature=JSON.stringify(item);
         if(oldCard?.ideaSignature===itemSignature){section.append(oldCard);continue;}
@@ -187,6 +205,7 @@
     }
     rendered=signature;
     bulk.sync('action',rows);bulk.sync('idea',ideaRows);
+    if(focused===ideaSearch)ideaSearch.focus({preventScroll:true});
     if(focused?.matches('[data-bulk-check]')){
       const card=[...dialog.querySelectorAll(focusedIdea?'[data-idea-id]':'[data-followup-id]')].find(el=>(focusedIdea?el.dataset.ideaId:el.dataset.followupId)===(focusedIdea||focusId));
       card?.querySelector('[data-bulk-check]')?.focus({preventScroll:true});
@@ -213,8 +232,7 @@
         if(ticket!==sequence)return;
       }
       render(rows);error.hidden=true;
-      const count=rows.length+' action'+(rows.length===1?'':'s');
-      if(status.textContent!==count)status.textContent=count;
+      updateCount(rows);
     }catch(e){if(ticket===sequence){error.textContent=e.message;error.hidden=false;status.textContent='Could not refresh. Displayed actions may be out of date. Use Refresh to retry.';}}
     finally{if(ticket===sequence){pending=false;lanes.removeAttribute('aria-busy');}}
   }
