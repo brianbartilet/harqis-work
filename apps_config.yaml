@@ -789,6 +789,20 @@ YOUTUBE:
   return_data_only: True
 
 
+GRANOLA:
+  app_id: 'granola'
+  client: 'rest'
+  parameters:
+    base_url: 'https://public-api.granola.ai/v1/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 30
+    stream: False
+  app_data:
+    api_key: ${GRANOLA_API_KEY}
+  return_data_only: True
+
+
 HFL_CORPUS:
   app_id: 'hfl_corpus'
   client: 'rest'

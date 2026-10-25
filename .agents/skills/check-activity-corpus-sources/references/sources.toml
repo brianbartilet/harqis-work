@@ -191,6 +191,20 @@ auto_retry = true
 backfill = "task-window"
 
 [[sources]]
+key = "granola"
+kind = "source"
+monitor_mode = "scheduled"
+task = "workflows.hfl.tasks.ingest_granola.ingest_granola_activity"
+entry_sources = ["granola"]
+schedule = "daily 23:30; shipped disabled until API key and folder are configured"
+task_max_age_hours = 36
+entry_max_age_hours = 168
+expects_entry = true
+allow_empty = true
+auto_retry = false
+backfill = "manual window and cursor"
+
+[[sources]]
 key = "youtube"
 kind = "source"
 monitor_mode = "scheduled"

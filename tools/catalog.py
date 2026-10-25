@@ -44,6 +44,7 @@ APP_CATALOG: tuple[AppToolSpec, ...] = (
     AppToolSpec("github", "GitHub", "apps.github.mcp.register_github_tools"),
     AppToolSpec("google_apps", "Google Apps", "apps.google_apps.mcp.register_google_apps_tools"),
     AppToolSpec("google_drive", "Google Drive", "apps.google_drive.mcp.register_google_drive_tools"),
+    AppToolSpec("granola", "Granola", "apps.granola.mcp.register_granola_tools"),
     AppToolSpec("grok", "Grok", "apps.grok.mcp.register_grok_tools"),
     AppToolSpec("hfl_corpus", "HFL Activity Corpus", "apps.hfl_corpus.mcp.register_hfl_corpus_tools", aliases=("activity_corpus",)),
     AppToolSpec("jira", "Jira", "apps.jira.mcp.register_jira_tools"),

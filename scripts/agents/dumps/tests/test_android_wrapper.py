@@ -117,7 +117,8 @@ def test_terminated_supervisor_cleans_child(tmp_path):
             time.sleep(.02)
         assert pidfile.exists()
         proc.send_signal(signal.SIGTERM)
-        assert proc.wait(timeout=3) == 143
+        status = proc.wait(timeout=3)
+        assert status == 143, diagnostics(tmp_path)
         with pytest.raises(ProcessLookupError):
             os.kill(int(pidfile.read_text(encoding="utf-8")), 0)
         assert diagnostics(tmp_path)[-1]["event"] == "interrupted"
@@ -172,6 +173,54 @@ def test_cleanup_waits_for_group_disappearance(monkeypatch):
     monkeypatch.setattr(wrapper['os'], 'killpg', killpg)
     proc = SimpleNamespace(pid=123, poll=lambda: 0, wait=lambda timeout: 0)
     assert wrapper['_stop_group'](proc, 0) is True
+    assert len(probes) == 2
+
+
+@pytest.mark.parametrize("denied_signal", ["SIGTERM", "SIGKILL", None])
+def test_cleanup_rechecks_transient_permission_error(monkeypatch, denied_signal):
+    from types import SimpleNamespace
+    denied_signal = getattr(signal, denied_signal) if denied_signal else 0
+    wrapper = load_wrapper()
+    denied = []
+    reaped = []
+    def killpg(pid, sig):
+        if sig == denied_signal and not denied:
+            denied.append(sig)
+            raise PermissionError
+        if sig == 0 and reaped:
+            raise ProcessLookupError
+    def wait(timeout):
+        reaped.append(True)
+        return 0
+    monkeypatch.setattr(wrapper["os"], "killpg", killpg)
+    proc = SimpleNamespace(pid=123, poll=lambda: 0, wait=wait)
+    assert wrapper["_stop_group"](proc, .01) is True
+    assert denied and reaped
+
+
+def test_cleanup_persistent_permission_error_is_not_success(monkeypatch):
+    from types import SimpleNamespace
+    wrapper = load_wrapper()
+    def denied(*args):
+        raise PermissionError
+    monkeypatch.setattr(wrapper["os"], "killpg", denied)
+    proc = SimpleNamespace(pid=123, poll=lambda: 0, wait=lambda timeout: 0)
+    assert wrapper["_stop_group"](proc, 0) is False
+
+
+def test_cleanup_retries_permission_error_after_reaping(monkeypatch):
+    from types import SimpleNamespace
+    wrapper = load_wrapper()
+    probes = []
+    def killpg(pid, sig):
+        if sig == 0:
+            probes.append(sig)
+            if len(probes) == 1:
+                raise PermissionError
+            raise ProcessLookupError
+    monkeypatch.setattr(wrapper["os"], "killpg", killpg)
+    proc = SimpleNamespace(pid=123, poll=lambda: 0, wait=lambda timeout: 0)
+    assert wrapper["_stop_group"](proc, 0) is True
     assert len(probes) == 2
 
 

@@ -1,5 +1,11 @@
 # HFL Memory Signal as a Calendar, Idea Board, and Agent Action Layer
 
+> Follow-on design (2026-10-20):
+> [Conversation memory: notes, Plaud, and optional Granola](CONVERSATION-MEMORY-GRANOLA-NOTES-PLAUD.md)
+> compares capture options against the current action and radar implementations.
+> Its repository baseline distinguishes shipped capabilities from the historical
+> gaps discussed in this thesis.
+
 The strongest direction is to evolve Memory Signal into a **temporal memory and
 intent layer**: one place that shows what was planned, what actually happened,
 what ideas emerged, and what agents can do next.

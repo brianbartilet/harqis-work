@@ -1439,6 +1439,40 @@ def register_memory_tools(mcp: FastMCP):
         }
 
     @mcp.tool()
+    def granola_activity(
+        period: str = "", since: str = "", until: str = "",
+        folder_id: str = "", max_notes: int = 20, cursor: str = "",
+        synthesize: bool = False,
+    ) -> dict:
+        """Preview selected Granola summaries without HFL/ES writes.
+
+        Args:
+            period: Same date vocabulary as memory_recall; defaults to last seven days.
+            since: ISO date or relative -Nd.
+            until: Inclusive ISO end date, default today.
+            folder_id: Selected fol_ ID; defaults to GRANOLA_FOLDER_ID.
+            max_notes: At most 1–100 notes; default 20.
+            cursor: Continue an identical window/query using next_cursor.
+            synthesize: Optional Haiku preview; false returns source summaries.
+        """
+        logger.info("granola_activity called")
+        from workflows.hfl.tasks.ingest_granola import collect_granola_activity, distill_granola_activity
+        start, end, label = _resolve_window(period, since, until)
+        end = end or _today()
+        start = start or end - timedelta(days=6)
+        try:
+            activity = collect_granola_activity(
+                since=start, until=end, folder_id=folder_id, max_notes=max_notes, cursor=cursor)
+            previews = [distill_granola_activity(note, synthesize=synthesize)
+                        for note in activity["notes"]]
+            result = {**activity, "found": bool(activity["notes"]), "previews": previews,
+                      "period": _period_dict(start, end, label)}
+        except Exception as exc:
+            result = {"found": False, "error": type(exc).__name__, "partial": True}
+        logger.info("granola_activity done")
+        return result
+
+    @mcp.tool()
     def plaud_activity(
         period: str = "",
         since: str = "",

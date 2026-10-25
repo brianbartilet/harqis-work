@@ -297,6 +297,28 @@ Wraps `apps/gemini/references/web/api/` services. Requires valid `GEMINI` sectio
 
 ---
 
+### Granola (`apps/granola/mcp.py`)
+
+Read-only official API tools; requires `GRANOLA_API_KEY`. These do not write HFL.
+
+| Tool | Args | Returns |
+| --- | --- | --- |
+| `list_granola_notes` | `created_after?`, `created_before?`, `updated_after?`, `folder_id?`, `cursor?`, `page_size?` | One metadata page |
+| `get_granola_note` | `note_id`, `include_transcript?` | Full note, including accessible private notes |
+| `get_granola_transcript` | `note_id`, `cursor?`, `page_size?` | One transcript page |
+| `list_granola_folders` | `cursor?`, `page_size?` | One folder page |
+
+The Memory tool `granola_activity(period?, since?, until?, folder_id?,
+max_notes?, cursor?, synthesize?)` previews selected summaries without corpus
+writes. `synthesize` defaults false. Empty windows make no model call.
+
+*“List my Granola folders so I can choose an HFL import folder.”*
+*“Preview this week's Granola meeting summaries without saving them.”*
+
+See [configuration and boundaries](../apps/granola/README.md).
+
+---
+
 ### Grok (`apps/grok/mcp.py`)
 
 Wraps xAI Grok via the OpenAI-compatible SDK (`https://api.x.ai/v1`). Requires valid `GROK` section in `apps_config.yaml`.

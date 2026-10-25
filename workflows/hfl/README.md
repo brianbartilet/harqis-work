@@ -82,6 +82,7 @@ for these boundaries and the September 15–16 recovery plan.
 
 | Task | What it does | Express target | Schedule (when active) |
 | --- | --- | --- | --- |
+| `ingest_granola_activity` | Captures one entry per selected Granola meeting summary; Haiku with labelled source fallback, stable note deduplication, canonical persistence. Initial capture only. | `file:activity-corpus+es:hfl-entries` | Disabled; supplied daily 23:30 on `hfl`, seven-day overlap. See [activation](#granola-activation). |
 | `capture_hfl_entry` | Appends one structured entry to today's corpus file. Empty `moment` is a no-op. | `file:hfl_corpus` | Adhoc — invoked via `.delay()`, an MCP tool, an agent, or a hotkey. The scheduled slot fires Sunday 03:33 with empty kwargs (i.e. is a no-op). |
 | `retrieve_hfl_corpus` | Substring + tag scan over the corpus, optional date filter. Returns up to `k` entries, most recent first. | `es_log` (callers consume the return value) | Adhoc — same pattern as capture. |
 | `summarize_hfl_week` | Weekly Haiku 4.5 rollup of the past N days; writes `YYYY-Www-rollup.md` with searchable tags aggregated from its source entries. | `file:hfl_summary+es_log` | Sundays 21:00 local. |
@@ -1164,3 +1165,161 @@ the frontend owning the role/Space profile; `HFL_CORPUS_API_TOKEN` authenticates
 `HFL_PERSONA_QUEUE` optionally changes the owner UI manual queue. The frontend needs
 existing Anthropic credentials. See [Roles and Spaces](../../docs/info/ROLES-AND-SPACES.md)
 for limits, failure handling, extraction, and local review.
+
+## Granola activation
+
+**Task:** `workflows.hfl.tasks.ingest_granola.ingest_granola_activity`.
+**Runtime:** `celery` — fixed read, bounded Haiku distillation, durable submit.
+**Schedule owner:** manual until enabled; Celery Beat afterward.
+**Schedule:** supplied daily 23:30 in the configured Celery timezone, commented
+out by default; seven Singapore calendar dates including today.
+**Queue:** `WorkflowQueue.HFL`, one canonical worker identity. **OS:** cross-platform.
+**Apps:** `apps/granola` → `apps/antropic` → canonical HFL persistence.
+**Config keys:** `GRANOLA`, `ANTHROPIC`, existing HFL/Elasticsearch configuration.
+**Prompt:** `prompts/ingest_granola.md`.
+
+Set `GRANOLA_API_KEY` and `GRANOLA_FOLDER_ID` in the host's ignored `.env/apps.env`.
+The selected folder includes its descendants. `ANTHROPIC_API_KEY` enables Haiku;
+provider failure uses labelled source text. Ingestion does not include private
+notes or request transcripts. It writes one HFL entry per note, `source=granola`,
+with the source link, note creation timestamp, and recorded meeting time.
+Both fallback and distillation are labelled synthesized because the upstream
+summary is already AI-generated.
+
+`granola_activity` is the paired read-only Memory tool, enabled independently of
+the Beat schedule. It accepts `period`, `since`, `until`, `folder_id`, `max_notes`,
+`cursor`, and optional `synthesize` (default false). Empty windows make no model
+call. Stored entries remain available through normal HFL recall.
+
+Missing token/folder produces a clean no-op. Source errors are reported without
+credentials or response bodies; individual note failures leave that page
+retryable. Model failures retain a raw summary fallback. Persistence receipts
+preserve `persisted`, `forwarded`, and `outbox`; only newly persisted receipts
+increment `entries_written`. Default projection index: `harqis-hfl-entries`
+(override with `HFL_ES_INDEX`).
+
+Initial capture only: retries preserve the first canonical entry. Source edits,
+deletions, and permission changes do not synchronize automatically. Seven-day
+overlap may repeat model work; select independently retainable notes. On
+`partial=true`, replay the same explicit `since`/`until` and folder with the
+returned `next_cursor`; if empty, replay the window from its start. Partial
+persistence failures must replay the original run's cursor, not a later page.
+Late-processed/shared notes outside the window need a wider manual backfill.
+
+### First-time setup and import
+
+Use an existing configured HARQIS host with its repository virtual environment,
+machine configuration, and HFL persistence services. Run these PowerShell
+examples from the repository root. Each example loads `.env/apps.env` and the
+machine overrides **before** importing app/workflow configuration. On macOS or
+Linux, run the Python bodies with `.venv/bin/python` instead.
+
+1. Create a Granola API key as described in the
+   [app configuration](../../apps/granola/README.md#configuration), and set
+   `GRANOLA_API_KEY` in the host's ignored `.env/apps.env`.
+2. List accessible folders:
+
+```powershell
+@'
+from scripts.launch import setup_env
+setup_env()
+import json
+from apps.granola.config import CONFIG
+from apps.granola.references.web.api.notes import ApiServiceGranolaNotes
+print(json.dumps(ApiServiceGranolaNotes(CONFIG).list_folders(page_size=20), indent=2))
+'@ | .venv/Scripts/python.exe -
+```
+
+Set `GRANOLA_FOLDER_ID` to the selected `fol_...` ID in `.env/apps.env`.
+If the folder page has `hasMore=true`, repeat with its returned `cursor`.
+Configure the same values on the canonical HFL worker before scheduled use.
+
+3. Preview up to five summaries created today in Singapore, without HFL writes
+   or a model call. Replace the dates with the desired inclusive ISO date window
+   if today's notes are empty:
+
+```powershell
+@'
+from scripts.launch import setup_env
+setup_env()
+import json
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from workflows.hfl.tasks.ingest_granola import collect_granola_activity
+day = datetime.now(ZoneInfo("Asia/Singapore")).date()
+preview = collect_granola_activity(since=day, until=day, max_notes=5, max_pages=1)
+print(json.dumps(preview, indent=2, default=str))
+'@ | .venv/Scripts/python.exe -
+```
+
+The Memory MCP tool `granola_activity` provides the same read-only collection
+path. Review the selected summaries and any `errors` or `partial` result before
+importing.
+
+4. On the canonical HFL host, run the first bounded import. **This command writes
+   HFL entries.** It runs synchronously, so it does not need a Celery worker to
+   consume a queued task. Existing HFL persistence/index configuration is required:
+
+```powershell
+@'
+from scripts.launch import setup_env
+setup_env()
+import json
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from workflows.hfl.tasks.ingest_granola import ingest_granola_activity
+day = datetime.now(ZoneInfo("Asia/Singapore")).date().isoformat()
+receipt = ingest_granola_activity(
+    since=day, until=day, max_notes=5, max_pages=1, synthesize=False,
+)
+print(json.dumps(receipt, indent=2, default=str))
+'@ | .venv/Scripts/python.exe -
+```
+
+Inspect each item in `results`: `forwarded` or `outbox` is not confirmation of
+canonical persistence or indexing. Confirm the resulting `source=granola`
+entries through normal HFL recall and inspect indexing receipts. Repeating the
+same import should retain the existing entries without creating duplicates.
+Use the same explicit window as the preview when testing historical notes.
+
+### Scheduled activation
+
+The schedule remains disabled until these steps are completed:
+
+1. Set the key and selected folder; verify a read-only preview.
+2. Manually ingest a small window with `synthesize=False`, inspect canonical
+   delivery/indexing receipts, and confirm the retention policy.
+3. Confirm volume fits the bounds (20 notes/five pages by default). Resolve
+   partial runs before scheduling; there is no automatic durable cursor.
+4. Uncomment `run-job--ingest_granola_activity` in `tasks_config.py`, regenerate
+   the frontend registry, and restart Beat plus the canonical HFL worker.
+5. Reconnect the CLI/MCP client to refresh tool discovery.
+
+Generate the registry with `python frontend/generate_registry.py` after loading
+the host environment. Follow the existing [host lifecycle instructions](../../scripts/README.md)
+for restarting the configured services; avoid starting a second Beat instance.
+
+### Troubleshooting
+
+| Result | Next step |
+| --- | --- |
+| `skipped: no token` / `no folder` | Set the missing variable on the executing host, then restart long-running consumers to reload it. |
+| No notes | Check folder access, child-folder selection, processing status, and the note **creation-date** window. |
+| HTTP 401/403 | Check the API key, plan entitlement, and permitted note scope. |
+| HTTP 429 | Wait before retrying; the adapter has no automatic rate-limit retry. |
+| `partial: true` | Follow the cursor/window recovery instructions above before scheduling. |
+| `forwarded`, `outbox`, or failed delivery | Inspect the canonical HFL service and existing outbox recovery; do not count these as indexed entries. |
+
+Run verification with the repository virtual environment **after loading the
+machine environment**:
+
+```powershell
+.venv/Scripts/python.exe -m py_compile workflows/hfl/tasks/ingest_granola.py workflows/hfl/tasks_config.py workflows/hfl/__init__.py
+.venv/Scripts/python.exe -c "import workflows.hfl; from core.apps.sprout.app.celery import SPROUT; print('workflows.hfl.tasks.ingest_granola.ingest_granola_activity' in SPROUT.tasks)"
+.venv/Scripts/python.exe -m pytest -o addopts= workflows/hfl/tests/test_ingest_granola.py -v
+.venv/Scripts/python.exe -m tools commands granola
+```
+
+Live smoke tests need explicit `GRANOLA_LIVE_TESTS=1`; no live HFL-writing test
+is enabled. See [app configuration](../../apps/granola/README.md) and
+[implementation record](../../docs/thesis/GRANOLA-HFL-INGEST-IMPLEMENTATION.md).
