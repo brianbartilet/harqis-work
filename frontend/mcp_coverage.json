@@ -2291,6 +2291,34 @@
     },
     {
       "method": "GET",
+      "path": "/second-brain/feed",
+      "status": "ui",
+      "tools": [],
+      "reason": "Session-authenticated HTML feed page; browser-specific presentation."
+    },
+    {
+      "method": "GET",
+      "path": "/second-brain/hud/build-context",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated HUD builder instructions and skill hashes; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/second-brain/hud/data",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated HUD widget data and layout snapshot; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "PUT",
+      "path": "/second-brain/hud/layout",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Session-authenticated, CSRF-protected HUD layout write; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
       "path": "/second-brain/feed-fragment",
       "status": "ui",
       "tools": [],
