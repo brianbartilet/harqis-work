@@ -1,0 +1,40 @@
+# Independent demo stack. Do not combine with the main HARQIS compose file.
+# Copy demo.env.example to a private env file outside the repository, then run:
+# docker compose --env-file <private-env-file> -f workflows/n8n/deploy/demo/compose.yaml config --quiet
+# docker compose --env-file <private-env-file> -f workflows/n8n/deploy/demo/compose.yaml up -d
+# Keep the public proxy disabled until the owner account has been created.
+name: harqis-n8n-demo
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_DEMO_VERSION:?Set a reviewed exact n8n version}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${N8N_DEMO_PORT:-5679}:5678"
+    volumes:
+      - demo_data:/home/node/.n8n
+    environment:
+      TZ: Asia/Singapore
+      GENERIC_TIMEZONE: Asia/Singapore
+      N8N_HOST: ${N8N_DEMO_HOST:?Set the demo hostname}
+      N8N_PROTOCOL: https
+      N8N_PORT: 5678
+      N8N_EDITOR_BASE_URL: https://${N8N_DEMO_HOST}/
+      # Requires n8n >= 2.35.0; older versions use WEBHOOK_URL.
+      N8N_WEBHOOK_URL: https://${N8N_DEMO_HOST}/
+      N8N_PROXY_HOPS: ${N8N_DEMO_PROXY_HOPS:-1}
+      N8N_SECURE_COOKIE: "true"
+      N8N_ENCRYPTION_KEY: ${N8N_DEMO_ENCRYPTION_KEY:?Set a unique persistent encryption key}
+      # Leave email mode empty for manual invitation links until SMTP is ready.
+      N8N_EMAIL_MODE: ${N8N_DEMO_EMAIL_MODE:-}
+      N8N_SMTP_HOST: ${N8N_DEMO_SMTP_HOST:-}
+      N8N_SMTP_PORT: ${N8N_DEMO_SMTP_PORT:-465}
+      N8N_SMTP_USER: ${N8N_DEMO_SMTP_USER:-}
+      N8N_SMTP_PASS: ${N8N_DEMO_SMTP_PASS:-}
+      N8N_SMTP_SENDER: ${N8N_DEMO_SMTP_SENDER:-}
+      N8N_SMTP_SSL: ${N8N_DEMO_SMTP_SSL:-true}
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "168"
+
+volumes:
+  demo_data:
