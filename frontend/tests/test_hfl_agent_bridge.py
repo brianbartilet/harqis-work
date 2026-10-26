@@ -53,7 +53,7 @@ def test_settings_persist_validate_and_require_owner_csrf(bridge, authenticated_
     assert read_settings()['agent_mode'] == 'trusted'
     assert read_settings()['actions_polling_minutes'] == 30
     page = authenticated_client.get('/settings')
-    assert page.status_code == 200 and 'Agent settings have moved' in page.text
+    assert page.status_code == 200 and 'Activity Corpus' in page.text
     assert authenticated_client.get('/agents/api/defaults').json()['actions_polling_minutes'] == 30
     assert 'App Settings' in authenticated_client.get('/profile').text
     values = {'csrf': make_csrf_token('frontend-test-user'), 'actions_polling_minutes': '5', 'pin_backfill_days': '7'}
@@ -303,7 +303,7 @@ def test_browser_settings_and_future_dates(bridge, authenticated_client, monkeyp
             request_route.fulfill(status=response.status_code, headers={'content-type': response.headers.get('content-type', 'text/html')}, body=response.content)
         page.route('**/*', route)
         page.goto('https://bridge.test/settings')
-        page.get_by_text('Agent settings have moved', exact=False).first.wait_for()
+        page.get_by_role('heading', name='App Settings', exact=True).wait_for()
         page.locator('summary[aria-label="Profile menu"]').click()
         assert page.locator('nav[aria-label="Profile menu"] a[href="/settings"]').is_visible()
         page.locator('summary[aria-label="Profile menu"]').click()

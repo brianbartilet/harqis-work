@@ -32,14 +32,13 @@
   </nav>
   {% endif %}
   <h1 class="text-2xl font-semibold">App Settings</h1>
-  <p class="mt-2 text-sm text-slate-400">Manage agents and application behavior. Personal details are in <a class="text-cyan-300" href="/profile">Profile</a>.</p>
+  <p class="mt-2 text-sm text-slate-400">Manage application behavior. Personal details are in <a class="text-cyan-300" href="/profile">Profile</a>.</p>
   {% if saved %}<p id="settings-save-notice" role="status" aria-live="polite">Settings saved.</p>{% endif %}
   {% set expanded_sections = (open_sections | default(request.query_params.get('open', ''))).split(',') %}
   <form method="post" action="/settings">
     {% if quick_tags_return %}<input type="hidden" name="quick_tags_return" value="{{ quick_tags_return }}">{% endif %}
     <input type="hidden" name="open_sections" value="">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-  <p class="mt-6 rounded-xl border border-slate-700 bg-slate-900 p-6">Agent settings have moved to <a href="/agents" class="text-cyan-300">Build → Agents</a>. Manage your fleet and shared execution defaults there.</p>
   <details id="activity-corpus" class="settings-section mt-6 rounded-xl border border-slate-700 bg-slate-900 p-6" {% if errors.favorite_tags or errors.secret_tags or errors.current_secret_pin or errors.new_secret_pin or errors.confirm_secret_pin or 'activity-corpus' in expanded_sections %}open{% endif %}>
     <summary><span class="text-lg font-semibold">Activity Corpus</span><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg></summary>
     <div class="mt-6 space-y-6">
