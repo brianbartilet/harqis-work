@@ -20,7 +20,7 @@
     const root=document.querySelector('[data-connector-cards]');
     if(root){root.replaceChildren();for(const item of current){
       const card=el('article',undefined,'connector-card'),header=el('header');const title=el('h2',undefined,'connector-title');
-      const logoUrl={github:root.dataset.githubLogo,jira:root.dataset.jiraLogo}[item.provider];
+      const logoUrl={github:root.dataset.githubLogo,jira:root.dataset.jiraLogo,n8n:root.dataset.n8nLogo}[item.provider];
       if(logoUrl){const logo=el('img',undefined,'connector-logo');logo.src=logoUrl;logo.alt='';logo.width=20;logo.height=20;logo.onerror=()=>logo.remove();title.append(logo);}
       title.append(document.createTextNode(item.name));header.append(title);
       const headerControls=el('div',undefined,'connector-header-controls');header.append(headerControls);
