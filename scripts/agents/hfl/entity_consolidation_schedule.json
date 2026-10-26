@@ -3,5 +3,7 @@
   "schedule": "0 3 * * *",
   "timezone": "Asia/Singapore",
   "skill": ".agents/skills/auto-merge-entities/SKILL.md",
-  "prompt": "Read and execute .agents/skills/auto-merge-entities/SKILL.md from the configured workdir. This daily 03:00 Asia/Singapore job is authorized to consolidate all registered entity types and retain aliases. Resume the durable backlog, checkpoint, then start one bounded execution with a stable recovery ID, at most 40 comparisons and 900 seconds. Process successive claim packets within that execution. Close it with the actual stop reason and verify its canonical grouped HFL report plus delivery.telegram_state sent or suppressed. Safe deferrals and budget stops are successful partial batches, not proof of duplicate cleanup. Newly discovered work waits for later executions. Isolate questionable identities and continue unrelated work; never loosen matching safeguards. The canonical notifier sends Telegram only for actual new merge operations. Do not retry suppressed delivery or send an additional cron notification. Use the skill legacy fallback only if the deployed server lacks bounded-executions-v1."
+  "prompt": "Run the bounded authenticated entity consolidation helper. No agent reasoning loop. Preserve existing cadence. At most 40 comparisons, 900 seconds, 8 model requests and 160000 input characters per execution. The canonical notifier alone reports actual merges. Deferred-only runs retain HFL audit and suppress Telegram.",
+  "script": "scripts/agents/hfl/run_entity_consolidation.py",
+  "no_agent": true
 }
