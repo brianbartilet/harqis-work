@@ -28,7 +28,7 @@ The radar data-only twin remains importable for compatibility but is no longer s
 | `show_tcg_sell_cart` | Sundays at midnight | Match my listings to want-to-buy bids within `discount_threshold_pct` and queue them in the seller's sell cart for manual fulfilment. Multiprocess one worker per listing. |
 | `show_jira_board` | Weekdays every hour | Pull In-Review / In-Progress / Ready / In-Analysis tickets from a Jira Software board (rapidView=`board_id`) and render them as a 4-section HUD widget. |
 | `get_desktop_logs` | Every 5 min | AI analysis of desktop activity logs |
-| `take_screenshots_for_gpt_capture` | Every 10 min | Desktop screenshot capture. Queue: `peon`. |
+| `take_screenshots_for_gpt_capture` | Every 30 min (`:00`, `:30`) | Desktop screenshot capture. Queue: `peon`. |
 | `show_calendar_information` | Every 15 min | Google Calendar events for today |
 | `get_failed_jobs` | Every 15 min | Failed Celery task list |
 | `show_mouse_bindings` | Every 60 sec | Mouse shortcut bindings display |
