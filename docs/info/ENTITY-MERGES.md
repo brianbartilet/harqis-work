@@ -23,11 +23,45 @@ and workers; no new schedule or credential is required.
 
 ## Daily Hermes consolidation
 
-The `auto-merge-entities` skill provides daily autonomous cleanup at 03:00
-Asia/Singapore. Reconcile `scripts/agents/hfl/entity_consolidation_schedule.json`
+The `auto-merge-entities` skill provides bounded daily cleanup. New installations
+default to 03:00 Asia/Singapore; reconciliation preserves an existing job's cadence.
+Reconcile `scripts/agents/hfl/entity_consolidation_schedule.json`
 using `setup_entity_consolidation.py --apply` on the canonical Hermes host.
-Hermes owns the schedule and contextual decisions; the API owns validated,
-transactional merges and Celery owns grouped report delivery. No extra Beat job.
+Hermes owns the schedule, running `run_entity_consolidation.py` with `no_agent=true`.
+The API owns bounded model assessment and validated transactional merges; Celery
+owns grouped report delivery. No extra Beat job or general-purpose agent loop.
+
+Deploy the `bounded-assessment-v1` API before reconciling the job. Setup installs a managed launcher inside the
+active Hermes profile's `scripts/` directory, using the repository's Python venv.
+It preserves existing cadence and replaces the conflicting agent prompt. The runner checks
+that capability and uses `POST /consolidation/{run}/claims/{token}/assess` for each
+claimed anchor packet. The model sees each entity once and checks all proposed
+members for contradictions. Existing merge/unmerge and curated-profile protections
+still apply. Same-title unprofiled mentions can establish a group through contextual
+assessment; the immediate resolver continues to require an established target.
+Only exact titles with the same explicit YouTube video URL in eligible source
+excerpts have a deterministic path without a model request. Name alone is insufficient.
+
+Each execution selects up to 40 comparisons for 900 seconds, permits eight model
+requests with 4,000 output tokens each, and reserves at most 160,000 input characters
+including system prompts. These are work/character budgets, not a billing estimate.
+The assessment defaults to `claude-haiku-4-5-20251001`, overridden by
+`HARQIS_ENTITY_MATCH_MODEL`. Responses and exact inputs are cached before delivery;
+failed/uncertain calls cannot be silently bought again. A failed or interrupted
+execution retains its journal for explicit recovery rather than restarting endlessly.
+Use the same `--execution-id` when checking a closed execution's report. Preserve and
+replay an unfinished journal request before resuming an active execution.
+Usage is stored in `execution.assessment_usage`; the runner reports actual tokens
+per verified merge and null for a zero-merge run. Deployment does not retroactively
+clear deferred decisions or override separation exclusions.
+
+Runtime decision: **hybrid**, high confidence. Hermes is the sole schedule owner;
+the authenticated service owns fixed batch evaluation, cached receipts and merges;
+Celery owns durable report delivery. Agents remain available for explicitly requested
+adaptive exception review. Controls are bounded execution IDs, claims, exact-input
+assessment caching, skill hashes, unchanged source/identity validation, and reversible
+operations. Review artifacts are execution reports, usage counters and local request
+receipts. No additional schedule or notification channel is introduced.
 
 Profiles expose `aliases` (exact strings), `partial_aliases` (substring hints of
 at least three characters), and `preferred_name`. The directory editor and profile
@@ -37,7 +71,7 @@ independent corroboration. Names with more unique current related activities ran
 higher, after explicit preferred names and curated profiles.
 
 Same-type token/trigram discovery includes fuzzy OCR variants. Partial hints only
-shortlist candidates. The agent checks activity context: two independently supported
+shortlist candidates. The assessor checks activity context: two independently supported
 facts normally, or one substantial specific shared fact for a strong name/identifier
 match with sparse activity. Similar spelling, popularity and model confidence alone
 never establish identity. Conflicting curated identities, explicit identifiers,
@@ -55,7 +89,8 @@ reuse their exact stars instead of repeatedly scanning identical fuzzy postings.
 This is not exhaustive all-pairs matching, particularly among ambiguous
 leaves of a same-name bucket. Newly merged groups participate in fresh discovery.
 
-Priority is People → Organizations → Tools → Pets → Apps → Games → remaining types;
+Priority is direct identifiers/contacts → exact names/aliases → fuzzy candidates;
+within each tier: People → Organizations → Tools → Pets → Apps → Games → remaining types.
 every fifth fresh claim selects the oldest comparison to prevent starvation.
 Search features persist by versioned name/profile inputs; counts and postings are
 shared within a snapshot. Run metadata, comparison rows and content-addressed evidence

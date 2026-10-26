@@ -5,10 +5,12 @@
 1. Reuse `entity_candidates` inverted indexes over canonical/alias names, partial
    hints, contacts and trigrams. This is candidate retrieval, never an identity verdict.
    No new per-alias LLM search is needed. Existing shortlist/discovery limits remain.
-2. Rank the complete pending ledger by `(type_priority, -anchor.related_items,
+2. Rank the complete pending ledger by `(signal_tier, type_priority, -anchor.related_items,
    anchor_id, -contact, -exact_name_or_alias, -partial, -fuzzy, -other.related_items,
    pair_id)`. Type priority is people, companies, tools, pets, apps, games, then other
-   kinds. `related_items` counts unique non-audit entries, not raw word mentions.
+   kinds. Signal tiers are direct contact/identifier, exact name/alias, then fuzzy,
+   so easy media matches precede weak fuzzy people matches. `related_items` counts
+   unique non-audit entries, not raw word mentions.
 3. Bound the response to at most 20 comparisons. In compact mode, put evidence in
    `entities[id]` exactly once; comparison records refer through `left_id`/`right_id`.
    Reject inconsistent snapshots rather than silently overwriting one. Keep every

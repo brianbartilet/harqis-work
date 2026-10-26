@@ -418,6 +418,13 @@ class ConsolidationClaimUpdate(BaseModel):
     lease_seconds: int = Field(default=900, ge=60, le=3600)
 
 
+@router.post('/consolidation/{run_id}/claims/{token}/assess')
+async def consolidation_assess(request: Request, run_id: str, token: str):
+    owner(request)
+    from workflows.hfl.entity_assessment import assess
+    return await call(assess, run_id, token)
+
+
 class ConsolidationEvidence(BaseModel):
     model_config = ConfigDict(extra='forbid')
     entity_id: str = Field(min_length=1, max_length=500)

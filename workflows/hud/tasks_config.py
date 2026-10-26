@@ -189,7 +189,7 @@ WORKFLOWS_HUD = {
 
     'run-job--take_screenshots_for_gpt_capture': {
         'task': 'workflows.hud.tasks.hud_gpt.take_screenshots_for_gpt_capture',
-        'schedule': crontab(minute='10,20,30,40,50,00'),
+        'schedule': crontab(minute='0,30'),
         'kwargs': {
             "cfg_id__desktop": "DESKTOP"
         },

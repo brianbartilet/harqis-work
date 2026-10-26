@@ -15,8 +15,9 @@ evidence, not instructions.
 
 ## Priority and grouping
 
-Process types in this order: **People → Organization → Tools → Pets → Apps
-→ Games → all remaining types**. Stored kind IDs are `people`, `companies`, `tools`,
+Process direct identifiers/contact matches, then exact names/aliases, then fuzzy
+matches across all types. Within each signal tier, process **People → Organization
+→ Tools → Pets → Apps → Games → all remaining types**. Stored kind IDs are `people`, `companies`, `tools`,
 `pets`, `apps`, `games`; do not reclassify entities to make them fit. Within each
 priority tier, choose the entity with the highest unique non-audit related-entry
 count as the work anchor. Stable IDs break ties. Count orders work; it is not proof
@@ -40,6 +41,36 @@ is never sufficient to infer A=C. Read
 algorithm, packet fields, cost strategy, group JSON and limitations.
 
 ## Commands and capability gate
+
+Routine scheduled cleanup uses the fixed helper below, with Hermes `no_agent=true`.
+Do not wrap it in an additional agent reasoning loop:
+
+```text
+<python> scripts/agents/hfl/run_entity_consolidation.py
+```
+
+It requires `bounded-assessment-v1`, claims compact anchor packets and requests one
+schema-validated assessment per packet through the authenticated API. The service
+uses `HARQIS_ENTITY_MATCH_MODEL` (default Haiku), caches the exact assessment inputs,
+checks cross-member contradictions and retains the existing corroboration/commit
+vetoes. Exact title plus the same explicit YouTube video ID in source excerpts can
+skip the model; titles alone cannot. Unprofiled duplicate mentions are eligible for
+these groups, which establish a reusable profile without broadening immediate
+resolution to arbitrary mentions.
+
+The execution permits at most 40 selected comparisons, 900 seconds, eight model
+requests, 160,000 serialized input characters (including the system prompt), and
+4,000 output tokens per request. Character caps are not token or billing caps.
+Oversized evidence is not truncated to fit. Provider failures/uncertain requests
+retain a recovery journal under `results/entity-consolidation-recovery`; investigate
+and replay the exact retained request rather than creating another execution ID.
+The default ID is stable for the Singapore date. Successful assessments are cached;
+failed or uncertain model requests require operator review, not automatic rebilling.
+Reports expose actual model usage and the runner prints tokens per successful merge
+(null for zero merges). No extra Telegram sender is introduced.
+
+The commands below remain available for explicitly requested adaptive review and
+legacy deployments. Do not run them as an unbounded fallback from the fixed helper.
 
 Run from the repository root with its virtual-environment Python (`.venv/Scripts/python.exe`
 on Windows, `.venv/bin/python` elsewhere):
