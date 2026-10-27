@@ -8,8 +8,9 @@ def visible(agent, user=None):
         if user != agent['connector_user']:
             return False
         from modules.integrations.store import get
-        connector = get(user, 'n8n')
-        return connector.get('enabled') and connector.get('site') == agent.get('connector_site')
+        connector = get(user, agent.get('connector_provider', 'n8n'))
+        return (connector.get('enabled') and connector.get('site') == agent.get('connector_site')
+                and (not agent.get('connector_account') or connector.get('account_id') == agent['connector_account']))
     return True
 
 
@@ -28,6 +29,12 @@ def listing(user=None):
         state = max(activity)[1] if activity else 'ready'
         if any(s in {'running', 'waiting', 'starting', 'queued'} for _, s in activity):
             state = 'running'
+        if agent['runtime'] == 'grokbot':
+            from modules.integrations.store import get
+            connector = get(user, 'grokbot')
+            state = ('Reconnect required' if connector.get('status') == 'Reconnect required' else
+                     'Sync delayed' if connector.get('error') else
+                     'Unavailable' if not agent.get('remote_available', True) else 'Discovered')
         result.append({**agent, 'state': state, 'last_activity': max(activity)[0] if activity else ''})
     return result
 

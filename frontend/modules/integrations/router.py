@@ -16,6 +16,38 @@ def provider_name(provider):
     return provider
 
 
+@api.post('/grokbot/login/start')
+def grokbot_login_start(user=Depends(owner_auth)):
+    from modules.integrations.grokbot import start_login
+    return start_login(user)
+
+
+@api.post('/grokbot/login/{identity}/poll')
+def grokbot_login_poll(identity: str, user=Depends(owner_auth)):
+    from modules.integrations.grokbot import poll_login
+    return poll_login(user, identity)
+
+
+@api.post('/grokbot/login/{identity}/cancel')
+def grokbot_login_cancel(identity: str, user=Depends(owner_auth)):
+    from modules.integrations.grokbot import cancel
+    return cancel(user, identity)
+
+
+@api.post('/grokbot/connect-key')
+def grokbot_connect_key(raw: dict, user=Depends(owner_auth)):
+    from modules.integrations.grokbot import connect_key
+    return connect_key(user, raw.get('key'))
+
+
+@api.post('/grokbot/sync')
+def grokbot_sync(raw: dict, user=Depends(owner_auth)):
+    from modules.integrations.grokbot import sync
+    if type(raw.get('if_stale', False)) is not bool:
+        raise HTTPException(422, 'Invalid refresh option.')
+    return sync(user, raw.get('if_stale', False))
+
+
 @api.post('/n8n/sync')
 def sync_n8n(raw: dict, user=Depends(owner_auth)):
     from modules.integrations.n8n import sync
@@ -61,6 +93,8 @@ def connectors(user=Depends(owner_auth)):
 @api.post('/connectors/{provider}/test')
 def test_connection(provider: str, raw: dict, user=Depends(owner_auth)):
     provider_name(provider)
+    if provider == 'grokbot':
+        raise HTTPException(409, 'Use Grok Bot browser sign-in or Cursor API-key connection.')
     identity = Provider(provider, credentials(provider, raw)).test()
     return {'status': 'Test passed', **identity}
 
@@ -69,6 +103,8 @@ def test_connection(provider: str, raw: dict, user=Depends(owner_auth)):
 @api.post('/connectors/{provider}/connect')
 def connect(provider: str, raw: dict, user=Depends(owner_auth)):
     provider_name(provider)
+    if provider == 'grokbot':
+        raise HTTPException(409, 'Use Grok Bot browser sign-in or Cursor API-key connection.')
     clean = credentials(provider, raw)
     # Revalidate before saving; a failed replacement must preserve the saved account.
     identity = Provider(provider, clean).test()
@@ -86,6 +122,9 @@ def connect(provider: str, raw: dict, user=Depends(owner_auth)):
 @api.post('/connectors/{provider}/toggle')
 def toggle(provider: str, raw: dict, user=Depends(owner_auth)):
     provider_name(provider)
+    if provider == 'grokbot':
+        from modules.integrations.grokbot import toggle as toggle_grokbot
+        return toggle_grokbot(user, raw.get('enabled'))
     if type(raw.get('enabled')) is not bool:
         raise HTTPException(422, 'Expected an enabled boolean.')
     data = store.get(user, provider, private=True)
@@ -105,6 +144,9 @@ def toggle(provider: str, raw: dict, user=Depends(owner_auth)):
 @api.post('/connectors/{provider}/disconnect')
 def disconnect(provider: str, user=Depends(owner_auth)):
     provider_name(provider)
+    if provider == 'grokbot':
+        from modules.integrations.grokbot import disconnect as disconnect_grokbot
+        return disconnect_grokbot(user)
     return store.save(user, provider, {'status':'Not connected', 'enabled':False}, {})
 
 

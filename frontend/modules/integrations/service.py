@@ -14,6 +14,7 @@ PROVIDERS = {'github': {'name': 'GitHub', 'capabilities': ['Create and link bran
 
 
 PROVIDERS['n8n'] = {'name': 'n8n', 'capabilities': ['Browse workflows', 'Discover first-class agents through MCP', 'Link agents to the fleet workspace']}
+PROVIDERS['grokbot'] = {'name': 'Grok Bot', 'capabilities': ['Experimental account connection', 'Automatically discover Bots in the fleet', 'Browser sign-in or Cursor API key']}
 
 
 def connected(user, provider):

@@ -118,10 +118,10 @@ def validate(raw, existing=None):
         asset = store().asset(item['thumbnail'])
         if asset['media_type'] not in {'image/png', 'image/gif'}:
             raise ValueError('Choose a PNG or GIF thumbnail.')
-    if existing and existing.get('runtime') == 'n8n':
+    if existing and existing.get('runtime') != 'hermes':
         for key in ('instructions', 'overrides', 'skills', 'tools', 'workflows', 'triggers', 'subagents'):
             if item[key] != existing[key]:
-                raise ValueError('Edit n8n execution configuration in n8n.')
+                raise ValueError('Edit execution configuration in the external provider.')
     return item
 
 
@@ -130,7 +130,7 @@ def execution(identity, require_active=True):
     if require_active and not agent['active']:
         raise ValueError('This agent is deactivated. Choose an active agent.')
     if agent['runtime'] != 'hermes':
-        raise ValueError('Open this agent in n8n to start a session.')
+        raise ValueError('Open this agent in its external provider to start a session.')
     selected = {s['id']: s for s in skills()}
     frozen = {k: agent[k] for k in ('id', 'name', 'version', 'persona', 'instructions', 'workspace_ids', 'tools', 'workflows', 'triggers', 'subagents')}
     frozen['skills'] = [selected[key] for key in agent['skills'] if key in selected]

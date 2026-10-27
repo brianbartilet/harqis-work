@@ -4,3 +4,5 @@
 
 .fleet-toolbar-actions{margin-left:auto}.fleet-toolbar-actions button{white-space:nowrap}
 @media(max-width:900px){.fleet-toolbar-actions{margin-left:0}}
+
+.fleet-orb[data-state="Reconnect required"],.fleet-orb[data-state="Sync delayed"],.fleet-orb[data-state="Unavailable"]{border-color:#facc15}.fleet-alert a{text-decoration:underline;color:inherit}

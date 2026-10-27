@@ -18,17 +18,18 @@
   async function load(){
     const snapshot=await api('/connectors');current=snapshot.items;cardLinks=snapshot.links||[];
     const root=document.querySelector('[data-connector-cards]');
+    document.querySelectorAll('[data-connector-count]').forEach(n=>n.textContent=current.length);
     if(root){root.replaceChildren();for(const item of current){
       const card=el('article',undefined,'connector-card'),header=el('header');const title=el('h2',undefined,'connector-title');
       const logoUrl={github:root.dataset.githubLogo,jira:root.dataset.jiraLogo,n8n:root.dataset.n8nLogo}[item.provider];
       if(logoUrl){const logo=el('img',undefined,'connector-logo');logo.src=logoUrl;logo.alt='';logo.width=20;logo.height=20;logo.onerror=()=>logo.remove();title.append(logo);}
       title.append(document.createTextNode(item.name));header.append(title);
       const headerControls=el('div',undefined,'connector-header-controls');header.append(headerControls);
-      const connectLabel=item.status==='Connected'?'Reconnect / test':'Connect';
+      const connectLabel=item.provider==='grokbot'?'Configure Grok Bot':item.status==='Connected'?'Reconnect / test':'Connect';
       const connect=button(headerControls,'',()=>setup(item));connect.classList.add('connector-connect');connect.setAttribute('aria-label',connectLabel);connect.title=connectLabel;
       connect.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m13 2-9 12h7l-1 8 10-12h-7l1-8Z"/></svg>';
       const disconnect=button(headerControls,'',async()=>{const confirm=dialog('Disconnect '+item.name);confirm.body.append(el('p','Remove this connection’s saved credentials? Imported cards and links remain; reconnect the same account to use them again.'));button(controls(confirm.body),'Disconnect account',async()=>{await api('/connectors/'+item.provider+'/disconnect',{});confirm.d.close();await load();});});
-      disconnect.classList.add('connector-disconnect');disconnect.setAttribute('aria-label','Disconnect '+item.name);disconnect.title='Disconnect '+item.name;disconnect.disabled=item.status!=='Connected';
+      disconnect.classList.add('connector-disconnect');disconnect.setAttribute('aria-label','Disconnect '+item.name);disconnect.title='Disconnect '+item.name;disconnect.disabled=!item.account;
       disconnect.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 5 3-3M2 22l3-3M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4ZM7.5 13.5 10 11m.5 5.5L13 14M18 12l2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0L12 6Z"/></svg>';
       const toggle=el('button',undefined,'connector-switch');toggle.type='button';toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked',String(item.enabled));toggle.setAttribute('aria-label','Enable '+item.name);
       const track=el('span',undefined,'connector-switch-track');track.setAttribute('aria-hidden','true');toggle.append(track);headerControls.append(toggle);card.append(header);
@@ -38,6 +39,12 @@
       if(item.error)card.append(el('p',item.error));
       const capabilities=el('ul');item.capabilities.forEach(c=>capabilities.append(el('li',c)));card.append(capabilities);
       if(item.enabled&&item.provider==='jira'){const footer=el('footer',undefined,'connector-footer');card.append(footer);button(controls(footer),'Import assigned issues',jiraImport);}
+      if(item.provider==='grokbot'){
+        const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);
+        button(row,item.account?'Reconnect':'Connect',()=>setup(item));
+        if(item.enabled){button(row,'Refresh Bots',async()=>{await api('/grokbot/sync',{});await load();});link(row,'View fleet','/agents');}
+        if(item.last_sync)footer.append(el('p','Last discovery: '+new Date(item.last_sync).toLocaleString()+' · '+item.bot_count+' Bots'));
+      }
       if(item.enabled&&item.provider==='n8n'){
         const footer=el('footer',undefined,'connector-footer');card.append(footer);
         button(controls(footer),'Discover agents',async()=>{const view=dialog('Discover n8n agents'),query=field(view.body,'Agent search');button(controls(view.body),'Search and synchronize',async()=>{const result=await api('/n8n/sync',{query:query.value});view.body.append(el('p',result.imported+' agents synchronized. '+result.message));link(view.body,'Open agent fleet','/agents');});});
@@ -48,7 +55,48 @@
     document.querySelectorAll('[data-connector-action]').forEach(b=>{b.hidden=!current.some(c=>c.provider==='jira'&&c.enabled);badges(b.parentElement,b.dataset.connectorAction);});
     window.dispatchEvent(new CustomEvent('integrations:changed',{detail:current}));
   }
+  function grokbotSetup(){
+    const {d,body,error}=dialog('Connect Grok Bot');
+    body.append(el('p','Experimental read-only discovery. Sign in through Cursor or use a Cursor user API key. A successful connection immediately adds your Bots to the fleet.'));
+    const state=el('p','Choose a sign-in method.','connector-status');state.setAttribute('role','status');state.setAttribute('aria-live','polite');body.append(state);
+    let attempt='',timer,closed=false,busy=false;
+    const browserArea=el('div');body.append(browserArea);
+    const links=el('div');browserArea.append(links);
+    async function cancel(){clearTimeout(timer);const id=attempt;attempt='';if(id)await api('/grokbot/login/'+id+'/cancel',{}).catch(()=>{});}
+    async function poll(id){
+      if(closed||attempt!==id)return;
+      try{
+        const result=await api('/grokbot/login/'+id+'/poll',{});
+        if(closed||attempt!==id)return;
+        if(result.status==='Connected'){attempt='';state.textContent=result.imported+' Bots discovered.';await load();d.close();return;}
+        timer=setTimeout(()=>poll(id),3000);
+      }catch(e){if(!closed&&attempt===id){error.textContent=e.message;state.textContent='Sign-in paused. Retry checking, or start again.';retry.hidden=false;}}
+    }
+    button(controls(browserArea),'Sign in with browser',async()=>{
+      if(busy)return;busy=true;error.textContent='';await cancel();links.replaceChildren();
+      try{
+        const result=await api('/grokbot/login/start',{});
+        if(closed){await api('/grokbot/login/'+result.attempt_id+'/cancel',{});return;}
+        attempt=result.attempt_id;link(links,'Continue on Cursor',result.url);
+        state.textContent='Open Continue on Cursor to sign in. This window will discover your Bots when you finish. Expires in 10 minutes.';
+        retry.hidden=true;timer=setTimeout(()=>poll(attempt),3000);
+      }finally{busy=false;}
+    });
+    const retry=button(controls(browserArea),'Check sign-in again',()=>poll(attempt));retry.hidden=true;
+    const details=el('details',undefined,'grokbot-key-choice');const summary=el('summary','Use a Cursor API key instead');summary.insertAdjacentHTML('beforeend','<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg>');details.append(summary);body.append(details);
+    details.append(el('p','Use a Cursor user API key. xAI inference keys do not provide Bot access. The key is exchanged for encrypted sign-in tokens and is not saved.'));
+    const key=field(details,'Cursor API key','password');key.autocomplete='new-password';key.maxLength=4096;
+    button(controls(details),'Connect with API key',async()=>{
+      if(busy)return;busy=true;error.textContent='';await cancel();links.replaceChildren();state.textContent='Connecting and discovering Bots…';
+      const value=key.value;key.value='';key.disabled=true;
+      try{const result=await api('/grokbot/connect-key',{key:value});if(!closed){state.textContent=result.imported+' Bots discovered.';await load();d.close();}}
+      catch(e){if(!closed)state.textContent='Connection failed. Your previous connection is unchanged.';throw e;}
+      finally{busy=false;key.disabled=false;}
+    });
+    d.addEventListener('close',()=>{closed=true;key.value='';cancel();},{once:true});
+  }
   function setup(item){
+    if(item.provider==='grokbot'){grokbotSetup();return;}
     const {d,body,error}=dialog('Connect '+item.name);
     body.append(el('p','Test your credentials, then save the connection. Testing does not save credentials. Saved credentials are encrypted and separate from workflow accounts.'));
     if(item.provider==='github'){

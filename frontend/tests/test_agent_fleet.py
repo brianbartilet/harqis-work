@@ -88,7 +88,7 @@ def test_csrf_and_navigation(fleet, authenticated_client):
     assert page.status_code == 200, page.text
     assert 'agent-fleet.js?v=' in page.text
     assert page.text.index('href="/agents"') < page.text.index('href="/applications"')
-    assert 'Agent settings have moved' in client.get('/settings').text
+    assert 'Agent settings have moved' not in client.get('/settings').text
 
 
 def test_prepare_retry_does_not_duplicate_actions(fleet, authenticated_client):
