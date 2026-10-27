@@ -5,4 +5,6 @@ Connector brand assets
 
 - n8n: SVG from https://dashboardicons.com/icons/n8n (https://cdn.jsdelivr.net/gh/homarr-labs/dashboard-icons/svg/n8n.svg).
 
+- Grok Bot: monochrome logomark from https://asvg.app/icons/grok-bot (https://asvg.app/assets/svg/grok-bot/grok-bot-logomark-mono.svg). Foreground set to slate-200 for the dark connector card; eye mask preserved.
+
 Brand marks remain the property of their respective owners and identify these integrations.

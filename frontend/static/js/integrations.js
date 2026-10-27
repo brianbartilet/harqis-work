@@ -21,7 +21,7 @@
     document.querySelectorAll('[data-connector-count]').forEach(n=>n.textContent=current.length);
     if(root){root.replaceChildren();for(const item of current){
       const card=el('article',undefined,'connector-card'),header=el('header');const title=el('h2',undefined,'connector-title');
-      const logoUrl={github:root.dataset.githubLogo,jira:root.dataset.jiraLogo,n8n:root.dataset.n8nLogo}[item.provider];
+      const logoUrl={github:root.dataset.githubLogo,jira:root.dataset.jiraLogo,n8n:root.dataset.n8nLogo,grokbot:root.dataset.grokbotLogo}[item.provider];
       if(logoUrl){const logo=el('img',undefined,'connector-logo');logo.src=logoUrl;logo.alt='';logo.width=20;logo.height=20;logo.onerror=()=>logo.remove();title.append(logo);}
       title.append(document.createTextNode(item.name));header.append(title);
       const headerControls=el('div',undefined,'connector-header-controls');header.append(headerControls);
