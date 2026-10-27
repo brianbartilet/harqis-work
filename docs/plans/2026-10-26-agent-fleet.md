@@ -4,6 +4,10 @@ Source action: `item-cf8aea45afb448eaa3db00561d6aaf34`. The owner approved the
 recommended scope on 2026-10-26 after review of the complete action and five
 attached screenshots.
 
+Related exploration: [Hermes / HARQIS Butler runtime and interaction boundaries](2026-10-27-hermes-harqis-butler-exploration.md)
+records a read-only runtime snapshot and proposed approval, continuity and
+browser-control acceptance gates; it does not supersede this implementation plan.
+
 ## Approved scope
 
 Hermes is the execution runtime. OpenAI, Google Gemini and Anthropic Claude are
