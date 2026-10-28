@@ -70,6 +70,7 @@
     <div class="kg-source-field"><span>Sources</span><details id="kg-source-menu"><summary id="kg-source-caption">All sources</summary><div id="kg-source-options"></div></details><p id="kg-source-inherited" class="kg-source-inherited"></p></div>
 
     <label class="kg-density">From<input id="kg-since" type="date"></label><label class="kg-density">To<input id="kg-until" type="date"></label>
+    <label class="kg-maturity">Show<select id="kg-maturity"><option value="">Established entities</option><option value="all">Include provisional mentions</option></select></label>
     <label>Date range<select id="kg-rolling"><option value="0">Fixed dates</option>{% if request.query_params.get('embed') != '1' and request.query_params.get('readonly') != '1' %}<option value="week">This week</option>{% endif %}<option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last 365 days</option></select></label>
   </div>
     <label class="kg-toggle"><input id="kg-shared" type="checkbox" role="switch"> Shared connections only</label>
