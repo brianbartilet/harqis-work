@@ -72,6 +72,8 @@ def test_removal_preserves_activities_other_entities_backup_and_receipt(corpus):
         db.execute('INSERT INTO profiles(id,kind,data) VALUES (?,?,?)',
                    (topic['id'], 'topics', json.dumps(dict(name=topic['label']))))
         db.execute('INSERT INTO entity_activity_links VALUES (?,?,?,?)', (topic['id'], 'one', 'owner', 'now'))
+        db.execute('INSERT INTO entity_merges(id,kind,name,members) VALUES (?,?,?,?)',
+                   (topic['id'], 'topics', topic['label'], '[]'))
     before = json.dumps(corpus)
     preview = entity_retirement.preview()
     request = str(uuid4())
@@ -80,6 +82,7 @@ def test_removal_preserves_activities_other_entities_backup_and_receipt(corpus):
     assert json.dumps(corpus) == before
     assert store.records()['one']['mentions'] == [tool]
     assert topic['id'] not in store.profiles()
+    assert entity_retirement.preview()['entities'] == 0  # Archived merge snapshots are not remaining work.
     assert entity_retirement.remove_topics(request, preview['selection_hash'], 'test') == result
     with sqlite3.connect(result['backup']) as db:
         assert len(json.loads(db.execute('SELECT mentions FROM enrichment').fetchone()[0])) == 2
@@ -108,6 +111,24 @@ def test_legacy_topics_hidden_before_cleanup(corpus):
     legacy(get_store(), corpus[0], [topic])
     assert entities.entity_index() == []
     assert not any(n['kind'] == 'topics' for n in entities.graph()['nodes'])
+
+
+def test_retyped_group_preserves_members_without_restoring_retired_type(corpus):
+    store = get_store()
+    topic = entities.mention(corpus[0], 'topics', 'Python', 'Python', 'model-extracted')
+    legacy(store, corpus[0], [topic])
+    store.save_profile('outer', 'tools', dict(name='Python'))
+    with store.connection() as db:
+        db.execute('INSERT INTO profiles(id,kind,data) VALUES (?,?,?)',
+                   (topic['id'], 'topics', json.dumps(dict(name='Python'))))
+        db.execute('INSERT INTO decisions(alias,canonical,reason) VALUES (?,?,?)', (topic['id'], 'outer', 'reviewed'))
+    preview = entity_retirement.preview()
+    assert preview['reclassified_profiles'] == 1
+    result = entity_retirement.remove_topics(str(uuid4()), preview['selection_hash'], 'test')
+    assert result['entities'] == 0 and result['mentions'] == 0
+    assert store.profiles()[topic['id']]['kind'] == 'tools'
+    assert store.resolve(topic['id']) == 'outer'
+    assert entity_retirement.preview()['reclassified_profiles'] == 0
 
 
 def test_removal_rolls_back_when_audit_cannot_be_saved(corpus, monkeypatch):

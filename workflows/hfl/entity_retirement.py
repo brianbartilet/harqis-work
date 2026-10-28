@@ -14,7 +14,7 @@ def _selection(db):
     records = [dict(r) for r in db.execute('SELECT id,mentions FROM enrichment')]
     retired = {i for i, kind in profiles.items() if kind == 'topics'
                and profiles.get(resolve(i), kind) == 'topics'}
-    retired.update(r['id'] for r in db.execute("SELECT id FROM entity_merges WHERE kind='topics'")
+    retired.update(r['id'] for r in db.execute("SELECT id FROM entity_merges WHERE kind='topics' AND active=1")
                    if profiles.get(resolve(r['id']), 'topics') == 'topics')
     updates, removed = [], 0
     for row in records:
@@ -38,11 +38,19 @@ def _hash(db, ids, updates):
     return digest([sorted(ids), updates, revision(db)])
 
 
+def _reclassified(db):
+    profiles = dict(db.execute('SELECT id,kind FROM profiles'))
+    resolve = identity_resolver(db)
+    return {i: profiles[resolve(i)] for i, kind in profiles.items()
+            if kind == 'topics' and profiles.get(resolve(i), 'topics') != 'topics'}
+
+
 def preview():
     with get_store().connection() as db:
         db.execute('BEGIN')
         ids, updates, mentions = _selection(db)
         return dict(kind='topics', entities=len(ids), mentions=mentions, activities=len(updates),
+                    reclassified_profiles=len(_reclassified(db)),
                     selection_hash=_hash(db, ids, updates), preserves_activity_text=True)
 
 
@@ -70,6 +78,12 @@ def remove_topics(request_id, selection_hash, actor):
             ids, updates, mentions = _selection(db)
             if _hash(db, ids, updates) != selection_hash:
                 raise ValueError('Topic entities changed; fetch a fresh removal preview')
+            reclassified = _reclassified(db)
+            # An explicitly retyped outer identity keeps its members. Normalize their
+            # old type too, so a future unmerge cannot resurrect the retired vocabulary.
+            for identity, kind in reclassified.items():
+                db.execute('UPDATE profiles SET kind=? WHERE id=?', (kind, identity))
+                db.execute('UPDATE entity_merges SET kind=? WHERE id=?', (kind, identity))
             db.execute('CREATE TEMP TABLE retired_ids(id TEXT PRIMARY KEY)')
             db.executemany('INSERT INTO retired_ids VALUES (?)', [(i,) for i in ids])
             db.executemany('UPDATE enrichment SET mentions=? WHERE id=?', updates)
@@ -113,6 +127,7 @@ def remove_topics(request_id, selection_hash, actor):
                 value = [t for t in value if t['id'] != 'topics'] if isinstance(value, list) else {k:v for k,v in value.items() if k != 'topics'}
                 db.execute('INSERT OR REPLACE INTO state VALUES (?,?)', (key, json.dumps(value)))
             result = dict(action='topics-removed', state='complete', entities=len(ids), mentions=mentions,
+                          reclassified_profiles=len(reclassified),
                           activities=len(updates), backup=str(backup), request_id=request_id)
             result['event_id'] = record_event(db, 'type:topics', 'type-retired', actor, result, deliver=False)
             db.execute('INSERT INTO entity_operations VALUES (?,?,?)', (request_id, fingerprint, json.dumps(result)))
