@@ -124,6 +124,8 @@ class EntityStore:
                     for r in db.execute('SELECT * FROM enrichment')}
 
     def save(self, identity, content_hash, mentions, version=VERSION, match=False, types_revision=''):
+        from workflows.hfl.entity_types import RETIRED
+        mentions = [m for m in mentions if m.get('kind') not in RETIRED]
         with self.connection() as db:
             previous = db.execute('SELECT hash,version,mentions,types_revision FROM enrichment WHERE id=?', (identity,)).fetchone()
             encoded_mentions = json.dumps(mentions)
@@ -231,6 +233,9 @@ class EntityStore:
                     for r in db.execute('SELECT * FROM profiles')}
 
     def save_profile(self, identity, kind, data, actor='owner', connection=None):
+        from workflows.hfl.entity_types import RETIRED
+        if kind in RETIRED:
+            raise ValueError('This entity type has been retired')
         # Curated data is never pruned or overwritten by enrichment.
         with (nullcontext(connection) if connection is not None else self.connection()) as db:
             if connection is None:

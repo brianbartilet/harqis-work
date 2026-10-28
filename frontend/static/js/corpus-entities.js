@@ -12,9 +12,9 @@
   let dismissBusy = false;
   let suggestionEntityById = new Map(), entityById = new Map();
   const suggestionNodes = new Map();
-  const kinds = {people: 'People', companies: 'Organizations', tools: 'Tools', topics: 'Topics', objects: 'Referenced objects'};
+  const kinds = {people: 'People', companies: 'Organizations', tools: 'Tools', objects: 'Referenced objects'};
   let typeDefinitions = new Map(), typeEditorBusy = false;
-  const kindColors = {people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', objects:'#e9c96c'};
+  const kindColors = {people:'#ffbd91', companies:'#deafff', tools:'#70edbd', objects:'#e9c96c'};
   const sourceValue = entry => String(entry.source || '').trim();
   function pill(text) { const p = el('span', text); p.className = 'pill'; return p; }
   function typePill(kind) { const node = pill((kinds[kind] || kind || 'Unavailable').toLowerCase()); node.classList.add('entity-kind'); node.style.setProperty('--entity-color', kindColors[kind] || '#95a7c3'); return node; }
@@ -23,7 +23,7 @@
     for (const [value, title] of [['', 'All types'], ...Object.entries(kinds)]) {
       const button = el('button', title); button.type = 'button'; button.className = 'pill';
       button.setAttribute('aria-pressed', String(value ? selectedKinds.has(value) : !selectedKinds.size));
-      const count = el('span', String(items.filter(e => !value || e.kind === value).length)); count.className = 'pill-count'; button.append(count);
+      const count = el('span', String(items.filter(e => ($('filter-maturity').value === 'all' || !e.provisional) && (!value || e.kind === value)).length)); count.className = 'pill-count'; button.append(count);
       button.onclick = () => { if (!value) selectedKinds.clear(); else if (selectedKinds.has(value)) selectedKinds.delete(value); else selectedKinds.add(value); page = 0; refreshFilters(); render(); };
       $('filter-kind').append(button);
     }
@@ -107,7 +107,7 @@
   function matchesFilters(e) {
     const q = $('entity-query').value.trim().toLowerCase(), contact = $('filter-contact').value;
     const p = e.profile || {}, searchable = [e.label, kinds[e.kind] || e.kind, ...e.categories, ...(p.aliases || []), ...(p.partial_aliases || []), ...(p.emails || []), ...(p.phones || []), ...(p.references || []), p.notes || ''].join(' ').toLowerCase();
-    return q.split(/\s+/).every(word => searchable.includes(word)) && (!selectedKinds.size || selectedKinds.has(e.kind)) && (!selectedCategories.size || [...selectedCategories].some(category => category === '__none__' ? !e.categories.length : e.categories.includes(category))) && (!selectedSources.size || e.entries.some(x => selectedSources.has(sourceValue(x)))) && (!contact || (contact === 'contact' ? p.emails?.length || p.phones?.length : contact === 'curated' ? e.profile : !e.profile));
+    return ($('filter-maturity').value === 'all' || !e.provisional) && q.split(/\s+/).every(word => searchable.includes(word)) && (!selectedKinds.size || selectedKinds.has(e.kind)) && (!selectedCategories.size || [...selectedCategories].some(category => category === '__none__' ? !e.categories.length : e.categories.includes(category))) && (!selectedSources.size || e.entries.some(x => selectedSources.has(sourceValue(x)))) && (!contact || (contact === 'contact' ? p.emails?.length || p.phones?.length : contact === 'curated' ? e.profile : !e.profile));
   }
   function compareEntities(a, b) { return $('sort').value === 'activity' ? b.entries.length - a.entries.length || a.label.localeCompare(b.label) : $('sort').value === 'recent' ? (b.entries[0]?.date || '').localeCompare(a.entries[0]?.date || '') || a.label.localeCompare(b.label) : $('sort').value === 'name-desc' ? b.label.localeCompare(a.label) : a.label.localeCompare(b.label); }
   function render() {
@@ -276,7 +276,7 @@
       for (const id of selectedEntities) if (!available.has(id)) selectedEntities.delete(id);
       facets(); render();
       hasLoaded = true;
-      $('load-scope').textContent = 'Search and filters cover the current activity scope; results display 50 per page.';
+      $('load-scope').textContent = 'Established entities are shown by default. Include provisional mentions to review one-off extractions.';
     }
     finally { if(version === loadVersion) setLoading(false); }
   }
@@ -614,7 +614,8 @@
   };
   async function run(fn) { try { await fn(); } catch (e) { $('entity-status').textContent = e.message; } }
   for (const id of ['entity-query', 'filter-contact', 'sort']) $(id).addEventListener(id === 'entity-query' ? 'input' : 'change', () => { page = 0; render(); });
-  $('clear-filters').onclick = () => { $('entity-query').value = ''; $('filter-contact').value = ''; selectedKinds.clear(); selectedCategories.clear(); selectedSources.clear(); page = 0; facets(); render(); };
+  $('filter-maturity').onchange = () => { page = 0; refreshFilters(); render(); };
+  $('clear-filters').onclick = () => { $('entity-query').value = ''; $('filter-contact').value = ''; $('filter-maturity').value = ''; selectedKinds.clear(); selectedCategories.clear(); selectedSources.clear(); page = 0; facets(); render(); };
   document.addEventListener('click', event => { for (const id of ['category-menu', 'source-menu']) if (!$(id).contains(event.target)) $(id).open = false; });
   document.addEventListener('keydown', event => { if (event.key === 'Escape') for (const id of ['category-menu', 'source-menu']) $(id).open = false; });
   $('reload-entities').onclick = () => run(load);
