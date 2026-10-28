@@ -153,6 +153,32 @@ def test_explicit_empty_mentions_are_valid_but_missing_rows_stay_pending(extract
     assert get_store().records() == {}
 
 
+def test_prompt_requires_full_id_coverage_and_explicit_empty_mentions(extraction, monkeypatch):
+    from apps.antropic.references.web.base_api_service import BaseApiServiceAnthropic
+    row, _, response, set_response = extraction
+    set_response('{"entries": [{"id": "one", "mentions": []}]}')
+    calls = []
+    monkeypatch.setattr(BaseApiServiceAnthropic, 'send_messages',
+                        lambda self, **kw: calls.append(kw) or response)
+    assert entities.enrich()['processed'] == 1
+    assert get_store().records()['one']['mentions'] == []
+    prompt = calls[0]['system']
+    assert 'every input ID exactly once' in prompt
+    assert 'mentions: []' in prompt
+    assert 'Do not shorten' in prompt
+
+
+def test_response_diagnostics_count_omitted_and_unknown_ids_privately(extraction):
+    row, _, _, set_response = extraction
+    set_response('{"entries": [{"id": "PRIVATE-UNKNOWN", "mentions": []}]}')
+    assert entities.extract_batch([row]) == {}
+    diagnostic = get_store().state('enrichment-response')
+    assert diagnostic == dict(supplied=1, returned=1, accepted=0, omitted=1, unknown=1)
+    assert 'PRIVATE' not in str(diagnostic)
+    assert entities.enrich()['pending'] == 1
+    assert get_store().records() == {}
+
+
 def test_evidence_and_vocabulary_filters_remain_enforced(extraction):
     row, payload, _, set_response = extraction
     payload['entries'][0]['mentions'].extend([

@@ -410,7 +410,7 @@ def test_enrichment_propagates_batches_entities_sources_and_dates(corpus, monkey
     assert len(updated['edges']) == 3
 
 
-@pytest.mark.parametrize('source', ['entities-audit', 'entity-consolidation'])
+@pytest.mark.parametrize('source', ['entities-audit', 'entity-consolidation', 'sharing-audit'])
 def test_audit_sources_skip_model_fallback_and_legacy_mentions(corpus, monkeypatch, source):
     audit = entry('audit', text='org/repo#123', source=source)
     corpus[:] = [audit]
@@ -422,3 +422,9 @@ def test_audit_sources_skip_model_fallback_and_legacy_mentions(corpus, monkeypat
                [entities.mention(audit, 'people', 'Alex', 'Alex', 'model')])
     assert entities.projection()[0]['mentions'] == []
     assert entities.graph()['entries'] == 1  # Audit remains visible as an activity.
+    store.save_profile('owner-linked', 'people', {'name': 'Owner linked'})
+    with store.connection() as db:
+        db.execute('INSERT INTO entity_activity_links(entity_id,entry_id,actor,created) VALUES (?,?,?,?)',
+                   ('owner-linked', 'audit', 'owner', '2026-10-28'))
+    assert [(m['id'], m['method']) for m in entities.projection()[0]['mentions']] == [
+        ('owner-linked', 'user-confirmed')]
