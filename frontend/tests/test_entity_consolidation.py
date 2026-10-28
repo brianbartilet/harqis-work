@@ -37,7 +37,7 @@ def first():
 
 
 def test_pending_priority_is_global_type_then_occurrence_not_insertion():
-    kinds = ['people', 'companies', 'tools', 'pets', 'apps', 'games', 'topics']
+    kinds = ['people', 'companies', 'tools', 'pets', 'apps', 'games', 'projects']
     pairs = {}
     for kind in reversed(kinds):
         for count in [1, 50]:
@@ -538,6 +538,8 @@ def test_alias_editor_saves_partial_hints_and_preference(corpus, authenticated_c
                     headers={k:v for k,v in response.headers.items() if k.lower() not in {'content-encoding', 'content-length'}})
             page.route('https://entities.test/**', route_request)
             page.goto('https://entities.test/hfl-corpus/entities')
+            page.wait_for_selector('#entity-results:not([hidden])')
+            page.select_option('#filter-maturity', 'all')
             card = page.locator('#entity-list > details').first
             card.locator(':scope > summary').click()
             card.get_by_role('button', name='Update soul').click()

@@ -4,7 +4,7 @@
 
 **Manage types and add entities** creates types with a name, color and extraction
 description, or creates a named entity manually. Defaults include People, Organizations,
-Tools, Topics, Referenced objects and Pets. Open an entity to change its type or edit its
+Tools, Referenced objects and Pets. Open an entity to change its type or edit its
 profile. Custom types and Pets keep same-name mentions separate until identity matching
 or a reviewed merge establishes that they are the same entity.
 
@@ -20,6 +20,41 @@ Authenticated endpoints include `POST /api/hfl/entities/types` (`name`, `color`,
 `POST /api/hfl/entities/backfill?include_new_types=true`. The directory response includes
 its `types` registry. Types are stored with the local entity database shared by the API
 and workers; no new schedule or credential is required.
+
+## Entity signal and Topic retirement
+
+Extraction identifies named, reusable things, not activity descriptions or combinations
+of keywords. "Code task in Python" and "debug test in Python" extract **Tools → Python**;
+the surrounding activity stays in its source evidence. Topics is retired and cannot be
+created again. Existing Topic projections are excluded from the directory and graph;
+new enrichment and profile writes reject the retired type.
+
+The directory defaults to **Established entities**. Automatic entities with only one
+supporting activity are provisional; **Include provisional mentions** reveals them for
+review. Curated profiles, merged identities, explicit identifiers and entities supported
+by at least two distinct current activities remain visible. This is a visibility rule,
+not permission to merge same-name people. Provisional evidence remains available to
+consolidation. Incoming resolution still uses established profiles and confirmed alias
+rules/contextual evidence; similar spelling is not an automatic identity approval.
+The API preserves its complete matching view by default; `include_provisional=false`
+requests the established subset. Counts are calculated before pagination.
+
+Removing existing Topic data is an explicit owner operation, not a startup migration:
+
+1. `GET /api/hfl/entities/types/topics/removal-preview` returns affected entity,
+   mention and activity counts plus `selection_hash`.
+2. `POST /api/hfl/entities/types/topics/remove` with that hash and a UUID `request_id`
+   removes Topic mentions, profiles and current links, and retires pending/deferred
+   comparisons. A changed selection returns 409; re-preview before retrying.
+3. Reuse the exact request ID/body after an uncertain response. The receipt records a
+   database backup path and internal audit event. Explicitly reclassified entities are
+   retained. Corpus activity text and historical merge audits/reports are preserved.
+
+Deploy API and enrichment workers with the retired-type write guard before cleanup;
+older workers do not know this policy. Backups contain private entity evidence and stay
+on the owning host beside its database. This operation does not re-enrich history or
+infer replacement Tools from removed Topics. Re-extract a selected activity explicitly
+if its named tools were never extracted separately.
 
 ## Daily Hermes consolidation
 

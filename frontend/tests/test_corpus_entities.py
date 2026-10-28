@@ -167,7 +167,7 @@ def test_profile_validation_and_owner_boundary(corpus, authenticated_client):
         assert authenticated_client.post('/api/hfl/entities/profile/entity:missing', json=payload).status_code == 400
 
 
-@pytest.mark.parametrize('kind', ['people', 'companies', 'tools', 'topics', 'objects'])
+@pytest.mark.parametrize('kind', ['people', 'companies', 'tools', 'pets', 'objects'])
 def test_profile_references_for_every_type(corpus, authenticated_client, monkeypatch, kind):
     monkeypatch.setattr(entities, 'entity_index', lambda: [dict(id='reference-test', kind=kind)])
     url = '/api/hfl/entities/profile/reference-test'
@@ -181,7 +181,7 @@ def test_profile_references_for_every_type(corpus, authenticated_client, monkeyp
 
 
 def test_directory_returns_all_entities_by_default(authenticated_client, monkeypatch):
-    rows = [dict(id=str(i), label=f'Entity {i:04}', kind='topics') for i in range(1203)]
+    rows = [dict(id=str(i), label=f'Entity {i:04}', kind='tools') for i in range(1203)]
     monkeypatch.setattr(entities, 'entity_index', lambda *args: rows.copy())
     data = authenticated_client.get('/api/hfl/entities').json()
     assert data['total'] == len(data['entities']) == 1203
