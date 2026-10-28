@@ -36,6 +36,10 @@ by at least two distinct current activities remain visible. This is a visibility
 not permission to merge same-name people. Provisional evidence remains available to
 consolidation. Incoming resolution still uses established profiles and confirmed alias
 rules/contextual evidence; similar spelling is not an automatic identity approval.
+The Activity Graph has the same **Show** dropdown, defaults to established entities,
+and remembers the choice in browser view state. Filtering removes provisional entity
+nodes and their connections before graph capacity counts; activity/source/date nodes
+remain. Explicit board membership is unchanged.
 The API preserves its complete matching view by default; `include_provisional=false`
 requests the established subset. Counts are calculated before pagination.
 

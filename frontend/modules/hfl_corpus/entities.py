@@ -203,7 +203,7 @@ def projection(source='', since='', until='', context='', resolve_mentions=True,
     return rows
 
 
-def graph(source='', since='', until='', limit=100, query='', shared=False, context=''):
+def graph(source='', since='', until='', limit=100, query='', shared=False, context='', include_provisional=True):
     from modules.hfl_corpus.ideas_api import canonical_snapshot
     from modules.hfl_corpus.ideas_graph import extend
     from modules.hfl_corpus.graph_workspace import active_context, scope_snapshot
@@ -211,12 +211,12 @@ def graph(source='', since='', until='', limit=100, query='', shared=False, cont
     snapshot = canonical_snapshot()
     snapshot = scope_snapshot(snapshot, context)
     if not any(snapshot.get(k) for k in ('ideas', 'actions', 'topics', 'links', 'goals', 'maps', 'lists')):
-        return _corpus_graph(source, since, until, limit, query, shared, context)
-    base = _corpus_graph(source, since, until, 0, '', False, context)
+        return _corpus_graph(source, since, until, limit, query, shared, context, include_provisional)
+    base = _corpus_graph(source, since, until, 0, '', False, context, include_provisional)
     return extend(base, snapshot, since=since, until=until, query=query, sources=source, context=context, shared=shared, limit=limit, workspace_scoped=bool(context))
 
 
-def _corpus_graph(source='', since='', until='', limit=100, query='', shared=False, context=''):
+def _corpus_graph(source='', since='', until='', limit=100, query='', shared=False, context='', include_provisional=True):
     rows = projection('', since, until, context) if context else projection('', since, until)
     available_sources = sorted({e['source'] for e in rows if e['source']})
     selected_sources = {source} if isinstance(source, str) and source else set(source or [])
@@ -227,6 +227,16 @@ def _corpus_graph(source='', since='', until='', limit=100, query='', shared=Fal
         entity_index()  # Only reconcile changed/unbound owners; avoid a second corpus scan.
     graph_store = get_store()
     profiles = graph_store.profiles()
+    if not include_provisional:
+        support = {}
+        for entry in rows:
+            if entry['source'] not in EXCLUDED_SOURCES:
+                for mention in entry['mentions']:
+                    support.setdefault(mention['id'], set()).add(entry['id'])
+        rows = [{**entry, 'mentions': [m for m in entry['mentions']
+                 if profiles.get(m['id']) or m.get('external_id')
+                 or m.get('resolution') == 'reviewed-alias'
+                 or len(support.get(m['id'], ())) >= 2]} for entry in rows]
     alias_ids = {d['alias'] for d in graph_store.decisions() if d['active']}
     with graph_store.connection() as db:
         alias_ids.update(r[0] for r in db.execute('SELECT id FROM entity_merges WHERE active=0'))
@@ -308,7 +318,7 @@ def _corpus_graph(source='', since='', until='', limit=100, query='', shared=Fal
     # Curated entities without activity belong to the unfiltered owner overview.
     if not (selected_sources or since or until or context or shared):
         for identity, profile in profiles.items():
-            if identity not in alias_ids:
+            if identity not in alias_ids and profile['kind'] not in entity_types.RETIRED:
                 if not query or query in profile['name'].casefold():
                     curated_ids.add(identity)
                     if not limit or len(nodes) < budget:

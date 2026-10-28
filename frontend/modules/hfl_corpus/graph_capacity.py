@@ -7,11 +7,11 @@ MAX_NODES = 20000
 MAX_EDGES = 100000
 
 
-def bounded_graph(source, since, until, query, shared, context, node_limit, edge_limit, preview):
+def bounded_graph(source, since, until, query, shared, context, node_limit, edge_limit, preview, include_provisional=True):
     from modules.hfl_corpus import entities
 
     # Preserve canonical filtering and authorization before counting or sampling.
-    graph = entities.graph(source, since, until, 0, query, shared, context)
+    graph = entities.graph(source, since, until, 0, query, shared, context, include_provisional)
     nodes, edges = graph['nodes'], graph['edges']
     exceeded = len(nodes) > node_limit or len(edges) > edge_limit
     capacity = dict(exceeded=exceeded, preview=bool(exceeded and preview),

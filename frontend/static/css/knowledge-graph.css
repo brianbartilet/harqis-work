@@ -172,7 +172,7 @@
 .kg-menu-heading,#kg-animation-status{font-size:12px;color:#94a3b8}
 #kg-preset-notice{margin:0 12px 6px;padding:8px 12px;border-left:2px solid #38bdf8;color:#bae6fd;font-size:12px}#kg-preset-notice[hidden]{display:none}
 .kg-live-status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
-.kg-filter-drawer .kg-filter-grid>.kg-source-field{grid-column:1/-1}
+.kg-filter-drawer .kg-filter-grid>.kg-source-field,.kg-filter-drawer .kg-filter-grid>.kg-maturity{grid-column:1/-1}
 .kg-filter-drawer #kg-source-options{width:100%;max-width:100%}
 @media(max-width:760px){
  .kg-main-toolbar .kg-animation-menu{grid-column:2/-1;grid-row:1;position:static;min-width:0}

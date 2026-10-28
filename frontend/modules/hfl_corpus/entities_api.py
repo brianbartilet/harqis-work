@@ -115,15 +115,15 @@ async def graph(request: Request, source: str = '', since: str = '', until: str 
                 limit: int = Query(default=100, ge=0, le=1000),
                 query: str = Query(default='', max_length=200), shared: bool = False,
                 sources: list[str] = Query(default=[]), context: str = '',
-                capacity_guard: bool = False, preview: bool = False,
+                capacity_guard: bool = False, preview: bool = False, include_provisional: bool = True,
                 node_limit: int = Query(default=DEFAULT_NODES, ge=MIN_NODES, le=MAX_NODES),
                 edge_limit: int = Query(default=DEFAULT_EDGES, ge=100, le=MAX_EDGES)):
     authorize(request)
     if capacity_guard:
         from modules.hfl_corpus.graph_capacity import bounded_graph
         return await run_in_threadpool(bounded_graph, sources or source, since, until,
-                                      query, shared, context, node_limit, edge_limit, preview)
-    return await run_in_threadpool(entities.graph, sources or source, since, until, limit, query, shared, context)
+                                      query, shared, context, node_limit, edge_limit, preview, include_provisional)
+    return await run_in_threadpool(entities.graph, sources or source, since, until, limit, query, shared, context, include_provisional)
 
 
 @router.get('/api/hfl/entities')
