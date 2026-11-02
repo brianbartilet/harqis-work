@@ -7,7 +7,7 @@ from workflows.hfl.entity_store import get_store
 
 log = logging.getLogger(__name__)
 TASK = 'workflows.knowledge.tasks.connected_hfl.refresh_corpus_entities'
-EXCLUDED_SOURCES = frozenset({'entities-audit', 'entity-consolidation'})
+EXCLUDED_SOURCES = frozenset({'entities-audit', 'entity-consolidation', 'sharing-audit'})
 
 
 def request_enrichment(entry_id='*'):
@@ -15,7 +15,10 @@ def request_enrichment(entry_id='*'):
         return {'state': 'disabled'}
     store = get_store()
     with store.connection() as db:
+        # Canonical changes and explicit owner recovery create a fresh budget.
+        db.execute('BEGIN IMMEDIATE')
         db.execute('INSERT OR REPLACE INTO pending(id,revision) VALUES (?,?)', (entry_id, uuid.uuid4().hex))
+        db.execute('DELETE FROM enrichment_failures WHERE id=?', (entry_id,))
     return dispatch_pending()
 
 
@@ -29,7 +32,10 @@ def dispatch_pending():
     from core.apps.sprout.app.celery import SPROUT
     store = get_store()
     with store.connection() as db:
-        pending = list(db.execute('SELECT * FROM pending WHERE queued_at < ? LIMIT 20', (time.time()-600,)))
+        pending = list(db.execute('''SELECT p.* FROM pending p
+            LEFT JOIN enrichment_failures f ON f.id=p.id AND f.revision=p.revision
+            WHERE p.queued_at < ? AND COALESCE(f.state,'pending') != 'quarantined'
+            LIMIT 20''', (time.time()-600,)))
     ids = []
     for row in pending:
         try:

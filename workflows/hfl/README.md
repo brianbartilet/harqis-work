@@ -78,6 +78,60 @@ capture hooks, forward-delivery acknowledgement, or events older than the retry
 window. See the [dated recovery runbook](../../docs/info/HFL-CAPTURE-RECOVERY.md)
 for these boundaries and the September 15–16 recovery plan.
 
+## Entity enrichment quarantine and recovery
+
+Enrichment requires the model to return **every complete input ID exactly once**,
+including `mentions: []` for entries without eligible entities. A missing row is
+not a successful empty extraction. The parser remains fail-closed for malformed,
+truncated or ambiguous JSON; there are no model repair calls. The latest valid
+response's `enrichment-response` state stores only supplied/returned/accepted,
+omitted and unknown **counts**, never IDs or response content. Parser failures
+leave that last-valid-response diagnostic unchanged; task errors contain only
+exception class names.
+
+Internal `entities-audit`, `entity-consolidation`, and `sharing-audit` activities
+remain visible but are excluded from automatic extraction and legacy automatic
+mentions. Explicit owner-created entity/activity links remain visible.
+
+The entity SQLite store now creates an additive `enrichment_failures` table on
+open. Existing pending rows are preserved and begin with a zero failure budget;
+no historical failures are inferred. Each pending **intent revision** (including
+`*` bulk requests) has a durable limit of five failed executions, matching an
+initial attempt plus four retries. Exhausting an already-running Celery task's
+retry allowance also quarantines that revision immediately. Counts survive fresh
+broker deliveries, dispatcher runs, and process restarts. Successful bulk batches
+do not consume the failure budget. Lock contention does not consume it either.
+
+Quarantined intent stays in `pending` for inspection, but the ten-minute stale
+work dispatcher excludes it and already-queued duplicates return `quarantined`
+without calling the model. The failing execution raises a sanitized error so
+Celery does not falsely report completion. Inspect the durable records with:
+
+```sql
+SELECT p.id, p.revision, f.failures, f.state, f.error, f.updated
+FROM pending p JOIN enrichment_failures f
+  ON f.id = p.id AND f.revision = p.revision;
+```
+
+After correcting the cause, an operator can explicitly request recovery through
+`workflows.hfl.entity_events.request_enrichment(entry_id)` using the normal
+configured application environment. This is a **write and queue action**, not a
+read-only diagnosis. It creates a fresh revision and budget using the existing
+notification path. Canonical edits that notify enrichment do the same. Prefer a
+single entry ID; recovering `*` reopens the entire bulk request. Do not repeatedly
+reset a failing revision on a timer. Old tasks cannot mark the new revision
+failed or remove its pending intent. Successful completion removes the matching
+failure record. Failure accounting and recovery are transactional, revision-
+scoped, and retain the existing worker file lock and content-hash recheck.
+
+Boundaries: the budget counts caught failed executions, not hard-killed workers
+or failed broker sends. Legacy direct task calls with no revision retain Celery's
+bounded retry behavior but have no durable intent to quarantine; use the normal
+request API for recoverable work. Quarantining a `*` request can pause remaining
+entries in that bulk request; independent per-entry notifications still proceed.
+No automatic deployment, replay, or historical corpus rewrite is part of this
+migration.
+
 ## Tasks
 
 | Task | What it does | Express target | Schedule (when active) |
