@@ -139,11 +139,11 @@ YAML files in `agents/projects/profiles/`. Each profile declares model, tools, p
 
 | Profile | Extra tools vs base | MCP apps |
 |---|---|---|
-| `base` | read_file, glob, grep, post_comment, move_card, check_item | — |
-| `agent:default` | + ask_human (read-only; no write/bash) — fallback for unlabelled cards, bound to the host in-process worker | — |
-| `agent:code` | + write_file, bash | Jira, Trello, Gmail, Calendar, Discord, YNAB, OANDA, Reddit, Echo MTG, Scryfall, TCG MP |
-| `agent:write` | + write_file (no bash) | Google Apps, Trello, Discord, Telegram |
-| `agent:full` | + write_file, bash, git (branch/commit/push/PR), ask_human — generalist catch-all that opens PRs as `claude[bot]` | Google Apps, Trello, Discord, Jira, Telegram |
+| `base` | read_file, glob, grep, post_comment, move_card, check_item, ask_human | — |
+| `agent:default` | Same as base (read-only filesystem; no write/bash) — fallback for unlabelled cards, bound to the host in-process worker | — |
+| `agent:code` | + write_file, bash | Google Apps, YouTube, Trello, Discord, Jira, Telegram, YNAB, OANDA, Reddit, Echo MTG, Scryfall, TCG MP |
+| `agent:write` | + write_file (no bash) | Google Apps, YouTube, Trello, Discord, Telegram |
+| `agent:full` | + write_file, bash, git (status/branch/commit/push/PR) — generalist catch-all that opens PRs as `claude[bot]` | Google Apps, YouTube, Trello, Discord, Jira, Telegram |
 
 New agent type = new YAML file. No orchestrator code changes.
 
@@ -327,7 +327,7 @@ Declared in `workflows/queues.py` (`WorkflowQueue` enum) and registered with Rab
 | `hfl` | Homework-for-Life capture / ingest / summarize / recall — pinned to `harqis-server` |
 | `capture` | Isolated Windows desktop screen-reader supervisor; consumed only by `capture-worker` |
 
-**Broadcast (fanout)** — every subscribed worker runs each task; tasks **must** be idempotent. A worker only receives broadcasts when its `queues` list includes the broadcast name (otherwise the exchange isn't declared and beat publishes fail with `NOT_FOUND`):
+**Broadcast (fanout)** — every subscribed worker runs each task; tasks **must** be idempotent. A worker only receives broadcasts when its `queues` list includes the broadcast name. Beat and workers pre-declare the fanout exchanges at startup in `workflows/config.py`, preventing missing-exchange `NOT_FOUND` failures before consumers subscribe; this does not retain broadcasts for workers that are not subscribed.
 
 | Queue | Used by |
 |-------|---------|
