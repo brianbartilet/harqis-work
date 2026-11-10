@@ -79,14 +79,14 @@
   <section class="chat-workspace">
     <header class="workspace-header">
       <div class="share-menu-control">
-        <button class="drawer-toggle" type="button" data-view-menu-toggle aria-label="Choose shared view" aria-controls="share-view-menu" aria-expanded="false"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h12M4 10h12M4 15h12"/></svg></button>
+        <button class="drawer-toggle" type="button" data-view-menu-toggle aria-label="Discover shared views" aria-controls="share-view-menu" aria-expanded="false">Discover</button>
         <nav id="share-view-menu" class="share-view-menu" aria-label="Shared views" hidden>
           {% for key, label in share_menu %}<button type="button" data-share-view="{{ key }}" aria-current="{{ 'page' if key == 'entries' else 'false' }}">{{ label }}</button>{% endfor %}
         </nav>
       </div>
       <div class="workspace-heading">
         <h1 data-view-title>Ask my agent</h1>
-        <p class="muted" data-view-description>{{ grant.snapshot.entries|length }} moments ingested and analyzed{% if grant.snapshot.activity_entries %} · {{ grant.snapshot.activity_entries|length }} shared objects{% endif %} · {% if grant.live_updates %}content refreshed {{ content_refreshed_at }} · {% endif %}{% if grant.no_expiry %}no expiry{% else %}available until {{ expires_at_display }}{% endif %}</p>
+        <p class="muted" data-view-description>{% if grant.live_updates %}content refreshed {{ content_refreshed_at }} · {% endif %}{% if grant.no_expiry %}no expiry{% else %}available until {{ expires_at_display }}{% endif %}</p>
       </div>
       {% if owner_preview %}
       <a class="button button-secondary logout-form" href="/sharing">Close session</a>

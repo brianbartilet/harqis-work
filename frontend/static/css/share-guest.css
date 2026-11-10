@@ -5,6 +5,7 @@ body .preview-toast{top:148px}
 .share-menu-control{position:relative;flex:none}
 .share-workspace .drawer-head{align-items:center;padding:11px 16px}
 .share-workspace :is(.drawer-close,.drawer-toggle){display:grid;place-items:center;width:44px;height:44px;flex:0 0 44px;padding:0}
+.share-workspace .drawer-toggle{width:auto;flex:0 0 auto;padding:0 12px;white-space:nowrap;font-size:.8rem}
 .share-workspace :is(.drawer-close,.drawer-toggle) svg{width:18px;height:18px;pointer-events:none}
 .share-view-menu{position:absolute;top:calc(100% + 9px);left:0;width:230px;max-width:calc(100vw - 40px);padding:7px;border:1px solid #334155;border-radius:12px;background:#101b2e;box-shadow:0 16px 40px #0008;z-index:50}
 .share-view-menu button{display:block;width:100%;padding:12px;text-align:left;background:transparent;color:#cbd5e1;border-radius:7px;font-size:.85rem}
@@ -58,6 +59,11 @@ body .preview-toast{top:148px}
 .share-graph-header-controls:has(.share-graph-options:empty){display:none}
 .shared-graph .share-entity-orbs-toggle{display:none}
 @media(max-width:700px){
+  .workspace-heading [data-view-description]{display:none}
+  .share-workspace .workspace-heading h1{white-space:normal;overflow:visible;font-size:.85rem}
+  .share-workspace .workspace-header{gap:8px}
+  .share-workspace .drawer-toggle{padding:0 10px}
+  .share-workspace :is(a.logout-form,.logout-form button){font-size:.72rem;padding:8px}
   .share-view-head{gap:8px}
   .share-board-head .share-board-picker{flex:1 1 150px}
   .share-main-view .share-graph-workspace.has-selection{grid-template-columns:minmax(0,1fr)}

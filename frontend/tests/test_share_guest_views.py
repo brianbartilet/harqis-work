@@ -117,7 +117,7 @@ def test_public_share_assets_without_owner_login(authenticated_client):
     assert authenticated_client.get('/share/assets/../config.py').status_code == 404
 
 
-@pytest.mark.parametrize('width', [1440, 390])
+@pytest.mark.parametrize('width', [1440, 390, 320])
 def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus, width, tmp_path):
     from playwright.sync_api import expect
     context['plans'] = [
@@ -135,19 +135,32 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
     page.goto('https://editing.test/sharing/shares/' + grant.id + '/preview')
     page.locator('[data-preview-toast-close]').click()
     expect(page.locator('[data-view-title]')).to_have_text('Ask my agent')
+    expect(page.locator('[data-view-menu-toggle]')).to_have_text('Discover')
+    description = page.locator('[data-view-description]')
+    expect(description).not_to_contain_text('moments ingested')
+    expect(description).not_to_contain_text('shared objects')
+    if width <= 700:
+        expect(description).not_to_be_visible()
+    else:
+        expect(description).to_be_visible()
+    controls = [page.locator(selector).bounding_box() for selector in
+                ('[data-view-menu-toggle]', '.workspace-heading', '.logout-form')]
+    assert all(box['x'] >= 0 and box['x'] + box['width'] <= width for box in controls)
+    assert all(left['x'] + left['width'] <= right['x'] for left, right in zip(controls, controls[1:]))
+    page.screenshot(path=str(tmp_path / f'shared-header-{width}.png'))
     expect(page.locator('#share-view-menu')).not_to_be_visible()
-    page.get_by_role('button', name='Choose shared view').click()
+    page.get_by_role('button', name='Discover shared views').click()
     expect(page.locator('#share-view-menu')).to_have_css('position', 'absolute')
     menu = page.locator('#share-view-menu').bounding_box()
     assert menu['x'] >= 0 and menu['x'] + menu['width'] <= width
     page.screenshot(path=str(tmp_path / f'shared-menu-{width}.png'))
-    page.get_by_role('button', name='Choose shared view').click()
+    page.get_by_role('button', name='Discover shared views').click()
     expect(page.locator('[data-chat-form]')).to_be_visible()
     expect(page.locator('[data-share-sidebar=entries]')).not_to_have_attribute('hidden', '')
     page.locator('#question').fill('Keep this draft')
 
     def choose(key):
-        page.get_by_role('button', name='Choose shared view').click()
+        page.get_by_role('button', name='Discover shared views').click()
         page.locator('[data-share-view=' + key + ']').click()
 
     choose('actions')
@@ -273,7 +286,7 @@ def test_citations_switch_from_other_panels(editor_page, context, sharing_corpus
     page.locator('[data-chat-thread]').evaluate('(el, id) => { el.innerHTML = `<a href="?page=1#evidence-${id}">Activity source</a>`; }', citation)
 
     def open_plans():
-        page.get_by_role('button', name='Choose shared view').click()
+        page.get_by_role('button', name='Discover shared views').click()
         page.locator('[data-share-view=plans]').click()
         expect(page.locator('[data-share-sidebar=plans]')).to_be_visible()
         if width <= 900:

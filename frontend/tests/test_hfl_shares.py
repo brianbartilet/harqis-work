@@ -1834,7 +1834,7 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     assert "data-view-menu-toggle" in second.text
     assert 'id="shared-moments-drawer" type="checkbox"' in second.text
     assert 'for="shared-moments-drawer"' in second.text
-    assert 'aria-label="Choose shared view"' in second.text
+    assert 'aria-label="Discover shared views"' in second.text
     assert 'class="drawer-close" type="button"' in second.text
     assert "event.stopPropagation();" in second.text
     assert "if (!isCompact()) drawerState.checked = false;" in second.text
@@ -1849,7 +1849,7 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     assert "width:min(1120px,calc(100% - 48px))" in second.text
     assert ".entry-content img, .entry-content video" in second.text
     assert "A little context, chosen for you" in second.text
-    assert "moments ingested and analyzed" in second.text
+    assert "moments ingested and analyzed" not in second.text
     assert '<span class="brand-name">HARQIS</span>' in second.text
     assert '<span class="brand-context">Knowledge Corpus Share</span>' in second.text
     assert 'class="brand-logo" aria-hidden="true"' in second.text
