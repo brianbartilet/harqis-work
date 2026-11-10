@@ -451,6 +451,28 @@ def _owner_page_number(total: int, raw_page: str, page_size: int) -> tuple[int, 
     return min(requested, total_pages), total_pages
 
 
+def _saved_recipes_context_sync(request: Request, user: str) -> dict[str, Any]:
+    """Page recipes without loading the corpus or rebuilding the editor."""
+    store = get_share_store()
+    recipes = store.list_configurations()
+    items, page, total_pages = _owner_page(
+        recipes, request.query_params.get("recipe_page", "1"), _OWNER_RECIPE_PAGE_SIZE,
+    )
+    return {
+        "request": request,
+        "configurations": tuple({
+            "configuration": item,
+            "expiration_summary": "No expiry" if item.no_expiry else _duration_summary(item.ttl_seconds),
+        } for item in items),
+        "configuration": store.get_configuration(request.query_params.get("configuration_id", "")),
+        "recipe_page": page,
+        "recipe_total_pages": total_pages,
+        "share_page": _owner_page_number(store.count_shares(), request.query_params.get("share_page", "1"), _OWNER_SHARE_PAGE_SIZE)[0],
+        "all_sources_value": ALL_SOURCES,
+        "csrf": make_csrf_token(user),
+    }
+
+
 def _generated_shares_context_sync(request: Request, user: str) -> dict[str, Any]:
     """Build only the inexpensive generated-share list fragment context."""
     store = get_share_store()
@@ -483,7 +505,8 @@ def _generated_shares_context_sync(request: Request, user: str) -> dict[str, Any
                 ),
                 "expires_at_display": _expiry_display(share),
                 "has_link": bool(store.get_share_link(share.id)),
-                "has_recipe": bool(store.get_configuration(share.configuration_id)),
+                "has_recipe": bool(recipe := store.get_configuration(share.configuration_id)),
+                "recipe_name": recipe.name if recipe else "",
             }
             for share in share_page_items
         ),
@@ -601,7 +624,8 @@ def _owner_context_sync(
                 ),
                 "expires_at_display": _expiry_display(share),
                 "has_link": bool(store.get_share_link(share.id)),
-                "has_recipe": bool(store.get_configuration(share.configuration_id)),
+                "has_recipe": bool(recipe := store.get_configuration(share.configuration_id)),
+                "recipe_name": recipe.name if recipe else "",
             }
             for share in share_page_items
         ),
@@ -693,6 +717,17 @@ async def sharing_page(
             configuration=configuration,
             success=success,
         ),
+    )
+
+
+@owner_router.get("/saved-recipes", response_class=HTMLResponse)
+async def saved_recipes_fragment(request: Request):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    context = await asyncio.to_thread(_saved_recipes_context_sync, request, user)
+    return templates.TemplateResponse(
+        request, "modules/hfl_shares/partials/saved_recipes.html", context,
     )
 
 

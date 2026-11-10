@@ -148,7 +148,7 @@
   .owner-pagination a:hover { background:#334155; color:#f8fafc; }
   .owner-pagination span { color:#64748b; font-size:.7rem; text-align:center; }
   .generated-shares-content { transition:opacity .15s ease; }
-  .generated-shares-content[aria-busy="true"] { opacity:.5; pointer-events:none; }
+  .saved-recipes-content[aria-busy="true"], .generated-shares-content[aria-busy="true"] { opacity:.5; pointer-events:none; }
   .wrap { overflow-wrap:anywhere; word-break:break-word; }
   .expand-panel { border:1px solid #1e293b; border-radius:.75rem; background:rgba(2,6,23,.45); }
   .expand-panel > summary { display:flex; cursor:pointer; list-style:none; align-items:center; justify-content:space-between; gap:.75rem; color:#93c5fd; font-size:.8rem; padding:.8rem .9rem; }
@@ -439,35 +439,8 @@
           </span>
           <span class="owner-list-arrow-shell" aria-hidden="true"><svg class="owner-list-arrow h-4 w-4 transition" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 7.5 5 5 5-5"></path></svg></span>
         </summary>
-        <div class="saved-recipes-content mt-2">
-        {% for row in configurations %}
-        {% set item = row.configuration %}
-        <div class="item recipe-item{% if cfg and cfg.id == item.id %} recipe-item-active{% endif %}">
-          <div class="card-title-row">
-            <a class="wrap text-sm font-semibold text-sky-300" href="/sharing?configuration_id={{ item.id }}" data-recipe-load{% if cfg and cfg.id == item.id %} aria-current="true"{% endif %}>{{ item.name }}</a>
-            <div class="actions recipe-actions card-actions">
-              <button class="btn instant-share-button" type="button" data-instant-share
-                      {% if item.entity_template %}data-personal-recipe="{{ item.id }}"{% endif %}
-                      data-instant-url="/sharing/configurations/{{ item.id }}/instant"
-                      title="Instant share" aria-label="Instant share {{ item.name }}">{{ action_icon('instant') }}</button>
-              <a class="btn btn-soft" href="/sharing?configuration_id={{ item.id }}&duplicate=true" data-recipe-load title="Duplicate" aria-label="Duplicate {{ item.name }}">{{ action_icon('duplicate') }}</a>
-              {% if not cfg or cfg.id != item.id %}
-              <form method="post" action="/sharing/configurations/{{ item.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-danger" type="submit" title="Delete" aria-label="Delete {{ item.name }}">{{ action_icon('delete') }}</button></form>
-              {% endif %}
-            </div>
-          </div>
-          <p class="mt-1 text-xs text-slate-500">{{ "All sources" if all_sources_value in item.sources else item.sources|join(', ') }}</p>
-          <p class="mt-1 text-xs text-slate-500">{{ row.expiration_summary }}</p>
-          {% if item.entity_template %}<p class="pill">Entity template · choose an entity to share</p>{% elif item.entity_id %}<p class="pill">For {{ item.recipient or item.entity_name }}</p>{% endif %}
-        </div>
-        {% else %}<p class="mt-2 text-xs text-slate-500">No saved recipes yet.</p>{% endfor %}
-        {% if recipe_total_pages > 1 %}
-        <nav class="owner-pagination" aria-label="Saved recipe pages">
-          {% if recipe_page > 1 %}<a href="/sharing?recipe_page={{ recipe_page - 1 }}&share_page={{ share_page }}{% if cfg and cfg.id %}&configuration_id={{ cfg.id }}{% endif %}">Previous</a>{% else %}<span></span>{% endif %}
-          <span>Page {{ recipe_page }} of {{ recipe_total_pages }}</span>
-          {% if recipe_page < recipe_total_pages %}<a href="/sharing?recipe_page={{ recipe_page + 1 }}&share_page={{ share_page }}{% if cfg and cfg.id %}&configuration_id={{ cfg.id }}{% endif %}">Next</a>{% else %}<span></span>{% endif %}
-        </nav>
-        {% endif %}
+        <div class="saved-recipes-content mt-2" data-saved-recipes-content aria-live="polite">
+        {% include "modules/hfl_shares/partials/saved_recipes.html" %}
         </div>
       </details>
 
@@ -597,32 +570,49 @@
   const instantQr = instantDialog?.querySelector('[data-instant-qr]');
   let instantTrigger = null;
 
-  generatedSharesContent?.addEventListener('click', async event => {
-    const link = event.target.closest('[data-generated-shares-page]');
-    if (
-      !link || event.defaultPrevented || event.button !== 0 ||
-      event.metaKey || event.ctrlKey || event.shiftKey || event.altKey
-    ) return;
-    event.preventDefault();
-    generatedSharesPanel.open = true;
-    generatedSharesContent.setAttribute('aria-busy', 'true');
-    try {
-      const pageUrl = new URL(link.href);
-      const fragmentUrl = new URL(pageUrl);
-      fragmentUrl.pathname = '/sharing/generated-shares';
-      const response = await fetch(fragmentUrl, {
-        headers: {'Accept': 'text/html'},
-      });
-      if (!response.ok) throw new Error('Generated shares could not be loaded.');
-      generatedSharesContent.innerHTML = await response.text();
-      window.history.replaceState({}, '', pageUrl);
-    } catch (error) {
-      keepGeneratedSharesOpen();
-      window.location.assign(link.href);
-    } finally {
-      generatedSharesContent.removeAttribute('aria-busy');
-    }
-  });
+  const bindOwnerPagination = (content, selector, path, pageParameter) => {
+    let loading = false;
+    content?.addEventListener('click', async event => {
+      const link = event.target.closest(selector);
+      if (!link || event.defaultPrevented || event.button !== 0 ||
+          event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      if (loading) return;
+      loading = true;
+      content.setAttribute('aria-busy', 'true');
+      content.querySelector('[data-pagination-error]')?.remove();
+      try {
+        const fragmentUrl = new URL(window.location.href);
+        fragmentUrl.searchParams.set(pageParameter, new URL(link.href).searchParams.get(pageParameter));
+        fragmentUrl.pathname = path;
+        const response = await fetch(fragmentUrl, {headers: {'Accept': 'text/html'}});
+        if (!response.ok || response.redirected) throw new Error('Pages could not be loaded. Please try again.');
+        const html = await response.text();
+        // Only update this list's parameter; the other list may have paged meanwhile.
+        const pageUrl = new URL(window.location.href);
+        pageUrl.searchParams.set(pageParameter, fragmentUrl.searchParams.get(pageParameter));
+        const scrollY = window.scrollY;
+        content.innerHTML = html;
+        window.history.replaceState({}, '', pageUrl);
+        const pagination = content.querySelector('.owner-pagination');
+        pagination?.setAttribute('tabindex', '-1');
+        pagination?.focus({preventScroll: true});
+        window.scrollTo({top: scrollY, behavior: 'instant'});
+      } catch (error) {
+        const message = document.createElement('p');
+        message.dataset.paginationError = '';
+        message.setAttribute('role', 'alert');
+        message.className = 'mt-2 text-xs text-slate-400';
+        message.textContent = 'Pages could not be loaded. Please try again.';
+        content.append(message);
+      } finally {
+        loading = false;
+        content.removeAttribute('aria-busy');
+      }
+    });
+  };
+  bindOwnerPagination(generatedSharesContent, '[data-generated-shares-page]', '/sharing/generated-shares', 'share_page');
+  bindOwnerPagination(document.querySelector('[data-saved-recipes-content]'), '[data-saved-recipes-page]', '/sharing/saved-recipes', 'recipe_page');
 
   if (!form || !selector || !sourceSummary || !tagCloud) return;
 
@@ -1051,8 +1041,9 @@
       submitter.dataset.progressNext
     );
   });
-  document.querySelectorAll('[data-recipe-load]').forEach(link => {
-    link.addEventListener('click', event => {
+  document.addEventListener('click', event => {
+      const link = event.target.closest('[data-recipe-load]');
+      if (!link) return;
       if (
         event.defaultPrevented || event.button !== 0 ||
         event.metaKey || event.ctrlKey || event.shiftKey || event.altKey
@@ -1061,7 +1052,6 @@
         'Loading recipe',
         'Preparing the selected recipe and its latest preview…'
       );
-    });
   });
   document.querySelectorAll('[data-recipe-clear]').forEach(link => {
     link.addEventListener('click', event => {
@@ -1075,8 +1065,9 @@
       );
     });
   });
-  document.querySelectorAll('[data-instant-share]').forEach(button => {
-    button.addEventListener('click', async () => {
+  document.addEventListener('click', async event => {
+      const button = event.target.closest('[data-instant-share]');
+      if (!button) return;
       if (button.dataset.personalRecipe) {
         window.location.href = '/sharing?configuration_id=' + encodeURIComponent(button.dataset.personalRecipe);
         return;
@@ -1102,7 +1093,6 @@
         hideProgress();
         window.alert(error.message || 'Instant share could not be rendered.');
       }
-    });
   });
   instantDialog?.querySelector('[data-instant-close]')?.addEventListener('click', closeInstantDialog);
   window.openPersonalizedShare = openInstantDialog;

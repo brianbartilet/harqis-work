@@ -1046,7 +1046,7 @@ def test_owner_page_paginates_recipes_and_shares_with_mobile_first_saved_list(
     assert 'aria-label="Generated share pages"' in first.text
     assert "data-generated-shares-content" in first.text
     assert "data-generated-shares-page" in first.text
-    assert "fragmentUrl.pathname = '/sharing/generated-shares';" in first.text
+    assert "'/sharing/generated-shares', 'share_page'" in first.text
     assert 'class="panel saved-recipes-panel owner-list-panel">' in first.text
     assert (
         'class="panel generated-shares-panel owner-list-panel" '
@@ -1073,6 +1073,80 @@ def test_owner_page_paginates_recipes_and_shares_with_mobile_first_saved_list(
     assert fragment.text.count('class="item generated-share-item"') == 5
     assert "Page 2 of 3" in fragment.text
     assert "social-recipe-form" not in fragment.text
+
+
+@pytest.mark.parametrize("width", [1440, 390])
+def test_owner_recipe_pagination_preserves_draft_and_panels(editor_page, sharing_corpus, width, tmp_path):
+    from playwright.sync_api import expect
+    page, client = editor_page
+    store = get_share_store()
+    recipe = None
+    for index in range(6):
+        recipe = store.save_configuration(_configuration(name=f"Recipe {index + 1}"))
+    for index in range(6):
+        store.create_share(
+            configuration_id=recipe.id, name=f"Share {index + 1}",
+            token_hash=f"pagination-{index}", pin_hash="", auth_mode="qr", allowed_email="",
+            snapshot=build_snapshot(recipe, (sharing_corpus,)), ttl_seconds=3600,
+            single_use=False, device_limit=1,
+        )
+    page.set_viewport_size({"width": width, "height": 1000})
+    page.goto("https://editing.test/sharing")
+    recipes = page.locator('.saved-recipes-panel')
+    shares = page.locator('.generated-shares-panel')
+    recipes.locator('summary').click()
+    shares.locator('summary').click()
+    page.evaluate("window.paginationSentinel = 'same document'")
+    name = page.locator('[data-social-form] input[name="name"]')
+    name.fill('Unsaved draft')
+    recipes.get_by_role('link', name='Next', exact=True).click()
+    expect(recipes).to_contain_text('Page 2 of 2')
+    expect(name).to_have_value('Unsaved draft')
+    assert page.evaluate('window.paginationSentinel') == 'same document'
+    assert recipes.evaluate('(el) => el.open')
+    assert shares.evaluate('(el) => el.open')
+    expect(shares).to_contain_text('Recipe: Recipe 6')
+    expect(shares).to_contain_text(f'Recipe ID: {recipe.id}')
+    shares.get_by_role('link', name='Next', exact=True).click()
+    expect(shares).to_contain_text('Page 2 of 2')
+    assert 'recipe_page=2' in page.url
+    recipes.get_by_role('link', name='Previous', exact=True).click()
+    expect(recipes).to_contain_text('Page 1 of 2')
+    assert 'share_page=2' in page.url
+    page.route('**/sharing/saved-recipes?**', lambda route: route.fulfill(status=500, body='failed'))
+    recipes.get_by_role('link', name='Next', exact=True).click()
+    expect(recipes.get_by_role('alert')).to_contain_text('Please try again')
+    expect(name).to_have_value('Unsaved draft')
+    assert recipes.evaluate('(el) => el.open')
+    assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+    page.screenshot(path=str(tmp_path / f'share-pagination-{width}.png'), full_page=True)
+    page.reload()
+    assert not recipes.evaluate('(el) => el.open')
+
+
+def test_saved_recipes_fragment_and_deleted_recipe_metadata(authenticated_client, sharing_corpus, monkeypatch):
+    from modules.hfl_shares import router
+    store = get_share_store()
+    recipe = store.save_configuration(_configuration(name='Source recipe'))
+    store.create_share(
+        configuration_id=recipe.id, name='Published share', token_hash='recipe-metadata',
+        pin_hash='', auth_mode='qr', allowed_email='', snapshot=build_snapshot(recipe, (sharing_corpus,)),
+        ttl_seconds=3600, single_use=False, device_limit=1,
+    )
+    def no_catalog(*args, **kwargs):
+        raise AssertionError('Pagination must not load the corpus')
+    monkeypatch.setattr(router, '_sharing_catalog', no_catalog)
+    response = authenticated_client.get('/sharing/saved-recipes?recipe_page=invalid')
+    assert response.status_code == 200
+    assert 'Source recipe' in response.text
+    assert 'social-recipe-form' not in response.text
+    response = authenticated_client.get('/sharing/generated-shares')
+    assert 'Recipe: Source recipe' in response.text
+    assert f'Recipe ID: {recipe.id}' in response.text
+    store.delete_configuration(recipe.id)
+    response = authenticated_client.get('/sharing/generated-shares')
+    assert 'Recipe: Deleted recipe' in response.text
+    assert f'Recipe ID: {recipe.id}' in response.text
 
 
 def test_owner_share_page_uses_snapshot_free_sql_pagination(
