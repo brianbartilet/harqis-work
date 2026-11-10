@@ -1105,8 +1105,9 @@ def test_owner_recipe_pagination_preserves_draft_and_panels(editor_page, sharing
     assert page.evaluate('window.paginationSentinel') == 'same document'
     assert recipes.evaluate('(el) => el.open')
     assert shares.evaluate('(el) => el.open')
-    expect(shares).to_contain_text('Recipe: Recipe 6')
-    expect(shares).to_contain_text(f'Recipe ID: {recipe.id}')
+    expect(shares).to_contain_text('From: Recipe 6')
+    expect(shares.get_by_role('link', name='Recipe 6').first).to_have_attribute('href', f'/sharing?configuration_id={recipe.id}')
+    expect(shares).not_to_contain_text('Recipe ID:')
     shares.get_by_role('link', name='Next', exact=True).click()
     expect(shares).to_contain_text('Page 2 of 2')
     assert 'recipe_page=2' in page.url
@@ -1122,6 +1123,9 @@ def test_owner_recipe_pagination_preserves_draft_and_panels(editor_page, sharing
     page.screenshot(path=str(tmp_path / f'share-pagination-{width}.png'), full_page=True)
     page.reload()
     assert not recipes.evaluate('(el) => el.open')
+    shares.get_by_role('link', name='Recipe 6').click()
+    expect(name).to_have_value('Recipe 6')
+    assert f'configuration_id={recipe.id}' in page.url
 
 
 def test_saved_recipes_fragment_and_deleted_recipe_metadata(authenticated_client, sharing_corpus, monkeypatch):
@@ -1141,12 +1145,14 @@ def test_saved_recipes_fragment_and_deleted_recipe_metadata(authenticated_client
     assert 'Source recipe' in response.text
     assert 'social-recipe-form' not in response.text
     response = authenticated_client.get('/sharing/generated-shares')
-    assert 'Recipe: Source recipe' in response.text
-    assert f'Recipe ID: {recipe.id}' in response.text
+    assert '>Source recipe</a>' in response.text
+    assert f'href="/sharing?configuration_id={recipe.id}" data-recipe-load' in response.text
+    assert 'Recipe ID:' not in response.text
     store.delete_configuration(recipe.id)
     response = authenticated_client.get('/sharing/generated-shares')
-    assert 'Recipe: Deleted recipe' in response.text
-    assert f'Recipe ID: {recipe.id}' in response.text
+    assert 'From: Deleted recipe' in response.text
+    assert 'data-recipe-load' not in response.text
+    assert 'Recipe ID:' not in response.text
 
 
 def test_owner_share_page_uses_snapshot_free_sql_pagination(
