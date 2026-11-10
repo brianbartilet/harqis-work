@@ -129,7 +129,36 @@ def synthesize(evidence, *, start, end, existing_intents=()):
                       load_prompt("timeline_suggestions"), 'findings')
 
 
+def intent_batches(existing, limit=100000):
+    """Partition the full comparison set without silently dropping old intents."""
+    batches, batch, size = [], [], 2
+    for record in existing:
+        length = len(json.dumps(record, ensure_ascii=False)) + 2
+        if length + 2 > limit:
+            raise TimelineModelError('An existing intent exceeds the review limit; cached ideas were preserved.')
+        if batch and size + length > limit:
+            batches.append(batch)
+            batch, size = [], 2
+        batch.append(record)
+        size += length
+    if batch:
+        batches.append(batch)
+    return batches or [[]]
+
+
 def review_ideas(candidates, existing):
+    """Review survivors against every batch before allowing persistence."""
+    original_count = len(candidates)
+    if not candidates:
+        return [], 0
+    for batch in intent_batches(existing):
+        candidates, _ = _review_ideas_batch(candidates, batch)
+        if not candidates:
+            break
+    return candidates, original_count - len(candidates)
+
+
+def _review_ideas_batch(candidates, existing):
     """Reject semantic repeats before they become reviewable cards."""
     if not candidates or (not existing and len(candidates) == 1):
         return candidates, 0
@@ -250,13 +279,14 @@ def explore_period(start, end, *, run_id=None, store=None, collect=collect_perio
         rows, coverage = collect(start,end)
         history = related(rows,start) if rows else []
         snapshot = canonical.idea_generation_snapshot()
-        if len(json.dumps(snapshot['records'], ensure_ascii=False)) > 200000:
-            raise TimelineModelError('Existing idea context exceeds the review limit; cached ideas were preserved.')
+        # Generation gets bounded context; the mandatory review below still
+        # compares every surviving proposal against the entire snapshot.
+        generation_intents = intent_batches(snapshot['records'])[0]
         suggestions = []
         for offset in range(0,len(rows),40):
             batch = rows[offset:offset+40]
             compact, lookup = _evidence_rows(batch,history)
-            findings = validate_findings(analyze(compact,start=start,end=end,existing_intents=snapshot['records']),set(lookup),lookup=lookup,include_matrix=True,include_boards=True)
+            findings = validate_findings(analyze(compact,start=start,end=end,existing_intents=generation_intents),set(lookup),lookup=lookup,include_matrix=True,include_boards=True)
             for finding in findings[:8]:
                 ids = finding["evidence"]
                 primary_ids = [eid for eid in ids if eid.startswith("N")]
