@@ -315,3 +315,69 @@ def test_shared_location_preview_respects_enabled_references():
     assert '>Location</strong>' in html and 'Explore further' in html
     assert 'Hidden' not in html and 'Website' in html
     assert 'loading="lazy"' in html and 'Open in OpenStreetMap' in html
+
+
+@pytest.mark.parametrize('conflict', [False, True])
+def test_bulk_update_all_linked_active_shares(authenticated_client, context, sharing_corpus, monkeypatch, conflict):
+    from modules.hfl_shares.security import make_csrf_token
+    store = get_share_store()
+    cfg = store.save_configuration(recipe(activity={'sections': ['entries', 'actions']}))
+    original = build_snapshot(cfg, (sharing_corpus,))
+    grants = [make_share(original, cfg) for _ in range(7)]
+    with store._connect() as db:
+        tokens = {grant.id: db.execute('SELECT token_hash FROM shares WHERE id=?', (grant.id,)).fetchone()['token_hash'] for grant in grants}
+    revoked = make_share(original, cfg)
+    store.revoke_share(revoked.id)
+    expired = make_share(original, cfg)
+    instant = make_share(original, cfg)
+    with store._connect() as db:
+        db.execute("UPDATE shares SET no_expiry=0, expires_at='2000-01-01T00:00:00+00:00' WHERE id=?", (expired.id,))
+        db.execute('UPDATE shares SET instant=1 WHERE id=?', (instant.id,))
+    other = store.save_configuration(replace(recipe(), name='Other recipe'))
+    unrelated = make_share(original, other)
+    cfg = store.save_configuration(replace(cfg, activity={'sections': ['entries', 'ideas']}))
+    if conflict:
+        original_replace = store.replace_share_content
+        monkeypatch.setattr(store, 'replace_share_content', lambda grant, *args: False if grant.id == grants[0].id else original_replace(grant, *args))
+    url = f'/sharing/configurations/{cfg.id}/update-shares'
+    assert authenticated_client.post(url, data={}).status_code == 403
+    response = authenticated_client.post(url, data={'csrf': make_csrf_token('frontend-test-user')})
+    assert response.status_code == (422 if conflict else 200)
+    assert f'Updated {6 if conflict else 7} generated shares' in response.text
+    assert 'Skipped 2 inactive or unavailable shares' in response.text
+    if conflict:
+        assert '1 shares could not be updated' in response.text
+    for grant in grants:
+        updated = store.get_share(grant.id)
+        if conflict and grant.id == grants[0].id:
+            assert updated.snapshot == original
+        else:
+            assert updated.snapshot.activity['sections'] == ['entries', 'ideas']
+        assert updated.expires_at == grant.expires_at
+        assert updated.auth_mode == grant.auth_mode
+        assert store.get_share_by_token_hash(tokens[grant.id]).id == grant.id
+        assert store.get_share_link(grant.id) == 'encrypted-original-link'
+    for grant in [revoked, expired, instant, unrelated]:
+        assert store.get_share(grant.id).snapshot == original
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_bulk_update_recipe_header_control(editor_page, context, sharing_corpus, width, tmp_path):
+    from playwright.sync_api import expect
+    page, client = editor_page
+    cfg = get_share_store().save_configuration(recipe())
+    page.set_viewport_size({'width': width, 'height': 1000})
+    page.goto('https://editing.test/sharing')
+    expect(page.get_by_role('button', name='Update generated shares', exact=True)).to_have_count(0)
+    page.goto(f'https://editing.test/sharing?configuration_id={cfg.id}')
+    button = page.get_by_role('button', name='Update generated shares', exact=True)
+    expect(button).to_be_visible()
+    assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+    page.screenshot(path=str(tmp_path / f'bulk-share-header-{width}.png'))
+    page.once('dialog', lambda dialog: dialog.dismiss())
+    button.click()
+    expect(button).to_be_enabled()
+    page.once('dialog', lambda dialog: dialog.accept())
+    button.click()
+    expect(page.locator('[data-success-toast]')).to_contain_text('No generated shares are linked')
+    expect(page.locator('[data-social-form] input[name="configuration_id"]')).to_have_value(cfg.id)

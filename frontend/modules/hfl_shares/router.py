@@ -1192,6 +1192,77 @@ async def share_handoff(request: Request, share_id: str):
     })
 
 
+async def _publish_saved_recipe(request: Request, grant: ShareGrant, configuration: ShareConfiguration) -> ShareConfiguration:
+    """Publish using the same recipient binding and concurrency checks for every action."""
+    bound_entities = grant.snapshot.filters.get('entities') or []
+    bound_entity = grant.snapshot.filters.get('entity')
+    if bound_entity:
+        configuration = replace(configuration, entity_id=bound_entity['id'], entity_name=bound_entity['label'],
+                                entity_kind=bound_entity['kind'], entity_ids=tuple(e['id'] for e in bound_entities),
+                                entities=tuple(bound_entities), recipient=grant.snapshot.recipient)
+    secret_options = _secret_snapshot_options(request, configuration)
+    def rebuild():
+        snapshot = build_snapshot(
+            configuration,
+            _sharing_documents(configuration.sources if not configuration.activity else (ALL_SOURCES,),
+                               force=True, include_secrets=configuration.include_secrets),
+            enabled_reference_ids=grant.snapshot.enabled_reference_ids,
+            disabled_reference_ids=configuration.disabled_reference_ids,
+            **secret_options,
+        )
+        return _stable_live_citations(snapshot, grant.snapshot)
+    snapshot = await asyncio.to_thread(rebuild)
+    if not snapshot.all_entries:
+        raise ValueError("The saved recipe has no eligible content. The share was not changed.")
+    if snapshot.estimated_chars > get_settings().hfl_share_max_snapshot_chars:
+        raise ValueError("The saved recipe is too large to share. Narrow its sources or filters.")
+    if not await asyncio.to_thread(get_share_store().replace_share_content, grant, snapshot, configuration):
+        raise HTTPException(status_code=409, detail="The share changed during the update. Please retry.")
+    record_share_audit(event="updated_from_recipe", share_id=grant.id)
+    return configuration
+
+
+@owner_router.post("/configurations/{configuration_id}/update-shares")
+async def update_generated_shares(request: Request, configuration_id: str):
+    user, redirect = require_user(request)
+    if redirect:
+        return redirect
+    form = await request.form()
+    _require_csrf(form, user)
+    store = get_share_store()
+    configuration = store.get_configuration(configuration_id)
+    if not configuration:
+        raise HTTPException(status_code=404, detail="Saved recipe not found.")
+    # Validate protected-content access before changing any shares.
+    _secret_snapshot_options(request, configuration)
+    share_ids = await asyncio.to_thread(store.recipe_share_ids, configuration_id)
+    updated = 0
+    skipped = 0
+    failures = []
+    for share_id in share_ids:
+        grant = await asyncio.to_thread(store.get_share, share_id)
+        if not grant or not grant.available or grant.configuration_id != configuration_id:
+            skipped += 1
+            continue
+        try:
+            await _publish_saved_recipe(request, grant, configuration)
+            updated += 1
+        except (TypeError, ValueError, HTTPException) as exc:
+            detail = exc.detail if isinstance(exc, HTTPException) else str(exc)
+            failures.append(f"{grant.name}: {detail}")
+    summary = f"Updated {updated} generated shares from the saved recipe."
+    if skipped:
+        summary += f" Skipped {skipped} inactive or unavailable shares."
+    if not share_ids:
+        summary = "No generated shares are linked to this saved recipe."
+    error = f"{len(failures)} shares could not be updated. " + " ".join(failures) if failures else ""
+    return templates.TemplateResponse(
+        request, "modules/hfl_shares/index.html",
+        await _owner_context(request, user, configuration=configuration, success=summary, error=error),
+        status_code=422 if failures else 200,
+    )
+
+
 @owner_router.post("/shares/{share_id}/update")
 async def update_share_from_recipe(request: Request, share_id: str):
     user, redirect = require_user(request)
@@ -1206,35 +1277,11 @@ async def update_share_from_recipe(request: Request, share_id: str):
     configuration = store.get_configuration(grant.configuration_id)
     if not configuration:
         raise HTTPException(status_code=409, detail="The original saved recipe is no longer available.")
-    bound_entities = grant.snapshot.filters.get('entities') or []
-    bound_entity = grant.snapshot.filters.get('entity')
-    if bound_entity:
-        configuration = replace(configuration, entity_id=bound_entity['id'], entity_name=bound_entity['label'],
-                                entity_kind=bound_entity['kind'], entity_ids=tuple(e['id'] for e in bound_entities),
-                                entities=tuple(bound_entities), recipient=grant.snapshot.recipient)
     try:
-        secret_options = _secret_snapshot_options(request, configuration)
-        def rebuild():
-            snapshot = build_snapshot(
-                configuration,
-                _sharing_documents(configuration.sources if not configuration.activity else (ALL_SOURCES,),
-                                   force=True, include_secrets=configuration.include_secrets),
-                enabled_reference_ids=grant.snapshot.enabled_reference_ids,
-                disabled_reference_ids=configuration.disabled_reference_ids,
-                **secret_options,
-            )
-            return _stable_live_citations(snapshot, grant.snapshot)
-        snapshot = await asyncio.to_thread(rebuild)
-        if not snapshot.all_entries:
-            raise ValueError("The saved recipe has no eligible content. The share was not changed.")
-        if snapshot.estimated_chars > get_settings().hfl_share_max_snapshot_chars:
-            raise ValueError("The saved recipe is too large to share. Narrow its sources or filters.")
-        if not await asyncio.to_thread(store.replace_share_content, grant, snapshot, configuration):
-            raise HTTPException(status_code=409, detail="The share changed during the update. Please retry.")
+        configuration = await _publish_saved_recipe(request, grant, configuration)
     except (TypeError, ValueError) as exc:
         return templates.TemplateResponse(request, "modules/hfl_shares/index.html",
             await _owner_context(request, user, configuration=configuration, error=str(exc)), status_code=422)
-    record_share_audit(event="updated_from_recipe", share_id=share_id)
     return templates.TemplateResponse(request, "modules/hfl_shares/index.html",
         await _owner_context(request, user, configuration=configuration,
             success="Share updated from the saved recipe. Its QR, link, expiry and access settings are unchanged."))

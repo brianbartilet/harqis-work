@@ -233,7 +233,13 @@
           <button type="button" id="recipe-help-open" class="context-icon-button" aria-label="How share recipes work" title="How share recipes work" aria-haspopup="dialog" aria-controls="recipe-help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7h.01"></path></svg></button>
         </div>
         <div class="recipe-header-actions">
-          {% if cfg and cfg.id %}<a class="btn btn-danger" href="/sharing" data-recipe-clear>Clear</a>{% endif %}
+          {% if cfg and cfg.id %}
+          <form method="post" action="/sharing/configurations/{{ cfg.id }}/update-shares" data-update-generated-shares>
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button class="btn btn-soft" type="submit">Update generated shares</button>
+          </form>
+          <a class="btn btn-danger" href="/sharing" data-recipe-clear>Clear</a>
+          {% endif %}
         </div>
       </div>
       <form id="social-recipe-form" method="post" data-social-form>
@@ -1040,6 +1046,18 @@
       submitter.dataset.progressMessage,
       submitter.dataset.progressNext
     );
+  });
+  document.querySelector('[data-update-generated-shares]')?.addEventListener('submit', event => {
+    const updateForm = event.currentTarget;
+    if (updateForm.dataset.processing === 'true' || !window.confirm(
+      'Update all active generated shares linked to this recipe from its latest saved version? Recipients will see the updated content. Save recipe edits first. QR/link and access settings stay the same.'
+    )) {
+      event.preventDefault();
+      return;
+    }
+    updateForm.dataset.processing = 'true';
+    updateForm.querySelector('button').disabled = true;
+    showProgress('Updating generated shares', 'Publishing the saved recipe to all linked active shares…');
   });
   document.addEventListener('click', event => {
       const link = event.target.closest('[data-recipe-load]');

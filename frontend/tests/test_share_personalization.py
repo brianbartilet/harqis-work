@@ -226,7 +226,8 @@ def test_personalized_live_refresh_keeps_binding_and_approval(entities, context,
     assert 'New workspace idea' not in str(initial.to_record())
 
 
-def test_update_from_template_retains_frozen_share_entity(authenticated_client, entities, context, sharing_corpus):
+@pytest.mark.parametrize('bulk', [False, True])
+def test_update_from_template_retains_frozen_share_entity(authenticated_client, entities, context, sharing_corpus, bulk):
     from modules.hfl_shares.security import opaque_hash
     store = get_share_store()
     cfg = recipe(entity_template=True)
@@ -234,7 +235,8 @@ def test_update_from_template_retains_frozen_share_entity(authenticated_client, 
     grant = store.create_share(configuration_id=template.id, name='For Alex', token_hash=opaque_hash('personal-test'),
         pin_hash='', auth_mode='qr', allowed_email='', snapshot=build_snapshot(cfg, (sharing_corpus,)),
         ttl_seconds=3600, single_use=False, device_limit=1)
-    response = authenticated_client.post('/sharing/shares/' + grant.id + '/update',
+    url = f'/sharing/configurations/{template.id}/update-shares' if bulk else f'/sharing/shares/{grant.id}/update'
+    response = authenticated_client.post(url,
                                         data={'csrf':make_csrf_token('frontend-test-user')})
     assert response.status_code == 200, response.text
     updated = store.get_share(grant.id)
