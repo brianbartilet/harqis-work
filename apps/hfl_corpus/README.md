@@ -508,3 +508,16 @@ PR reconciliation API. It creates entries/actions, updates GitHub card links, an
 reconciles closure; it is a mutating tool. It uses the owner’s enabled personal
 GitHub connector, not the separate host GitHub token. See
 [workflow behavior and activation](../../workflows/hfl/README.md#sync_github_pull_requests).
+
+### Topic removal and consolidation assessment
+
+| Tool | Description |
+|------|-------------|
+| `get_hfl_corpus_entity_topic_removal_preview` | Read topic removal counts and selection hash. |
+| `delete_hfl_corpus_entity_topics` | Remove topics using the reviewed hash and stable request UUID. **Destructive: remote write.** |
+| `update_hfl_corpus_entity_consolidation_assessment` | Assess/cache an active claimed packet; may invoke a model, never commits merges. **Destructive: remote write.** |
+
+*"Preview the scope of topic removal."*
+*"Assess this claimed consolidation packet without applying merges."*
+
+Removal requires the exact preview hash and a stable UUID for retries; the API rejects stale selections.

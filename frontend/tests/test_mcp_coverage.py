@@ -208,6 +208,10 @@ def test_every_new_service_uses_reviewed_http_contract(row, recording_api, tmp_p
         assert b'name="files"' in body and b'supporting evidence' in body
     if 'destination' in values:
         assert Path(values['destination']).read_bytes() == b'\x00\xffattachment\r\n'
+    if method == 'delete_entity_topics':
+        assert json.loads(body) == {key: values[key] for key in ('request_id', 'selection_hash')}
+    if method == 'update_entity_consolidation_assessment':
+        assert not body
     if method == 'create_map':
         assert json.loads(body)['name'] == 'test' and 'title' not in json.loads(body)
     if method == 'create_checklist_action':

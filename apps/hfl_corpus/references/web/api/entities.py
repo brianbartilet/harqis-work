@@ -423,3 +423,28 @@ class ApiServiceHflCorpusEntities(ApiServiceHflCorpusExtended):
             errors: Optional sanitized operational errors; reuse identical values on replay.
         """
         return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/executions/{self._segment(execution_id)}/close', payload=dict(reason=reason, errors=errors or []))
+
+    def get_entity_topic_removal_preview(self) -> dict:
+        """Preview topic removal counts and selection hash without changing state."""
+        return self._json('GET', 'entities/types/topics/removal-preview')
+
+    def delete_entity_topics(self, request_id: str, selection_hash: str) -> dict:
+        """Remove topics from a reviewed preview. Destructive: writes remote state.
+
+        Args:
+            request_id: Stable UUID reused for retries.
+            selection_hash: Exact hash returned by the removal preview; stale selections are rejected.
+        """
+        return self._json('POST', 'entities/types/topics/remove',
+                          payload=dict(request_id=request_id, selection_hash=selection_hash))
+
+    def update_entity_consolidation_assessment(self, run_id: str, token: str) -> dict:
+        """Assess and cache a claimed packet without committing merges.
+
+        Destructive: writes remote state and may invoke a model.
+
+        Args:
+            run_id: Consolidation run ID.
+            token: Active claim token for the bounded packet.
+        """
+        return self._json('POST', f'entities/consolidation/{self._segment(run_id)}/claims/{self._segment(token)}/assess')

@@ -31,6 +31,21 @@ def _dict_result(result) -> dict:
 
 def register_hfl_corpus_tools(mcp: FastMCP):
 
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def get_hfl_corpus_entity_topic_removal_preview() -> dict:
+        """Preview topic removal counts and the selection hash without changing state."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).get_entity_topic_removal_preview())
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def delete_hfl_corpus_entity_topics(request_id: str, selection_hash: str) -> dict:
+        """Remove topic entities using a reviewed selection hash and stable request ID. Destructive: writes remote state."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).delete_entity_topics(request_id=request_id, selection_hash=selection_hash))
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
+    def update_hfl_corpus_entity_consolidation_assessment(run_id: str, token: str) -> dict:
+        """Assess and cache a claimed consolidation packet without committing merges. Destructive: writes remote state and may invoke a model."""
+        return _dict_result(ApiServiceHflCorpusEntities(CONFIG).update_entity_consolidation_assessment(run_id=run_id, token=token))
+
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True))
     def sync_hfl_github_updates(pages: int = 5, limit: int = 10, run_id: str = '') -> dict:
         """Import/reconcile published PRs from the owner's enabled GitHub connector.
