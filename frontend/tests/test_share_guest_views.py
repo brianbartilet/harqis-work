@@ -134,17 +134,12 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
     page.set_viewport_size({'width':width, 'height':844})
     page.goto('https://editing.test/sharing/shares/' + grant.id + '/preview')
     page.locator('[data-preview-toast-close]').click()
-    expect(page.locator('[data-view-title]')).to_have_text('Ask my agent')
+    expect(page.locator('[data-view-title]')).to_have_count(0)
     expect(page.locator('[data-view-menu-toggle]')).to_have_text('Discover')
-    description = page.locator('[data-view-description]')
-    expect(description).not_to_contain_text('moments ingested')
-    expect(description).not_to_contain_text('shared objects')
-    if width <= 700:
-        expect(description).not_to_be_visible()
-    else:
-        expect(description).to_be_visible()
+    expect(page.locator('[data-view-description]')).to_have_count(0)
+    expect(page.locator('.brand-context')).to_have_text('Knowledge Corpus Agent')
     controls = [page.locator(selector).bounding_box() for selector in
-                ('[data-view-menu-toggle]', '.workspace-heading', '.logout-form')]
+                ('[data-view-menu-toggle]', '.logout-form')]
     assert all(box['x'] >= 0 and box['x'] + box['width'] <= width for box in controls)
     assert all(left['x'] + left['width'] <= right['x'] for left, right in zip(controls, controls[1:]))
     page.screenshot(path=str(tmp_path / f'shared-header-{width}.png'))
@@ -184,7 +179,7 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
     page.locator('[data-drawer-close]').click()
     choose('graph')
     graph = page.locator('[data-share-main=graph]')
-    expect(page.locator('[data-view-title]')).to_have_text('Activity graph')
+    expect(page.locator('[data-view-title]')).to_have_count(0)
     expect(graph.locator('canvas').first).to_be_visible()
     if width > 900:
         expect(page.locator('[data-entry-drawer]')).not_to_have_attribute('inert', '')
@@ -212,7 +207,7 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
     expect(pill).to_have_attribute('aria-pressed', 'false')
     page.screenshot(path=str(tmp_path / f'shared-graph-{width}.png'))
     graph.get_by_role('button', name='Back to chat').click()
-    expect(page.locator('[data-view-title]')).to_have_text('Ask my agent')
+    expect(page.locator('[data-view-title]')).to_have_count(0)
     expect(page.locator('#question')).to_have_value('Keep this draft')
     if width > 900:
         page.locator('[data-drawer-close]').click()
@@ -224,8 +219,8 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
         orbs.click()
     expect(legend.get_by_role('button').first).to_have_attribute('aria-pressed', 'true')
     choose('boards')
-    expect(page.locator('[data-view-title]')).to_have_text('Idea boards')
-    expect(page.locator('[data-view-description]')).to_contain_text('Workspace board')
+    expect(page.locator('[data-view-title]')).to_have_count(0)
+    expect(page.locator('[data-view-description]')).to_have_count(0)
     boards = page.locator('[data-share-main=boards]')
     expect(boards.locator('canvas').first).to_be_visible()
     board_legend = boards.get_by_role('group', name='Graph entity types')

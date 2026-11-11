@@ -59,8 +59,6 @@ body .preview-toast{top:148px}
 .share-graph-header-controls:has(.share-graph-options:empty){display:none}
 .shared-graph .share-entity-orbs-toggle{display:none}
 @media(max-width:700px){
-  .workspace-heading [data-view-description]{display:none}
-  .share-workspace .workspace-heading h1{white-space:normal;overflow:visible;font-size:.85rem}
   .share-workspace .workspace-header{gap:8px}
   .share-workspace .drawer-toggle{padding:0 10px}
   .share-workspace :is(a.logout-form,.logout-form button){font-size:.72rem;padding:8px}

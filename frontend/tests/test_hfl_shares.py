@@ -770,7 +770,7 @@ def test_live_recipe_refreshes_latest_entries_using_frozen_rules(
 
     assert preview.status_code == 200
     assert "Added a live recipe update" in preview.text
-    assert "content refreshed" in preview.text
+    assert "content refreshed" not in preview.text
     assert refreshed is not None
     assert len(refreshed.snapshot.entries) == 2
     assert refreshed.snapshot.entries[1].citation == "S1"
@@ -1671,8 +1671,8 @@ def test_shared_manifesto_modal_uses_scoped_guest_and_owner_access(
 
     assert portal.status_code == 200
     assert '<span class="brand-name">HARQIS</span>' in portal.text
-    assert '<span class="brand-context">Knowledge Corpus Share</span>' in portal.text
-    assert ">HARQIS - Knowledge Corpus Share<" not in portal.text
+    assert '<span class="brand-context">Knowledge Corpus Agent</span>' in portal.text
+    assert ">HARQIS - Knowledge Corpus Agent<" not in portal.text
     assert 'data-manifesto-open' in portal.text
     assert re.search(r">\s*Manifesto\s*</button>", portal.text)
     assert 'data-manifesto-dialog aria-labelledby="shared-manifesto-title"' in portal.text
@@ -1851,7 +1851,7 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     assert "A little context, chosen for you" in second.text
     assert "moments ingested and analyzed" not in second.text
     assert '<span class="brand-name">HARQIS</span>' in second.text
-    assert '<span class="brand-context">Knowledge Corpus Share</span>' in second.text
+    assert '<span class="brand-context">Knowledge Corpus Agent</span>' in second.text
     assert 'class="brand-logo" aria-hidden="true"' in second.text
     assert "width:min(1500px,calc(100% - 24px));" in second.text
     assert "button.textContent.trim()" in second.text
@@ -1964,7 +1964,7 @@ def test_answer_html_repairs_inline_bullets_before_markdown_rendering():
     assert "Explore travel history</a></li>" in rendered
 
 
-def test_guest_entries_use_literal_search_ten_item_pages_and_readable_dates(
+def test_guest_entries_use_literal_search_ten_item_pages_and_minimal_header(
     authenticated_client, monkeypatch, tmp_path
 ):
     from modules.hfl_shares import router, scope
@@ -2011,10 +2011,9 @@ def test_guest_entries_use_literal_search_ten_item_pages_and_readable_dates(
     assert "Project moment 11" in searched.text
     assert '<div class="entry-load-status" data-entry-sentinel' not in searched.text
     assert "Project moment 1</h3>" not in searched.text
-    assert re.search(
-        r"[A-Z][a-z]+ \d{2}, 2026 \d{1,2}:\d{2} [AP]M UTC",
-        first_page.text,
-    )
+    assert 'data-view-title' not in first_page.text
+    assert 'data-view-description' not in first_page.text
+    assert 'available until' not in first_page.text
     assert "[S1]" not in first_page.text
     assert "Activity entries" in first_page.text
     assert "data-wait-overlay" in first_page.text
@@ -2277,7 +2276,7 @@ def test_owner_can_preview_active_share_without_guest_verification(
     assert "previewToast?.remove()" in preview.text
     assert "Hello, Avery!" in preview.text
     assert '<span class="brand-name">HARQIS</span>' in preview.text
-    assert '<span class="brand-context">Knowledge Corpus Share</span>' in preview.text
+    assert '<span class="brand-context">Knowledge Corpus Agent</span>' in preview.text
     assert 'data-chat-form data-owner-preview' in preview.text
     assert f'action="/sharing/shares/{grant.id}/preview/chat"' in preview.text
     assert ">Ask</button>" in preview.text
@@ -2551,7 +2550,7 @@ def test_static_guest_routes_are_not_interpreted_as_capability_tokens(
     assert response.status_code == 404
     assert "cannot be opened" in response.text
     assert '<span class="brand-name">HARQIS</span>' in response.text
-    assert '<span class="brand-context">Knowledge Corpus Share</span>' in response.text
+    assert '<span class="brand-context">Knowledge Corpus Agent</span>' in response.text
 
 
 def test_malformed_capability_token_is_rejected_before_store_lookup(
