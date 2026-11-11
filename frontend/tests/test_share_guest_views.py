@@ -125,8 +125,9 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
         dict(id='later', title='Later plan', category='Zulu', start_date='2026-09-01', end_date='2027-02-01', workspace_ids=['work']),
     ]
     cfg = recipe(activity={'sections':['entries','actions','ideas','boards','plans','graph'],
-                           'graph_view':{'preset':'people','animation':'off'}})
+                           'graph_view':{'preset':'people','animation':'off','hidden_kinds':['actions']}})
     snapshot = build_snapshot(cfg, (sharing_corpus,))
+    assert any(node['kind'] == 'actions' for node in snapshot.activity['graph']['nodes'])
     grant = make_share(snapshot)
     page, client = editor_page
     # The public ingress exposes /share/*, but not the owner's /static/*.
@@ -208,9 +209,14 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
     else:
         expect(orbs).not_to_be_visible()
     expect(legend).to_be_visible()
+    expect(legend.locator('[data-kind=actions]')).to_have_count(0)
     pill = legend.get_by_role('button').first
     pill.click()
     expect(pill).to_have_attribute('aria-pressed', 'false')
+    expect(pill).to_be_visible()
+    pill.click()
+    expect(pill).to_have_attribute('aria-pressed', 'true')
+    expect(legend.locator('[data-kind=actions]')).to_have_count(0)
     page.screenshot(path=str(tmp_path / f'shared-graph-{width}.png'))
     graph.get_by_role('button', name='Back to chat').click()
     expect(page.locator('[data-view-title]')).to_have_count(0)
