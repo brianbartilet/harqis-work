@@ -331,7 +331,8 @@ def test_share_corpus_uses_automatic_preview_and_blocking_long_actions(
     assert "form.dataset.processing === 'true'" in response.text
     assert re.search(
         r'<button class="btn btn-soft" formaction="/sharing/configurations" '
-        r"formnovalidate>Save recipe</button>",
+        r'formnovalidate\s+data-progress-title="Saving recipe"\s+'
+        r'data-progress-message="Saving your recipe settings…">Save recipe</button>',
         response.text,
     )
     generate = response.text.index('formaction="/sharing/generate"')
@@ -3852,3 +3853,29 @@ def test_share_save_notice_centered_and_dismissible(editor_page, sharing_corpus,
     page.goto(url)
     page.get_by_role("button", name="Dismiss notification").click()
     expect(notice).to_have_count(0)
+
+
+@pytest.mark.parametrize("width", [1440, 390])
+def test_recipe_save_shows_progress_before_navigation(editor_page, sharing_corpus, width, tmp_path):
+    from playwright.sync_api import expect
+    page, client = editor_page
+    response = client.post("/sharing/configurations", data=_form(), follow_redirects=False)
+    page.set_viewport_size({"width": width, "height": 1000})
+    page.goto("https://editing.test" + response.headers["location"])
+    save = page.get_by_role("button", name="Save recipe", exact=True)
+    # Hold navigation for one submission so the immediate pending state is observable.
+    save.evaluate("button => button.form.addEventListener('submit', event => event.preventDefault(), {once:true})")
+    save.click()
+    overlay = page.locator('[data-progress-overlay]')
+    expect(overlay).to_be_visible()
+    expect(overlay).to_contain_text('Saving recipe')
+    expect(overlay).to_contain_text('Saving your recipe settings…')
+    assert save.evaluate("button => button.form.getAttribute('aria-busy')") == 'true'
+    assert save.evaluate("button => { const event = new SubmitEvent('submit', {bubbles:true, cancelable:true, submitter:button}); return !button.form.dispatchEvent(event); }")
+    page.screenshot(path=str(tmp_path / f'recipe-saving-{width}.png'))
+    page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow'))")
+    expect(overlay).not_to_be_visible()
+    assert save.evaluate("button => button.form.hasAttribute('aria-busy')") is False
+    save.click()
+    expect(page.locator('[data-success-toast]')).to_contain_text('Japan context updated.')
+    expect(overlay).not_to_be_visible()

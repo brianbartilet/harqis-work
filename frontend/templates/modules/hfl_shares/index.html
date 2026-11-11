@@ -412,7 +412,9 @@
         </div>
 
         <div class="actions">
-          <button class="btn btn-soft" formaction="/sharing/configurations" formnovalidate>Save recipe</button>
+          <button class="btn btn-soft" formaction="/sharing/configurations" formnovalidate
+                  data-progress-title="Saving recipe"
+                  data-progress-message="Saving your recipe settings…">Save recipe</button>
           <button class="btn btn-soft disabled:cursor-not-allowed disabled:opacity-50" formaction="/sharing/preview/chat"
                   data-test-agent {% if not preview %}disabled{% endif %}
                    data-progress-title="Testing agent"
