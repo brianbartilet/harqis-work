@@ -61,7 +61,6 @@ body .preview-toast{top:148px}
 @media(max-width:700px){
   .share-workspace .workspace-header{gap:8px}
   .share-workspace .drawer-toggle{padding:0 10px}
-  .share-workspace :is(a.logout-form,.logout-form button){font-size:.72rem;padding:8px}
   .share-view-head{gap:8px}
   .share-board-head .share-board-picker{flex:1 1 150px}
   .share-main-view .share-graph-workspace.has-selection{grid-template-columns:minmax(0,1fr)}

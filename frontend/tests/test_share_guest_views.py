@@ -136,6 +136,12 @@ def test_recipient_views_mobile_and_desktop(editor_page, context, sharing_corpus
     page.locator('[data-preview-toast-close]').click()
     expect(page.locator('[data-view-title]')).to_have_count(0)
     expect(page.locator('[data-view-menu-toggle]')).to_have_text('Discover')
+    button_styles = page.locator('.workspace-header .drawer-toggle').evaluate_all(
+        "els => els.map(el => { const s = getComputedStyle(el); return "
+        "[s.height, s.fontSize, s.fontWeight, s.lineHeight, s.padding, s.backgroundColor, s.color]; })"
+    )
+    assert len(button_styles) == 2
+    assert button_styles[0] == button_styles[1]
     expect(page.locator('[data-view-description]')).to_have_count(0)
     expect(page.locator('.brand-context')).to_have_text('Knowledge Corpus Agent')
     controls = [page.locator(selector).bounding_box() for selector in

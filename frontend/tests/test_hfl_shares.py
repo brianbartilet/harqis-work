@@ -1872,7 +1872,7 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     assert ">Close session</button>" in second.text
     assert "Close this shared session? You may need to verify again to return." in second.text
     assert "if (!confirmed) event.preventDefault();" in second.text
-    assert "a.logout-form, .logout-form button { width:auto;" in second.text
+    assert '<button class="drawer-toggle">Close session</button>' in second.text
     assert 'class="close-icon"' not in second.text
     assert "submit.textContent = 'Thinking…'" in second.text
     assert "form.setAttribute('aria-busy', 'true')" in second.text
