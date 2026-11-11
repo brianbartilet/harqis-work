@@ -3,7 +3,10 @@
   const $ = id => document.getElementById(id), root = $('hud-surface'), grid = $('hud-grid');
   const config = JSON.parse($('hud-config').textContent), catalog = new Map(config.catalog.map(x => [x.operation_id, x]));
   let state, settingsId, saving = false, pendingSaves = 0, saveGeneration = 0, loading = false, moving = false, serial = Promise.resolve(), motionFrame;
+  let refreshVersion = 0;
   let lastData = '', lastLayout = '', lastActive = '', builderKey = crypto.randomUUID();
+  const returnAgent = new URLSearchParams(location.search).get('agent');
+  if(returnAgent)$('hud-workspace-return').href='/agents?agent='+encodeURIComponent(returnAgent);
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const typingMsPerCharacter = 15;
   function el(tag, text, cls) { const node = document.createElement(tag); if (text != null) node.textContent = text; if (cls) node.className = cls; return node; }
@@ -208,17 +211,20 @@
   }
   function add(operation){if(state.layout.widgets.some(w=>w.operation===operation)){catalogRows();return;}state.layout.widgets.push({id:crypto.randomUUID(),operation,size:'2x2',hidden:false,animation:'static',workspace_ids:[...state.spaces.active],dashboard_url:''});changed();$('hud-catalog').close();}
   async function refresh(){
-    if(loading||moving||saving)return;loading=true;
-    try {const fresh=await api('/second-brain/hud/data');if(moving||saving)return;
+    if(loading||moving||saving)return;loading=true;const version=refreshVersion;
+    if(!state){grid.setAttribute('aria-busy','true');$('hud-loading').hidden=false;$('hud-retry').hidden=true;window.BrainPageLoading?.show('Loading your dashboard...');}
+    try {const fresh=await api('/second-brain/hud/data');if(moving||saving||version!==refreshVersion)return;
       if(state&&$('hud-settings').matches(':popover-open'))return;
-      state=fresh;renderSpaces();
+      state=fresh;$('hud-loading').hidden=true;$('hud-retry').hidden=true;renderSpaces();
       if(lastLayout!==JSON.stringify(state.layout.widgets)||lastData!==dataKey()||lastActive!==JSON.stringify(state.spaces.active))render();
       if($('hud-catalog').open)catalogRows();
-      notice(state.source_error);
-    }catch(e){notice(e.message);}finally{loading=false;}
+      notice(state.source_error);window.BrainPageLoading?.finish();
+    }catch(e){window.BrainPageLoading?.finish();notice(e.message);$('hud-loading').hidden=true;$('hud-retry').hidden=false;grid.setAttribute('aria-busy','false');}finally{loading=false;if(version!==refreshVersion)refresh();}
   }
+  function spacesChanged(){refreshVersion++;refresh();}
   $('hud-refresh').onclick=refresh;
-  document.addEventListener('hud:spaces-changed',refresh);
+  $('hud-retry').onclick=refresh;
+  document.addEventListener('hud:spaces-changed',spacesChanged);
   $('hud-add').onclick=()=>{if(!state)return;catalogRows();$('hud-catalog').showModal();};$('hud-catalog-search').oninput=catalogRows;
   $('hud-fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await root.requestFullscreen();}catch{notice('Full screen is unavailable in this browser.');}};
   document.addEventListener('fullscreenchange',()=>{const control=$('hud-fullscreen'),active=!!document.fullscreenElement,label=active?'Exit full screen':'Full screen';control.title=label;control.setAttribute('aria-label',label);control.setAttribute('aria-pressed',String(active));control.querySelector('path').setAttribute('d',active?'M3 8h5V3m8 0v5h5M8 21v-5H3m18 0h-5v5':'M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5');rowHeight();});
@@ -260,7 +266,7 @@
     }catch(e){$('hud-build-status').textContent=e.message;submit.disabled=false;}
   };
   new Sortable(grid,{handle:'.hud-drag',forceFallback:true,animation:reduced.matches?0:150,ghostClass:'hud-sort-ghost',onStart(){moving=true;},onEnd(event){moving=false;const ids=[...grid.children].map(c=>c.dataset.id),visibleSet=new Set(ids),ordered=ids.map(id=>state.layout.widgets.find(w=>w.id===id));state.layout.widgets=state.layout.widgets.map(w=>visibleSet.has(w.id)?ordered.shift():w);changed();}});
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});window.addEventListener('storage',event=>{if(event.key==='corpus:workspace-change')refresh();});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});window.addEventListener('storage',event=>{if(event.key==='corpus:workspace-change')spacesChanged();});
   new ResizeObserver(rowHeight).observe(root.querySelector('.hud-toolbar'));window.addEventListener('resize',rowHeight);rowHeight();
   const timer=setInterval(()=>{if(!document.hidden)refresh();},30000);motionFrame=requestAnimationFrame(motion);refresh();
   window.addEventListener('pagehide',()=>{clearInterval(timer);cancelAnimationFrame(motionFrame);});

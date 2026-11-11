@@ -54,6 +54,7 @@ class Layout(BaseModel):
     model_config = ConfigDict(extra='forbid')
     revision: int = Field(default=0, ge=0)
     widgets: list[Widget] = Field(default_factory=list, max_length=80)
+    agent_panel_expanded: bool | None = None
 
     @model_validator(mode='after')
     def unique_ids(self):
@@ -73,7 +74,7 @@ def defaults():
                ('hud.hud_calendar.show_calendar_information', '1x2'),
                ('hud.hud_jira.show_jira_board', '2x2'),
                ('hud.hud_logs.get_failed_jobs', '1x2'), ('context', '2x2')]
-    return Layout(widgets=[Widget(id=f'initial-{i}', operation=op, size=size) for i, (op, size) in enumerate(sources)]).model_dump()
+    return Layout(widgets=[Widget(id=f'initial-{i}', operation=op, size=size) for i, (op, size) in enumerate(sources)], agent_panel_expanded=False).model_dump()
 
 
 def schema(db):
@@ -84,7 +85,13 @@ def layout():
     with connection() as db:
         schema(db)
         row = db.execute('SELECT revision,payload FROM second_brain_hud_layout WHERE singleton=1').fetchone()
-        return {'revision': row['revision'], 'widgets': json.loads(row['payload'])} if row else defaults()
+        if not row:
+            return defaults()
+        stored = json.loads(row['payload'])
+        if isinstance(stored, list):  # Layouts saved before panel preferences.
+            stored = {'widgets': stored}
+        return {'revision': row['revision'], 'widgets': stored['widgets'],
+                'agent_panel_expanded': stored.get('agent_panel_expanded', False)}
 
 
 def save_layout(payload: Layout):
@@ -94,13 +101,18 @@ def save_layout(payload: Layout):
     with connection() as db:
         schema(db)
         db.execute('BEGIN IMMEDIATE')
-        row = db.execute('SELECT revision FROM second_brain_hud_layout WHERE singleton=1').fetchone()
+        row = db.execute('SELECT revision,payload FROM second_brain_hud_layout WHERE singleton=1').fetchone()
         if payload.revision != (row['revision'] if row else 0):
             raise HTTPException(409, 'HUD changed in another tab. Reload before saving.')
         revision = payload.revision + 1
         widgets = [w.model_dump() for w in payload.widgets]
-        db.execute('INSERT INTO second_brain_hud_layout VALUES (1,?,?) ON CONFLICT(singleton) DO UPDATE SET revision=excluded.revision,payload=excluded.payload', (revision, json.dumps(widgets)))
-        return {'revision': revision, 'widgets': widgets}
+        previous = json.loads(row['payload']) if row else {}
+        expanded = payload.agent_panel_expanded
+        if expanded is None:
+            expanded = previous.get('agent_panel_expanded', False) if isinstance(previous, dict) else False
+        stored = {'widgets': widgets, 'agent_panel_expanded': expanded}
+        db.execute('INSERT INTO second_brain_hud_layout VALUES (1,?,?) ON CONFLICT(singleton) DO UPDATE SET revision=excluded.revision,payload=excluded.payload', (revision, json.dumps(stored)))
+        return {'revision': revision, **stored}
 
 
 def inventory():

@@ -1,7 +1,7 @@
 """Authenticated fleet CRUD, assets, sessions and presentation graph."""
 import io
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from PIL import Image
 from modules.hfl_corpus.agent_bridge import owner_auth
 from modules.hfl_shares.security import make_csrf_token
@@ -29,8 +29,9 @@ def page(request: Request):
     user, redirect = require_user(request)
     if redirect:
         return redirect
+    from modules.second_brain import hud
     return templates.TemplateResponse(request, 'modules/agents/index.html', page_context(
-        request, user, 'agents', csrf=make_csrf_token(user)))
+        request, user, 'agents', csrf=make_csrf_token(user), hud_sizes=hud.SIZES, hud_colors=hud.PIN_COLORS))
 
 
 @api.get('/catalogue')
@@ -38,10 +39,95 @@ def catalogue():
     return service.catalogue()
 
 
+@api.get('/graph')
+def ecosystem_graph(user=Depends(owner_auth)):
+    from modules.agents.ecosystem import graph
+    return graph(user)
+
+
+@api.post('/observations')
+def ecosystem_observation(raw: dict, user=Depends(owner_auth)):
+    from modules.agents.ecosystem import record
+    return checked(record, user, raw)
+
+
+@api.post('/demo')
+def ecosystem_demo(user=Depends(owner_auth)):
+    from modules.agents.ecosystem import seed_demo
+    return seed_demo(user)
+
+
 @api.get('/butler')
 def butler_history(user=Depends(owner_auth)):
     from modules.agents.butler import history
     return {'messages': history(user)}
+
+
+@api.get('/assistant')
+def assistant_status(probe: bool = True, user=Depends(owner_auth)):
+    from modules.agents import assistant
+    return checked(assistant.status, user, probe)
+
+
+@api.post('/assistant/primary')
+def assistant_primary(raw: dict, user=Depends(owner_auth)):
+    from modules.agents import assistant
+    return checked(assistant.select, user, raw)
+
+
+@api.get('/assistant/conversations')
+def assistant_conversations(user=Depends(owner_auth)):
+    from modules.agents import assistant
+    return {'items': assistant.conversations(user)}
+
+
+@api.post('/assistant/conversations')
+def assistant_new(raw: dict, user=Depends(owner_auth)):
+    from modules.agents import assistant
+    return checked(assistant.create_conversation, user, raw)
+
+
+@api.get('/assistant/conversations/{identity}')
+def assistant_messages(identity: str, user=Depends(owner_auth)):
+    from modules.agents import assistant
+    return checked(assistant.refresh, user, identity)
+
+
+@api.post('/assistant/conversations/{identity}/messages')
+def assistant_send(identity: str, raw: dict, user=Depends(owner_auth)):
+    from modules.agents import assistant
+    return checked(assistant.send, user, identity, raw)
+
+
+@api.get('/assistant/conversations/{identity}/turns/{turn}/events')
+def assistant_events(identity: str, turn: str, user=Depends(owner_auth)):
+    from modules.agents import assistant
+    return StreamingResponse(checked(assistant.events, user, identity, turn), media_type='text/event-stream',
+                             headers={'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no'})
+
+
+@api.post('/assistant/conversations/{identity}/turns/{turn}/{operation}')
+def assistant_control(identity: str, turn: str, operation: str, raw: dict, user=Depends(owner_auth)):
+    from modules.agents import assistant
+    return checked(assistant.control, user, identity, turn, operation, raw)
+
+
+@api.get('/assistant/conversations/{identity}/proposals')
+def assistant_proposals(identity: str, user=Depends(owner_auth)):
+    from modules.agents import assistant
+    return {'items': assistant.proposals(user, identity)}
+
+
+@api.post('/assistant/conversations/{identity}/proposals')
+def assistant_proposal(identity: str, raw: dict, user=Depends(owner_auth)):
+    from modules.agents import assistant
+    return checked(assistant.proposal, user, identity, raw)
+
+
+@api.post('/assistant/proposals/{identity}')
+def assistant_decide(identity: str, raw: dict, user=Depends(owner_auth)):
+    from modules.agents import assistant
+    return checked(assistant.decide, user, identity, raw)
 
 
 @api.get('/butler/schedule')
@@ -90,6 +176,9 @@ def create(raw: dict):
 def update(identity: str, raw: dict, user=Depends(owner_auth)):
     db = service.initialize()
     item = checked(db.get, identity)
+    from modules.agents.projection import visible
+    if item.get('mock') and not visible(item, user):
+        raise HTTPException(404, 'Agent unavailable.')
     if item.get('connector_user') and item['connector_user'] != user:
         raise HTTPException(404, 'Agent unavailable.')
     return {'item': checked(db.save, checked(service.validate, raw, item), identity=identity, version=raw.get('version'))}

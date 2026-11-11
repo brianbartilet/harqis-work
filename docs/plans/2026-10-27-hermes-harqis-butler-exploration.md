@@ -5,6 +5,10 @@ report. **Express output:** an owner-facing Butler that understands explicitly
 supplied HARQIS context, performs bounded approved work, and returns verified
 results linked to canonical records.
 
+The subsequent [primary assistant implementation](2026-10-27-primary-hermes-assistant.md)
+records the shipped code scope, owner gateway setup, transport limits and test
+coverage. It does not turn this inspection snapshot into live deployment evidence.
+
 This complements, rather than replaces, the [agent fleet and frontend Butler
 plan](2026-10-26-agent-fleet.md). That branch already implements owner-facing
 Butler messages through the existing action bridge/worker. The staged design

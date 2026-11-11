@@ -1,3 +1,4 @@
+import {connectionRadius} from './graph-sizing.mjs';
 import {readGraphState} from './graph-state.mjs';
 import {graphDateRange} from './graph-dates.mjs';
 import {createLabelLayout} from './graph-labels.mjs';
@@ -734,7 +735,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     const byId=new Map(nodes.map(n=>[n.id,n]));
     edges=data.edges.filter(e=>byId.has(e.source)&&byId.has(e.target)).map(e=>({...e,a:byId.get(e.source),b:byId.get(e.target)}));
     nodes.forEach(n=>n.visibleDegree=0);edges.forEach(e=>{e.a.visibleDegree++;e.b.visibleDegree++;});
-    nodes.forEach(n=>{const board=window.HflIdeas?.maps.current,smallGraph=nodes.length<=35;n.radius=board?8+3*(board.node_sizes?.[n.id]||3):n.kind==='entries'?(smallGraph?7:4.5):(smallGraph?10:4)+4*Math.log2(1+n.visibleDegree);});
+    nodes.forEach(n=>{const board=window.HflIdeas?.maps.current;n.radius=board?8+3*(board.node_sizes?.[n.id]||3):connectionRadius(n.kind,n.visibleDegree,nodes.length);});
     const anchors=nodes.filter(n=>n.kind!=='entries').sort((a,b)=>b.visibleDegree-a.visibleDegree).slice(0,4);
     const adjacency=new Map(nodes.map(n=>[n.id,new Set()]));
     for(const e of edges){adjacency.get(e.source).add(e.target);adjacency.get(e.target).add(e.source);}

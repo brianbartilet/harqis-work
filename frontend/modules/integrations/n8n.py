@@ -145,7 +145,7 @@ def sync(user, query=''):
             old = db.get(identity)
         except KeyError:
             old = None
-        item = {**(old or defaults(remote['name'][:120])), 'runtime': 'n8n', 'remote_id': remote['id'],
+        item = {**(old or defaults(remote['name'][:120])), 'runtime': 'n8n', 'classification': (old or {}).get('classification', 'workflows'), 'remote_id': remote['id'],
                 'connector_user': user, 'connector_site': connection['site'], 'remote_name': remote['name'][:120],
                 'published': bool(remote.get('published')), 'available_in_mcp': bool(remote.get('availableInMCP'))}
         if not old or any(old.get(k) != v for k, v in item.items()):

@@ -1,9 +1,9 @@
-<div class="activity-navigation{% if active_module in ['agents', 'applications', 'workflows', 'git_forks'] %} is-active{% endif %}">
+<div class="activity-navigation{% if active_module in ['applications', 'workflows', 'git_forks'] %} is-active{% endif %}">
   <button type="button" aria-haspopup="true" aria-expanded="false">Build</button>
   <details class="activity-navigation-menu">
     <summary hidden>Build navigation</summary>
     <nav class="activity-navigation-options" aria-label="Build tools">
-      {% for key in ['agents', 'applications', 'workflows', 'git_forks'] %}
+      {% for key in ['applications', 'workflows', 'git_forks'] %}
       {% for child in modules | default([]) if child.key == key %}
       <a href="{{ child.route }}" {% if active_module == child.key %}aria-current="page"{% endif %}>{{ child.label }}</a>
       {% endfor %}

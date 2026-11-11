@@ -1,5 +1,21 @@
 # Second Brain web HUD
 
+## Workspace navigation
+
+**Express → Second Brain** opens the agent fleet workspace at `/agents`.
+The highlighted brain icon at the start of the workspace toolbar opens the
+full dashboard at `/second-brain`. Its robot-icon shortcut
+returns to the workspace, preserving the originating agent when supplied.
+Both pages show a full-screen loading splash with indeterminate progress during navigation and initial data loading. The splash clears on success or failure, leaving errors and retry controls accessible. Reduced-motion preferences are respected. The dashboard robot icon sits before Add widget and returns to the Second Brain workspace.
+Build no longer contains an Agents entry. Existing routes and agent deep links
+remain supported.
+
+Activity Corpus, Activity Graph, Kanban, the workspace, and the dashboard use
+shared saved Space preferences, including multiple Spaces, All activity, and
+schedule-driven Dynamic mode. Fleet and dashboard retain separate controls,
+widget ordering, sizing, and appearance; widget Space membership remains shared.
+The advisory feed's categories and execution schedules are unchanged.
+
 ## Refresher: what Second Brain already does
 
 Second Brain is an advisory context service, not a general-purpose agent runner.

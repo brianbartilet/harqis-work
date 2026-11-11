@@ -18,6 +18,8 @@ def post(client, path, data):
 def fleet(bridge, monkeypatch, tmp_path):
     from modules.agents import service
     monkeypatch.setenv('HARQIS_CONNECTORS_DB', str(tmp_path / 'connectors.sqlite3'))
+    monkeypatch.delenv('HARQIS_HERMES_URL', raising=False)
+    monkeypatch.delenv('HARQIS_HERMES_API_KEY', raising=False)
     return service
 
 
@@ -27,7 +29,7 @@ def test_seed_is_idempotent_and_migrates_presets(fleet):
     one = fleet.initialize().list()
     two = fleet.initialize().list()
     assert one == two
-    assert {a['name'] for a in one} == {'Default agent', 'Butler', 'Research'}
+    assert {a['name'] for a in one} == {'Default agent', 'HARQIS Butler', 'Research'}
     assert next(a for a in one if a['name'] == 'Research')['overrides']['agent_model'] == 'test-model'
 
 
@@ -213,7 +215,9 @@ def test_fleet_browser(fleet, authenticated_client, tmp_path):
         page.get_by_role('button',name='Select Research assistant',exact=True).wait_for()
         page.get_by_role('button',name='Select Research assistant',exact=True).click()
         page.get_by_role('button',name='Deactivate',exact=True).click()
+        page.locator('.fleet-filter-menu > summary').click()
         page.get_by_label('Show deactivated',exact=True).check()
+        page.locator('.fleet-filter-menu > summary').click()
         page.get_by_role('button',name='Select Research assistant',exact=True).click()
         assert page.get_by_role('button',name='Open session',exact=True).is_disabled()
         page.get_by_role('button',name='Activate',exact=True).click()
@@ -225,7 +229,7 @@ def test_fleet_browser(fleet, authenticated_client, tmp_path):
         page.evaluate('window.scrollTo(0,0)')
         page.screenshot(path=str(tmp_path/'fleet-mobile.png'),full_page=True)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-        page.get_by_role('button',name='✧ Butler',exact=True).click()
-        page.get_by_label('Ask about your work or request a change').wait_for()
+        page.get_by_role('button',name='✧ HARQIS Butler',exact=True).click()
+        page.get_by_label('Ask about your work or describe an action to prepare').wait_for()
         assert not errors, errors
         browser.close()

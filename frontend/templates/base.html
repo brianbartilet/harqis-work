@@ -259,12 +259,15 @@
 {% if user and butler_csrf %}
 <link rel="stylesheet" href="{{ static_asset('css/butler.css') }}">
 <script type="application/json" id="butler-csrf">{{ butler_csrf|tojson }}</script>
-<button type="button" id="butler-launch" aria-controls="butler-panel" aria-expanded="false">✧ Butler</button>
+<button type="button" id="butler-launch" aria-controls="butler-panel" aria-expanded="false">✧ HARQIS Butler</button>
 <section id="butler-panel" hidden aria-label="HARQIS Butler">
-  <header><div><strong>Butler</strong><small>Your HARQIS assistant</small></div><button type="button" id="butler-close" aria-label="Close Butler">✕</button></header>
+  <header><div><strong id="butler-name">HARQIS Butler</strong><small id="butler-connection">Your primary Hermes assistant</small></div><button type="button" id="butler-close" aria-label="Close HARQIS Butler">✕</button></header>
+  <div class="butler-toolbar"><label for="butler-conversation">Conversation</label><select id="butler-conversation"></select><button type="button" id="butler-new">New</button></div>
+  <small id="butler-context"></small>
   <div id="butler-messages" aria-live="polite"></div>
   <p id="butler-error" role="alert"></p>
-  <form id="butler-form"><label for="butler-message">Ask about your work or request a change</label><textarea id="butler-message" maxlength="12000" required rows="3"></textarea><div><button id="butler-send">Send</button><a href="/agents?agent=butler">Configure</a></div></form>
+  <form id="butler-form"><label for="butler-message">Ask about your work or describe an action to prepare</label><textarea id="butler-message" maxlength="12000" required rows="3"></textarea><div><button id="butler-send">Send</button><button type="button" id="butler-stop" hidden>Stop</button><button type="button" id="butler-steer" hidden>Send guidance</button><a id="butler-configure" href="/agents?agent=butler">Configure</a></div></form>
+  <dialog id="butler-preview"><form id="butler-preview-form"><h2>Preview HFL action</h2><label>Title<input id="butler-action-title" maxlength="160" required></label><label>Expected outcome<textarea id="butler-action-outcome" maxlength="10000" required rows="6"></textarea></label><p>The original request becomes the task prompt. Saving creates an action for review; it does not start execution.</p><p id="butler-preview-error" role="alert"></p><div><button type="submit">Review exact action</button><button type="button" id="butler-preview-close">Cancel</button></div></form></dialog>
 </section>
 <script src="{{ static_asset('js/butler.js') }}" defer></script>
 {% endif %}

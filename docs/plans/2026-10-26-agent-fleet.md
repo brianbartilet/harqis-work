@@ -1,5 +1,20 @@
 # Agent fleet and frontend butler
 
+## Workspace navigation
+
+**Express → Second Brain** opens the agent fleet workspace at `/agents`.
+The highlighted brain icon at the start of the workspace toolbar opens the
+full dashboard at `/second-brain`. Its robot-icon shortcut
+returns to the workspace, preserving the originating agent when supplied.
+Build no longer contains an Agents entry. Existing routes and agent deep links
+remain supported.
+
+Activity Corpus, Activity Graph, Kanban, the workspace, and the dashboard use
+shared saved Space preferences, including multiple Spaces, All activity, and
+schedule-driven Dynamic mode. Fleet and dashboard retain separate controls,
+widget ordering, sizing, and appearance; widget Space membership remains shared.
+The advisory feed's categories and execution schedules are unchanged.
+
 Source action: `item-cf8aea45afb448eaa3db00561d6aaf34`. The owner approved the
 recommended scope on 2026-10-26 after review of the complete action and five
 attached screenshots.
@@ -57,7 +72,7 @@ agent prevents new execution with that current definition but does not rewrite
 an already-created run/session snapshot. Existing sessions and queued snapshots
 retain their original execution authority. Deactivation is not cancellation.
 
-App Settings links to Build → Agents; shared execution defaults move into the
+App Settings links to Express → Second Brain; shared execution defaults move into the
 fleet workspace. Its existing backend settings endpoint remains compatible.
 
 ## Interface and integrations

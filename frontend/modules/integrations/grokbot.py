@@ -169,7 +169,7 @@ def reconcile(user, account, rows):
                 old = db.get(identity)
             except KeyError:
                 old = None
-            item = {**(old or defaults(remote['name'])), 'runtime':PROVIDER, 'connector_provider':PROVIDER,
+            item = {**(old or defaults(remote['name'])), 'runtime':PROVIDER, 'classification': (old or {}).get('classification', 'workflows'), 'connector_provider':PROVIDER,
                     'connector_user':user, 'connector_account':account, 'connector_site':WEBSITE,
                     'remote_id':remote['id'], 'remote_name':remote['name'], 'remote_description':remote['description'],
                     'remote_available':True}

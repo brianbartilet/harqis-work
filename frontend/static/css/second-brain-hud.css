@@ -616,3 +616,12 @@
   vertical-align:bottom;
 }
 .hud-desktop-divider::after { content:"========================================================================================================================================================================================================"; }
+
+
+#hud-retry{margin-bottom:14px}
+
+
+.hud-tools .hud-workspace-return{display:grid;place-items:center;flex:none;width:36px;height:36px;padding:7px;border-radius:8px;border-color:#22d3ee;background:#083344;color:#a5f3fc;box-shadow:0 0 12px #22d3ee22}
+.hud-workspace-return svg{width:20px;height:20px}
+.hud-tools .hud-workspace-return:hover{background:#155e75;color:#fff}
+.hud-workspace-return:focus-visible{outline:2px solid #67e8f9;outline-offset:3px}

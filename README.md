@@ -370,7 +370,7 @@ def show_calendar_information(**kwargs):
 
 ## Desktop HUD
 
-The primary HUD surface is now the authenticated **Second Brain web dashboard** at `/second-brain`. It supports persistent layouts, Space-aware visibility, eight snap sizes, mobile stacking, motion, monitoring and agent-assisted creation. See the [migration review and Second Brain refresher](docs/info/SECOND-BRAIN-HUD-MIGRATION.md) and [complete source inventory](docs/info/HUD-SOURCE-INVENTORY.md).
+**Express → Second Brain** opens the agent fleet workspace at `/agents`. Use the highlighted brain icon at the start of its toolbar to open the full **Second Brain web dashboard** at `/second-brain`; the dashboard robot icon returns to the workspace. The two views keep independent layouts and controls while sharing saved Space selection and widget Space membership. The dashboard supports persistent layouts, Space-aware visibility, eight snap sizes, mobile stacking, motion, monitoring and agent-assisted creation. See the [migration review and Second Brain refresher](docs/info/SECOND-BRAIN-HUD-MIGRATION.md) and [complete source inventory](docs/info/HUD-SOURCE-INVENTORY.md).
 
 Rainmeter rendering is deprecated and opt-in (`HARQIS_LEGACY_RAINMETER=1`). Existing source tasks and dumps continue; the desktop behavior described below applies when legacy rendering is enabled.
 

@@ -1,9 +1,13 @@
 """Fleet graph projection; Space filters are organizational, connector ownership is not."""
+import json
+import os
 from starlette.datastructures import QueryParams
 from modules.agents import service
 
 
 def visible(agent, user=None):
+    if agent.get('mock'):
+        return os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1' and agent.get('demo_user') == user
     if agent.get('connector_user'):
         if user != agent['connector_user']:
             return False
@@ -20,22 +24,35 @@ def listing(user=None):
     db.expire_sessions()
     sessions = db.sessions()
     runs = db.list(limit=1000)
+    assistant_activity = {}
+    if user:
+        with service.store().connect() as connection:
+            rows = [(r['kind'], json.loads(r['payload'])) for r in connection.execute(
+                "SELECT kind,payload FROM fleet_assistant WHERE user=? AND kind IN ('conversation','turn')", (user,))]
+        owners = {v['id']: v['agent_id'] for kind, v in rows if kind == 'conversation'}
+        for kind, value in rows:
+            if kind == 'turn' and value['conversation_id'] in owners:
+                state = {'completed': 'succeeded', 'submitting': 'queued', 'stopping': 'running',
+                         'unknown': 'awaiting_input', 'waiting_for_approval': 'awaiting_input'}.get(value['state'], value['state'])
+                assistant_activity.setdefault(owners[value['conversation_id']], []).append((value['created'], state))
     result = []
     for agent in service.initialize().list():
         if not visible(agent, user):
             continue
         activity = [(s['activity'], s['state']) for s in sessions if s['settings'].get('fleet_agent', {}).get('id') == agent['id']]
         activity += [(r['updated_at'], r['state']) for r in runs if r['snapshot'].get('execution_settings', {}).get('fleet_agent', {}).get('id') == agent['id']]
+        activity += assistant_activity.get(agent['id'], [])
         state = max(activity)[1] if activity else 'ready'
         if any(s in {'running', 'waiting', 'starting', 'queued'} for _, s in activity):
             state = 'running'
-        if agent['runtime'] == 'grokbot':
+        if agent['runtime'] == 'grokbot' and agent.get('connector_user'):
             from modules.integrations.store import get
             connector = get(user, 'grokbot')
             state = ('Reconnect required' if connector.get('status') == 'Reconnect required' else
                      'Sync delayed' if connector.get('error') else
                      'Unavailable' if not agent.get('remote_available', True) else 'Discovered')
-        result.append({**agent, 'state': state, 'last_activity': max(activity)[0] if activity else ''})
+        result.append({**agent, 'classification': agent.get('classification', service.SERVICES.get(agent['runtime'], ('', 'general'))[1]),
+                       'state': 'Mock' if agent.get('mock') else state, 'last_activity': max(activity)[0] if activity else ''})
     return result
 
 

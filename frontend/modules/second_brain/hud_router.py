@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from modules.hfl_corpus.router import _workspace_authorize
 from modules.hfl_shares.security import make_csrf_token
-from modules.second_brain import hud
+from modules.second_brain import hud, agent_hud
 from web import page_context, require_user, templates
 
 router = APIRouter()
@@ -28,6 +28,12 @@ async def data(request: Request):
     return await asyncio.to_thread(hud.data)
 
 
+@router.get('/second-brain/hud/layout')
+async def read_layout(request: Request):
+    _workspace_authorize(request)
+    return await asyncio.to_thread(hud.layout)
+
+
 @router.put('/second-brain/hud/layout')
 async def save(request: Request, payload: hud.Layout):
     _workspace_authorize(request, write=True)
@@ -41,3 +47,21 @@ async def build_context(request: Request):
     skills = ['create-new-hud', 'create-new-service-app', 'create-new-workflow']
     return {'instructions': (path / 'workflows/second_brain/prompts/build_widget.md').read_text(encoding='utf-8'),
             'skills': [{'name': name, 'sha256': hashlib.sha256((path / '.agents/skills' / name / 'SKILL.md').read_bytes()).hexdigest()} for name in skills]}
+
+
+@router.get('/agents/hud/data')
+async def agent_data(request: Request):
+    _workspace_authorize(request)
+    return await asyncio.to_thread(agent_hud.data)
+
+
+@router.get('/agents/hud/layout')
+async def agent_layout(request: Request):
+    _workspace_authorize(request)
+    return await asyncio.to_thread(agent_hud.layout)
+
+
+@router.put('/agents/hud/layout')
+async def save_agent_layout(request: Request, payload: agent_hud.Layout):
+    _workspace_authorize(request, write=True)
+    return await asyncio.to_thread(agent_hud.save_layout, payload)

@@ -34,6 +34,12 @@ class AgentFleetStore:
                     PRIMARY KEY(user,request_id));
                 CREATE TABLE IF NOT EXISTS fleet_briefings (
                     user TEXT PRIMARY KEY, version INTEGER NOT NULL, payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS fleet_assistant (
+                    user TEXT NOT NULL, id TEXT NOT NULL, kind TEXT NOT NULL,
+                    payload TEXT NOT NULL, PRIMARY KEY(user,id));
+                CREATE TABLE IF NOT EXISTS fleet_objects (
+                    user TEXT NOT NULL, id TEXT NOT NULL, payload TEXT NOT NULL,
+                    PRIMARY KEY(user,id));
             ''')
 
     @contextmanager
