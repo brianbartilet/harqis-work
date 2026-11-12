@@ -23,6 +23,24 @@ def fleet(bridge, monkeypatch, tmp_path):
     return service
 
 
+def test_nod_profile_is_visible_but_cannot_execute(fleet, authenticated_client):
+    client = authenticated_client
+    catalogue = client.get('/agents/api/catalogue').json()
+    assert {'id': 'nod', 'name': 'Nod', 'classification': 'workflows'} in catalogue['services']
+    response = post(client, '/items', {'name': 'Nod · Browser assistant', 'runtime': 'nod'})
+    assert response.status_code == 200, response.text
+    agent = response.json()['item']
+    assert agent['classification'] == 'workflows'
+    listing = client.get('/agents/api/items').json()['items']
+    assert next(a for a in listing if a['id'] == agent['id'])['state'] == 'Externally managed'
+    with pytest.raises(ValueError):
+        fleet.execution(agent['id'])
+    assert post(client, '/assistant/primary', {'agent_id': agent['id'], 'version': 0}).status_code == 422
+    edited = post(client, '/items/' + agent['id'], {'version': agent['version'], 'name': 'Nod · Admin', 'active': False})
+    assert edited.status_code == 200
+    assert edited.json()['item']['runtime'] == 'nod'
+
+
 def test_seed_is_idempotent_and_migrates_presets(fleet):
     from modules.hfl_corpus.action_agents import store
     store().configure('preset:Research', {'overrides': {'agent_model': 'test-model'}})

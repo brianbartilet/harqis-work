@@ -16,9 +16,10 @@ def identifier(value):
 
 
 class Gateway:
-    def __init__(self):
-        self.url = os.getenv('HARQIS_HERMES_URL', '').rstrip('/')
-        self.key = os.getenv('HARQIS_HERMES_API_KEY', '').strip()
+    def __init__(self, *, url=None, key=None, tool_policy=None):
+        self.url = (os.getenv('HARQIS_HERMES_URL', '') if url is None else url).rstrip('/')
+        self.key = (os.getenv('HARQIS_HERMES_API_KEY', '') if key is None else key).strip()
+        self.tool_policy = os.getenv('HARQIS_HERMES_TOOL_POLICY', '') if tool_policy is None else tool_policy
         parsed = urlsplit(self.url)
         if (not self.key or parsed.scheme not in {'http', 'https'} or not parsed.hostname
                 or parsed.username or parsed.password or parsed.query or parsed.fragment
@@ -61,7 +62,7 @@ class Gateway:
             # Current Hermes discovery excludes implicit default MCP servers.
             # This deployment contract is mandatory in addition to discovery:
             # platform_toolsets.api_server: [no_mcp], without other toolsets.
-            if os.getenv('HARQIS_HERMES_TOOL_POLICY') != 'no-tools-no-mcp':
+            if self.tool_policy != 'no-tools-no-mcp':
                 raise HTTPException(503, 'Configure the Hermes API platform with no tools and no_mcp, then set HARQIS_HERMES_TOOL_POLICY=no-tools-no-mcp.')
             toolsets = self.request('GET', '/v1/toolsets')
             if isinstance(toolsets, dict):

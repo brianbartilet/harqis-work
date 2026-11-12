@@ -22,7 +22,8 @@ FIELDS = {'name', 'description', 'persona', 'instructions', 'color', 'active', '
           'skills', 'tools', 'workflows', 'triggers', 'subagents', 'overrides', 'thumbnail', 'runtime', 'classification'}
 SERVICES = {'hermes': ('Hermes', 'general'), 'codex': ('Codex', 'coding'),
             'claude': ('Claude', 'coding'), 'chatgpt': ('ChatGPT', 'general'),
-            'n8n': ('n8n', 'workflows'), 'grokbot': ('Grok Bot', 'workflows'), 'service': ('Other agent service', 'general')}
+            'n8n': ('n8n', 'workflows'), 'nod': ('Nod', 'workflows'),
+            'grokbot': ('Grok Bot', 'workflows'), 'service': ('Other agent service', 'general')}
 CLASSIFICATIONS = {'coding': 'Coding agent', 'general': 'General purpose', 'workflows': 'Workflow agent'}
 
 

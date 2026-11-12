@@ -1,6 +1,6 @@
 /* Shared native-image avatars: the browser preserves animated GIF playback. */
 (() => {
-  const services={hermes:'Hermes',codex:'Codex',claude:'Claude',chatgpt:'ChatGPT',n8n:'n8n',grokbot:'Grok Bot',service:'Other agent service'};
+  const services={hermes:'Hermes',codex:'Codex',claude:'Claude',chatgpt:'ChatGPT',n8n:'n8n',nod:'Nod',grokbot:'Grok Bot',service:'Other agent service'};
   const classifications={coding:'Coding agent',general:'General purpose',workflows:'Workflow agent'};
   function initials(name){return (name||'').split('·')[0].trim().split(/\s+/).filter(Boolean).slice(0,2).map(word=>Array.from(word)[0]).join('').toLocaleUpperCase()||'?';}
   function label(agent){return `${agent.name} · ${services[agent.runtime]||agent.runtime||'Agent'} · ${classifications[agent.classification]||agent.classification||'General purpose'}`;}

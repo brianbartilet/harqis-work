@@ -39,6 +39,49 @@ def catalogue():
     return service.catalogue()
 
 
+@api.post('/connections/test')
+def test_connection(raw: dict, user=Depends(owner_auth)):
+    from modules.agents import connections
+    return checked(connections.test, user, raw)
+
+
+@api.get('/items/{identity}/connection')
+def connection_settings(identity: str, user=Depends(owner_auth)):
+    from modules.agents import connections
+    return checked(connections.read, user, identity)
+
+
+@api.get('/items/{identity}/connection/status')
+def connection_status(identity: str, user=Depends(owner_auth)):
+    from modules.agents import connections
+    return checked(connections.status, user, identity)
+
+
+@api.post('/items/{identity}/connection/test')
+def test_agent_connection(identity: str, raw: dict, user=Depends(owner_auth)):
+    from modules.agents import connections
+    return checked(connections.test, user, raw, identity)
+
+
+@api.post('/items/{identity}/connection')
+def save_connection(identity: str, raw: dict, user=Depends(owner_auth)):
+    from modules.agents import connections
+    return checked(connections.save, user, identity, raw)
+
+
+@api.get('/items/{identity}/conversations')
+def agent_conversations(identity: str, user=Depends(owner_auth)):
+    from modules.agents import assistant, connections
+    checked(connections.agent_for, user, identity)
+    return {'items': assistant.conversations(user, identity)}
+
+
+@api.post('/items/{identity}/conversations')
+def new_agent_conversation(identity: str, raw: dict, user=Depends(owner_auth)):
+    from modules.agents import assistant
+    return checked(assistant.create_fleet_conversation, user, identity, raw)
+
+
 @api.get('/graph')
 def ecosystem_graph(user=Depends(owner_auth)):
     from modules.agents.ecosystem import graph

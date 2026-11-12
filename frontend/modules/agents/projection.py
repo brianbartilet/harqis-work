@@ -19,6 +19,8 @@ def visible(agent, user=None):
 
 
 def listing(user=None):
+    from modules.agents.connections import summaries
+    gateways = summaries(user) if user else {}
     from modules.hfl_corpus.action_agents import store as terminals
     db = terminals()
     db.expire_sessions()
@@ -43,6 +45,8 @@ def listing(user=None):
         activity += [(r['updated_at'], r['state']) for r in runs if r['snapshot'].get('execution_settings', {}).get('fleet_agent', {}).get('id') == agent['id']]
         activity += assistant_activity.get(agent['id'], [])
         state = max(activity)[1] if activity else 'ready'
+        if agent['runtime'] == 'nod':
+            state = 'Externally managed'
         if any(s in {'running', 'waiting', 'starting', 'queued'} for _, s in activity):
             state = 'running'
         if agent['runtime'] == 'grokbot' and agent.get('connector_user'):
@@ -51,7 +55,8 @@ def listing(user=None):
             state = ('Reconnect required' if connector.get('status') == 'Reconnect required' else
                      'Sync delayed' if connector.get('error') else
                      'Unavailable' if not agent.get('remote_available', True) else 'Discovered')
-        result.append({**agent, 'classification': agent.get('classification', service.SERVICES.get(agent['runtime'], ('', 'general'))[1]),
+        result.append({**agent, 'gateway': gateways.get(agent['id'], {'enabled': False}),
+                       'classification': agent.get('classification', service.SERVICES.get(agent['runtime'], ('', 'general'))[1]),
                        'state': 'Mock' if agent.get('mock') else state, 'last_activity': max(activity)[0] if activity else ''})
     return result
 

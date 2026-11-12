@@ -1,0 +1,15 @@
+import React,{useState} from 'react';
+
+export const emptyConnection=()=>({enabled:false,version:0,url:'',key:'',mode:'chat',readonly_confirmed:false});
+export const connectionPayload=value=>Object.fromEntries(['enabled','version','url','key','mode','readonly_confirmed'].map(key=>[key,value[key]??(key==='key'?'':undefined)]));
+
+export function FleetConnection({value,onChange,identity,api,busy}){
+  const [testing,setTesting]=useState(false),[result,setResult]=useState('');
+  function change(key,next){setResult('');onChange({...value,[key]:next,...(key==='url'?{key:'',has_key:false}:{})});}
+  async function test(){setTesting(true);setResult('');try{const data=await api(identity?'/items/'+identity+'/connection/test':'/connections/test',connectionPayload(value));setResult('Connected · '+(data.mode==='execute'?'task execution':'chat only')+' · '+['run_events_sse','run_stop','run_steer'].filter(k=>data.capabilities[k]).map(k=>({run_events_sse:'streaming',run_stop:'stop',run_steer:'steering'}[k])).join(', '));}catch(e){setResult(e.message);}finally{setTesting(false);}}
+  return <fieldset className="fleet-connection" disabled={busy||testing}><legend>Connection</legend><label>Connection mode<select aria-label="Connection mode" value={value.enabled?'gateway':'bridge'} disabled={busy||testing} onChange={e=>change('enabled',e.target.value==='gateway')}><option value="bridge">Existing action bridge</option><option value="gateway">Connected Hermes gateway</option></select></label>
+    {value.enabled&&<><p>Connect from the HARQIS server to a Hermes Runs API. Each conversation starts a separate session on that gateway.</p><label>Gateway URL<input aria-label="Gateway URL" type="url" required maxLength={2000} placeholder="https://your-gateway.example" value={value.url} onChange={e=>change('url',e.target.value)}/></label><label>API key<input aria-label="Gateway API key" type="password" autoComplete="new-password" maxLength={4096} value={value.key||''} placeholder={value.has_key?'Saved · leave blank to keep':'Enter API key'} onChange={e=>change('key',e.target.value)}/></label><p>Keys are encrypted on the server and never included in the agent profile.</p><label>Interaction support<select aria-label="Interaction support" value={value.mode} onChange={e=>change('mode',e.target.value)}><option value="chat">Chat only</option><option value="execute">Chat and task execution</option></select></label>
+    {value.mode==='chat'?<label className="fleet-check"><input type="checkbox" checked={value.readonly_confirmed} onChange={e=>change('readonly_confirmed',e.target.checked)}/>The gateway API platform has no tools and uses no_mcp.</label>:<p>Messages can execute tasks using the gateway’s configured tools and permissions. Manage those permissions and any approvals in Hermes.</p>}
+    <button type="button" disabled={busy||testing} onClick={test}>{testing?'Testing…':'Test connection'}</button><p role="status">{result}</p><small>Saving verifies the connection again. Switching back to the action bridge disconnects this gateway for your account.</small></>}
+  </fieldset>;
+}
