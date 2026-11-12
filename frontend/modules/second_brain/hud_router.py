@@ -8,6 +8,8 @@ from modules.hfl_corpus.router import _workspace_authorize
 from modules.hfl_shares.security import make_csrf_token
 from modules.second_brain import hud, agent_hud
 from web import page_context, require_user, templates
+from auth import get_current_user
+from modules.agents.projection import hud_avatars
 
 router = APIRouter()
 
@@ -25,7 +27,9 @@ async def page(request: Request):
 @router.get('/second-brain/hud/data')
 async def data(request: Request):
     _workspace_authorize(request)
-    return await asyncio.to_thread(hud.data)
+    result = await asyncio.to_thread(hud.data)
+    result['agents'] = await asyncio.to_thread(hud_avatars, get_current_user(request))
+    return result
 
 
 @router.get('/second-brain/hud/layout')
@@ -52,7 +56,9 @@ async def build_context(request: Request):
 @router.get('/agents/hud/data')
 async def agent_data(request: Request):
     _workspace_authorize(request)
-    return await asyncio.to_thread(agent_hud.data)
+    result = await asyncio.to_thread(agent_hud.data)
+    result['agents'] = await asyncio.to_thread(hud_avatars, get_current_user(request))
+    return result
 
 
 @router.get('/agents/hud/layout')

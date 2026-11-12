@@ -69,6 +69,38 @@ def test_subagent_cycle_and_skill_snapshot(fleet, authenticated_client):
     assert len(frozen['skills'][0]['hash']) == 64
 
 
+def test_animated_avatar_round_trip(fleet, authenticated_client):
+    output = io.BytesIO()
+    Image.new('RGB', (24, 24), 'red').save(output, format='GIF', save_all=True,
+        append_images=[Image.new('RGB', (24, 24), 'blue')], duration=100, loop=0)
+    client = authenticated_client
+    uploaded = client.post('/agents/api/assets', files={'file': ('avatar.gif', output.getvalue(), 'image/gif')}, headers=owner_headers())
+    assert uploaded.status_code == 200
+    asset = uploaded.json()
+    agent = post(client, '/items', {'name': 'Sage · Research partner', 'thumbnail': asset['id']}).json()['item']
+    assert fleet.store().get(agent['id'])['thumbnail'] == asset['id']
+    downloaded = client.get('/agents/api/assets/' + asset['id'])
+    assert downloaded.content == output.getvalue()
+    assert Image.open(io.BytesIO(downloaded.content)).n_frames == 2
+
+
+def test_hud_avatars_include_all_links_and_respect_visibility(fleet, monkeypatch):
+    from modules.agents.projection import hud_avatars
+    from modules.second_brain import hud
+    monkeypatch.setattr(hud, 'inventory', lambda: [{'operation_id': 'calendar', 'source_task': 'calendar.task'},
+                                                 {'operation_id': 'unlinked', 'source_task': 'other.task'}])
+    db = fleet.store()
+    for identity, extra in [('sage', {'workflows': ['celery:calendar.task']}),
+                            ('ada', {'triggers': ['celery:calendar.task']}),
+                            ('inactive', {'active': False, 'workflows': ['celery:calendar.task']}),
+                            ('private', {'connector_user': 'someone-else', 'workflows': ['celery:calendar.task']})]:
+        db.save({**fleet.defaults(identity), **extra}, identity=identity)
+    result = hud_avatars('owner')
+    assert {a['id'] for a in result['calendar']} == {'sage', 'ada'}
+    assert result['unlinked'] == []
+    assert set(result['calendar'][0]) == {'id', 'name', 'runtime', 'classification', 'thumbnail', 'color'}
+
+
 def test_assets_verified_and_authenticated(fleet, authenticated_client):
     client = authenticated_client
     fake = client.post('/agents/api/assets', files={'file':('bad.png',b'<script>alert(1)</script>','image/png')}, headers=owner_headers())

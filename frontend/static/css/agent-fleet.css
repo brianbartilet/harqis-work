@@ -175,3 +175,5 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 .fleet-shell .fleet-dashboard-link{display:grid;place-items:center;flex:none;width:36px;height:36px;border:1px solid #22d3ee;border-radius:8px;background:#083344;color:#a5f3fc;box-shadow:0 0 12px #22d3ee22}
 .fleet-shell .fleet-dashboard-link:hover{background:#155e75;color:#fff}
 .fleet-shell .fleet-dashboard-link:focus-visible{outline:2px solid #67e8f9;outline-offset:3px}
+.fleet-graph-avatars {position:absolute;inset:0;overflow:hidden;pointer-events:none;}
+.fleet-graph-avatars .agent-avatar {position:absolute;left:0;top:0;box-shadow:none;}

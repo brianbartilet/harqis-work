@@ -21,7 +21,7 @@
   function safeLink(url) { try {const u=new URL(url);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password?u.href:null;}catch{return null;} }
   function link(label,url) {const a=el('a',label);a.href=url;a.target='_blank';a.rel='noopener noreferrer';return a;}
   function visible(w) {return !w.hidden&&(!w.workspace_ids.length||w.workspace_ids.some(id=>state.spaces.active.includes(id)));}
-  function dataKey(){const display=items=>items.map(({title,summary,details,source_at,status,links})=>({title,summary,details,source_at,status,links}));return JSON.stringify([Object.entries(state.items).map(([id,items])=>[id,display(items)]),display(state.context),state.kibana_url]);}
+  function dataKey(){const display=items=>items.map(({title,summary,details,source_at,status,links})=>({title,summary,details,source_at,status,links}));return JSON.stringify([Object.entries(state.items).map(([id,items])=>[id,display(items)]),display(state.context),state.kibana_url,state.agents]);}
   function sized(card,size) {const [c,r]=size.split('x').map(Number);card.style.setProperty('--cols',c);card.style.setProperty('--rows',r);}
   function renderSpaces() { window.HudSpaces.update(state.spaces); }
   function renderChecks(target,selected) {
@@ -138,7 +138,7 @@
       if(w.accent){header.style.backgroundColor=`color-mix(in srgb, ${w.accent} 24%, #0f172a)`;header.style.borderBottomColor=w.accent;header.style.boxShadow=`inset 3px 0 ${w.accent}`;}
       const menuButton=button('',event=>settings(w,event.currentTarget),'Settings for '+(catalog.get(w.operation)?.label||'widget'));menuButton.className='hud-widget-menu-button';menuButton.setAttribute('aria-haspopup','dialog');menuButton.setAttribute('aria-expanded','false');menuButton.setAttribute('aria-controls','hud-settings');
       menuButton.innerHTML='<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 5h12M4 10h12M4 15h12"/></svg>';
-      header.append(el('h2',catalog.get(w.operation)?.label||w.operation),drag,menuButton);
+      header.append(el('h2',catalog.get(w.operation)?.label||w.operation),window.AgentAvatars.group(state.agents?.[w.operation]||[]),drag,menuButton);
       card.append(header,el('nav',null,'hud-links'),el('div',null,'hud-widget-body'),el('footer',null,'hud-widget-footer'));
       const handle=button('',()=>{},'Resize widget; use settings for keyboard resizing');handle.className='hud-resize';resize(handle,card,w);card.append(handle);renderBody(card,w);grid.append(card);card.querySelector('.hud-widget-body').scrollTop=scrolls.get(w.id)||0;
     }

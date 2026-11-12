@@ -56,6 +56,21 @@ def listing(user=None):
     return result
 
 
+def hud_avatars(user=None):
+    """Public presentation fields for visible HUD monitors and linked workflows."""
+    from modules.second_brain.hud import inventory
+    agents = [a for a in service.store().list() if a['active'] and visible(a, user)]
+    result = {}
+    for item in inventory():
+        workflow = 'celery:' + (item.get('source_task') or '')
+        linked = [a for a in agents if a['id'] == 'butler' or
+                  (item.get('source_task') and workflow in [*a.get('workflows', []), *a.get('triggers', [])])]
+        result[item['operation_id']] = [
+            {key: a.get(key, '') for key in ('id', 'name', 'runtime', 'classification', 'thumbnail', 'color')}
+            for a in linked]
+    return result
+
+
 def nodes(context='', query='', since='', until=''):
     params = QueryParams(context)
     spaces = set(filter(None, params.get('views', params.get('workspace', '')).split(',')))
