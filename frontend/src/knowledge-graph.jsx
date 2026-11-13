@@ -95,7 +95,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     if(readOnly)return;
     if(new URL(location.href).searchParams.get('connections')==='1')return;
     if(!stateReady||loading||capacityBlocked||!graphApi||window.HflIdeas?.maps.current)return;
-    const filters=Object.fromEntries(['search','rolling','since','until'].map(id=>[id,$(id).value]));
+    const filters=Object.fromEntries(['search','rolling','since','until','maturity'].map(id=>[id,$(id).value]));
     filters.shared=$('shared').checked;
     const positions=Object.fromEntries(nodes.slice(0,20000).map(n=>[n.id,{...(layoutTargets.get(n.id)||{x:n.x,y:n.y}),manual:!!n.manual}]));
     const center=graphApi.screen2GraphCoords(host.clientWidth/2,host.clientHeight/2);
@@ -121,6 +121,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     if($('rolling').value!=='0')chips.push($('rolling').selectedOptions[0].textContent);
     else for(const id of ['since','until'])if($(id).value)chips.push(id+': '+$(id).value);
     if(selectedSources.size)chips.push('Sources: '+[...selectedSources].join(', '));
+    chips.push($('maturity').value==='all'?'Including provisional mentions':'Established entities');
     if($('shared').checked)chips.push('Shared connections only');
     const excluded=[...$('types').querySelectorAll('input:not(:checked)')].map(input=>input.closest('label').textContent.trim());
     if(excluded.length)chips.push('Hidden types: '+excluded.join(', '));
@@ -206,7 +207,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     if(params.get('rolling')==='week'&&$('rolling').value==='week')syncDates();
   }
   function requestParams(){
-    const params=new URLSearchParams({since:$('since').value,until:$('until').value,rolling:$('rolling').value,limit:'0',query:$('search').value,shared:String($('shared').checked)});
+    const params=new URLSearchParams({since:$('since').value,until:$('until').value,rolling:$('rolling').value,limit:'0',query:$('search').value,shared:String($('shared').checked),include_provisional:String($('maturity').value==='all')});
     const context=window.activityModals?.context();if(context)params.set('context',context);
     if(window.HflIdeas?.maps.current)return new URLSearchParams({limit:'0'});
     if(capacityEnabled){
@@ -1054,7 +1055,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   $('reset').onclick=()=>{
     pendingState=null;try {localStorage.removeItem(stateKey);} catch {}
     window.activityModals?.reset();preset='timeline';setAnimation('off');
-    $('search').value='';$('rolling').value='0';$('since').value='';$('until').value='';
+    $('search').value='';$('rolling').value='0';$('since').value='';$('until').value='';$('maturity').value='';
     selectedSources.clear();sourceOptions(data.sources||[]);syncDates();$('shared').checked=false;
     enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts','agents']);selected=null;focusId=null;exampleMode?render():load();
   };
@@ -1095,7 +1096,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     $('shared').checked=false;selectedSources.clear();
   }
   if(pendingState){
-    for(const id of ['search','rolling','since','until']){
+    for(const id of ['search','rolling','since','until','maturity']){
       const value=pendingState.filters[id];
       if(typeof value==='string'&&($(id).tagName!=='SELECT'||[...$(id).options].some(o=>o.value===value)))$(id).value=value;
     }

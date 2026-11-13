@@ -79,19 +79,15 @@
   <section class="chat-workspace">
     <header class="workspace-header">
       <div class="share-menu-control">
-        <button class="drawer-toggle" type="button" data-view-menu-toggle aria-label="Choose shared view" aria-controls="share-view-menu" aria-expanded="false"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 5h12M4 10h12M4 15h12"/></svg></button>
+        <button class="drawer-toggle" type="button" data-view-menu-toggle aria-label="Discover shared views" aria-controls="share-view-menu" aria-expanded="false">Discover</button>
         <nav id="share-view-menu" class="share-view-menu" aria-label="Shared views" hidden>
           {% for key, label in share_menu %}<button type="button" data-share-view="{{ key }}" aria-current="{{ 'page' if key == 'entries' else 'false' }}">{{ label }}</button>{% endfor %}
         </nav>
       </div>
-      <div class="workspace-heading">
-        <h1 data-view-title>Ask my agent</h1>
-        <p class="muted" data-view-description>{{ grant.snapshot.entries|length }} moments ingested and analyzed{% if grant.snapshot.activity_entries %} · {{ grant.snapshot.activity_entries|length }} shared objects{% endif %} · {% if grant.live_updates %}content refreshed {{ content_refreshed_at }} · {% endif %}{% if grant.no_expiry %}no expiry{% else %}available until {{ expires_at_display }}{% endif %}</p>
-      </div>
       {% if owner_preview %}
-      <a class="button button-secondary logout-form" href="/sharing">Close session</a>
+      <a class="button drawer-toggle logout-form" href="/sharing">Close session</a>
       {% else %}
-      <form class="logout-form" method="post" action="/share/session/logout" data-close-session><button class="button-secondary">Close session</button></form>
+      <form class="logout-form" method="post" action="/share/session/logout" data-close-session><button class="drawer-toggle">Close session</button></form>
       {% endif %}
     </header>
 
@@ -276,9 +272,6 @@
   let viewRevision = 0;
   let sidebarView = 'entries';
   const mainViews = new Set(['boards', 'graph']);
-  const viewTitle = document.querySelector('[data-view-title]');
-  const viewDescription = document.querySelector('[data-view-description]');
-  const chatDescription = viewDescription.textContent;
   const sidebarDescriptions = {
     entries: 'Moments behind the story',
     actions: 'Next steps and new possibilities',
@@ -286,16 +279,6 @@
   };
   const menuButtons = [...viewMenu.querySelectorAll('[data-share-view]')];
   const closeMenu = () => { viewMenu.hidden = true; menuToggle.setAttribute('aria-expanded', 'false'); };
-  const updateViewHeading = () => {
-    viewTitle.textContent = selectedView === 'boards' ? 'Idea boards' : selectedView === 'graph' ? 'Activity graph' : 'Ask my agent';
-    const board = document.querySelector('[data-share-board-picker]')?.selectedOptions[0]?.textContent;
-    viewDescription.textContent = selectedView === 'boards'
-      ? `${board || 'Shared ideas'} · Explore ideas and their connections. Select a node for details.`
-      : selectedView === 'graph'
-        ? 'Discover connections across shared activity. Select a node to learn more.'
-        : chatDescription;
-    viewDescription.title = viewDescription.textContent;
-  };
   const setSidebarView = view => {
     sidebarView = view;
     document.querySelectorAll('[data-share-sidebar]').forEach(panel => { panel.hidden = panel.dataset.shareSidebar !== view; });
@@ -321,7 +304,6 @@
     if (!main) {
       setSidebarView(view);
     }
-    updateViewHeading();
     if (main) drawerState.checked = false;
     else if (openDrawer) drawerState.checked = isCompact();
     syncDrawer(); closeMenu();
@@ -357,7 +339,6 @@
     question.focus({preventScroll:true});
   }));
   document.querySelector('[data-share-board-picker]')?.addEventListener('change', event => {
-    updateViewHeading();
     document.querySelectorAll('[data-share-board]').forEach(panel => {
       window.resetShareGraphs?.(panel);
       panel.hidden = panel.dataset.shareBoard !== event.target.value;
@@ -933,7 +914,6 @@
     document.documentElement.style.overflow = '';
   });
   setSidebarView('entries');
-  updateViewHeading();
   syncDrawer();
   observeEntryStream();
   scrollToLatest();

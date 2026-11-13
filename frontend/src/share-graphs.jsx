@@ -14,7 +14,7 @@ const legendLabel = kind => ({daily:'dates', companies:'organizations', drafts:'
 const identity = value => typeof value === 'object' ? value.id : value;
 const SelectCaret = () => <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m5 7.5 5 5 5-5"/></svg>;
 
-function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onViewChange, fillHeight = false, controlsHost, collapseEntitiesOnMobile = false, description = ''}) {
+function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onViewChange, fillHeight = false, controlsHost, collapseEntitiesOnMobile = false, publishedView = false, description = ''}) {
   const host = useRef(null), graph = useRef(null), cameraReady = useRef(false), dragging = useRef(false);
   const connectionFitted = useRef(false);
   const descriptionOverlay = useRef(null);
@@ -26,7 +26,8 @@ function SharedGraph({data, layout = 'timeline', rootId, initialView = {}, onVie
   const viewRef = useRef(view);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const motion = useRef({time:initialView.animation_time || 0, last:0});
-  const kinds = useMemo(() => [...new Set(data.nodes.map(n=>n.kind))], [data]);
+  // Published exclusions are fixed; recipient toggles only affect the remaining kinds.
+  const kinds = useMemo(() => [...new Set(data.nodes.map(n=>n.kind))].filter(kind=>!publishedView || !(initialView.hidden_kinds || []).includes(kind)), [data, publishedView, initialView]);
   const changeView = patch => {
     const next = {...captureView(), ...patch};
     if (patch.hidden_kinds) cameraReady.current=false;
@@ -233,7 +234,7 @@ window.renderShareGraphs = () => {
     const settings=container.dataset.graphLayout==='timeline' ? container.closest('form')?.querySelector('[name="graph_view"]') : null;
     const initialView=settings ? JSON.parse(settings.value) : data.view || {};
     const onViewChange=settings ? view=>{settings.value=JSON.stringify(view);} : undefined;
-    const root=createRoot(host);roots.set(host,root);root.render(<SharedGraph data={data} layout={container.dataset.graphLayout} initialView={initialView} onViewChange={onViewChange} fillHeight={!!container.closest("[data-share-main]")} collapseEntitiesOnMobile={!!container.closest("[data-share-main]")} controlsHost={container.closest("[data-share-main]")?.querySelector("[data-share-graph-controls]")} description={container.closest("[data-share-board]")?.querySelector("[data-share-board-description]")?.content.textContent.trim() || ""}/>);
+    const root=createRoot(host);roots.set(host,root);root.render(<SharedGraph data={data} layout={container.dataset.graphLayout} initialView={initialView} publishedView={!!container.closest('[data-share-main="graph"]')} onViewChange={onViewChange} fillHeight={!!container.closest("[data-share-main]")} collapseEntitiesOnMobile={!!container.closest("[data-share-main]")} controlsHost={container.closest("[data-share-main]")?.querySelector("[data-share-graph-controls]")} description={container.closest("[data-share-board]")?.querySelector("[data-share-board-description]")?.content.textContent.trim() || ""}/>);
   });
 };
 window.selectShareGraphNode = (panel, nodeId) => {

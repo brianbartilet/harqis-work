@@ -115,24 +115,28 @@ async def graph(request: Request, source: str = '', since: str = '', until: str 
                 limit: int = Query(default=100, ge=0, le=1000),
                 query: str = Query(default='', max_length=200), shared: bool = False,
                 sources: list[str] = Query(default=[]), context: str = '',
-                capacity_guard: bool = False, preview: bool = False,
+                capacity_guard: bool = False, preview: bool = False, include_provisional: bool = True,
                 node_limit: int = Query(default=DEFAULT_NODES, ge=MIN_NODES, le=MAX_NODES),
                 edge_limit: int = Query(default=DEFAULT_EDGES, ge=100, le=MAX_EDGES)):
     authorize(request)
     if capacity_guard:
         from modules.hfl_corpus.graph_capacity import bounded_graph
         return await run_in_threadpool(bounded_graph, sources or source, since, until,
-                                      query, shared, context, node_limit, edge_limit, preview)
-    return await run_in_threadpool(entities.graph, sources or source, since, until, limit, query, shared, context)
+                                      query, shared, context, node_limit, edge_limit, preview, include_provisional)
+    return await run_in_threadpool(entities.graph, sources or source, since, until, limit, query, shared, context, include_provisional)
 
 
 @router.get('/api/hfl/entities')
 async def index(request: Request, source: str = '', since: str = '', until: str = '',
                 limit: int | None = Query(default=None, ge=0, le=10000),
                 q: str = '', kind: str = '', offset: int = Query(default=0, ge=0),
-                context: str = '', graph_query: str = '', sources: list[str] = Query(default=[])):
+                context: str = '', graph_query: str = '', sources: list[str] = Query(default=[]),
+                include_provisional: bool = True):
     authorize(request)
     rows = await run_in_threadpool(entities.entity_index, source, since, until, context, graph_query, sources)
+    provisional_total = sum(bool(e.get('provisional')) for e in rows)
+    if not include_provisional:
+        rows = [e for e in rows if not e.get('provisional')]
     rows.sort(key=lambda e: (e['label'].casefold(), e['id']))
     from workflows.hfl.entity_types import listing
     types = listing()
@@ -141,7 +145,7 @@ async def index(request: Request, source: str = '', since: str = '', until: str 
             all(word in str([e['label'], e.get('categories'), e.get('profile')]).casefold() for word in q.casefold().split())]
     from workflows.hfl.entity_directory_status import annotate
     page = rows[offset:offset + limit] if limit else rows[offset:]
-    return {'entities': await run_in_threadpool(annotate, page), 'total': len(rows), 'counts': counts, 'types': types}
+    return {'entities': await run_in_threadpool(annotate, page), 'total': len(rows), 'counts': counts, 'types': types, 'provisional_total': provisional_total}
 
 
 class Profile(BaseModel):
@@ -164,6 +168,28 @@ class TypeWrite(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     color: str = Field(pattern=r'^#[0-9a-fA-F]{6}$')
     description: str = Field(min_length=1, max_length=1000)
+
+
+class TopicRemoval(BaseModel):
+    request_id: str = Field(min_length=36, max_length=36)
+    selection_hash: str = Field(pattern=r'^[0-9a-f]{64}$')
+
+
+@router.get('/api/hfl/entities/types/topics/removal-preview')
+async def topic_removal_preview(request: Request):
+    authorize(request)
+    from workflows.hfl.entity_retirement import preview
+    return await run_in_threadpool(preview)
+
+
+@router.post('/api/hfl/entities/types/topics/remove')
+async def remove_topics(request: Request, payload: TopicRemoval):
+    actor = authorize(request)
+    from workflows.hfl.entity_retirement import remove_topics
+    try:
+        return await run_in_threadpool(remove_topics, payload.request_id, payload.selection_hash, actor)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from None
 
 
 @router.post('/api/hfl/entities/types')

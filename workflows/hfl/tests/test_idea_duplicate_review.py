@@ -103,6 +103,48 @@ def test_no_review_call_for_empty_or_only_first_idea(monkeypatch):
     assert timeline.review_ideas([{'title': 'First'}], []) == ([{'title': 'First'}], 0)
 
 
+def test_large_history_checks_late_duplicates_without_dropping_records(monkeypatch):
+    existing = [{'id': f'idea:{i}', 'context': 'x' * 60000} for i in range(4)]
+    candidates = [{'title': 'Duplicate'}, {'title': 'Distinct'}]
+    seen = []
+
+    def model(payload, prompt, field):
+        data = json.loads(payload)
+        assert len(payload) < 250000
+        seen.extend(item['id'] for item in data['existing_intents'])
+        return {'decisions': [{'id': item['id'], 'duplicate_of':
+            'idea:3' if item['title'] == 'Duplicate' and seen[-1] == 'idea:3' else None}
+            for item in data['candidates']]}
+
+    monkeypatch.setattr(timeline, 'model_json', model)
+    assert timeline.review_ideas(candidates, existing) == ([candidates[1]], 1)
+    assert seen == [item['id'] for item in existing]
+
+
+def test_later_batch_failure_preserves_cache(tmp_path, monkeypatch):
+    store = FollowUpStore(tmp_path / 'ideas.sqlite3')
+    day = '2026-09-01'
+    seed(store, day)
+    cached = store.suggestions(day, day)
+    existing = [{'id': f'idea:{i}', 'context': 'x' * 60000} for i in range(4)]
+    monkeypatch.setattr(store, 'idea_generation_snapshot', lambda: {'records': existing, 'digest': 'snapshot'})
+    calls = []
+
+    def model(payload, prompt, field):
+        calls.append(payload)
+        if len(calls) > 1:
+            raise ConnectionError('Review unavailable')
+        return {'decisions': [{'id': 'candidate:0', 'duplicate_of': None}]}
+
+    monkeypatch.setattr(timeline, 'model_json', model)
+    with pytest.raises(ConnectionError):
+        timeline.explore_period(day, day, store=store,
+            run_id=store.claim_period(day, day, force=True), collect=lambda *a: ([], {}),
+            idea_review=lambda candidates, records: timeline.review_ideas([{'title': 'New'}], records))
+    assert len(calls) == 2
+    assert store.suggestions(day, day) == cached
+
+
 def seed(store, day, title='Existing idea'):
     run = store.claim_period(day, day)
     store.save_suggestions(day, day, run, [{'title': title, 'category': 'recommendations',

@@ -119,7 +119,7 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 <header class="activity-modal-heading"><h1>Activity Corpus Entities</h1><button type="button" data-activity-close aria-label="Close entities" title="Close entities"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header>
 <div class="activity-scope-controls"><button type="button" data-activity-all role="switch" aria-checked="true">All activity<span class="activity-switch-track" aria-hidden="true"></span></button></div>
 
-<p class="text-slate-400 entity-intro">People, organizations, tools, topics and referenced objects from your activity. Open an entity to review its evidence or edit its profile. Add references for websites, social media and files to any entity. Local file paths are displayed for copying.</p>
+<p class="text-slate-400 entity-intro">Named people, organizations, tools, pets and referenced objects from your activity. Open an entity to review its evidence or edit its profile. Add references for websites, social media and files to any entity. Local file paths are displayed for copying.</p>
 
 <details class="entity-maintenance" id="entity-type-manager"><summary>Manage types and add entities</summary>
   <form id="entity-type-form"><div class="profile-fields">
@@ -141,6 +141,7 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 <div class="directory-filters">
 <div><span class="filter-label">Category</span><details class="multi-filter" id="category-menu"><summary id="category-caption">All categories</summary><div id="filter-category" class="checkbox-options"></div></details></div>
 <div><span class="filter-label">Activity source</span><details class="multi-filter" id="source-menu"><summary id="source-caption">All sources</summary><div id="filter-source" class="checkbox-options"></div></details></div>
+<label>Show<select id="filter-maturity"><option value="">Established entities</option><option value="all">Include provisional mentions</option></select></label>
 <label>Profile<select id="filter-contact"><option value="">All profiles</option><option value="contact">Has contact details</option><option value="curated">Edited profiles</option><option value="unreviewed">Without a profile</option></select></label>
 
 <label>Sort by<select id="sort"><option value="name">Name A–Z</option><option value="name-desc">Name Z–A</option><option value="activity">Most activity</option><option value="recent">Latest activity</option></select></label>
@@ -160,7 +161,7 @@ html,.entity-shell *,.activity-entities-drawer{scrollbar-width:thin;scrollbar-co
 
 <p class="my-3 text-slate-400">Historical enrichment runs in bounded background batches. Explicit references are available even before extraction finishes.</p>
 <ol class="my-3 space-y-2 text-slate-400 list-decimal pl-5">
-<li><strong>Enrich corpus history</strong> queues extraction of people, organizations (including companies, nonprofits and public institutions), tools and topics from activity evidence. It needs the configured background worker; queued or pending means processing has not finished. Saved profiles are preserved.</li>
+<li><strong>Enrich corpus history</strong> queues extraction of people, organizations (including companies, nonprofits and public institutions), named tools and other configured entity types from activity evidence. It needs the configured background worker; queued or pending means processing has not finished. Saved profiles are preserved.</li>
 <li><strong>Check progress</strong> shows the job state and last batch counts. Once processing finishes, use <strong>Refresh entities</strong> to load the updated directory.</li>
 <li><strong>Export Obsidian vault</strong> writes activity notes, daily indexes and entity links to the server’s configured vault folder. It is a one-way export, not a browser download or a backup of edited profiles. Set <code>HARQIS_OBSIDIAN_VAULT</code> on the server first. Locally edited notes are reported as conflicts instead of overwritten; review the export result in Technical details.</li>
 </ol>

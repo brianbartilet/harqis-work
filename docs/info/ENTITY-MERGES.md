@@ -4,7 +4,7 @@
 
 **Manage types and add entities** creates types with a name, color and extraction
 description, or creates a named entity manually. Defaults include People, Organizations,
-Tools, Topics, Referenced objects and Pets. Open an entity to change its type or edit its
+Tools, Referenced objects and Pets. Open an entity to change its type or edit its
 profile. Custom types and Pets keep same-name mentions separate until identity matching
 or a reviewed merge establishes that they are the same entity.
 
@@ -21,13 +21,86 @@ Authenticated endpoints include `POST /api/hfl/entities/types` (`name`, `color`,
 its `types` registry. Types are stored with the local entity database shared by the API
 and workers; no new schedule or credential is required.
 
+## Entity signal and Topic retirement
+
+Extraction identifies named, reusable things, not activity descriptions or combinations
+of keywords. "Code task in Python" and "debug test in Python" extract **Tools → Python**;
+the surrounding activity stays in its source evidence. Topics is retired and cannot be
+created again. Existing Topic projections are excluded from the directory and graph;
+new enrichment and profile writes reject the retired type.
+
+The directory defaults to **Established entities**. Automatic entities with only one
+supporting activity are provisional; **Include provisional mentions** reveals them for
+review. Curated profiles, merged identities, explicit identifiers and entities supported
+by at least two distinct current activities remain visible. This is a visibility rule,
+not permission to merge same-name people. Provisional evidence remains available to
+consolidation. Incoming resolution still uses established profiles and confirmed alias
+rules/contextual evidence; similar spelling is not an automatic identity approval.
+The Activity Graph has the same **Show** dropdown, defaults to established entities,
+and remembers the choice in browser view state. Filtering removes provisional entity
+nodes and their connections before graph capacity counts; activity/source/date nodes
+remain. Explicit board membership is unchanged.
+The API preserves its complete matching view by default; `include_provisional=false`
+requests the established subset. Counts are calculated before pagination.
+
+Removing existing Topic data is an explicit owner operation, not a startup migration:
+
+1. `GET /api/hfl/entities/types/topics/removal-preview` returns affected entity,
+   mention and activity counts plus `selection_hash`.
+2. `POST /api/hfl/entities/types/topics/remove` with that hash and a UUID `request_id`
+   removes Topic mentions, profiles and current links, and retires pending/deferred
+   comparisons. A changed selection returns 409; re-preview before retrying.
+3. Reuse the exact request ID/body after an uncertain response. The receipt records a
+   database backup path and internal audit event. Explicitly reclassified entities are
+   retained. Corpus activity text and historical merge audits/reports are preserved.
+
+Deploy API and enrichment workers with the retired-type write guard before cleanup;
+older workers do not know this policy. Backups contain private entity evidence and stay
+on the owning host beside its database. This operation does not re-enrich history or
+infer replacement Tools from removed Topics. Re-extract a selected activity explicitly
+if its named tools were never extracted separately.
+
 ## Daily Hermes consolidation
 
-The `auto-merge-entities` skill provides daily autonomous cleanup at 03:00
-Asia/Singapore. Reconcile `scripts/agents/hfl/entity_consolidation_schedule.json`
+The `auto-merge-entities` skill provides bounded daily cleanup. New installations
+default to 03:00 Asia/Singapore; reconciliation preserves an existing job's cadence.
+Reconcile `scripts/agents/hfl/entity_consolidation_schedule.json`
 using `setup_entity_consolidation.py --apply` on the canonical Hermes host.
-Hermes owns the schedule and contextual decisions; the API owns validated,
-transactional merges and Celery owns grouped report delivery. No extra Beat job.
+Hermes owns the schedule, running `run_entity_consolidation.py` with `no_agent=true`.
+The API owns bounded model assessment and validated transactional merges; Celery
+owns grouped report delivery. No extra Beat job or general-purpose agent loop.
+
+Deploy the `bounded-assessment-v1` API before reconciling the job. Setup installs a managed launcher inside the
+active Hermes profile's `scripts/` directory, using the repository's Python venv.
+It preserves existing cadence and replaces the conflicting agent prompt. The runner checks
+that capability and uses `POST /consolidation/{run}/claims/{token}/assess` for each
+claimed anchor packet. The model sees each entity once and checks all proposed
+members for contradictions. Existing merge/unmerge and curated-profile protections
+still apply. Same-title unprofiled mentions can establish a group through contextual
+assessment; the immediate resolver continues to require an established target.
+Only exact titles with the same explicit YouTube video URL in eligible source
+excerpts have a deterministic path without a model request. Name alone is insufficient.
+
+Each execution selects up to 40 comparisons for 900 seconds, permits eight model
+requests with 4,000 output tokens each, and reserves at most 160,000 input characters
+including system prompts. These are work/character budgets, not a billing estimate.
+The assessment defaults to `claude-haiku-4-5-20251001`, overridden by
+`HARQIS_ENTITY_MATCH_MODEL`. Responses and exact inputs are cached before delivery;
+failed/uncertain calls cannot be silently bought again. A failed or interrupted
+execution retains its journal for explicit recovery rather than restarting endlessly.
+Use the same `--execution-id` when checking a closed execution's report. Preserve and
+replay an unfinished journal request before resuming an active execution.
+Usage is stored in `execution.assessment_usage`; the runner reports actual tokens
+per verified merge and null for a zero-merge run. Deployment does not retroactively
+clear deferred decisions or override separation exclusions.
+
+Runtime decision: **hybrid**, high confidence. Hermes is the sole schedule owner;
+the authenticated service owns fixed batch evaluation, cached receipts and merges;
+Celery owns durable report delivery. Agents remain available for explicitly requested
+adaptive exception review. Controls are bounded execution IDs, claims, exact-input
+assessment caching, skill hashes, unchanged source/identity validation, and reversible
+operations. Review artifacts are execution reports, usage counters and local request
+receipts. No additional schedule or notification channel is introduced.
 
 Profiles expose `aliases` (exact strings), `partial_aliases` (substring hints of
 at least three characters), and `preferred_name`. The directory editor and profile
@@ -37,7 +110,7 @@ independent corroboration. Names with more unique current related activities ran
 higher, after explicit preferred names and curated profiles.
 
 Same-type token/trigram discovery includes fuzzy OCR variants. Partial hints only
-shortlist candidates. The agent checks activity context: two independently supported
+shortlist candidates. The assessor checks activity context: two independently supported
 facts normally, or one substantial specific shared fact for a strong name/identifier
 match with sparse activity. Similar spelling, popularity and model confidence alone
 never establish identity. Conflicting curated identities, explicit identifiers,
@@ -55,7 +128,8 @@ reuse their exact stars instead of repeatedly scanning identical fuzzy postings.
 This is not exhaustive all-pairs matching, particularly among ambiguous
 leaves of a same-name bucket. Newly merged groups participate in fresh discovery.
 
-Priority is People → Organizations → Tools → Pets → Apps → Games → remaining types;
+Priority is direct identifiers/contacts → exact names/aliases → fuzzy candidates;
+within each tier: People → Organizations → Tools → Pets → Apps → Games → remaining types.
 every fifth fresh claim selects the oldest comparison to prevent starvation.
 Search features persist by versioned name/profile inputs; counts and postings are
 shared within a snapshot. Run metadata, comparison rows and content-addressed evidence

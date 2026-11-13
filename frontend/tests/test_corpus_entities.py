@@ -167,7 +167,7 @@ def test_profile_validation_and_owner_boundary(corpus, authenticated_client):
         assert authenticated_client.post('/api/hfl/entities/profile/entity:missing', json=payload).status_code == 400
 
 
-@pytest.mark.parametrize('kind', ['people', 'companies', 'tools', 'topics', 'objects'])
+@pytest.mark.parametrize('kind', ['people', 'companies', 'tools', 'pets', 'objects'])
 def test_profile_references_for_every_type(corpus, authenticated_client, monkeypatch, kind):
     monkeypatch.setattr(entities, 'entity_index', lambda: [dict(id='reference-test', kind=kind)])
     url = '/api/hfl/entities/profile/reference-test'
@@ -181,7 +181,7 @@ def test_profile_references_for_every_type(corpus, authenticated_client, monkeyp
 
 
 def test_directory_returns_all_entities_by_default(authenticated_client, monkeypatch):
-    rows = [dict(id=str(i), label=f'Entity {i:04}', kind='topics') for i in range(1203)]
+    rows = [dict(id=str(i), label=f'Entity {i:04}', kind='tools') for i in range(1203)]
     monkeypatch.setattr(entities, 'entity_index', lambda *args: rows.copy())
     data = authenticated_client.get('/api/hfl/entities').json()
     assert data['total'] == len(data['entities']) == 1203
@@ -410,7 +410,7 @@ def test_enrichment_propagates_batches_entities_sources_and_dates(corpus, monkey
     assert len(updated['edges']) == 3
 
 
-@pytest.mark.parametrize('source', ['entities-audit', 'entity-consolidation'])
+@pytest.mark.parametrize('source', ['entities-audit', 'entity-consolidation', 'sharing-audit'])
 def test_audit_sources_skip_model_fallback_and_legacy_mentions(corpus, monkeypatch, source):
     audit = entry('audit', text='org/repo#123', source=source)
     corpus[:] = [audit]
@@ -422,3 +422,9 @@ def test_audit_sources_skip_model_fallback_and_legacy_mentions(corpus, monkeypat
                [entities.mention(audit, 'people', 'Alex', 'Alex', 'model')])
     assert entities.projection()[0]['mentions'] == []
     assert entities.graph()['entries'] == 1  # Audit remains visible as an activity.
+    store.save_profile('owner-linked', 'people', {'name': 'Owner linked'})
+    with store.connection() as db:
+        db.execute('INSERT INTO entity_activity_links(entity_id,entry_id,actor,created) VALUES (?,?,?,?)',
+                   ('owner-linked', 'audit', 'owner', '2026-10-28'))
+    assert [(m['id'], m['method']) for m in entities.projection()[0]['mentions']] == [
+        ('owner-linked', 'user-confirmed')]

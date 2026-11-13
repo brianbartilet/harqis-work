@@ -153,6 +153,7 @@ def process_batch(use_model=True, entry_id=None):
     from workflows.hfl.entity_candidates import CandidateIndex, incoming_candidates, similarity
     from workflows.hfl.entity_consolidation import corroborated, evidence
     from workflows.hfl.entity_resolution_scope import Scope
+    from workflows.hfl.entity_types import RETIRED
     store = get_store()
     with store.connection() as db:
         db.execute('BEGIN')
@@ -171,7 +172,7 @@ def process_batch(use_model=True, entry_id=None):
     evidence_ids.update(e['id'] for target in current if target['id'] in relevant_ids for e in target['entries'])
     labels = {e['id']: e['label'] for e in current}
     # Only established profiles are targets. A raw mention is never its own anchor.
-    targets = [e for e in current if e.get('profile')]
+    targets = [e for e in current if e.get('profile') and e['kind'] not in RETIRED]
     target_ids = {e['id'] for e in targets}
     candidate_index = CandidateIndex(targets)
     souls = entity_soul.all_souls()
@@ -187,6 +188,8 @@ def process_batch(use_model=True, entry_id=None):
                 or record.get('hash') != entities.entry_hash(entry)):
             continue
         for mention in record.get('mentions', []):
+            if mention['kind'] in RETIRED:
+                continue
             if (entry['id'], mention['id']) in already_resolved:
                 continue
             canonical = store.resolve(mention['id'])

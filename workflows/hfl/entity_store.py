@@ -40,6 +40,9 @@ class EntityStore:
                 CREATE TABLE IF NOT EXISTS decisions(id INTEGER PRIMARY KEY AUTOINCREMENT, alias TEXT,
                     canonical TEXT, reason TEXT, active INTEGER DEFAULT 1, created TEXT DEFAULT CURRENT_TIMESTAMP);
                 CREATE TABLE IF NOT EXISTS pending(id TEXT PRIMARY KEY, revision TEXT, queued_at REAL DEFAULT 0);
+                CREATE TABLE IF NOT EXISTS enrichment_failures(id TEXT PRIMARY KEY, revision TEXT NOT NULL,
+                    failures INTEGER NOT NULL DEFAULT 0, state TEXT NOT NULL DEFAULT 'pending',
+                    error TEXT NOT NULL DEFAULT '', updated REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS profiles(id TEXT PRIMARY KEY, kind TEXT NOT NULL,
                     data TEXT NOT NULL, updated TEXT DEFAULT CURRENT_TIMESTAMP);
                 CREATE TABLE IF NOT EXISTS state(key TEXT PRIMARY KEY, value TEXT);
@@ -115,6 +118,38 @@ class EntityStore:
         finally:
             db.close()
 
+    def enrichment_status(self, identity, revision):
+        """A task may act only on its live, non-quarantined intent revision."""
+        with self.connection() as db:
+            row = db.execute('''SELECT p.revision, f.state FROM pending p
+                LEFT JOIN enrichment_failures f ON f.id=p.id AND f.revision=p.revision
+                WHERE p.id=?''', (identity,)).fetchone()
+        if not row or row['revision'] != revision:
+            return 'superseded'
+        return row['state'] or 'pending'
+
+    def fail_enrichment(self, identity, revision, error, *, exhausted=False):
+        """Count failures across deliveries, atomically scoped to current intent.
+
+        Five failures match one initial Celery attempt plus four retries. Never
+        store exception messages (provider errors can contain source content).
+        """
+        with self.connection() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT revision FROM pending WHERE id=?', (identity,)).fetchone()
+            if not row or row['revision'] != revision:
+                return 'superseded'
+            previous = db.execute('SELECT failures,state FROM enrichment_failures WHERE id=? AND revision=?',
+                                  (identity, revision)).fetchone()
+            if previous and previous['state'] == 'quarantined':
+                return 'quarantined'
+            failures = (previous['failures'] if previous else 0) + 1
+            state = 'quarantined' if exhausted or failures >= 5 else 'pending'
+            db.execute('''INSERT OR REPLACE INTO enrichment_failures
+                (id,revision,failures,state,error,updated) VALUES (?,?,?,?,?,unixepoch())''',
+                       (identity, revision, failures, state, type(error).__name__))
+            return state
+
     def legacy_id(self, locator):
         return 'legacy-' + hashlib.sha256(locator.encode()).hexdigest()[:32]
 
@@ -124,6 +159,8 @@ class EntityStore:
                     for r in db.execute('SELECT * FROM enrichment')}
 
     def save(self, identity, content_hash, mentions, version=VERSION, match=False, types_revision=''):
+        from workflows.hfl.entity_types import RETIRED
+        mentions = [m for m in mentions if m.get('kind') not in RETIRED]
         with self.connection() as db:
             previous = db.execute('SELECT hash,version,mentions,types_revision FROM enrichment WHERE id=?', (identity,)).fetchone()
             encoded_mentions = json.dumps(mentions)
@@ -231,6 +268,9 @@ class EntityStore:
                     for r in db.execute('SELECT * FROM profiles')}
 
     def save_profile(self, identity, kind, data, actor='owner', connection=None):
+        from workflows.hfl.entity_types import RETIRED
+        if kind in RETIRED:
+            raise ValueError('This entity type has been retired')
         # Curated data is never pruned or overwritten by enrichment.
         with (nullcontext(connection) if connection is not None else self.connection()) as db:
             if connection is None:

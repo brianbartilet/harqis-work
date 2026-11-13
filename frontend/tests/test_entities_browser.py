@@ -8,7 +8,7 @@ def test_complete_directory_and_references(authenticated_client, monkeypatch, tm
     playwright = pytest.importorskip('playwright.sync_api')
     from modules.hfl_corpus import entities
     monkeypatch.setenv('HARQIS_ENTITIES_DB', str(tmp_path / 'entities.sqlite3'))
-    rows = [dict(id=str(i), label=f'Entity {i:04}', kind='topics', categories=[],
+    rows = [dict(id=str(i), label=f'Entity {i:04}', kind='pets', categories=[],
                  profile=None, entries=[], resolution='model-extracted') for i in range(1203)]
     rows[-1]['profile'] = dict(name=rows[-1]['label'], categories=[], emails=[], phones=[], notes='',
                                references=['https://social.example/unique-last-entity', 'C:\\Notes\\last.pdf'])
@@ -43,23 +43,17 @@ def test_complete_directory_and_references(authenticated_client, monkeypatch, tm
             assert page.locator('#filter-kind button').first.text_content() == 'All types1203'
             assert page.locator('.entity-card').count() == 50
             assert page.locator('#page-number').inner_text() == 'Page 1 of 25'
-            assert page.locator('.profile-editor').count() == 0  # Details are built only when opened.
+            assert page.locator('.contact-line').count() == 0  # Details are built only when opened.
             page.click('#next')
             assert 'Entity 0050' in page.locator('.entity-card').first.inner_text()
             page.fill('#entity-query', 'unique-last-entity')
             assert page.locator('.entity-card').count() == 1
             assert page.locator('#page-number').inner_text() == 'Page 1 of 1'
             page.locator('.entity-card > summary').click()
-            page.wait_for_selector('.profile-editor')
+            page.wait_for_selector('.contact-line', state='attached')
             assert page.get_by_role('link', name='https://social.example/unique-last-entity', exact=True).get_attribute('rel') == 'noopener noreferrer'
             assert page.locator('code').filter(has_text='C:\\Notes\\last.pdf').count() == 1
-            page.locator('.profile-editor > summary').click()
-            page.locator('textarea[name="references"]').fill('https://example.com/new-reference')
-            page.get_by_role('button', name='Save profile', exact=True).click()
-            page.wait_for_function("document.querySelector('#entity-status').textContent.includes('Profile saved.')")
-            page.fill('#entity-query', 'new-reference')
-            assert page.locator('.entity-card').count() == 1
-            assert page.locator('#filter-kind button').first.text_content() == 'All types1203'
+            # Profile editing now lives in Update soul; this check covers directory references.
             page.click('#clear-filters')
             assert page.locator('.entity-card').count() == 50
             page.set_viewport_size({'width': 390, 'height': 844})
@@ -78,15 +72,15 @@ def test_bulk_selection_merge_and_unmerge(authenticated_client, monkeypatch, tmp
     monkeypatch.setattr(entities, 'current_entries', lambda: [])
     monkeypatch.setattr('workflows.hfl.persistence.submit_hfl_entry', lambda *args, **kwargs: {'delivery': 'outbox'})
     for index in range(60):
-        get_store().save_profile(f'topic-{index}', 'topics', dict(name=f'Topic {index:02}',
+        get_store().save_profile(f'pet-{index}', 'pets', dict(name=f'Pet {index:02}',
             categories=['Testing'], emails=[], phones=[], references=[f'https://example.test/{index}'], notes=f'Note {index}'))
     get_store().save_profile('person', 'people', dict(name='Zoe', categories=[], emails=[], phones=[], references=[], notes=''))
     import json
     with get_store().connection() as db:
         db.execute("INSERT INTO entity_match_jobs(id,mode,seeds,state) VALUES ('browser-job','history','[]','complete')")
-        suggestion = {'entity_ids':['topic-0','topic-1'], 'names':['Topic 00','Topic 01'],
+        suggestion = {'entity_ids':['pet-0','pet-1'], 'names':['Pet 00','Pet 01'],
                       'decision':{'reason':'Possible shared identity; please review.','facts':[]}}
-        db.execute("INSERT INTO entity_match_pairs(id,job_id,left_id,right_id,state,data) VALUES ('browser-suggestion','browser-job','topic-0','topic-1','suggested',?)", (json.dumps(suggestion),))
+        db.execute("INSERT INTO entity_match_pairs(id,job_id,left_id,right_id,state,data) VALUES ('browser-suggestion','browser-job','pet-0','pet-1','suggested',?)", (json.dumps(suggestion),))
     with playwright.sync_playwright() as engine:
         options = {'headless': True}
         if not Path(engine.chromium.executable_path).exists():
@@ -123,15 +117,15 @@ def test_bulk_selection_merge_and_unmerge(authenticated_client, monkeypatch, tmp
             page.locator('#matching-suggestions').get_by_role('button',name='Keep separate',exact=True).click()
             page.wait_for_function("document.querySelector('#matching-suggestions').textContent.includes('No uncertain matches')")
             page.click('#clear-selection')
-            page.get_by_role('checkbox', name='Select Topic 00', exact=True).check()
-            assert page.locator('#selection-count').inner_text() == '1 selected · Topics'
+            page.get_by_role('checkbox', name='Select Pet 00', exact=True).check()
+            assert page.locator('#selection-count').inner_text() == '1 selected · Pets'
             page.click('#next')
             assert page.get_by_role('checkbox', name='Select Zoe', exact=True).is_enabled()
-            page.get_by_role('checkbox', name='Select Topic 50', exact=True).check()
-            page.fill('#entity-query', 'Topic 01')
-            assert page.locator('#selection-count').inner_text() == '2 selected · Topics'
+            page.get_by_role('checkbox', name='Select Pet 50', exact=True).check()
+            page.fill('#entity-query', 'Pet 01')
+            assert page.locator('#selection-count').inner_text() == '2 selected · Pets'
             page.click('#select-page')
-            assert page.locator('#selection-count').inner_text() == '3 selected · Topics'
+            assert page.locator('#selection-count').inner_text() == '3 selected · Pets'
             page.click('#clear-filters')
             page.click('#select-matching')
             assert page.locator('#selection-count').inner_text() == '61 selected · Mixed types'
@@ -150,7 +144,7 @@ def test_bulk_selection_merge_and_unmerge(authenticated_client, monkeypatch, tmp
             page.click('#batch-type-confirm')
             page.wait_for_selector('#entity-type-dialog', state='hidden')
             page.wait_for_function("document.querySelector('#selection-feedback').textContent.includes('61 entities changed to Tools')")
-            assert all(get_store().profiles()[f'topic-{i}']['kind'] == 'tools' for i in range(60))
+            assert all(get_store().profiles()[f'pet-{i}']['kind'] == 'tools' for i in range(60))
             assert get_store().profiles()['person']['kind'] == 'tools'
             assert page.locator('#change-type-selected').is_disabled()
             page.fill('#entity-query', 'Zoe')
@@ -160,19 +154,19 @@ def test_bulk_selection_merge_and_unmerge(authenticated_client, monkeypatch, tmp
             page.click('#batch-type-confirm')
             page.wait_for_selector('#entity-type-dialog', state='hidden')
             page.wait_for_function("document.querySelector('#selection-feedback').textContent.includes('1 entities changed to People')")
-            page.fill('#entity-query', 'Topic')
-            page.get_by_role('checkbox', name='Select Topic 00', exact=True).check()
+            page.fill('#entity-query', 'Pet')
+            page.get_by_role('checkbox', name='Select Pet 00', exact=True).check()
             page.click('#select-matching')
             page.click('#change-type-selected')
-            page.select_option('#batch-type-kind', 'topics')
+            page.select_option('#batch-type-kind', 'pets')
             page.click('#batch-type-confirm')
             page.wait_for_selector('#entity-type-dialog', state='hidden')
-            page.wait_for_function("document.querySelector('#selection-feedback').textContent.includes('60 entities changed to Topics')")
-            page.get_by_role('checkbox', name='Select Topic 00', exact=True).check()
+            page.wait_for_function("document.querySelector('#selection-feedback').textContent.includes('60 entities changed to Pets')")
+            page.get_by_role('checkbox', name='Select Pet 00', exact=True).check()
             page.click('#select-matching')
             page.click('#clear-filters')
             page.click('#merge-selected')
-            page.fill('#merge-name', 'Combined topics')
+            page.fill('#merge-name', 'Combined pets')
             page.fill('#merge-evidence', 'Same subject across aliases')
             page.click('#merge-review')
             page.wait_for_selector('#merge-preview-content:not([hidden])')
@@ -192,13 +186,13 @@ def test_bulk_selection_merge_and_unmerge(authenticated_client, monkeypatch, tmp
             page.wait_for_selector('#entity-merge-dialog', state='hidden')
             page.wait_for_function("document.querySelector('#filter-kind button').textContent === 'All types2'")
             assert page.locator('.entity-card').count() == 2
-            saved = next(p for p in get_store().profiles().values() if p['name'] == 'Combined topics')
+            saved = next(p for p in get_store().profiles().values() if p['name'] == 'Combined pets')
             assert saved['categories'] == ['Reviewed category']
             assert saved['emails'] == ['reviewed@example.test']
             assert saved['phones'] == ['+65 1234 5678']
             assert saved['references'] == ['https://example.test/reviewed']
             assert saved['notes'] == 'Reviewed merge notes'
-            page.locator('.entity-card > summary').filter(has_text='Combined topics').click()
+            page.locator('.entity-card > summary').filter(has_text='Combined pets').click()
             page.get_by_text('Entity audit history', exact=True).click()
             page.wait_for_function("document.querySelector('.entity-audit').textContent.includes('Same subject across aliases')")
             page.get_by_role('button', name='Unmerge', exact=True).click()

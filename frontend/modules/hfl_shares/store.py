@@ -570,6 +570,15 @@ class ShareStore:
             ).fetchall()
         return [self._grant_summary(row) for row in rows]
 
+    def recipe_share_ids(self, configuration_id: str) -> list[str]:
+        """Return all managed shares for a recipe, independent of owner pagination."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT id FROM shares WHERE configuration_id=? AND instant=0 ORDER BY created_at DESC",
+                (configuration_id,),
+            ).fetchall()
+        return [row["id"] for row in rows]
+
     def list_shares(self, *, include_instant: bool = False) -> list[ShareGrant]:
         with self._connect() as connection:
             rows = connection.execute(

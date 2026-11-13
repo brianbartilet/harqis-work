@@ -24,6 +24,7 @@
       {% endif %}
     </div>
   </div>
+  <p class="wrap mt-1 text-xs text-slate-400">From: {% if row.has_recipe %}<a class="font-semibold text-sky-300" href="/sharing?configuration_id={{ share.configuration_id }}" data-recipe-load>{{ row.recipe_name }}</a>{% else %}{{ "Deleted recipe" if share.configuration_id else "Not linked" }}{% endif %}</p>
   <p class="generated-share-description text-xs text-slate-500">{{ share.entry_count }} entries · {{ "live recipe" if share.live_updates else "fixed snapshot" }} · {% if share.no_expiry %}no expiry{% else %}expires {{ row.expires_at_display }}{% endif %}</p>
   {% if share.browser_redemption_limit %}<p class="text-xs text-slate-500">{{ share.browser_redemption_limit }} redemptions per browser</p>{% endif %}
   <div class="share-status-row"><span class="status-pill status-{{ row.status }}">{{ row.status }}</span></div>

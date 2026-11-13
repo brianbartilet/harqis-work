@@ -95,7 +95,7 @@ def test_ecosystem_browser(fleet, authenticated_client, tmp_path, width, height)
             page = browser.new_page(viewport={'width':width,'height':height})
             errors=[]
             page.on('pageerror', lambda e:errors.append(str(e)))
-            workspace = {'views':[{'id':'work','name':'Work','color':'#67e8f9','schedule':[{'days':[0],'start':'09:00','end':'18:00'}]}],'preferences':{'dynamic':False,'manual':[],'revision':0},'active':[]}
+            workspace = {'views':[{'id':'work','name':'Work','color':'#67e8f9','schedule':[{'days':[0],'start':'09:00','end':'18:00'}]},hud_space],'preferences':{'dynamic':False,'manual':[],'revision':0},'active':[]}
             def route(r):
                 u=urlparse(r.request.url)
                 if u.path in {'/second-brain/hud/data','/agents/hud/data'}:
@@ -123,7 +123,7 @@ def test_ecosystem_browser(fleet, authenticated_client, tmp_path, width, height)
             assert agent_hud.layout()['agent_panel_expanded'] is True
             page.reload()
             page.wait_for_function("document.querySelector('.fleet-hud-panel')?.dataset.expanded==='true'")
-            assert page.title() == 'HARQIS \u2014 Agents'
+            assert page.title() == 'HARQIS \u2014 Second Brain'
             page.get_by_role('button',name='Animation',exact=True).click()
             animation_menu=page.get_by_role('region',name='Animation modes')
             assert animation_menu.get_by_role('button').count()==4
@@ -143,6 +143,8 @@ def test_ecosystem_browser(fleet, authenticated_client, tmp_path, width, height)
             page.get_by_role('heading',name='Milo · Test specialist',exact=True).wait_for()
             assert page.get_by_text('returns artifact',exact=True).is_visible()
             page.get_by_role('complementary',name='HARQIS Butler HUD feed').wait_for()
+            # Clicking the graph background restores the overview and its filters.
+            page.locator('.fleet-map canvas').click(position={'x': 5, 'y': 5})
             page.get_by_label('Search agents and outputs').fill('invoices')
             page.wait_for_function("document.querySelectorAll('.fleet-list button').length===2")
             assert page.get_by_role('button',name='Select Atlas · Operations',exact=True).count()==1
@@ -167,6 +169,8 @@ def test_ecosystem_browser(fleet, authenticated_client, tmp_path, width, height)
             page.get_by_label('Show mock data',exact=True).check()
             page.get_by_role('dialog',name='Filters',exact=True).get_by_role('button',name='Close',exact=True).click()
             page.locator('.fleet-spaces > details > summary').click()
+            if width <= 900:
+                assert page.locator('.workspace-menu-panel').bounding_box()['y'] >= page.locator('.fleet-spaces > details > summary').bounding_box()['y'] + page.locator('.fleet-spaces > details > summary').bounding_box()['height']
             page.get_by_label('Focus on',exact=True).click()
             page.get_by_label('Work',exact=True).check()
             page.keyboard.press('Escape')
@@ -179,6 +183,9 @@ def test_ecosystem_browser(fleet, authenticated_client, tmp_path, width, height)
             page.get_by_role('switch',name='Dynamic mode').uncheck()
             page.wait_for_function("document.querySelector('.activity-dynamic-badge').textContent==='Dynamic OFF'")
             page.keyboard.press('Escape')
+            # Escape closes the nested picker first; close its outer Space menu too.
+            if page.locator('.fleet-spaces > details').get_attribute('open') is not None:
+                page.locator('.fleet-spaces > details > summary').click()
             page.get_by_role('button',name='Select HARQIS Butler',exact=True).click()
             hud=page.get_by_role('complementary',name='HARQIS Butler HUD feed')
             hud.wait_for()
@@ -227,7 +234,15 @@ def test_ecosystem_browser(fleet, authenticated_client, tmp_path, width, height)
             size_menu.locator('summary').click()
             page.screenshot(path=str(tmp_path/('ecosystem-hud-menu-'+str(width)+'.png')),full_page=True)
             size_menu.get_by_role('button',name='Save',exact=True).click()
-            page.wait_for_function("document.querySelector('[data-id=\"hud:hud.hud_radar.show_daily_radar\"]').style.getPropertyValue('--cols')==='3'")
+            # A Space-scoped HUD is hidden until that Space is selected.
+            radar_card.wait_for(state='detached')
+            page.locator('.fleet-spaces > details > summary').click()
+            page.get_by_label('Focus on',exact=True).click()
+            page.get_by_label('HUD Work',exact=True).check()
+            page.keyboard.press('Escape')
+            if page.locator('.fleet-spaces > details').get_attribute('open') is not None:
+                page.locator('.fleet-spaces > details > summary').click()
+            page.wait_for_function("document.querySelector('[data-id=\"hud:hud.hud_radar.show_daily_radar\"]')?.style.getPropertyValue('--cols')==='3'")
             saved_widget=agent_hud.layout()['widgets'][0]
             assert saved_widget['size']=='3x1'
             assert saved_widget['animation']=='typing'
@@ -245,7 +260,7 @@ def test_ecosystem_browser(fleet, authenticated_client, tmp_path, width, height)
             assert hud.evaluate('(el)=>el.scrollLeft')>0
             page.screenshot(path=str(tmp_path/('ecosystem-hud-'+str(width)+'.png')),full_page=True)
             page.reload()
-            page.get_by_role('button',name='Select HARQIS Butler',exact=True).click()
+            # With no selection the HUD continues to show Butler's available cards.
             hud.wait_for()
             page.wait_for_function("document.querySelector('[data-id=\"hud:hud.hud_radar.show_daily_radar\"]')?.style.getPropertyValue('--cols')==='3'")
             assert hud.locator('.fleet-hud-card').evaluate_all('(cards)=>cards.map(card=>card.dataset.id)')==reordered
@@ -273,6 +288,14 @@ def test_ecosystem_browser(fleet, authenticated_client, tmp_path, width, height)
             assert not next(w for w in shared_hud.layout()['widgets'] if w['operation']=='monitoring')['hidden']
             assert any(w['operation']=='context' for w in shared_hud.layout()['widgets'])
 
+            # Restore all agents before testing graph dragging and fullscreen.
+            page.locator('.fleet-spaces > details > summary').click()
+            page.get_by_label('Focus on',exact=True).click()
+            page.get_by_role('button',name='All activity',exact=True).click()
+            page.keyboard.press('Escape')
+            if page.locator('.fleet-spaces > details').get_attribute('open') is not None:
+                page.locator('.fleet-spaces > details > summary').click()
+            page.get_by_role('button',name='Select HARQIS Butler',exact=True).click()
             page.evaluate('window.scrollTo(0,0)')
             page.wait_for_timeout(1800)
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
@@ -303,7 +326,7 @@ def test_ecosystem_browser(fleet, authenticated_client, tmp_path, width, height)
                 }""")
                 page.mouse.move(point['x'],point['y'])
                 page.wait_for_timeout(500)
-                assert page.locator('.fleet-map').evaluate('(e)=>getComputedStyle(e).cursor') == 'grab', {'point':point,'hit':page.evaluate('([x,y])=>document.elementFromPoint(x,y)?.outerHTML.slice(0,500)',[point['x'],point['y']])}
+                assert page.locator('.fleet-map').evaluate('(e)=>getComputedStyle(e).cursor') == 'pointer', {'point':point,'hit':page.evaluate('([x,y])=>document.elementFromPoint(x,y)?.outerHTML.slice(0,500)',[point['x'],point['y']])}
                 before_drag=page.evaluate("JSON.parse(localStorage.getItem('harqis:fleet:graph:v2:frontend-test-user')).positions")
                 page.mouse.down()
                 page.mouse.move(point['x']+60,point['y']+40,steps=15)
@@ -314,7 +337,9 @@ def test_ecosystem_browser(fleet, authenticated_client, tmp_path, width, height)
                   return Object.entries(positions).some(([id,p])=>id!=='agent:butler'&&before[id]&&Math.hypot(p.x-before[id].x,p.y-before[id].y)>1);
                 }""",arg=before_drag)
                 assert page.evaluate("JSON.parse(localStorage.getItem('harqis:fleet:graph:v2:frontend-test-user')).positions['agent:butler'].manual")
-                assert page.locator('.fleet-list button').count()==8
+            # The selected agent inspector replaces the overview list.
+            assert page.locator('.fleet-list button').count()==0
+            assert page.locator('.fleet-inspector').get_by_role('heading',name='HARQIS Butler',exact=True).is_visible()
             page.get_by_role('button',name='Zoom in',exact=True).click()
             page.get_by_role('button',name='Zoom out',exact=True).click()
             page.get_by_role('button',name='Fit view',exact=True).click()

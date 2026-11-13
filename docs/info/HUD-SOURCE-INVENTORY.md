@@ -34,7 +34,7 @@ Source audit: 2026-10-24. Active means a live dictionary entry in `workflows/hud
 | `run-job--show_tcg_sell_cart--on` | `workflows.hud.tasks.hud_tcg.show_tcg_sell_cart` | `crontab(day_of_week='fri,sun,sat', hour='1,8,12,20', minute=0)` | `{'queue': WorkflowQueue.HUD, 'os': ['windows'], 'expires': 60 * 60 * 24}` |
 | `run-job--show_jira_board` | `workflows.hud.tasks.hud_jira.show_jira_board` | `crontab(day_of_week='mon-fri', minute=0)` | `{'queue': WorkflowQueue.HOST, 'os': ['any'], 'expires': 60 * 30}` |
 | `run-job--get_desktop_logs` | `workflows.hud.tasks.hud_gpt.get_desktop_logs` | `crontab(minute=5)` | `{'queue': WorkflowQueue.HUD, 'os': ['windows'], 'expires': 60 * 60}` |
-| `run-job--take_screenshots_for_gpt_capture` | `workflows.hud.tasks.hud_gpt.take_screenshots_for_gpt_capture` | `crontab(minute='10,20,30,40,50,00')` | `{'queue': WorkflowQueue.PEON, 'os': ['windows'], 'expires': 60 * 10}` |
+| `run-job--take_screenshots_for_gpt_capture` | `workflows.hud.tasks.hud_gpt.take_screenshots_for_gpt_capture` | `crontab(minute='0,15,30,45')` | `{'queue': WorkflowQueue.PEON, 'os': ['windows'], 'expires': 60 * 10}` |
 | `run-job--show_calendar_information` | `workflows.hud.tasks.hud_calendar.show_calendar_information` | `crontab(minute='15,30,45,00')` | `{'queue': WorkflowQueue.HOST, 'os': ['any'], 'expires': 60 * 30}` |
 | `run-job--get_failed_jobs` | `workflows.hud.tasks.hud_logs.get_failed_jobs` | `crontab(minute='*/15')` | `{'queue': WorkflowQueue.HOST, 'os': ['any'], 'expires': 60 * 15}` |
 | `run-job--show_mouse_bindings` | `workflows.hud.tasks.hud_utils.show_mouse_bindings` | `timedelta(seconds=60)` | `{'queue': WorkflowQueue.HUD, 'os': ['windows'], 'expires': 60 * 2}` |

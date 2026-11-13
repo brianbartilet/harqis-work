@@ -52,13 +52,13 @@ def test_type_backfill_is_explicit_and_preserves_existing_projection(review_data
     from workflows.hfl import entity_events
     row = dict(id='entry',title='Pet',text='Fido is my pet.',source='notes',date='2026-09-01',tags=[],path='day.md',anchor='',ref='')
     monkeypatch.setattr(entities,'current_entries',lambda:[row])
-    get_store().save('entry',entities.entry_hash(row),[entities.mention(row,'topics','Fido','Fido','test')])
+    get_store().save('entry',entities.entry_hash(row),[entities.mention(row,'tools','Fido','Fido','test')])
     monkeypatch.setattr(entities,'extract_batch',lambda rows:{e['id']:[entities.mention(e,'pets','Fido','Fido','model-extracted')] for e in rows})
     monkeypatch.setattr(entity_events,'request_enrichment',lambda:{'state':'queued'})
     entity_types.create('Birds','#aabbcc','Named birds')
     assert entities.enrich()['processed']==0
     assert authenticated_client.post('/api/hfl/entities/backfill?include_new_types=true').status_code==200
-    assert entities.projection()[0]['mentions'][0]['kind']=='topics'
+    assert entities.projection()[0]['mentions'][0]['kind']=='tools'
     assert entities.enrich()['processed']==1
     assert entities.enrich()['processed']==0
     assert entities.projection()[0]['mentions'][0]['kind']=='pets'

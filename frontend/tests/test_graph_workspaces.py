@@ -119,8 +119,9 @@ def test_workspace_boards_and_global_entities_browser(ideas, authenticated_clien
                 animation = page.locator('#kg-open-animation').bounding_box()
                 workspace = trigger.bounding_box()
                 refresh = page.locator('#kg-reload').bounding_box()
-                assert animation['x'] >= search['x']+search['width']
-                assert animation['x'] < search['x']+search['width']+30
+                assert refresh['x'] >= search['x']+search['width']
+                assert animation['x'] >= refresh['x']+refresh['width']
+                assert abs(animation['y']-refresh['y']) <= 2
                 assert workspace['x'] > refresh['x']+refresh['width']
                 entities = page.locator('#kg-entities').bounding_box()
                 filters = page.locator('#kg-open-filters').bounding_box()

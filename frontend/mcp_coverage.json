@@ -3797,6 +3797,50 @@
       ],
       "reason": "Bounded bearer-authenticated owner PR reconciliation, exposed through a dedicated mutating tool; uses the existing personal connector.",
       "service": "apps.hfl_corpus.references.web.api.github_updates.ApiServiceHflGithubUpdates.sync_github_updates"
+    },
+    {
+      "method": "GET",
+      "path": "/api/hfl/entities/types/topics/removal-preview",
+      "status": "covered",
+      "tools": [
+        "get_hfl_corpus_entity_topic_removal_preview"
+      ],
+      "reason": "Preview topic removal counts and the selection hash without changing state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.get_entity_topic_removal_preview"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/types/topics/remove",
+      "status": "covered",
+      "tools": [
+        "delete_hfl_corpus_entity_topics"
+      ],
+      "reason": "Remove topic entities using a reviewed selection hash and stable request ID. Destructive: writes remote state.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.delete_entity_topics"
+    },
+    {
+      "method": "POST",
+      "path": "/api/hfl/entities/consolidation/{run_id}/claims/{token}/assess",
+      "status": "covered",
+      "tools": [
+        "update_hfl_corpus_entity_consolidation_assessment"
+      ],
+      "reason": "Assess and cache a claimed consolidation packet without committing merges. Destructive: writes remote state and may invoke a model.",
+      "service": "apps.hfl_corpus.references.web.api.entities.ApiServiceHflCorpusEntities.update_entity_consolidation_assessment"
+    },
+    {
+      "method": "GET",
+      "path": "/sharing/saved-recipes",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner-session-authenticated HTML fragment for the saved recipe list; browser-specific presentation."
+    },
+    {
+      "method": "POST",
+      "path": "/sharing/configurations/{configuration_id}/update-shares",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session and CSRF-protected publication of a saved recipe to active shares; dedicated machine-facing service/auth contract is deferred."
     }
   ]
 }

@@ -1,0 +1,29 @@
+{% from "modules/hfl_shares/partials/action_icon.html" import action_icon %}
+        {% for row in configurations %}
+        {% set item = row.configuration %}
+        <div class="item recipe-item{% if configuration and configuration.id == item.id %} recipe-item-active{% endif %}">
+          <div class="card-title-row">
+            <a class="wrap text-sm font-semibold text-sky-300" href="/sharing?configuration_id={{ item.id }}" data-recipe-load{% if configuration and configuration.id == item.id %} aria-current="true"{% endif %}>{{ item.name }}</a>
+            <div class="actions recipe-actions card-actions">
+              <button class="btn instant-share-button" type="button" data-instant-share
+                      {% if item.entity_template %}data-personal-recipe="{{ item.id }}"{% endif %}
+                      data-instant-url="/sharing/configurations/{{ item.id }}/instant"
+                      title="Instant share" aria-label="Instant share {{ item.name }}">{{ action_icon('instant') }}</button>
+              <a class="btn btn-soft" href="/sharing?configuration_id={{ item.id }}&duplicate=true" data-recipe-load title="Duplicate" aria-label="Duplicate {{ item.name }}">{{ action_icon('duplicate') }}</a>
+              {% if not configuration or configuration.id != item.id %}
+              <form method="post" action="/sharing/configurations/{{ item.id }}/delete"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn btn-danger" type="submit" title="Delete" aria-label="Delete {{ item.name }}">{{ action_icon('delete') }}</button></form>
+              {% endif %}
+            </div>
+          </div>
+          <p class="mt-1 text-xs text-slate-500">{{ "All sources" if all_sources_value in item.sources else item.sources|join(', ') }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ row.expiration_summary }}</p>
+          {% if item.entity_template %}<p class="pill">Entity template · choose an entity to share</p>{% elif item.entity_id %}<p class="pill">For {{ item.recipient or item.entity_name }}</p>{% endif %}
+        </div>
+        {% else %}<p class="mt-2 text-xs text-slate-500">No saved recipes yet.</p>{% endfor %}
+        {% if recipe_total_pages > 1 %}
+        <nav class="owner-pagination" aria-label="Saved recipe pages">
+          {% if recipe_page > 1 %}<a data-saved-recipes-page href="/sharing?recipe_page={{ recipe_page - 1 }}&share_page={{ share_page }}{% if configuration and configuration.id %}&configuration_id={{ configuration.id }}{% endif %}">Previous</a>{% else %}<span></span>{% endif %}
+          <span>Page {{ recipe_page }} of {{ recipe_total_pages }}</span>
+          {% if recipe_page < recipe_total_pages %}<a data-saved-recipes-page href="/sharing?recipe_page={{ recipe_page + 1 }}&share_page={{ share_page }}{% if configuration and configuration.id %}&configuration_id={{ configuration.id }}{% endif %}">Next</a>{% else %}<span></span>{% endif %}
+        </nav>
+        {% endif %}

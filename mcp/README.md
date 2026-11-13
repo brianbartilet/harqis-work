@@ -184,6 +184,22 @@ Wraps the AppSheet [API v2](https://support.google.com/appsheet/answer/10105768)
 
 ---
 
+
+### HFL Corpus (`apps/hfl_corpus/mcp.py`)
+
+The complete tool catalog is documented in [the app README](../apps/hfl_corpus/README.md).
+
+| Tool | Description |
+|------|-------------|
+| `get_hfl_corpus_entity_topic_removal_preview` | Read topic removal counts and selection hash. |
+| `delete_hfl_corpus_entity_topics` | Remove topics using the reviewed hash and stable request UUID. **Destructive: remote write.** |
+| `update_hfl_corpus_entity_consolidation_assessment` | Assess/cache an active claimed packet; may invoke a model, never commits merges. **Destructive: remote write.** |
+
+*"Preview the scope of topic removal."*
+*"Assess this claimed consolidation packet without applying merges."*
+
+Removal requires the exact preview hash and a stable UUID for retries; the API rejects stale selections.
+
 ### OANDA (`apps/oanda/mcp.py`)
 
 Wraps `apps/oanda/references/web/api/` services. Requires valid `OANDA` section in `apps_config.yaml`.

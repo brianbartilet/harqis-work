@@ -153,7 +153,8 @@ def pair_priority(pair):
                            key=lambda e: (-e.get('related_items', 0), e['id']))
     kind = pair['kind']
     signals = pair.get('signals', {})
-    return (TYPE_PRIORITY.index(kind) if kind in TYPE_PRIORITY else len(TYPE_PRIORITY),
+    return (0 if signals.get('contact') else 1 if signals.get('exact') else 2,
+            TYPE_PRIORITY.index(kind) if kind in TYPE_PRIORITY else len(TYPE_PRIORITY),
             -anchor.get('related_items', 0), anchor['id'],
             -bool(signals.get('contact')), -bool(signals.get('exact')),
             -bool(signals.get('partial')), -signals.get('fuzzy', 0),
@@ -166,7 +167,8 @@ def view(run, offset=0, limit=20):
     pending = sorted((p for p in pairs if p['state'] == 'pending'), key=pair_priority) if limit else []
     return {k: run[k] for k in ('id', 'state', 'initial', 'delivery')} | {
         'capabilities': ['atomic-anchor-groups-v1', 'anchor-packets-v1',
-                         'claimed-anchor-packets-v1', 'consolidation-batch-v2', 'bounded-executions-v1'],
+                         'claimed-anchor-packets-v1', 'consolidation-batch-v2', 'bounded-executions-v1',
+                         'bounded-assessment-v1'],
         'execution': run.get('executions', {}).get(run.get('execution')),
         'execution_report': run.get('execution_report'),
         'metrics': run.get('metrics', {}), 'checkpoint': run.get('checkpoint'),

@@ -331,7 +331,8 @@ def test_share_corpus_uses_automatic_preview_and_blocking_long_actions(
     assert "form.dataset.processing === 'true'" in response.text
     assert re.search(
         r'<button class="btn btn-soft" formaction="/sharing/configurations" '
-        r"formnovalidate>Save recipe</button>",
+        r'formnovalidate\s+data-progress-title="Saving recipe"\s+'
+        r'data-progress-message="Saving your recipe settings…">Save recipe</button>',
         response.text,
     )
     generate = response.text.index('formaction="/sharing/generate"')
@@ -770,7 +771,7 @@ def test_live_recipe_refreshes_latest_entries_using_frozen_rules(
 
     assert preview.status_code == 200
     assert "Added a live recipe update" in preview.text
-    assert "content refreshed" in preview.text
+    assert "content refreshed" not in preview.text
     assert refreshed is not None
     assert len(refreshed.snapshot.entries) == 2
     assert refreshed.snapshot.entries[1].citation == "S1"
@@ -1046,7 +1047,7 @@ def test_owner_page_paginates_recipes_and_shares_with_mobile_first_saved_list(
     assert 'aria-label="Generated share pages"' in first.text
     assert "data-generated-shares-content" in first.text
     assert "data-generated-shares-page" in first.text
-    assert "fragmentUrl.pathname = '/sharing/generated-shares';" in first.text
+    assert "'/sharing/generated-shares', 'share_page'" in first.text
     assert 'class="panel saved-recipes-panel owner-list-panel">' in first.text
     assert (
         'class="panel generated-shares-panel owner-list-panel" '
@@ -1073,6 +1074,86 @@ def test_owner_page_paginates_recipes_and_shares_with_mobile_first_saved_list(
     assert fragment.text.count('class="item generated-share-item"') == 5
     assert "Page 2 of 3" in fragment.text
     assert "social-recipe-form" not in fragment.text
+
+
+@pytest.mark.parametrize("width", [1440, 390])
+def test_owner_recipe_pagination_preserves_draft_and_panels(editor_page, sharing_corpus, width, tmp_path):
+    from playwright.sync_api import expect
+    page, client = editor_page
+    store = get_share_store()
+    recipe = None
+    for index in range(6):
+        recipe = store.save_configuration(_configuration(name=f"Recipe {index + 1}"))
+    for index in range(6):
+        store.create_share(
+            configuration_id=recipe.id, name=f"Share {index + 1}",
+            token_hash=f"pagination-{index}", pin_hash="", auth_mode="qr", allowed_email="",
+            snapshot=build_snapshot(recipe, (sharing_corpus,)), ttl_seconds=3600,
+            single_use=False, device_limit=1,
+        )
+    page.set_viewport_size({"width": width, "height": 1000})
+    page.goto("https://editing.test/sharing")
+    recipes = page.locator('.saved-recipes-panel')
+    shares = page.locator('.generated-shares-panel')
+    recipes.locator('summary').click()
+    shares.locator('summary').click()
+    page.evaluate("window.paginationSentinel = 'same document'")
+    name = page.locator('[data-social-form] input[name="name"]')
+    name.fill('Unsaved draft')
+    recipes.get_by_role('link', name='Next', exact=True).click()
+    expect(recipes).to_contain_text('Page 2 of 2')
+    expect(name).to_have_value('Unsaved draft')
+    assert page.evaluate('window.paginationSentinel') == 'same document'
+    assert recipes.evaluate('(el) => el.open')
+    assert shares.evaluate('(el) => el.open')
+    expect(shares).to_contain_text('From: Recipe 6')
+    expect(shares.get_by_role('link', name='Recipe 6').first).to_have_attribute('href', f'/sharing?configuration_id={recipe.id}')
+    expect(shares).not_to_contain_text('Recipe ID:')
+    shares.get_by_role('link', name='Next', exact=True).click()
+    expect(shares).to_contain_text('Page 2 of 2')
+    assert 'recipe_page=2' in page.url
+    recipes.get_by_role('link', name='Previous', exact=True).click()
+    expect(recipes).to_contain_text('Page 1 of 2')
+    assert 'share_page=2' in page.url
+    page.route('**/sharing/saved-recipes?**', lambda route: route.fulfill(status=500, body='failed'))
+    recipes.get_by_role('link', name='Next', exact=True).click()
+    expect(recipes.get_by_role('alert')).to_contain_text('Please try again')
+    expect(name).to_have_value('Unsaved draft')
+    assert recipes.evaluate('(el) => el.open')
+    assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
+    page.screenshot(path=str(tmp_path / f'share-pagination-{width}.png'), full_page=True)
+    page.reload()
+    assert not recipes.evaluate('(el) => el.open')
+    shares.get_by_role('link', name='Recipe 6').click()
+    expect(name).to_have_value('Recipe 6')
+    assert f'configuration_id={recipe.id}' in page.url
+
+
+def test_saved_recipes_fragment_and_deleted_recipe_metadata(authenticated_client, sharing_corpus, monkeypatch):
+    from modules.hfl_shares import router
+    store = get_share_store()
+    recipe = store.save_configuration(_configuration(name='Source recipe'))
+    store.create_share(
+        configuration_id=recipe.id, name='Published share', token_hash='recipe-metadata',
+        pin_hash='', auth_mode='qr', allowed_email='', snapshot=build_snapshot(recipe, (sharing_corpus,)),
+        ttl_seconds=3600, single_use=False, device_limit=1,
+    )
+    def no_catalog(*args, **kwargs):
+        raise AssertionError('Pagination must not load the corpus')
+    monkeypatch.setattr(router, '_sharing_catalog', no_catalog)
+    response = authenticated_client.get('/sharing/saved-recipes?recipe_page=invalid')
+    assert response.status_code == 200
+    assert 'Source recipe' in response.text
+    assert 'social-recipe-form' not in response.text
+    response = authenticated_client.get('/sharing/generated-shares')
+    assert '>Source recipe</a>' in response.text
+    assert f'href="/sharing?configuration_id={recipe.id}" data-recipe-load' in response.text
+    assert 'Recipe ID:' not in response.text
+    store.delete_configuration(recipe.id)
+    response = authenticated_client.get('/sharing/generated-shares')
+    assert 'From: Deleted recipe' in response.text
+    assert 'data-recipe-load' not in response.text
+    assert 'Recipe ID:' not in response.text
 
 
 def test_owner_share_page_uses_snapshot_free_sql_pagination(
@@ -1591,8 +1672,8 @@ def test_shared_manifesto_modal_uses_scoped_guest_and_owner_access(
 
     assert portal.status_code == 200
     assert '<span class="brand-name">HARQIS</span>' in portal.text
-    assert '<span class="brand-context">Knowledge Corpus Share</span>' in portal.text
-    assert ">HARQIS - Knowledge Corpus Share<" not in portal.text
+    assert '<span class="brand-context">Knowledge Corpus Agent</span>' in portal.text
+    assert ">HARQIS - Knowledge Corpus Agent<" not in portal.text
     assert 'data-manifesto-open' in portal.text
     assert re.search(r">\s*Manifesto\s*</button>", portal.text)
     assert 'data-manifesto-dialog aria-labelledby="shared-manifesto-title"' in portal.text
@@ -1754,7 +1835,7 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     assert "data-view-menu-toggle" in second.text
     assert 'id="shared-moments-drawer" type="checkbox"' in second.text
     assert 'for="shared-moments-drawer"' in second.text
-    assert 'aria-label="Choose shared view"' in second.text
+    assert 'aria-label="Discover shared views"' in second.text
     assert 'class="drawer-close" type="button"' in second.text
     assert "event.stopPropagation();" in second.text
     assert "if (!isCompact()) drawerState.checked = false;" in second.text
@@ -1769,9 +1850,9 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     assert "width:min(1120px,calc(100% - 48px))" in second.text
     assert ".entry-content img, .entry-content video" in second.text
     assert "A little context, chosen for you" in second.text
-    assert "moments ingested and analyzed" in second.text
+    assert "moments ingested and analyzed" not in second.text
     assert '<span class="brand-name">HARQIS</span>' in second.text
-    assert '<span class="brand-context">Knowledge Corpus Share</span>' in second.text
+    assert '<span class="brand-context">Knowledge Corpus Agent</span>' in second.text
     assert 'class="brand-logo" aria-hidden="true"' in second.text
     assert "width:min(1500px,calc(100% - 24px));" in second.text
     assert "button.textContent.trim()" in second.text
@@ -1792,7 +1873,7 @@ def test_guest_chat_is_markdown_persistent_contextual_and_session_isolated(
     assert ">Close session</button>" in second.text
     assert "Close this shared session? You may need to verify again to return." in second.text
     assert "if (!confirmed) event.preventDefault();" in second.text
-    assert "a.logout-form, .logout-form button { width:auto;" in second.text
+    assert '<button class="drawer-toggle">Close session</button>' in second.text
     assert 'class="close-icon"' not in second.text
     assert "submit.textContent = 'Thinking…'" in second.text
     assert "form.setAttribute('aria-busy', 'true')" in second.text
@@ -1884,7 +1965,7 @@ def test_answer_html_repairs_inline_bullets_before_markdown_rendering():
     assert "Explore travel history</a></li>" in rendered
 
 
-def test_guest_entries_use_literal_search_ten_item_pages_and_readable_dates(
+def test_guest_entries_use_literal_search_ten_item_pages_and_minimal_header(
     authenticated_client, monkeypatch, tmp_path
 ):
     from modules.hfl_shares import router, scope
@@ -1931,10 +2012,9 @@ def test_guest_entries_use_literal_search_ten_item_pages_and_readable_dates(
     assert "Project moment 11" in searched.text
     assert '<div class="entry-load-status" data-entry-sentinel' not in searched.text
     assert "Project moment 1</h3>" not in searched.text
-    assert re.search(
-        r"[A-Z][a-z]+ \d{2}, 2026 \d{1,2}:\d{2} [AP]M UTC",
-        first_page.text,
-    )
+    assert 'data-view-title' not in first_page.text
+    assert 'data-view-description' not in first_page.text
+    assert 'available until' not in first_page.text
     assert "[S1]" not in first_page.text
     assert "Activity entries" in first_page.text
     assert "data-wait-overlay" in first_page.text
@@ -2197,7 +2277,7 @@ def test_owner_can_preview_active_share_without_guest_verification(
     assert "previewToast?.remove()" in preview.text
     assert "Hello, Avery!" in preview.text
     assert '<span class="brand-name">HARQIS</span>' in preview.text
-    assert '<span class="brand-context">Knowledge Corpus Share</span>' in preview.text
+    assert '<span class="brand-context">Knowledge Corpus Agent</span>' in preview.text
     assert 'data-chat-form data-owner-preview' in preview.text
     assert f'action="/sharing/shares/{grant.id}/preview/chat"' in preview.text
     assert ">Ask</button>" in preview.text
@@ -2471,7 +2551,7 @@ def test_static_guest_routes_are_not_interpreted_as_capability_tokens(
     assert response.status_code == 404
     assert "cannot be opened" in response.text
     assert '<span class="brand-name">HARQIS</span>' in response.text
-    assert '<span class="brand-context">Knowledge Corpus Share</span>' in response.text
+    assert '<span class="brand-context">Knowledge Corpus Agent</span>' in response.text
 
 
 def test_malformed_capability_token_is_rejected_before_store_lookup(
@@ -3773,3 +3853,29 @@ def test_share_save_notice_centered_and_dismissible(editor_page, sharing_corpus,
     page.goto(url)
     page.get_by_role("button", name="Dismiss notification").click()
     expect(notice).to_have_count(0)
+
+
+@pytest.mark.parametrize("width", [1440, 390])
+def test_recipe_save_shows_progress_before_navigation(editor_page, sharing_corpus, width, tmp_path):
+    from playwright.sync_api import expect
+    page, client = editor_page
+    response = client.post("/sharing/configurations", data=_form(), follow_redirects=False)
+    page.set_viewport_size({"width": width, "height": 1000})
+    page.goto("https://editing.test" + response.headers["location"])
+    save = page.get_by_role("button", name="Save recipe", exact=True)
+    # Hold navigation for one submission so the immediate pending state is observable.
+    save.evaluate("button => button.form.addEventListener('submit', event => event.preventDefault(), {once:true})")
+    save.click()
+    overlay = page.locator('[data-progress-overlay]')
+    expect(overlay).to_be_visible()
+    expect(overlay).to_contain_text('Saving recipe')
+    expect(overlay).to_contain_text('Saving your recipe settings…')
+    assert save.evaluate("button => button.form.getAttribute('aria-busy')") == 'true'
+    assert save.evaluate("button => { const event = new SubmitEvent('submit', {bubbles:true, cancelable:true, submitter:button}); return !button.form.dispatchEvent(event); }")
+    page.screenshot(path=str(tmp_path / f'recipe-saving-{width}.png'))
+    page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow'))")
+    expect(overlay).not_to_be_visible()
+    assert save.evaluate("button => button.form.hasAttribute('aria-busy')") is False
+    save.click()
+    expect(page.locator('[data-success-toast]')).to_contain_text('Japan context updated.')
+    expect(overlay).not_to_be_visible()

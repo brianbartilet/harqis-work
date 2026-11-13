@@ -283,7 +283,7 @@ def test_assistant_browser_preview_and_reconnect(gateway, authenticated_client, 
                 request = route.request
                 url = urlparse(request.url)
                 if url.path == '/hfl-corpus/workspace-views':
-                    route.fulfill(json={'views': []});return
+                    route.fulfill(json={'views': [], 'active': [], 'preferences': {'manual': [], 'dynamic': False, 'revision': 0}});return
                 response = client.request(request.method, url.path + ('?' + url.query if url.query else ''),
                     content=request.post_data_buffer,
                     headers={k: v for k, v in request.headers.items() if k in {'content-type', 'x-csrf-token'}})
@@ -292,8 +292,8 @@ def test_assistant_browser_preview_and_reconnect(gateway, authenticated_client, 
             page.route('https://assistant.test/**', route_request)
             page.goto('https://assistant.test/agents')
             page.get_by_role('button', name='Select Default agent', exact=True).click()
-            page.get_by_role('button', name='Make primary assistant', exact=True).click()
-            page.get_by_role('button', name='Primary assistant', exact=True).wait_for()
+            # Primary selection is no longer an inspector action; Butler remains available.
+            assert page.get_by_role('button', name='Make primary assistant', exact=True).count() == 0
             page.click('#butler-launch')
             page.wait_for_function("document.querySelector('#butler-name').textContent==='HARQIS Butler'")
             page.fill('#butler-message', 'Prepare a release checklist')

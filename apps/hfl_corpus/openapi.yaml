@@ -4479,8 +4479,107 @@ paths:
           description: Connector unavailable or remote reader is not the canonical owner
         '422':
           description: Invalid work budget
+  /api/hfl/entities/consolidation/{run_id}/claims/{token}/assess:
+    post:
+      summary: Consolidation Assess
+      operationId: consolidation_assess_api_hfl_entities_consolidation__run_id__claims__token__assess_post
+      parameters:
+      - name: run_id
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Run Id
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+          title: Token
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/entities/types/topics/removal-preview:
+    get:
+      summary: Topic Removal Preview
+      operationId: topic_removal_preview_api_hfl_entities_types_topics_removal_preview_get
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+  /api/hfl/entities/types/topics/remove:
+    post:
+      summary: Remove Topics
+      operationId: remove_topics_api_hfl_entities_types_topics_remove_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TopicRemoval'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
 components:
   schemas:
+    TopicRemoval:
+      properties:
+        request_id:
+          type: string
+          maxLength: 36
+          minLength: 36
+          title: Request Id
+        selection_hash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          title: Selection Hash
+      type: object
+      required:
+      - request_id
+      - selection_hash
+      title: TopicRemoval
+    SyncRequest:
+      properties:
+        pages:
+          type: integer
+          maximum: 10.0
+          minimum: 1.0
+          title: Pages
+          default: 5
+        limit:
+          type: integer
+          maximum: 25.0
+          minimum: 1.0
+          title: Limit
+          default: 10
+        run_id:
+          type: string
+          maxLength: 100
+          title: Run Id
+          default: ''
+      additionalProperties: false
+      type: object
+      title: SyncRequest
     BatchKindWrite:
       properties:
         kind:

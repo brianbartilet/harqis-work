@@ -194,7 +194,7 @@ def test_gateway_browser_setup_and_conversation(gateway, authenticated_client, t
             page.screenshot(path=str(tmp_path / 'gateway-setup.png'))
             page.get_by_role('button', name='Save agent', exact=True).click()
             page.get_by_role('button', name='Select Connected agent', exact=True).click()
-            page.get_by_role('button', name='Conversation', exact=True).click()
+            page.get_by_role('tab', name='Conversation', exact=True).click()
             panel = page.get_by_role('region', name='Conversation with Connected agent', exact=True)
             panel.get_by_role('button', name='New conversation', exact=True).click()
             panel.get_by_label('Message to agent', exact=True).fill('Prepare a report')
@@ -214,7 +214,7 @@ def test_gateway_browser_setup_and_conversation(gateway, authenticated_client, t
             count = len(gateway[1])
             page.reload()
             page.get_by_role('button', name='Select Connected agent', exact=True).click()
-            page.get_by_role('button', name='Conversation', exact=True).click()
+            page.get_by_role('tab', name='Conversation', exact=True).click()
             panel.get_by_text('Stopped after preparing the outline.', exact=True).wait_for()
             assert len(gateway[1]) == count
             panel.get_by_role('button', name='Connection settings', exact=True).click()
