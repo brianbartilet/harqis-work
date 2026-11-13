@@ -31,4 +31,32 @@
   $('butler-stop').onclick=()=>control('stop');$('butler-steer').onclick=()=>control('steer');
   $('butler-preview-close').onclick=()=>$('butler-preview').close();
   $('butler-preview-form').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{await api('/conversations/'+conversation+'/proposals',{turn_id:previewTurn.id,title:$('butler-action-title').value,expected_outcome:$('butler-action-outcome').value});$('butler-preview').close();await refresh();}catch(e){$('butler-preview-error').textContent=e.message;}finally{b.disabled=false;}};
+  // Shared schedule settings live with Butler, independent of the Fleet React app.
+  const briefings=$('butler-briefings'), briefingFields=$('butler-briefings-fields'), briefingSave=$('butler-briefings-save');
+  let briefingValue=null, briefingRevision=0;
+  function briefingDay(){ $('butler-briefings-day').hidden=$('butler-briefings-cadence').value!=='weekly'; }
+  async function schedule(body){
+    const response=await fetch('/agents/api/butler/schedule',{method:body===undefined?'GET':'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},...(body===undefined?{}:{body:JSON.stringify(body)})});
+    const value=await response.json();if(!response.ok)throw Error(typeof value.detail==='string'?value.detail:'Could not save or load the briefing schedule.');return value;
+  }
+  $('butler-briefings-open').onclick=async()=>{
+    const revision=++briefingRevision;briefingValue=null;briefingFields.disabled=true;briefingSave.disabled=true;
+    $('butler-briefings-error').textContent='';$('butler-briefings-loading').hidden=false;briefings.showModal();
+    try{const value=await schedule();if(revision!==briefingRevision||!briefings.open)return;briefingValue=value;
+      for(const key of ['cadence','hour','weekday','timezone'])$('butler-briefings-'+key).value=value[key]??(key==='weekday'?0:'');
+      briefingDay();briefingFields.disabled=false;briefingSave.disabled=false;
+    }catch(e){if(revision===briefingRevision)$('butler-briefings-error').textContent=e.message;}
+    finally{if(revision===briefingRevision)$('butler-briefings-loading').hidden=true;}
+  };
+  $('butler-briefings-cadence').onchange=briefingDay;
+  $('butler-briefings-close').onclick=()=>briefings.close();
+  briefings.addEventListener('close',()=>{briefingRevision++;$('butler-briefings-open').focus();});
+  $('butler-briefings-form').onsubmit=async event=>{
+    event.preventDefault();if(!briefingValue||briefingSave.disabled)return;
+    const revision=briefingRevision,body={...briefingValue,cadence:$('butler-briefings-cadence').value,hour:Number($('butler-briefings-hour').value),weekday:Number($('butler-briefings-weekday').value),timezone:$('butler-briefings-timezone').value};
+    briefingFields.disabled=true;briefingSave.disabled=true;$('butler-briefings-error').textContent='';
+    try{await schedule(body);if(revision===briefingRevision)briefings.close();}
+    catch(e){if(revision===briefingRevision)$('butler-briefings-error').textContent=e.message;}
+    finally{if(revision===briefingRevision){briefingFields.disabled=false;briefingSave.disabled=false;}}
+  };
 })();

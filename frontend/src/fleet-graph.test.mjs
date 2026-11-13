@@ -33,3 +33,13 @@ test('orb radii mirror Activity Graph and shrink when connections are filtered',
   assert.equal(narrowed.nodes.find(n=>n.id==='agent:b').radius,10);
   assert.equal(data.nodes[0].radius,undefined,'source records stay unchanged');
 });
+
+
+test('fleet outputs use compact activity radii at both density thresholds',()=>{
+  assert.equal(filterFleet(data,{types:['file']}).nodes.find(n=>n.id==='report').radius,7);
+  const dense={agents:data.agents,nodes:[data.nodes[0],...Array.from({length:35},(_,i)=>({id:'hud:'+i,kind:'hud',agent_ids:['a'],label:'HUD '+i}))],edges:Array.from({length:35},(_,i)=>({source:'agent:a',target:'hud:'+i,relation:'monitors'}))};
+  const result=filterFleet(dense,{types:['hud']});
+  assert.equal(result.nodes.find(n=>n.kind==='hud').radius,4.5);
+  assert.equal(result.nodes.find(n=>n.kind==='agent').radius,4+4*Math.log2(36));
+  assert.equal(filterFleet(dense,{types:[]}).nodes[0].radius,10);
+});

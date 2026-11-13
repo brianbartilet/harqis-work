@@ -251,24 +251,30 @@ def test_fleet_browser(fleet, authenticated_client, tmp_path):
         page.on('pageerror',lambda e:errors.append(str(e)))
         def route(r):
             u=urlparse(r.request.url)
-            if u.path=='/hfl-corpus/workspace-views':
-                r.fulfill(content_type='application/json',body=json.dumps({'views':[{'id':'work','name':'Work'}]}));return
             response=client.request(r.request.method,u.path+('?' + u.query if u.query else ''),content=r.request.post_data_buffer,
                                     headers={k:v for k,v in r.request.headers.items() if k.lower() in {'content-type','x-csrf-token'}})
             r.fulfill(status=response.status_code,content_type=response.headers.get('content-type','text/html'),body=response.content)
         page.route('https://fleet.test/**', route)
         page.goto('https://fleet.test/agents')
+        page.locator('.fleet-detail-empty').wait_for()
+        assert page.locator('.fleet-hud-heading h2').inner_text()=='HARQIS Butler'
+        assert page.locator('.fleet-workspace.fleet-has-selection').count()==0
+        page.wait_for_function("[...document.querySelectorAll('.fleet-graph-avatars .agent-avatar')].length>1 && [...document.querySelectorAll('.fleet-graph-avatars .agent-avatar')].every(el=>Number(el.style.opacity)===1)")
         page.get_by_role('button',name='+ Add agent').click()
         page.get_by_label('Name',exact=True).fill('Research assistant')
         page.get_by_label('Description',exact=True).fill('Investigates sources and writes evidence-backed reports.')
         page.get_by_role('button',name='Save agent',exact=True).click()
         page.get_by_role('button',name='Select Research assistant',exact=True).wait_for()
         page.get_by_role('button',name='Select Research assistant',exact=True).click()
-        page.get_by_role('button',name='Deactivate',exact=True).click()
-        page.locator('.fleet-filter-menu > summary').click()
-        page.get_by_label('Show deactivated',exact=True).check()
-        page.locator('.fleet-filter-menu > summary').click()
+        assert page.locator('.fleet-hud-heading h2').inner_text()=='Research assistant'
+        page.locator('.fleet-map canvas').click(position={'x':35,'y':35})
+        page.locator('.fleet-detail-empty').wait_for()
+        assert page.locator('.fleet-hud-heading h2').inner_text()=='HARQIS Butler'
         page.get_by_role('button',name='Select Research assistant',exact=True).click()
+        page.get_by_role('button',name='Deactivate',exact=True).click()
+        page.get_by_role('button',name='Filters',exact=True).click()
+        page.get_by_label('Show deactivated',exact=True).check()
+        page.get_by_role('dialog',name='Filters',exact=True).get_by_role('button',name='Close',exact=True).click()
         assert page.get_by_role('button',name='Open session',exact=True).is_disabled()
         page.get_by_role('button',name='Activate',exact=True).click()
         page.wait_for_timeout(1800)
@@ -281,5 +287,208 @@ def test_fleet_browser(fleet, authenticated_client, tmp_path):
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.get_by_role('button',name='✧ HARQIS Butler',exact=True).click()
         page.get_by_label('Ask about your work or describe an action to prepare').wait_for()
+        page.goto('https://fleet.test/agents?agent=butler')
+        page.locator('.fleet-workspace.fleet-has-selection').wait_for()
+        assert page.locator('.fleet-inspector h2').inner_text()=='HARQIS Butler'
+        assert page.locator('.fleet-hud-heading h2').inner_text()=='HARQIS Butler'
+        page.locator('.fleet-output-list button').first.click()
+        assert page.locator('.fleet-hud-heading h2').inner_text()=='HARQIS Butler'
         assert not errors, errors
+        browser.close()
+
+
+@pytest.mark.parametrize('width,height', [(1440,1000),(390,844)])
+def test_fleet_activity_labels_and_solid_hud_links(fleet, authenticated_client, tmp_path, width, height):
+    playwright=pytest.importorskip('playwright.sync_api')
+    fleet.initialize()
+    errors=[]
+    with playwright.sync_playwright() as p:
+        browser=p.chromium.launch(channel='chrome',headless=True)
+        page=browser.new_page(viewport={'width':width,'height':height})
+        page.on('pageerror',lambda e:errors.append(str(e)))
+        page.add_init_script("""(() => {
+          window.labelPaints=[];window.dashedLinks=0;
+          const text=CanvasRenderingContext2D.prototype.fillText,dash=CanvasRenderingContext2D.prototype.setLineDash;
+          CanvasRenderingContext2D.prototype.fillText=function(label,x,y,...rest){
+            const m=this.getTransform();window.labelPaints.push({label,font:this.font,alpha:this.globalAlpha,x:m.a*x+m.e,y:m.d*y+m.f});
+            if(window.labelPaints.length>3000)window.labelPaints.splice(0,1000);
+            return text.call(this,label,x,y,...rest);
+          };
+          CanvasRenderingContext2D.prototype.setLineDash=function(values){if(values.some(v=>v>0))window.dashedLinks++;return dash.call(this,values);};
+        })();""")
+        def route(r):
+            u=urlparse(r.request.url)
+            response=authenticated_client.request(r.request.method,u.path+('?' + u.query if u.query else ''),content=r.request.post_data_buffer,
+                headers={k:v for k,v in r.request.headers.items() if k.lower() in {'content-type','x-csrf-token'}})
+            r.fulfill(status=response.status_code,content_type=response.headers.get('content-type','text/html'),body=response.content)
+        page.route('https://fleet.test/**',route)
+        page.goto('https://fleet.test/agents')
+        page.locator('.fleet-map canvas').wait_for()
+        page.wait_for_function("window.labelPaints.some(p=>p.label.includes('Butler'))")
+        page.wait_for_timeout(2200)
+        assert page.evaluate('window.dashedLinks')==0
+        assert page.evaluate("window.labelPaints.some(p=>p.font.startsWith('500 '))")
+        assert page.evaluate("new Set(window.labelPaints.map(p=>p.label)).size>1")
+        assert '?v=' in page.locator('script[src*="agent-fleet.js"]').get_attribute('src')
+        assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+        page.screenshot(path=str(tmp_path/f'fleet-labels-{width}.png'),full_page=True)
+        # The default view is unselected; verify passive animation repaints labels.
+        page.locator('.fleet-detail-empty').wait_for()
+        assert page.locator('.fleet-list .agent-avatar').count()==page.locator('.fleet-list button').count()
+        assert page.locator('.fleet-list .agent-avatar[tabindex]').count()==0
+        assert page.locator('.fleet-detail-empty h2').evaluate("el=>getComputedStyle(el).fontSize")=='12px'
+        page.locator('.fleet-inspector').screenshot(path=str(tmp_path/f'fleet-sidebar-{width}.png'))
+        page.get_by_role('button',name='Animation',exact=True).click()
+        page.get_by_role('button',name='Drift',exact=True).click()
+        page.get_by_role('button',name='Animation',exact=True).click()
+        page.mouse.move(0,0)
+        page.wait_for_timeout(600)
+        page.evaluate('window.labelPaints=[]')
+        page.wait_for_timeout(1100)
+        assert page.evaluate("new Set(window.labelPaints.filter(p=>p.label.includes('Butler')).map(p=>p.x.toFixed(2)+':'+p.y.toFixed(2))).size>5")
+        # Switching off must ease back to rest, even after the force engine cooled.
+        page.get_by_role('button',name='Animation',exact=True).click()
+        page.get_by_role('button',name='Off',exact=True).click()
+        page.get_by_role('button',name='Animation',exact=True).click()
+        page.wait_for_timeout(1800)
+        page.evaluate('window.labelPaints=[]')
+        page.wait_for_timeout(500)
+        assert page.evaluate("(() => {const points=window.labelPaints.filter(p=>p.label.includes('Butler'));return points.length<2||Math.max(...points.map(p=>p.x))-Math.min(...points.map(p=>p.x))<.2;})()")
+        assert not errors,errors
+        browser.close()
+
+
+@pytest.mark.parametrize('width,height', [(1440,1000),(390,844)])
+def test_fleet_inspector_controls_and_hud_navigation(fleet, authenticated_client, tmp_path, width, height):
+    playwright=pytest.importorskip('playwright.sync_api')
+    fleet.initialize()
+    graph=authenticated_client.get('/agents/api/graph').json()
+    anchor=next(n for n in graph['nodes'] if n['id']=='agent:butler')
+    records=[dict(id='hud:'+name,kind='hud',label=name.title()+' HUD',agent_ids=['butler'],color='#e9c96c') for name in ['top','bottom','hidden']]
+    records += [dict(id='action:recorded',kind='action',label='Recorded action',agent_ids=['butler'],color='#ff99aa',url='/hfl-corpus/actions?integration_agent=item-recorded')]
+    graph['nodes']=[anchor,*records]
+    graph['edges']=[dict(source='agent:butler',target=n['id'],relation='monitors' if n['kind']=='hud' else 'produced') for n in records]
+    hud={'layout':{'widgets':[dict(id=name,operation=name,size='2x4',hidden=name=='hidden',animation='static',workspace_ids=[]) for name in ['top','bottom','hidden']]},'items':{},'agents':{},'spaces':{'views':[]}}
+    errors=[]
+    with playwright.sync_playwright() as p:
+        browser=p.chromium.launch(channel='chrome',headless=True)
+        page=browser.new_page(viewport={'width':width,'height':height},reduced_motion='reduce')
+        page.on('pageerror',lambda error:errors.append(str(error)))
+        def route(r):
+            u=urlparse(r.request.url)
+            if u.path in ['/agents/api/graph','/agents/hud/data']:
+                r.fulfill(content_type='application/json',body=json.dumps(graph if u.path.endswith('/graph') else hud));return
+            response=authenticated_client.request(r.request.method,u.path+('?' + u.query if u.query else ''),content=r.request.post_data_buffer,
+                headers={k:v for k,v in r.request.headers.items() if k.lower() in {'content-type','x-csrf-token'}})
+            r.fulfill(status=response.status_code,content_type=response.headers.get('content-type','text/html'),body=response.content)
+        page.route('https://fleet.test/**',route)
+        page.goto('https://fleet.test/agents?agent=butler')
+        controls=page.get_by_role('group',name='Agent controls')
+        controls.wait_for()
+        assert controls.get_by_role('button',name='Deactivate',exact=True).is_disabled()
+        for label in ['Open session','Chat with HARQIS Butler','Edit','Deactivate']:
+            assert controls.get_by_role('button',name=label,exact=True).locator('svg').count()==1
+            assert controls.get_by_role('button',name=label,exact=True).locator('svg').evaluate('el=>el.getBoundingClientRect().width')==18
+        assert page.get_by_role('button',name='Primary assistant',exact=True).count()==0
+        assert page.get_by_role('button',name='Make primary assistant',exact=True).count()==0
+        assert page.get_by_label('Agent list',exact=True).count()==0
+        tabs=page.get_by_role('tablist',name='Agent details')
+        tabs.get_by_role('tab',name='Outputs').focus()
+        page.keyboard.press('ArrowRight')
+        assert tabs.get_by_role('tab',name='Profile',exact=True).get_attribute('aria-selected')=='true'
+        page.keyboard.press('ArrowRight')
+        assert tabs.get_by_role('tab',name='Conversation',exact=True).get_attribute('aria-selected')=='true'
+        expand=page.get_by_role('button',name='Expand',exact=True)
+        expand.click()
+        page.locator('.fleet-conversation-expanded').wait_for()
+        page.keyboard.press('Escape')
+        assert expand.evaluate('el=>el===document.activeElement')
+        positions=tabs.get_by_role('tab').evaluate_all('els=>els.map(el=>el.getBoundingClientRect().top)')
+        assert len(set(positions))==1
+        assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+        page.locator('.fleet-inspector').evaluate('el=>el.scrollTop=300')
+        page.screenshot(path=str(tmp_path/f'inspector-{width}.png'),full_page=True)
+        tabs.get_by_role('tab',name='Outputs').click()
+        page.locator('.fleet-output-list button').filter(has_text='Bottom HUD').click()
+        assert page.get_by_label('Agent list',exact=True).count()==0
+        row=page.locator('.fleet-relationship-list').get_by_role('button',name='Select HARQIS Butler',exact=True)
+        assert row.locator('.agent-avatar').count()==1
+        page.get_by_role('button',name='View',exact=True).click()
+        card=page.locator('.fleet-hud-card[data-id="hud:bottom"]')
+        assert card.evaluate('el=>el===document.activeElement')
+        assert page.locator('.fleet-hud-panel').evaluate('el=>el.scrollTop>0')
+        panel_bounds=page.locator('.fleet-hud-panel').bounding_box()
+        heading_bounds=page.locator('.fleet-hud-heading').bounding_box()
+        assert panel_bounds['y']<=heading_bounds['y']<=panel_bounds['y']+12
+        page.locator('.fleet-hud-panel').screenshot(path=str(tmp_path/f'hud-scrolled-{width}.png'))
+        row.click()
+        page.locator('.fleet-output-list button').filter(has_text='Hidden HUD').click()
+        page.get_by_role('button',name='View',exact=True).click()
+        page.get_by_text('Not available in the current HUD view',exact=True).wait_for()
+        assert page.locator('.fleet-hud-card[data-id="hud:hidden"]').count()==0
+        page.locator('.fleet-relationship-list button').click()
+        page.locator('.fleet-output-list button').filter(has_text='Recorded action').click()
+        link=page.get_by_role('link',name='Open action',exact=True)
+        assert 'edit=item-recorded' in link.get_attribute('href')
+        assert 'edit_kind=actionable' in link.get_attribute('href')
+        assert 'integration_agent' not in link.get_attribute('href')
+        assert not errors,errors
+        browser.close()
+
+
+@pytest.mark.parametrize('path,width,height',[('/agents',1440,1000),('/home',1440,1000),('/home',390,844)])
+def test_briefings_available_from_shared_butler(fleet, authenticated_client, tmp_path, path, width, height):
+    playwright=pytest.importorskip('playwright.sync_api')
+    fleet.initialize()
+    schedule={'cadence':'off','hour':9,'weekday':0,'timezone':'Asia/Singapore'}
+    saved=[]
+    errors=[]
+    with playwright.sync_playwright() as p:
+        browser=p.chromium.launch(channel='chrome',headless=True)
+        page=browser.new_page(viewport={'width':width,'height':height})
+        page.on('pageerror',lambda error:errors.append(str(error)))
+        def route(r):
+            u=urlparse(r.request.url)
+            if u.path=='/agents/api/butler/schedule':
+                if r.request.method=='POST':
+                    assert r.request.headers.get('x-csrf-token')
+                    saved.append(r.request.post_data_json)
+                    if len(saved)==1:
+                        r.fulfill(status=503,content_type='application/json',body=json.dumps({'detail':'Try again'}));return
+                    schedule.update(saved[-1])
+                r.fulfill(content_type='application/json',body=json.dumps(schedule));return
+            response=authenticated_client.request(r.request.method,u.path+('?' + u.query if u.query else ''),content=r.request.post_data_buffer,
+                headers={k:v for k,v in r.request.headers.items() if k.lower() in {'content-type','x-csrf-token'}})
+            r.fulfill(status=response.status_code,content_type=response.headers.get('content-type','text/html'),body=response.content)
+        page.route('https://fleet.test/**',route)
+        page.goto('https://fleet.test'+path)
+        assert page.locator('.fleet-toolbar').get_by_role('button',name='Briefings',exact=True).count()==0
+        page.locator('#butler-launch').click()
+        trigger=page.get_by_role('button',name='Automatic briefings',exact=True)
+        assert trigger.locator('svg').count()==1
+        trigger.click()
+        assert not errors,errors
+        page.screenshot(path=str(tmp_path/'briefings-open.png'),full_page=True)
+        dialog=page.get_by_role('dialog',name='Automatic briefings',exact=True)
+        assert dialog.count()==1,page.locator('#butler-briefings').evaluate('el=>({open:el.open,html:el.outerHTML})')
+        dialog.get_by_label('Frequency',exact=True).select_option('weekly')
+        dialog.get_by_label('Day',exact=True).select_option('4')
+        dialog.get_by_label('Hour (0–23)',exact=True).fill('15')
+        bounds=dialog.bounding_box()
+        assert abs(bounds['x']+bounds['width']/2-width/2)<2
+        assert abs(bounds['y']+bounds['height']/2-height/2)<2
+        page.screenshot(path=str(tmp_path/'briefings.png'),full_page=True)
+        dialog.get_by_role('button',name='Save schedule',exact=True).click()
+        dialog.get_by_text('Try again',exact=True).wait_for()
+        dialog.get_by_role('button',name='Save schedule',exact=True).click()
+        dialog.wait_for(state='hidden')
+        assert trigger.evaluate('el=>el===document.activeElement')
+        assert schedule=={'cadence':'weekly','hour':15,'weekday':4,'timezone':'Asia/Singapore'}
+        trigger.click()
+        page.wait_for_function("document.getElementById('butler-briefings-cadence').value==='weekly' && !document.getElementById('butler-briefings-fields').disabled")
+        page.keyboard.press('Escape')
+        dialog.wait_for(state='hidden')
+        assert page.locator('#butler-panel').is_visible()
+        assert trigger.evaluate('el=>el===document.activeElement')
+        assert not errors,errors
         browser.close()

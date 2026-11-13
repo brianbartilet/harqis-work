@@ -652,6 +652,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     nodeActions=[];
     selected=id;updateFullscreen();const n=nodes.find(n=>n.id===id),near=connected(id);
     highlight(id);
+    $('legend').closest('.kg-legend').hidden=!!n;
     $('detail').replaceChildren();$('detail').classList.toggle('kg-detail-empty',!n);
     const heading=document.createElement('h2'),description=document.createElement('p');
     const eyebrow=document.createElement('span');eyebrow.className='kg-eyebrow';eyebrow.textContent=n?kindLabel(n.kind):window.HflIdeas?.maps.current?'Your next big idea starts here':'Your knowledge, connected';$('detail').append(eyebrow);

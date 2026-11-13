@@ -164,7 +164,7 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 
 .fleet-workspace.fleet-has-hud:has(.fleet-hud-panel[data-expanded=true]){--hud-columns:2}
 .fleet-shell .fleet-hud-expand{display:grid;place-items:center;flex:none;margin-left:auto;width:28px;height:28px;padding:4px;background:transparent}
-.fleet-hud-heading{align-items:center;position:sticky;left:0}
+.fleet-hud-heading{align-items:center;position:sticky;top:0;left:0;z-index:10;background:#081425;box-shadow:0 -10px 0 #081425,0 6px 0 #081425}
 
 .fleet-fullscreen .fleet-workspace.fleet-has-hud:not(.fleet-has-selection){grid-template-columns:calc(var(--hud-columns)*var(--hud-unit) + (var(--hud-columns) - 1)*12px + 21px + var(--hud-scrollbar,0px)) minmax(0,1fr);grid-template-rows:minmax(0,1fr)}
 @media(max-width:900px){.fleet-fullscreen .fleet-workspace.fleet-has-hud:not(.fleet-has-selection){grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(130px,34%) minmax(180px,1fr)}}
@@ -193,3 +193,69 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 .fleet-connection p {line-height:1.5;}
 .fleet-tabs {flex-wrap:wrap;}
 @media(max-width:600px){.fleet-conversation-expanded{inset:8px;padding:14px;}.fleet-conversation-expanded .fleet-conversation-messages{min-height:120px;}}
+
+/* Activity graph inspector typography and compact rows, with native agent avatars. */
+.fleet-inspector .fleet-detail-empty{padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid #293d55}
+.fleet-inspector .fleet-detail-empty h2{margin:0 0 12px;color:#8fc4d8;font-size:12px;font-weight:500;line-height:1.5;letter-spacing:normal}
+.fleet-inspector .fleet-detail-empty p{margin:0;color:#8a9eb8;font-size:12px;font-weight:400;line-height:1.6}
+.fleet-inspector .fleet-list-title{margin:10px 0 0;color:#91a9c3;font-size:12px;font-weight:400;line-height:1.5;letter-spacing:normal;text-transform:none}
+.fleet-inspector .fleet-list{display:flex;flex-direction:column;gap:0;margin-top:8px}
+.fleet-inspector .fleet-list button{display:grid;grid-template-columns:24px minmax(0,1fr) auto;align-items:center;gap:9px;min-height:36px;padding:6px 4px;border:1px solid transparent;border-bottom-color:#21354a55;border-radius:0;background:transparent;line-height:1.35;font-size:12px;font-weight:400;text-align:left}
+.fleet-inspector .fleet-list button:hover{background:#223650}
+.fleet-inspector .fleet-list-name{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;font-size:12px;font-weight:400}
+.fleet-inspector .fleet-list small{white-space:nowrap;color:#7e9ab6;font-size:12px;font-weight:400;line-height:1.5}
+.fleet-list-avatar{display:flex;width:24px;height:24px;align-items:center;justify-content:center;pointer-events:none}
+.fleet-list-avatar .agent-avatar{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;border-radius:50%;overflow:hidden;background:var(--agent-color);color:#10263c;font-size:9px;line-height:1;font-weight:500}
+.fleet-list-avatar .agent-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit}
+
+/* Selected-node inspector: compact controls and one accessible tab strip. */
+.fleet-inspector>h2{font-size:18px;font-weight:500;line-height:1.45;margin:8px 0 12px}
+.fleet-inspector>p,.fleet-agent-panel p{font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+.fleet-inspector .fleet-agent-toolbar{gap:6px;margin:12px 0 18px}
+.fleet-shell button.fleet-inspector-icon{display:inline-flex;align-items:center;justify-content:center;flex:none;width:34px;height:34px;padding:7px;border-radius:8px}
+.fleet-inspector-tabs{display:flex;gap:0;border-bottom:1px solid #33465f;margin:0 0 14px;min-width:0}
+.fleet-shell .fleet-inspector-tabs button{display:flex;align-items:center;justify-content:center;gap:4px;flex:1;min-width:0;padding:10px 3px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:#91a9c3;font-size:11px;font-weight:400;white-space:nowrap}
+.fleet-shell .fleet-inspector-tabs button:hover{background:#20334a;color:#dbe7f5}
+.fleet-shell .fleet-inspector-tabs button[aria-selected=true]{border-bottom-color:#67e8f9;color:#cffafe;background:#164e6326}
+.fleet-tab-count{font-size:10px;padding:1px 4px;background:#21334a;border-radius:8px}
+.fleet-agent-panel{min-width:0;outline-offset:3px}
+.fleet-agent-panel>h3:first-child{margin-top:0}
+.fleet-inspector .fleet-relationship-list{margin:0}
+.fleet-inspector .fleet-history>small{margin:3px 0 12px 37px;font-size:11px;color:#7894b1}
+.fleet-shell .fleet-record-link{display:flex;align-items:center;justify-content:center;width:100%;box-sizing:border-box;min-height:40px;padding:10px 14px;margin:14px 0 18px;border:1px solid #3b82f6;border-radius:8px;background:#2563eb;color:#fff;font-size:12px;font-weight:400;text-decoration:none;cursor:pointer}
+.fleet-shell .fleet-record-link:hover{background:#1d4ed8}
+.fleet-hud-card:focus{outline:2px solid #67e8f9;outline-offset:-3px}
+
+.fleet-inspector-icon svg{flex:none;width:18px;height:18px}
+
+.fleet-agent-overview{padding-bottom:18px;margin-bottom:20px;border-bottom:1px solid #293d55}
+.fleet-agent-overview>.fleet-list-title{margin-top:0}
+
+.fleet-shell .fleet-connect-icon{display:inline-flex;align-items:center;justify-content:center;flex:none;width:34px;height:34px;padding:7px;border:1px solid #334155;border-radius:8px;background:#0f1c2e;color:#dbe7f5;text-decoration:none}
+.fleet-shell .fleet-connect-icon:hover{background:#20334a;border-color:#64748b}
+
+.fleet-shell dialog.fleet-agent-editor{position:fixed;inset:0;margin:auto;max-height:90dvh;overflow:auto}
+
+/* Give output summaries and cards room in the agent inspector. */
+.fleet-agent-panel>.fleet-output-list{margin-top:16px;gap:10px;padding-bottom:8px}
+.fleet-agent-panel>.fleet-output-list>button{padding:12px 14px;gap:7px}
+
+.fleet-shell dialog.fleet-defaults-dialog{position:fixed;inset:0;margin:auto;max-height:90dvh;overflow:auto}
+.fleet-defaults-dialog .fleet-defaults-actions{display:flex;justify-content:flex-end;gap:10px}
+@media(min-width:601px){.fleet-defaults-dialog .fleet-form .fleet-columns{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+@media(max-width:600px){.fleet-defaults-dialog .fleet-form .fleet-columns{grid-template-columns:minmax(0,1fr)}}
+
+.fleet-defaults-dialog .fleet-number-control{position:relative;display:block}
+.fleet-defaults-dialog .fleet-number-control input{appearance:textfield;-moz-appearance:textfield;padding-right:36px}
+.fleet-defaults-dialog .fleet-number-control input::-webkit-inner-spin-button,.fleet-defaults-dialog .fleet-number-control input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.fleet-defaults-dialog .fleet-number-steppers{position:absolute;right:10px;top:50%;transform:translateY(-50%);display:grid;width:18px}
+.fleet-shell .fleet-defaults-dialog .fleet-number-steppers button{display:flex;align-items:center;justify-content:center;width:18px;height:16px;padding:0;border:0;border-radius:3px;background:transparent;color:#67e8f9}
+.fleet-defaults-dialog .fleet-number-steppers svg{width:18px;height:18px;pointer-events:none}
+.fleet-shell .fleet-defaults-dialog .fleet-number-steppers button:hover{background:#20334a}
+
+/* Keep agent actions beside the view controls, with a distinct group boundary. */
+.fleet-toolbar .fleet-toolbar-actions{margin-left:0;padding-left:12px;border-left:1px solid #334155;gap:8px}
+.fleet-toolbar .fleet-connector-link{display:inline-flex;align-items:center;justify-content:center;align-self:stretch;border:1px solid #334155;border-radius:8px;background:#0f1c2e;color:#dbe7f5;font:inherit;font-size:13px;padding:9px 12px;text-decoration:none;white-space:nowrap}
+.fleet-toolbar .fleet-connector-link:hover{background:#20334a;border-color:#64748b}
+@media(max-width:1500px) and (min-width:901px){.fleet-toolbar .fleet-connector-link{font-size:11px;padding-left:8px;padding-right:8px}}
+@media(max-width:900px){.fleet-toolbar .fleet-toolbar-actions{padding-left:0;padding-top:8px;border-left:0;border-top:1px solid #334155}.fleet-toolbar .fleet-connector-link{font-size:11px}}

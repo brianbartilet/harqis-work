@@ -1,0 +1,15 @@
+<dialog id="butler-briefings" aria-labelledby="butler-briefings-title">
+  <header><h2 id="butler-briefings-title">Automatic briefings</h2><button type="button" id="butler-briefings-close" aria-label="Close automatic briefings">&#10005;</button></header>
+  <form id="butler-briefings-form">
+    <p>Read-only briefings appear in Butler chat. The existing Hermes worker dispatches them on its next sweep after the selected hour. Missed days are skipped.</p>
+    <p id="butler-briefings-loading" role="status">Loading schedule...</p>
+    <fieldset id="butler-briefings-fields" disabled>
+      <div class="butler-briefing-field"><label for="butler-briefings-cadence">Frequency</label><select id="butler-briefings-cadence" name="cadence"><option value="off">Off</option><option value="daily">Daily</option><option value="weekly">Weekly</option></select></div>
+      <label>Hour (0–23)<input id="butler-briefings-hour" name="hour" type="number" min="0" max="23" step="1" required></label>
+      <div class="butler-briefing-field" id="butler-briefings-day" hidden><label for="butler-briefings-weekday">Day</label><select id="butler-briefings-weekday" name="weekday">{% for day in ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] %}<option value="{{ loop.index0 }}">{{ day }}</option>{% endfor %}</select></div>
+      <label>Timezone<input id="butler-briefings-timezone" name="timezone" required></label>
+    </fieldset>
+    <p id="butler-briefings-error" role="alert"></p>
+    <button type="submit" id="butler-briefings-save" disabled>Save schedule</button>
+  </form>
+</dialog>

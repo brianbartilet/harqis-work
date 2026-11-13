@@ -1,4 +1,6 @@
 import {connectionRadius} from './graph-sizing.mjs';
+// Fleet outputs use Activity's compact entry orbs; agent hubs remain degree-sized.
+export const activityKind=kind=>({agent:'sources',subagent:'people',hud:'tools',configuration:'tools',workflow:'tools',trigger:'tools',task:'actions',action:'actions',idea:'ideas'}[kind]||'entries');
 // Agent anchors survive object filters; a matching output brings its producer into view.
 export function filterFleet(data,{query='',spaces=[],types=[],since='',until='',inactive=false,service='',demo=true}={}) {
   const q=query.trim().toLowerCase(), enabled=new Set(types), allowedAgents=new Map(data.agents.filter(a=>(inactive||a.active)&&(!service||a.runtime===service)&&(demo||!a.mock)).map(a=>[a.id,a]));
@@ -12,5 +14,5 @@ export function filterFleet(data,{query='',spaces=[],types=[],since='',until='',
   const links=data.edges.filter(e=>ids.has(e.source)&&ids.has(e.target));
   const degree=new Map(nodes.map(n=>[n.id,0]));
   for(const edge of links){degree.set(edge.source,degree.get(edge.source)+1);degree.set(edge.target,degree.get(edge.target)+1);}
-  return {nodes:nodes.map(n=>({...n,visibleDegree:degree.get(n.id),radius:connectionRadius(n.kind,degree.get(n.id),nodes.length)})),links};
+  return {nodes:nodes.map(n=>({...n,visibleDegree:degree.get(n.id),radius:connectionRadius(['agent','subagent'].includes(n.kind)?activityKind(n.kind):'entries',degree.get(n.id),nodes.length)})),links};
 }
