@@ -286,6 +286,7 @@ def test_fleet_browser(fleet, authenticated_client, tmp_path):
         page.screenshot(path=str(tmp_path/'fleet-mobile.png'),full_page=True)
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.get_by_role('button',name='✧ HARQIS Butler',exact=True).click()
+        page.get_by_role('tab',name='Conversations',exact=True).click()
         page.get_by_label('Ask about your work or describe an action to prepare').wait_for()
         page.goto('https://fleet.test/agents?agent=butler')
         page.locator('.fleet-workspace.fleet-has-selection').wait_for()

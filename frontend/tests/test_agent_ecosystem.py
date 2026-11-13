@@ -162,12 +162,9 @@ def test_ecosystem_browser(fleet, authenticated_client, tmp_path, width, height)
 
             page.get_by_label('Search agents and outputs').fill('')
             page.get_by_role('button',name='Filters',exact=True).click()
-            page.get_by_label('Show mock data',exact=True).uncheck()
+            assert page.get_by_label('Show mock data',exact=True).count()==0
             page.get_by_role('dialog',name='Filters',exact=True).get_by_role('button',name='Close',exact=True).click()
-            assert page.get_by_role('button',name='Select Ada · Senior developer',exact=True).count()==0
-            page.get_by_role('button',name='Filters',exact=True).click()
-            page.get_by_label('Show mock data',exact=True).check()
-            page.get_by_role('dialog',name='Filters',exact=True).get_by_role('button',name='Close',exact=True).click()
+            assert page.get_by_role('button',name='Select Ada · Senior developer',exact=True).count()==1
             page.locator('.fleet-spaces > details > summary').click()
             if width <= 900:
                 assert page.locator('.workspace-menu-panel').bounding_box()['y'] >= page.locator('.fleet-spaces > details > summary').bounding_box()['y'] + page.locator('.fleet-spaces > details > summary').bounding_box()['height']
@@ -366,7 +363,6 @@ def test_ecosystem_browser(fleet, authenticated_client, tmp_path, width, height)
             page.get_by_role('button',name='Filters',exact=True).click()
             drawer=page.get_by_role('dialog',name='Filters',exact=True)
             drawer.get_by_label('Show deactivated',exact=True).check()
-            drawer.get_by_label('Show mock data',exact=True).uncheck()
             drawer.get_by_label('Service',exact=True).select_option('hermes')
             drawer.get_by_label('From date',exact=True).fill('2026-01-01')
             drawer.get_by_label('Through date',exact=True).fill('2026-12-31')
@@ -382,7 +378,7 @@ def test_ecosystem_browser(fleet, authenticated_client, tmp_path, width, height)
             page.get_by_role('button',name='Filters',exact=True).click()
             drawer=page.get_by_role('dialog',name='Filters',exact=True)
             assert drawer.get_by_label('Show deactivated',exact=True).is_checked()
-            assert not drawer.get_by_label('Show mock data',exact=True).is_checked()
+            assert drawer.get_by_label('Show mock data',exact=True).count()==0
             assert drawer.get_by_label('Service',exact=True).input_value()=='hermes'
             assert drawer.get_by_label('From date',exact=True).input_value()=='2026-01-01'
             assert drawer.get_by_label('Through date',exact=True).input_value()=='2026-12-31'

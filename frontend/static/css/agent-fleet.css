@@ -262,3 +262,14 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 
 /* Keep inspector actions scrollable clear of the floating Butler launcher. */
 .fleet-shell .fleet-inspector{padding-bottom:88px;scroll-padding-bottom:88px}
+
+/* Match the shared Space picker without toolbar styles leaking into its panel. */
+.fleet-spaces .workspace-menu-panel{box-sizing:border-box;padding:14px;background:#0f1c2e;border:1px solid #334155;border-radius:12px;box-shadow:0 18px 42px #0006;font-size:13px;color:#e2e8f0;gap:12px}
+.fleet-spaces .workspace-menu-panel .workspace-focus-label{font-size:13px;font-weight:600}
+.fleet-spaces .workspace-view-picker>summary{height:36px;min-height:36px;margin:0;padding:0 32px 0 10px;display:flex;align-items:center;font-size:13px}
+.fleet-spaces .workspace-dynamic-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.fleet-shell .fleet-spaces .workspace-dynamic-toggle input[role=switch]{appearance:none;width:34px;height:20px;min-height:20px;padding:0;margin:0;border-radius:999px;background:#334155;border:1px solid #64748b}
+.fleet-shell .fleet-spaces .workspace-dynamic-toggle input[role=switch]:checked{background:#2563eb;border-color:#3b82f6}
+.fleet-spaces .workspace-menu-panel>a{font-size:13px;margin-top:0}
+.fleet-spaces .workspace-adaptive-status{font-size:12px;line-height:1.5;margin:0}
+.fleet-hud-panel[data-motion=false] *{animation-play-state:paused!important}

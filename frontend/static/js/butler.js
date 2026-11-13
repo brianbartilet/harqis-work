@@ -25,6 +25,16 @@
   launch.onclick=()=>{panel.hidden=false;launch.setAttribute('aria-expanded','true');panel.dispatchEvent(new Event('butler-opened'));if(panel.dataset.tab==='conversation')openConversation();};
   panel.addEventListener('butler-tab-change',()=>{clearTimeout(timer);closeStream();if(panel.dataset.tab==='conversation'&&!panel.hidden)openConversation();});
   function closeButler(restoreFocus=true){panel.hidden=true;launch.setAttribute('aria-expanded','false');clearTimeout(timer);closeStream();panel.dispatchEvent(new Event('butler-closed'));if(restoreFocus)launch.focus();}
+  document.addEventListener('keydown',async event=>{
+    if(event.defaultPrevented||event.repeat||event.isComposing||event.ctrlKey||event.altKey||event.metaKey||event.shiftKey||event.key.toLowerCase()!=='b')return;
+    if(event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],.xterm'))return;
+    const dialogs=[...document.querySelectorAll('dialog[open]')];
+    if(dialogs.some(dialog=>!['activity-hotkey-help','hud-hotkeys-dialog'].includes(dialog.id)))return;
+    event.preventDefault();event.stopImmediatePropagation();dialogs.forEach(dialog=>dialog.close());
+    if(document.fullscreenElement){try{await document.exitFullscreen();}catch{return;}}
+    document.getElementById('fleet-exit-fullscreen')?.click();
+    requestAnimationFrame(()=>{if(panel.hidden)launch.click();panel.querySelector('[role=tab][aria-selected=true]')?.focus();});
+  },true);
   $('butler-close').onclick=()=>closeButler();
   document.addEventListener('pointerdown',event=>{
     if(panel.hidden||event.button!==0||$('butler-preview').open)return;

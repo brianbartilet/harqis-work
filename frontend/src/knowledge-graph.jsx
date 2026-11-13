@@ -1045,7 +1045,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(key==='d')hotkeys.confirm(button,'Dismiss this object');else hotkeys.click(button);
       return true;
     }
-    const selectors={a:'.board-explore',e:'#kg-entities',f:'#kg-open-filters',b:'.board-guide-trigger',r:'#kg-reload',p:'#kg-fit','[':'#kg-in',']':'#kg-out'};
+    const selectors={a:'.board-explore',e:'#kg-entities',f:'#kg-open-filters',h:'.board-guide-trigger',r:'#kg-reload',p:'#kg-fit','[':'#kg-in',']':'#kg-out'};
     if(selectors[key]){hotkeys.click(document.querySelector(selectors[key]));return true;}
     if(key==='\\'){setFullscreen(!fullscreen);return true;}
     if(key===' '){if(maps?.current)hotkeys.click(named(document.querySelector('.board-controls'),/^Attach existing$/));else{choosePreset(lastChosenPreset);hotkeys.click($('reload'));}return true;}
