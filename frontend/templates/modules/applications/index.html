@@ -1,8 +1,20 @@
 {% extends "base.html" %}
 {% block title %}HARQIS — Integrations{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="{{ static_asset('css/breadcrumbs.css') }}">
+{% endblock %}
+
 {% block content %}
 <main class="flex-1 mx-auto max-w-7xl w-full px-4 py-5 sm:px-6 lg:px-8">
+  {% if request.query_params.get('from') == 'agents' %}
+  <nav class="integration-breadcrumbs" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="/agents">Agents</a></li>
+      <li><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m8 5 5 5-5 5"/></svg><span aria-current="page">Integrations</span></li>
+    </ol>
+  </nav>
+  {% endif %}
   <div class="flex items-end justify-between gap-4 mb-4">
     <div class="page-header">
       <p class="page-header-eyebrow">Integration inventory</p>

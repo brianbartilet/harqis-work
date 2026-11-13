@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block body_class %}fleet-page{% endblock %}
+{% block title %}HARQIS &mdash; Second Brain{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ static_asset('css/second-brain-loading.css') }}">
+<link rel="stylesheet" href="{{ static_asset('css/corpus-workspaces.css') }}">
+<link rel="stylesheet" href="{{ static_asset('css/second-brain-hud.css') }}">
+<link rel="stylesheet" href="{{ static_asset('css/agent-fleet.css') }}">
+{% endblock %}
+{% block content %}
+{% with brain_loading_message='Loading your workspace...' %}{% include 'partials/second_brain_loading.html' %}{% endwith %}
+<main id="agent-fleet" class="fleet-shell" inert aria-busy="true" aria-label="Second Brain agent workspace"></main>
+<script type="application/json" id="fleet-csrf">{{ csrf|tojson }}</script>
+<script type="application/json" id="fleet-hud-config">{{ {'sizes': hud_sizes, 'colors': hud_colors}|tojson }}</script>
+<script type="application/json" id="fleet-owner">{{ user|tojson }}</script>
+<script src="{{ static_asset('js/hfl-intent-reuse.js') }}" defer></script>
+<script src="{{ static_asset('js/agent-fleet.js') }}" defer></script>
+{% endblock %}

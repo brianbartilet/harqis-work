@@ -341,3 +341,5 @@
 .kg-shell #kg-detail .idea-add-toggle{box-sizing:border-box;width:100%;min-height:40px;border-radius:8px;font-size:12px;padding:10px 14px}
 .kg-shell #kg-detail .kg-action-separator{border:0;border-top:1px solid #293d55;margin:20px 0 10px}
 .kg-shell #kg-detail .idea-inspector-status-row{margin:0 0 12px}
+
+.kg-legend[hidden]{display:none}

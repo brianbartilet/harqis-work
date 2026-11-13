@@ -16,6 +16,65 @@ def provider_name(provider):
     return provider
 
 
+@api.post('/grokbot/login/start')
+def grokbot_login_start(user=Depends(owner_auth)):
+    from modules.integrations.grokbot import start_login
+    return start_login(user)
+
+
+@api.post('/grokbot/login/{identity}/poll')
+def grokbot_login_poll(identity: str, user=Depends(owner_auth)):
+    from modules.integrations.grokbot import poll_login
+    return poll_login(user, identity)
+
+
+@api.post('/grokbot/login/{identity}/cancel')
+def grokbot_login_cancel(identity: str, user=Depends(owner_auth)):
+    from modules.integrations.grokbot import cancel
+    return cancel(user, identity)
+
+
+@api.post('/grokbot/connect-key')
+def grokbot_connect_key(raw: dict, user=Depends(owner_auth)):
+    from modules.integrations.grokbot import connect_key
+    return connect_key(user, raw.get('key'))
+
+
+@api.post('/grokbot/sync')
+def grokbot_sync(raw: dict, user=Depends(owner_auth)):
+    from modules.integrations.grokbot import sync
+    if type(raw.get('if_stale', False)) is not bool:
+        raise HTTPException(422, 'Invalid refresh option.')
+    return sync(user, raw.get('if_stale', False))
+
+
+@api.post('/n8n/sync')
+def sync_n8n(raw: dict, user=Depends(owner_auth)):
+    from modules.integrations.n8n import sync
+    query = raw.get('query', '')
+    if not isinstance(query, str) or len(query) > 200:
+        raise HTTPException(422, 'Keep the search under 200 characters.')
+    return sync(user, query)
+
+
+@api.get('/n8n/workflows')
+def n8n_workflows(cursor: str = '', user=Depends(owner_auth)):
+    _, client = service.connected(user, 'n8n')
+    data = client.request('GET', '/workflows', params={'limit': 100, **({'cursor': cursor} if cursor else {})})
+    return {'items': [{k: w.get(k) for k in ('id', 'name', 'active', 'updatedAt')} for w in data.get('data', [])],
+            'cursor': data.get('nextCursor', '')}
+
+
+@api.post('/n8n/agents/{identity}/refresh')
+def refresh_n8n_agent(identity: str, user=Depends(owner_auth)):
+    from modules.integrations.n8n import refresh_agent
+    from workflows.hfl.agent_fleet_store import FleetConflict
+    try:
+        return refresh_agent(user, identity)
+    except FleetConflict as exc:
+        raise HTTPException(409, str(exc)) from None
+
+
 @router.get('')
 def page(request: Request):
     return RedirectResponse('/applications', status_code=307)
@@ -34,6 +93,8 @@ def connectors(user=Depends(owner_auth)):
 @api.post('/connectors/{provider}/test')
 def test_connection(provider: str, raw: dict, user=Depends(owner_auth)):
     provider_name(provider)
+    if provider == 'grokbot':
+        raise HTTPException(409, 'Use Grok Bot browser sign-in or Cursor API-key connection.')
     identity = Provider(provider, credentials(provider, raw)).test()
     return {'status': 'Test passed', **identity}
 
@@ -42,6 +103,8 @@ def test_connection(provider: str, raw: dict, user=Depends(owner_auth)):
 @api.post('/connectors/{provider}/connect')
 def connect(provider: str, raw: dict, user=Depends(owner_auth)):
     provider_name(provider)
+    if provider == 'grokbot':
+        raise HTTPException(409, 'Use Grok Bot browser sign-in or Cursor API-key connection.')
     clean = credentials(provider, raw)
     # Revalidate before saving; a failed replacement must preserve the saved account.
     identity = Provider(provider, clean).test()
@@ -49,6 +112,8 @@ def connect(provider: str, raw: dict, user=Depends(owner_auth)):
     metadata = {**identity, 'status':'Connected', 'enabled':False, 'connected_since':store.now(),
                 'auth_method':('Fine-grained personal access token' if clean['token'].startswith('github_pat_') else 'Personal access token') if provider == 'github' else 'Email and API token',
                 'expiry':'Unknown', 'site':clean.get('site', '')}
+    if provider == 'n8n':
+        metadata['auth_method'] = 'API key' + (' + MCP token' if clean.get('mcp_token') else '')
     if previous.get('account_id') == identity['account_id'] and previous.get('site','') == metadata['site']:
         metadata['connected_since'] = previous.get('connected_since', metadata['connected_since'])
     return store.save(user, provider, metadata, clean)
@@ -57,6 +122,9 @@ def connect(provider: str, raw: dict, user=Depends(owner_auth)):
 @api.post('/connectors/{provider}/toggle')
 def toggle(provider: str, raw: dict, user=Depends(owner_auth)):
     provider_name(provider)
+    if provider == 'grokbot':
+        from modules.integrations.grokbot import toggle as toggle_grokbot
+        return toggle_grokbot(user, raw.get('enabled'))
     if type(raw.get('enabled')) is not bool:
         raise HTTPException(422, 'Expected an enabled boolean.')
     data = store.get(user, provider, private=True)
@@ -76,6 +144,9 @@ def toggle(provider: str, raw: dict, user=Depends(owner_auth)):
 @api.post('/connectors/{provider}/disconnect')
 def disconnect(provider: str, user=Depends(owner_auth)):
     provider_name(provider)
+    if provider == 'grokbot':
+        from modules.integrations.grokbot import disconnect as disconnect_grokbot
+        return disconnect_grokbot(user)
     return store.save(user, provider, {'status':'Not connected', 'enabled':False}, {})
 
 

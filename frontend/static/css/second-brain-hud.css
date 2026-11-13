@@ -139,6 +139,7 @@
   border-bottom:1px solid #4082aa
 }
 .hud-widget-header h2 {
+  min-width:0;
   font:700 12px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;
   letter-spacing:.04em;
   text-transform:uppercase;
@@ -148,6 +149,13 @@
   white-space:nowrap;
   color:#f1f5f9
 }
+.agent-avatar-group {display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:4px;max-width:50%;margin:0 6px;flex-shrink:0;}
+.agent-avatar-group:empty {display:none;}
+.agent-avatar {position:relative;display:inline-grid;place-items:center;flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:var(--agent-color,#67e8f9);color:#081423;font:700 10px/1 system-ui;box-shadow:0 0 0 1px #ffffff40;vertical-align:middle;}
+.agent-avatar img {position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;}
+.agent-avatar:focus-visible {outline:2px solid #e9c96c;outline-offset:3px;}
+.agent-avatar-tooltip {display:none;}
+.agent-avatar:focus .agent-avatar-tooltip {display:block;position:absolute;right:0;top:calc(100% + 6px);z-index:20;min-width:160px;max-width:240px;padding:8px;background:#0f172a;color:#f1f5f9;border:1px solid #4082aa;border-radius:5px;white-space:normal;line-height:1.5;box-shadow:0 4px 12px #0008;}
 .hud-surface .hud-widget-header button {
   display:grid;
   place-items:center;
@@ -616,3 +624,12 @@
   vertical-align:bottom;
 }
 .hud-desktop-divider::after { content:"========================================================================================================================================================================================================"; }
+
+
+#hud-retry{margin-bottom:14px}
+
+
+.hud-tools .hud-workspace-return{display:grid;place-items:center;flex:none;width:36px;height:36px;padding:7px;border-radius:8px;border-color:#22d3ee;background:#083344;color:#a5f3fc;box-shadow:0 0 12px #22d3ee22}
+.hud-workspace-return svg{width:20px;height:20px}
+.hud-tools .hud-workspace-return:hover{background:#155e75;color:#fff}
+.hud-workspace-return:focus-visible{outline:2px solid #67e8f9;outline-offset:3px}

@@ -219,9 +219,19 @@ def graph(source='', since='', until='', limit=100, query='', shared=False, cont
     snapshot = canonical_snapshot()
     snapshot = scope_snapshot(snapshot, context)
     if not any(snapshot.get(k) for k in ('ideas', 'actions', 'topics', 'links', 'goals', 'maps', 'lists')):
-        return _corpus_graph(source, since, until, limit, query, shared, context, include_provisional)
-    base = _corpus_graph(source, since, until, 0, '', False, context, include_provisional)
-    return extend(base, snapshot, since=since, until=until, query=query, sources=source, context=context, shared=shared, limit=limit, workspace_scoped=bool(context))
+        result = _corpus_graph(source, since, until, limit, query, shared, context, include_provisional)
+    else:
+        base = _corpus_graph(source, since, until, 0, '', False, context, include_provisional)
+        result = extend(base, snapshot, since=since, until=until, query=query, sources=source, context=context, shared=shared, limit=limit, workspace_scoped=bool(context))
+    if not source and not shared:
+        from modules.agents.projection import extend as fleet_graph
+        result = fleet_graph(result, context=context, query=query, since=since, until=until)
+        ids = {n['id'] for n in result['nodes']}
+        for board in snapshot.get('maps', []):
+            for member in board.get('members', []):
+                if member.startswith('agent:') and member in ids and 'board:' + board['id'] in ids:
+                    result['edges'].append({'source': 'board:' + board['id'], 'target': member, 'relation': 'contains'})
+    return result
 
 
 def _corpus_graph(source='', since='', until='', limit=100, query='', shared=False, context='', include_provisional=True):

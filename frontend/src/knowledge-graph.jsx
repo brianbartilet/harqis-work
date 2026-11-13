@@ -1,3 +1,4 @@
+import {connectionRadius} from './graph-sizing.mjs';
 import {readGraphState} from './graph-state.mjs';
 import {graphDateRange} from './graph-dates.mjs';
 import {createLabelLayout} from './graph-labels.mjs';
@@ -55,7 +56,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   const color = kind => configuredTypes.get(kind)?.color || palette[kind] || '#e9c96c';
   window.HflGraphAppearance = {color, kindLabel};
   const defaultLabelKinds = new Set(['sources', 'people', 'tools', 'companies']);
-  let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts']);
+  let data = {nodes:[],edges:[]}, nodes = [], edges = [], selected = null, enabled = new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts','agents']);
   let exampleMode=new URLSearchParams(location.search).get('example')==='1';
   let requestVersion=0, requestController=null, backgroundController=null, appliedParams=null, graphSignature='', lastInteraction=0;
   const activePointers=new Set();
@@ -652,6 +653,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     nodeActions=[];
     selected=id;updateFullscreen();const n=nodes.find(n=>n.id===id),near=connected(id);
     highlight(id);
+    $('legend').closest('.kg-legend').hidden=!!n;
     $('detail').replaceChildren();$('detail').classList.toggle('kg-detail-empty',!n);
     const heading=document.createElement('h2'),description=document.createElement('p');
     const eyebrow=document.createElement('span');eyebrow.className='kg-eyebrow';eyebrow.textContent=n?kindLabel(n.kind):window.HflIdeas?.maps.current?'Your next big idea starts here':'Your knowledge, connected';$('detail').append(eyebrow);
@@ -735,7 +737,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     const byId=new Map(nodes.map(n=>[n.id,n]));
     edges=data.edges.filter(e=>byId.has(e.source)&&byId.has(e.target)).map(e=>({...e,a:byId.get(e.source),b:byId.get(e.target)}));
     nodes.forEach(n=>n.visibleDegree=0);edges.forEach(e=>{e.a.visibleDegree++;e.b.visibleDegree++;});
-    nodes.forEach(n=>{const board=window.HflIdeas?.maps.current,smallGraph=nodes.length<=35;n.radius=board?8+3*(board.node_sizes?.[n.id]||3):n.kind==='entries'?(smallGraph?7:4.5):(smallGraph?10:4)+4*Math.log2(1+n.visibleDegree);});
+    nodes.forEach(n=>{const board=window.HflIdeas?.maps.current;n.radius=board?8+3*(board.node_sizes?.[n.id]||3):connectionRadius(n.kind,n.visibleDegree,nodes.length);});
     const anchors=nodes.filter(n=>n.kind!=='entries').sort((a,b)=>b.visibleDegree-a.visibleDegree).slice(0,4);
     const adjacency=new Map(nodes.map(n=>[n.id,new Set()]));
     for(const e of edges){adjacency.get(e.source).add(e.target);adjacency.get(e.target).add(e.source);}
@@ -1043,7 +1045,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(key==='d')hotkeys.confirm(button,'Dismiss this object');else hotkeys.click(button);
       return true;
     }
-    const selectors={a:'.board-explore',e:'#kg-entities',f:'#kg-open-filters',b:'.board-guide-trigger',r:'#kg-reload',p:'#kg-fit','[':'#kg-in',']':'#kg-out'};
+    const selectors={a:'.board-explore',e:'#kg-entities',f:'#kg-open-filters',h:'.board-guide-trigger',r:'#kg-reload',p:'#kg-fit','[':'#kg-in',']':'#kg-out'};
     if(selectors[key]){hotkeys.click(document.querySelector(selectors[key]));return true;}
     if(key==='\\'){setFullscreen(!fullscreen);return true;}
     if(key===' '){if(maps?.current)hotkeys.click(named(document.querySelector('.board-controls'),/^Attach existing$/));else{choosePreset(lastChosenPreset);hotkeys.click($('reload'));}return true;}
@@ -1055,7 +1057,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     window.activityModals?.reset();preset='timeline';setAnimation('off');
     $('search').value='';$('rolling').value='0';$('since').value='';$('until').value='';$('maturity').value='';
     selectedSources.clear();sourceOptions(data.sources||[]);syncDates();$('shared').checked=false;
-    enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts']);selected=null;focusId=null;exampleMode?render():load();
+    enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts','agents']);selected=null;focusId=null;exampleMode?render():load();
   };
 
 
@@ -1099,7 +1101,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(typeof value==='string'&&($(id).tagName!=='SELECT'||[...$(id).options].some(o=>o.value===value)))$(id).value=value;
     }
     $('shared').checked=pendingState.filters.shared===true;
-    enabled=new Set([...pendingState.enabled,'ideas','actions','goals','drafts','boards','lists','thoughts']);pendingState.sources.forEach(s=>selectedSources.add(s));
+    enabled=new Set([...pendingState.enabled,'ideas','actions','goals','drafts','boards','lists','thoughts','agents']);pendingState.sources.forEach(s=>selectedSources.add(s));
     if(PRESETS[pendingState.preset])preset=pendingState.preset;
     if(Number.isFinite(pendingState.layoutSeed))layoutSeed=pendingState.layoutSeed;
     selected=typeof pendingState.selected==='string'?pendingState.selected:null;
@@ -1115,7 +1117,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       const point=window.HflIdeas.maps.current?(layoutTargets.get(n.id)||n):n;
       return [n.id,{x:point.x,y:point.y}];
     }));
-    window.addEventListener('hfl:ideas-updated',event=>{if(event.detail?.boardSwitch){pendingState=null;selected=null;enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts']);}if(event.detail?.selectId)selected=event.detail.selectId;
+    window.addEventListener('hfl:ideas-updated',event=>{if(event.detail?.boardSwitch){pendingState=null;selected=null;enabled=new Set(['entries','sources','daily','people','companies','tools','topics','objects','ideas','actions','goals','drafts','boards','lists','thoughts','agents']);}if(event.detail?.selectId)selected=event.detail.selectId;
       if(event.detail?.boardSwitch){
         // Selecting a saved board exits the example and refreshes its complete
         // graph, even when every member already exists in the activity cache.

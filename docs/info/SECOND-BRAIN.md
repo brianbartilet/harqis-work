@@ -1,5 +1,20 @@
 # Thinking Second Brain
 
+## Workspace navigation
+
+**Express → Second Brain** opens the agent fleet workspace at `/agents`.
+The highlighted brain icon at the start of the workspace toolbar opens the
+full dashboard at `/second-brain`. Its robot-icon shortcut
+returns to the workspace, preserving the originating agent when supplied.
+Build no longer contains an Agents entry. Existing routes and agent deep links
+remain supported.
+
+Activity Corpus, Activity Graph, Kanban, the workspace, and the dashboard use
+shared saved Space preferences, including multiple Spaces, All activity, and
+schedule-driven Dynamic mode. Fleet and dashboard retain separate controls,
+widget ordering, sizing, and appearance; widget Space membership remains shared.
+The advisory feed's categories and execution schedules are unchanged.
+
 The Thinking Second Brain is an advisory, context-aware feed that activates
 allowlisted read-only operations for the user's current categories. Categories
 are owner-configurable; a fresh store contains only the non-archivable `default`

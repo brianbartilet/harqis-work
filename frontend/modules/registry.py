@@ -15,6 +15,9 @@ class ModuleDefinition:
 
 
 MODULES: tuple[ModuleDefinition, ...] = (
+    ModuleDefinition(key="agents", label="Second Brain", route="/agents",
+                     description="Agent fleet, capabilities and sessions.",
+                     detail="Configure Space-aware agents, trace their work and open the HARQIS butler."),
     ModuleDefinition(
         key="home",
         label="Home",
@@ -45,7 +48,7 @@ MODULES: tuple[ModuleDefinition, ...] = (
     ),
     ModuleDefinition(
         key="second_brain",
-        label="Second Brain",
+        label="Second Brain Dashboard",
         route="/second-brain",
         description="A Space-aware HUD of what matters now.",
         detail="Arrange live source widgets, follow shared Spaces, and trace the advisory context feed to its source and freshness.",

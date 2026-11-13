@@ -149,3 +149,5 @@ html:has(.integration-tabs){scrollbar-gutter:stable}
 
 .workflow-integration-card.is-reordering .workflow-integration-card-body > div:first-child{padding-right:1.5rem}
 .workflow-integration-card > .drag-handle{top:.75rem;right:.75rem;left:auto}
+
+.grokbot-key-choice{margin-top:1rem;border-top:1px solid #334155;padding-top:1rem}.grokbot-key-choice>summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:1rem}.grokbot-key-choice>summary::-webkit-details-marker{display:none}.grokbot-key-choice>summary svg{width:20px;height:20px;color:#93c5fd;pointer-events:none;flex-shrink:0}.grokbot-key-choice[open]>summary svg{transform:rotate(180deg)}

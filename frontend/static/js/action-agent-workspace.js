@@ -66,8 +66,8 @@
     }
     const configureRow=el('div',undefined,'agent-configure-row');details.append(configureRow);
     button('Configure agent', configure, configureRow);
-    const defaults=el('a','Agent default settings');defaults.href='/settings';defaults.target='_blank';defaults.rel='noopener noreferrer';
-    defaults.title='Open App Settings in a new tab to change shared agent defaults';configureRow.append(defaults);
+    const defaults=el('a','Agent default settings');defaults.href='/agents';defaults.target='_blank';defaults.rel='noopener noreferrer';
+    defaults.title='Open Agents to change shared execution defaults';configureRow.append(defaults);
     button('New session', async()=>attach(await api(source+'/sessions',{})));
     button('Save session', async()=>{if(!session)throw new Error('Start a session first.');await api('/sessions/'+session.id,{saved:true});await refreshList();});
     button('Restore selected',async()=>{const id=sessions.value;if(!id)throw new Error('Select a session.');const selected=sessionList.find(s=>s.id===id);if(['queued','starting','idle','waiting','running'].includes(selected.state))attach(selected);else attach(await api(source+'/sessions',{restore:id}));});
@@ -160,7 +160,7 @@
     function showConfig() {
       const s=config.effective;
       description.replaceChildren();
-      for(const [label,value] of [['Agent','Hermes'],['Configuration',config.card.preset||'App Settings defaults'],['Profile',s.hermes_profile||'Worker profile'],['Permissions',s.agent_mode],['Repository',s.agent_repository||'Isolated worktree'],['Idle expiry',s.agent_session_expiry_minutes+' minutes']])description.append(el('dt',label),el('dd',value));
+      for(const [label,value] of [['Agent','Hermes'],['Configuration',config.effective.fleet_agent?.name||config.card.preset||'Shared defaults'],['Profile',s.hermes_profile||'Worker profile'],['Permissions',s.agent_mode],['Repository',s.agent_repository||'Isolated worktree'],['Idle expiry',s.agent_session_expiry_minutes+' minutes']])description.append(el('dt',label),el('dd',value));
       if (summary && config.action) {
         const action=config.action;
         summary.replaceChildren(el('span','ACTION'),el('h3',action.title));
@@ -215,6 +215,9 @@
       const header=el('header',undefined,'agenda-dialog-header');header.append(el('h2','Configure action agent'));
       button('Close',()=>dialog.close(),header);
       const form=el('form',undefined,'agenda-form-body');
+      const fleetLabel=el('label','Fleet agent'),fleet=el('select');fleet.append(new Option('Legacy defaults / preset',''));
+      for(const a of config.agents||[])if(a.runtime==='hermes'&&(a.active||a.id===config.card.agent_id))fleet.append(new Option(a.name+(a.active?'':' (deactivated)'),a.id));
+      fleet.value=config.card.agent_id||'';fleetLabel.append(fleet);form.append(fleetLabel);
       const presetLabel=el('label','Named preset');const preset=el('select');
       preset.append(new Option('App Settings defaults',''));
       Object.keys(config.presets).forEach(name=>preset.append(new Option(name,name)));
@@ -238,7 +241,7 @@
       button('Save as preset',async()=>{
         try {const result=await api('/presets',{name:presetName.value,overrides:{...(config.presets[preset.value]?.overrides||{}),...values()}});config=await api(source+'/configuration');if(![...preset.options].some(o=>o.value===result.name))preset.append(new Option(result.name,result.name));preset.value=result.name;Object.values(inputs).forEach(item=>{item.override.checked=false;item.input.disabled=true;});feedback.textContent='Preset saved. Save action configuration to assign it.';}catch(e){feedback.textContent=e.message;}
       },actions);
-      form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{config=await api(source+'/configuration',{preset:preset.value,overrides:values()});showConfig();dialog.close();}catch(e){feedback.textContent=e.message;}finally{save.disabled=false;}};
+      form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{config=await api(source+'/configuration',{preset:preset.value,agent_id:fleet.value,overrides:values()});showConfig();dialog.close();}catch(e){feedback.textContent=e.message;}finally{save.disabled=false;}};
       dialog.append(header,form);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();
     }
     function attach(item){

@@ -62,6 +62,7 @@ def _isolated_intent_store(monkeypatch, tmp_path):
     # Graph reads now include persisted ideas/actions; never open live intent data.
     monkeypatch.setenv('HFL_TIMELINE_STORE_PATH', str(tmp_path / 'intents.sqlite3'))
     monkeypatch.setenv('HARQIS_ENTITIES_DB', str(tmp_path / 'entities.sqlite3'))
+    monkeypatch.setenv('HARQIS_AGENTS_DB', str(tmp_path / 'fleet.sqlite3'))
 
 
 @pytest.fixture(autouse=True)

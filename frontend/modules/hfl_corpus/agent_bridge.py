@@ -77,6 +77,7 @@ def source_snapshot(kind, source_id):
         source.update({key: item[key] for key in ('description', 'body', 'checklists') if item.get(key)})
         from modules.hfl_corpus.intent_board_context import context
         source['board_ids'] = item.get('board_ids', [])
+        source['workspace_ids'] = item.get('workspace_ids', [])
         source['available_boards'] = context()
         guidance = ''
     elif kind == 'pin':
@@ -212,6 +213,8 @@ def older_gap_notice(snapshot, start, end):
 
 
 def sweep():
+    from modules.agents.briefings import sweep as briefing_sweep
+    briefing_sweep()
     store = bridge_store()
     store.expire()
     settings = read_settings()
@@ -340,22 +343,27 @@ def accept(run_id, actor):
 
 
 def deliver_pending():
+    from modules.agents.audit import deliver_pending as deliver_fleet
+    deliver_fleet()
     from workflows.hfl.dto import HflEntry
     from workflows.hfl.persistence import submit_hfl_entry
     store = bridge_store()
     for run in store.list(delivery='pending', limit=50, oldest=True):
         try:
             snap, result = run['snapshot'], run['result']
+            fleet = snap.get('execution_settings', {}).get('fleet_agent', {})
             if snap['kind'] == 'pin':
                 get_memory_pin_store().record_execution_snapshot(run)
             entry = HflEntry(when=datetime.fromisoformat(run['updated_at']), moment='Agent result: ' + snap['source']['title'][:160],
-                             what_happened=f"Agent run: {run['id']}\nSource: {run['source_key']}\nExecution state: {run['state']}\nPolicy: {POLICY}\n\n{result.get('summary', '')}",
+                             what_happened=f"Agent run: {run['id']}\nSource: {run['source_key']}\nExecution state: {run['state']}\nPolicy: {POLICY}\n" +
+                             (f"Fleet agent: {fleet['id']} / {fleet['name']} v{fleet['version']}\nConfiguration: {fleet['hash']}\n" if fleet else '') +
+                             f"\n{result.get('summary', '')}",
                              why_it_stayed='Connects delegated intent to an attributed, reviewable result.',
-                             tags=('agent-execution', 'follow-up'), references=tuple(result.get('evidence', [])), source='hfl-agent-execution')
+                             tags=('agent-execution', 'follow-up'), references=tuple(result.get('evidence', [])), source='agents-activity' if snap.get('execution_settings', {}).get('fleet_agent') else 'hfl-agent-execution')
             if os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1':
                 store.mark_delivery(run['id'], 'preview')
                 continue
-            delivered = submit_hfl_entry(entry, source='hfl-agent-execution', dedup_key='agent-run:' + run['id'], synthesized=True)
+            delivered = submit_hfl_entry(entry, source=entry.source, dedup_key='agent-run:' + run['id'], synthesized=True)
             if delivered.get('delivery') in {'persisted', 'forwarded', 'outbox'}:
                 store.mark_delivery(run['id'], 'delivered')
         except Exception:
