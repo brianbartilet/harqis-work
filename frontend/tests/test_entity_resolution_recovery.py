@@ -241,6 +241,160 @@ def test_unexpected_batch_failure_has_global_cooldown(queue, monkeypatch):
     assert 'secret' not in json.dumps(store.state('resolution-task-error'))
 
 
+@pytest.mark.parametrize('attempts', [0, 4])
+def test_snapshot_conflicts_back_off_without_spending_failure_budget(queue, monkeypatch, attempts):
+    store, sent = queue
+    now = [100000.0]
+    monkeypatch.setattr(resolution.time, 'time', lambda: now[0])
+    with store.connection() as db:
+        db.execute('UPDATE entity_resolution_jobs SET attempts=?', (attempts,))
+    calls = []
+
+    def conflict(**kwargs):
+        calls.append(kwargs)
+        raise resolution.EntityResolutionConflict('commit', 'evidence-changed')
+
+    monkeypatch.setattr(resolution, 'process_batch', conflict)
+    for delay in [30, 60, 120, 240, 480, 960, 1920, 3600, 3600]:
+        # Reload through get_store each time: cooldown is durable, not in memory.
+        result = resolution.process_pending()
+        assert result['errors'] == []
+        assert result['state'] == 'deferred'
+        assert result['processed'] == result['pending'] == 0
+        assert result['conflicts'][0]['diagnostics'] == dict(stage='commit', reason='evidence-changed')
+        with get_store().connection() as db:
+            job = dict(db.execute('SELECT * FROM entity_resolution_jobs').fetchone())
+        assert job['attempts'] == attempts and job['state'] == 'pending'
+        assert job['next_attempt'] == now[0] + delay
+        before = len(calls)
+        resolution.process_pending()
+        assert len(calls) == before  # No model churn before the durable deadline.
+        now[0] += delay
+    assert store.state('resolution-error-history')[-1]['attempt'] == attempts
+    assert store.state('resolution-last-error') is None
+    # A due conflict schedules continuation but is not a Celery FAILURE.
+    resolution.dispatch_pending()
+    result = task.run(dispatch_id=sent[-1]['task_id'])
+    assert result['state'] == 'deferred' and result['errors'] == []
+    assert sent[-1]['countdown'] == 3600
+
+
+@pytest.mark.parametrize('error_type,reason', [(ValueError, 'value-error'), (RuntimeError, 'unexpected-error')])
+def test_value_error_is_a_safe_bounded_hard_failure(queue, monkeypatch, error_type, reason):
+    store, _ = queue
+    secret = 'private source text, model response, provider credential'
+
+    def fail(**kwargs):
+        raise error_type(secret)
+
+    monkeypatch.setattr(resolution, 'process_batch', fail)
+    for attempt in range(1, 6):
+        result = resolution.process_pending()
+        assert result['state'] == 'failed'
+        assert result['errors'][0]['diagnostics'] == dict(stage='process-batch', reason=reason)
+        with store.connection() as db:
+            job = dict(db.execute('SELECT * FROM entity_resolution_jobs').fetchone())
+            assert job['attempts'] == attempt
+            assert job['state'] == ('failed' if attempt == 5 else 'pending')
+            db.execute('UPDATE entity_resolution_jobs SET next_attempt=0')
+            assert secret not in json.dumps([tuple(r) for r in db.execute('SELECT * FROM state')])
+    assert resolution.process_pending()['errors'] == []  # Quarantined, not attempted again.
+
+
+@pytest.mark.parametrize('conflict', [True, False])
+def test_failure_does_not_annotate_or_delay_replacement_revision(queue, monkeypatch, conflict):
+    store, _ = queue
+    replacement_details = dict(stage='replacement', reason='sentinel')
+
+    def replace(**kwargs):
+        with store.connection() as db:
+            db.execute("UPDATE entity_resolution_jobs SET revision='v2',attempts=0,next_attempt=123,error='new' ")
+        store.state('resolution-error:entry', replacement_details)
+        if conflict:
+            raise resolution.EntityResolutionConflict('assembly', 'state-changed')
+        raise ValueError('private source payload')
+
+    monkeypatch.setattr(resolution, 'process_batch', replace)
+    resolution.process_pending()
+    with store.connection() as db:
+        job = dict(db.execute('SELECT * FROM entity_resolution_jobs').fetchone())
+    assert (job['revision'], job['attempts'], job['next_attempt'], job['state'], job['error']) == (
+        'v2', 0, 123, 'pending', 'new')
+    assert store.state('resolution-error:entry') == replacement_details
+    assert store.state('resolution-conflict:entry') is None
+
+
+def test_success_clears_conflict_cooldown_but_retains_history(queue, monkeypatch):
+    store, _ = queue
+
+    def conflict(**kwargs):
+        raise resolution.EntityResolutionConflict('assembly', 'state-changed')
+
+    monkeypatch.setattr(resolution, 'process_batch', conflict)
+    resolution.process_pending()
+    assert store.state('resolution-conflict:entry')['count'] == 1
+    history = store.state('resolution-error-history')
+    with store.connection() as db:
+        db.execute('UPDATE entity_resolution_jobs SET next_attempt=0')
+
+    def succeed(**kwargs):
+        with store.connection() as db:
+            db.execute('DELETE FROM entity_resolution_jobs')
+        return {'processed': 1}
+
+    monkeypatch.setattr(resolution, 'process_batch', succeed)
+    assert resolution.process_pending()['processed'] == 1
+    assert store.state('resolution-conflict:entry') is None
+    assert store.state('resolution-error:entry') is None
+    assert store.state('resolution-error-history') == history
+
+
+def test_success_does_not_clear_replacement_diagnostics(queue, monkeypatch):
+    store, _ = queue
+    sentinel = dict(revision='v2', count=3)
+
+    def replace(**kwargs):
+        with store.connection() as db:
+            db.execute("UPDATE entity_resolution_jobs SET revision='v2'")
+        store.state('resolution-error:entry', {'reason': 'new'})
+        store.state('resolution-conflict:entry', sentinel)
+        return {'processed': 1}
+
+    monkeypatch.setattr(resolution, 'process_batch', replace)
+    resolution.process_pending()
+    assert store.state('resolution-conflict:entry') == sentinel
+    assert store.state('resolution-error:entry') == {'reason': 'new'}
+
+
+def test_conflict_preserves_last_hard_failure_and_final_failure_still_quarantines(queue, monkeypatch):
+    store, sent = queue
+    with store.connection() as db:
+        db.execute('UPDATE entity_resolution_jobs SET attempts=4')
+    previous = dict(error='ValueError', diagnostics=dict(stage='process-batch', reason='value-error'))
+    store.state('resolution-last-error', previous)
+
+    def conflict(**kwargs):
+        raise resolution.EntityResolutionConflict('commit', 'state-changed')
+
+    monkeypatch.setattr(resolution, 'process_batch', conflict)
+    resolution.process_pending()
+    assert store.state('resolution-last-error') == previous
+    with store.connection() as db:
+        db.execute('UPDATE entity_resolution_jobs SET next_attempt=0')
+
+    def fail(**kwargs):
+        raise ValueError('secret evidence text')
+
+    monkeypatch.setattr(resolution, 'process_batch', fail)
+    resolution.dispatch_pending()
+    with pytest.raises(RuntimeError, match='1 entries failed; 0 processed'):
+        task.run(dispatch_id=sent[0]['task_id'])
+    with store.connection() as db:
+        assert tuple(db.execute('SELECT attempts,state FROM entity_resolution_jobs').fetchone()) == (5, 'failed')
+    assert len(sent) == 1  # No continuation for quarantined work.
+    assert 'secret evidence' not in json.dumps(resolution.status())
+
+
 def test_response_error_survives_celery_exception_serialization():
     import pickle
     error = EntityModelResponseError({'reason': 'truncated', 'stop_reason': 'max_tokens'})

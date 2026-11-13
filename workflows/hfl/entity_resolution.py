@@ -17,6 +17,20 @@ POLICY = 'entity-resolution-v1'
 CACHE_POLICY = 'immediate-comparison-v1'
 
 
+class EntityResolutionConflict(ValueError):
+    """Expected optimistic concurrency veto, not a failed model execution."""
+
+    def __init__(self, stage, reason):
+        if (stage, reason) not in {
+                ('assembly', 'state-changed'), ('commit', 'state-changed'),
+                ('commit', 'evidence-changed')}:
+            raise ValueError('Invalid resolution conflict classification')
+        self.diagnostics = dict(stage=stage, reason=reason)
+        super().__init__('Entity evidence changed; resolution will retry with current context'
+                         if reason == 'evidence-changed' else
+                         'Entity state changed; resolution will retry with current context')
+
+
 def evaluate_cached(store, pairs):
     """Persist completed comparisons even if a later batch or commit must retry."""
     model = os.environ.get('HARQIS_ENTITY_MATCH_MODEL', os.environ.get(
@@ -242,7 +256,7 @@ def process_batch(use_model=True, entry_id=None):
         db.execute('BEGIN')
         assembled = Scope(db)
         if any(assembled.signature(i) != signature for i, signature in signatures.items()):
-            raise ValueError('Entity state changed; resolution will retry with current context')
+            raise EntityResolutionConflict('assembly', 'state-changed')
     # Reuse only identical model inputs; corroboration and commit vetoes still run.
     decisions = {}
     evaluated_pairs = evaluate_cached(store, model_pairs)
@@ -277,9 +291,9 @@ def process_batch(use_model=True, entry_id=None):
         db.execute('BEGIN IMMEDIATE')
         current_scope = Scope(db)
         if any(current_scope.signature(i) != signature for i, signature in signatures.items()):
-            raise ValueError('Entity state changed; resolution will retry with current context')
+            raise EntityResolutionConflict('commit', 'state-changed')
         if changed_entries.intersection(evidence_ids):
-            raise ValueError('Entity evidence changed; resolution will retry with current context')
+            raise EntityResolutionConflict('commit', 'evidence-changed')
         for plan in plans:
             entry, mention = plan['entry'], plan['mention']
             if entry['id'] not in latest or entities.entry_hash(latest[entry['id']]) != entities.entry_hash(entry):
@@ -341,32 +355,60 @@ def process_pending(use_model=True):
     with store.connection() as db:
         jobs = list(db.execute("""SELECT * FROM entity_resolution_jobs WHERE state='pending'
             AND next_attempt<=? ORDER BY created_at,entry_id LIMIT 8""", (time.time(),)))
-    processed, errors = 0, []
+    processed, errors, conflicts = 0, [], []
     for job in jobs:
         try:
             processed += process_batch(use_model=use_model, entry_id=job['entry_id'])['processed']
             store.state('resolution-last-success', time.time())
             with store.connection() as db:
-                db.execute('DELETE FROM state WHERE key=?', ('resolution-error:' + job['entry_id'],))
+                db.execute('''DELETE FROM state WHERE key IN (?, ?) AND NOT EXISTS
+                    (SELECT 1 FROM entity_resolution_jobs WHERE entry_id=?)''',
+                    ('resolution-error:' + job['entry_id'], 'resolution-conflict:' + job['entry_id'], job['entry_id']))
         except Exception as exc:
-            attempts = job['attempts'] + 1
-            error = type(exc).__name__  # Avoid persisting provider credentials or source payloads.
-            with store.connection() as db:
-                db.execute("""UPDATE entity_resolution_jobs SET attempts=?,next_attempt=?,state=?,error=?
-                    WHERE entry_id=? AND revision=?""",
-                    (attempts, time.time() + min(3600, 30 * 2 ** (attempts - 1)),
-                     'failed' if attempts >= 5 else 'pending', error, job['entry_id'], job['revision']))
             from workflows.hfl.entity_model_response import EntityModelResponseError
-            details = exc.diagnostics if isinstance(exc, EntityModelResponseError) else {}
+            conflict = isinstance(exc, EntityResolutionConflict)
+            attempts = job['attempts'] + (0 if conflict else 1)
+            error = type(exc).__name__  # Never persist exception messages or source payloads.
+            details = (exc.diagnostics if isinstance(exc, (EntityModelResponseError, EntityResolutionConflict))
+                       else dict(stage='process-batch', reason='value-error' if isinstance(exc, ValueError)
+                                 else 'unexpected-error'))
+            now = time.time()
+            with store.connection() as db:
+                db.execute('BEGIN IMMEDIATE')
+                delay = min(3600, 30 * 2 ** min(max(0, attempts - 1), 7))
+                conflict_key = 'resolution-conflict:' + job['entry_id']
+                count = 0
+                if conflict:
+                    row = db.execute('SELECT value FROM state WHERE key=?', (conflict_key,)).fetchone()
+                    previous = json.loads(row[0]) if row else {}
+                    # Saturate the exponent; persistent churn cannot grow integers
+                    # or trigger tight retries. Changed revisions start a new cooldown.
+                    count = min(8, previous.get('count', 0) + 1) if previous.get('revision') == job['revision'] else 1
+                    delay = min(3600, 30 * 2 ** (count - 1))
+                updated = db.execute("""UPDATE entity_resolution_jobs SET attempts=?,next_attempt=?,state=?,error=?
+                    WHERE entry_id=? AND revision=? AND state='pending'""",
+                    (attempts, now + delay, 'failed' if not conflict and attempts >= 5 else 'pending',
+                     error, job['entry_id'], job['revision'])).rowcount
+                # Diagnostics belong to the same revision as the conditional update.
+                # A replacement intent must not inherit the old worker's error/backoff.
+                if updated:
+                    db.execute('INSERT OR REPLACE INTO state VALUES (?,?)',
+                               ('resolution-error:' + job['entry_id'], json.dumps(details)))
+                    if conflict:
+                        db.execute('INSERT OR REPLACE INTO state VALUES (?,?)',
+                                   (conflict_key, json.dumps(dict(revision=job['revision'], count=count))))
             failure = dict(entry_id=job['entry_id'], error=error, diagnostics=details)
             # Preserve a bounded audit across retries and successful recovery;
-            # the per-entry current error is intentionally cleared on success.
+            # expected conflicts do not enter errors or overwrite last hard failure.
             history = store.state('resolution-error-history') or []
-            history.append(dict(at=time.time(), attempt=attempts, revision=job['revision'], **failure))
+            history.append(dict(at=now, attempt=attempts, revision=job['revision'],
+                                retryable_conflict=conflict, **failure))
             store.state('resolution-error-history', history[-100:])
-            store.state('resolution-error:' + job['entry_id'], details)
-            store.state('resolution-last-error', dict(at=time.time(), **failure))
-            errors.append(failure)
+            if conflict:
+                conflicts.append(failure)
+            else:
+                store.state('resolution-last-error', dict(at=now, **failure))
+                errors.append(failure)
     with store.connection() as db:
         db.execute("""INSERT INTO state VALUES ('resolution-completed',?) ON CONFLICT(key)
             DO UPDATE SET value=CAST(CAST(value AS INTEGER)+? AS TEXT)""", (str(processed), processed))
@@ -374,8 +416,9 @@ def process_pending(use_model=True):
                            (time.time(),)).fetchone()[0]
         next_attempt = db.execute("SELECT min(next_attempt) FROM entity_resolution_jobs WHERE state='pending'").fetchone()[0]
     store.state('resolution-last-finished', time.time())
-    result = dict(state='partial-failure' if errors and processed else 'failed' if errors else 'complete',
-                  processed=processed, pending=ready, errors=errors,
+    result = dict(state='partial-failure' if errors and processed else 'failed' if errors else
+                  'deferred' if conflicts else 'complete',
+                  processed=processed, pending=ready, errors=errors, conflicts=conflicts,
                   retry_after=max(2, min(3600, int(next_attempt-time.time())+1)) if next_attempt and not ready else None)
     store.state('resolution-last-result', dict(at=time.time(), **result))
     return result
