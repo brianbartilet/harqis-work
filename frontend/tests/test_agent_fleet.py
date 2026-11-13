@@ -464,31 +464,34 @@ def test_briefings_available_from_shared_butler(fleet, authenticated_client, tmp
         page.goto('https://fleet.test'+path)
         assert page.locator('.fleet-toolbar').get_by_role('button',name='Briefings',exact=True).count()==0
         page.locator('#butler-launch').click()
-        trigger=page.get_by_role('button',name='Automatic briefings',exact=True)
+        trigger=page.get_by_role('tab',name='Briefing settings',exact=True)
         assert trigger.locator('svg').count()==1
         trigger.click()
         assert not errors,errors
         page.screenshot(path=str(tmp_path/'briefings-open.png'),full_page=True)
-        dialog=page.get_by_role('dialog',name='Automatic briefings',exact=True)
+        dialog=page.get_by_role('tabpanel',name='Briefing settings',exact=True)
         assert dialog.count()==1,page.locator('#butler-briefings').evaluate('el=>({open:el.open,html:el.outerHTML})')
         dialog.get_by_label('Frequency',exact=True).select_option('weekly')
         dialog.get_by_label('Day',exact=True).select_option('4')
         dialog.get_by_label('Hour (0–23)',exact=True).fill('15')
         bounds=dialog.bounding_box()
-        assert abs(bounds['x']+bounds['width']/2-width/2)<2
-        assert abs(bounds['y']+bounds['height']/2-height/2)<2
+        panel_bounds=page.locator('#butler-panel').bounding_box()
+        assert bounds['x']>=panel_bounds['x'] and bounds['x']+bounds['width']<=panel_bounds['x']+panel_bounds['width']+1
+        assert bounds['y']>=panel_bounds['y']
+        assert page.locator('dialog#butler-briefings').count()==0
+        assert dialog.evaluate('(el)=>el.scrollWidth<=el.clientWidth')
         page.screenshot(path=str(tmp_path/'briefings.png'),full_page=True)
         dialog.get_by_role('button',name='Save schedule',exact=True).click()
         dialog.get_by_text('Try again',exact=True).wait_for()
         dialog.get_by_role('button',name='Save schedule',exact=True).click()
         dialog.wait_for(state='hidden')
-        assert trigger.evaluate('el=>el===document.activeElement')
+        assert page.get_by_role('tab',name='Briefings',exact=True).evaluate('el=>el===document.activeElement')
         assert schedule=={'cadence':'weekly','hour':15,'weekday':4,'timezone':'Asia/Singapore'}
         trigger.click()
         page.wait_for_function("document.getElementById('butler-briefings-cadence').value==='weekly' && !document.getElementById('butler-briefings-fields').disabled")
         page.keyboard.press('Escape')
         dialog.wait_for(state='hidden')
         assert page.locator('#butler-panel').is_visible()
-        assert trigger.evaluate('el=>el===document.activeElement')
+        assert page.get_by_role('tab',name='Briefings',exact=True).evaluate('el=>el===document.activeElement')
         assert not errors,errors
         browser.close()

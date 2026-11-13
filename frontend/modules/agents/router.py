@@ -173,6 +173,18 @@ def assistant_decide(identity: str, raw: dict, user=Depends(owner_auth)):
     return checked(assistant.decide, user, identity, raw)
 
 
+@api.get('/butler/briefings')
+def delivered_briefings(user=Depends(owner_auth)):
+    from modules.agents.briefings import history
+    return checked(history, user)
+
+
+@api.post('/butler/briefings/demo')
+def sample_briefings(user=Depends(owner_auth)):
+    from modules.agents.briefings import seed_demo
+    return checked(seed_demo, user)
+
+
 @api.get('/butler/schedule')
 def briefing_schedule(user=Depends(owner_auth)):
     from modules.agents.briefings import read

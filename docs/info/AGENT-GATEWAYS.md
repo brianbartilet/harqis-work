@@ -114,3 +114,27 @@ idempotent submission, event filtering, approval and cancellation contracts.
 Multiple profiles pointing to one Nod server represent the same remote owner
 assistant; they do not create independent Nod agents. Choose **Profile only** to
 remove the stored token without stopping the remote server.
+
+
+## Scheduled briefings
+
+Open the shared HARQIS Butler panel and select **Briefings** to read scheduled
+worker results. **Conversations** continues to show gateway sessions. Use the
+calendar button in the panel header to configure the briefing schedule.
+
+The existing Hermes sweep remains the schedule owner. Each occurrence is recorded
+once per user and local schedule date in `fleet_briefing_deliveries`, in the fleet
+database. The feed joins that occurrence to its legacy worker run and displays
+pending, running, completed or failed status. Pending and running results refresh
+automatically while the tab is open. A completed briefing means the worker has
+returned its answer; displaying it does not accept the underlying action.
+
+Existing scheduled results are recovered only when both the exact scheduler prompt
+and the deterministic user/date request ID match. Ordinary legacy messages are not
+included. The new table is created automatically; include the fleet and bridge
+databases in existing backups.
+
+When `HFL_TIMELINE_LOCAL_PREVIEW=1`, the tab offers **Load sample briefings**.
+These owner-scoped, explicitly marked mock cards cover all four states, never
+submit worker jobs, and do not change the schedule. They are hidden outside local
+preview, and the sample-creation endpoint rejects non-preview requests.

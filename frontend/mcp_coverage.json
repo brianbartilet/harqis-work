@@ -3841,6 +3841,363 @@
       "status": "deferred",
       "tools": [],
       "reason": "Owner-session and CSRF-protected publication of a saved recipe to active shares; dedicated machine-facing service/auth contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/agents",
+      "status": "ui",
+      "tools": [],
+      "reason": "Agent workspace HTML presentation; browser-specific."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/assets/{identity}",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner-session avatar upload/display for agent workspace presentation."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/assistant",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/assistant/conversations",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/assistant/conversations/{identity}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/assistant/conversations/{identity}/proposals",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/assistant/conversations/{identity}/turns/{turn}/events",
+      "status": "protocol",
+      "tools": [],
+      "reason": "Owner-session conversation event stream; browser transport protocol, not a standalone MCP operation."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/butler",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/butler/briefings",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session scheduled briefing delivery and preferences; no dedicated MCP briefing service is implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/butler/schedule",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session scheduled briefing delivery and preferences; no dedicated MCP briefing service is implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/catalogue",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/defaults",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/graph",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/items",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/items/{identity}/activity",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/items/{identity}/connection",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/items/{identity}/connection/status",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/items/{identity}/conversations",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/hud/data",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/hud/layout",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser HUD layout preferences for the owner workspace; not an agent execution API."
+    },
+    {
+      "method": "GET",
+      "path": "/integrations/api/n8n/workflows",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration setup, credential or workflow synchronization; dedicated machine-facing MCP authorization is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/second-brain/hud/layout",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser HUD layout preferences for the owner workspace; not an agent execution API."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/assets",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner-session avatar upload/display for agent workspace presentation."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/assistant/conversations",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/assistant/conversations/{identity}/messages",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/assistant/conversations/{identity}/proposals",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/assistant/conversations/{identity}/turns/{turn}/{operation}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/assistant/primary",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/assistant/proposals/{identity}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/audit/deliver",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/butler",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/butler/briefings/demo",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner-session local-preview sample data control; not a production automation API."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/butler/schedule",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session scheduled briefing delivery and preferences; no dedicated MCP briefing service is implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/connections/test",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/defaults",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/demo",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner-session local-preview sample data control; not a production automation API."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/items",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/items/{identity}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/items/{identity}/connection",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/items/{identity}/connection/test",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/items/{identity}/conversations",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/items/{identity}/prepare",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/observations",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session agent fleet operation; a dedicated machine-facing authentication and MCP service contract is not implemented."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/grokbot/connect-key",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration setup, credential or workflow synchronization; dedicated machine-facing MCP authorization is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/grokbot/login/start",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration setup, credential or workflow synchronization; dedicated machine-facing MCP authorization is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/grokbot/login/{identity}/cancel",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration setup, credential or workflow synchronization; dedicated machine-facing MCP authorization is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/grokbot/login/{identity}/poll",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration setup, credential or workflow synchronization; dedicated machine-facing MCP authorization is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/grokbot/sync",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration setup, credential or workflow synchronization; dedicated machine-facing MCP authorization is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/n8n/agents/{identity}/refresh",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration setup, credential or workflow synchronization; dedicated machine-facing MCP authorization is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/integrations/api/n8n/sync",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session integration setup, credential or workflow synchronization; dedicated machine-facing MCP authorization is deferred."
+    },
+    {
+      "method": "PUT",
+      "path": "/agents/hud/layout",
+      "status": "ui",
+      "tools": [],
+      "reason": "Browser HUD layout preferences for the owner workspace; not an agent execution API."
     }
   ]
 }

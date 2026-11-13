@@ -17,13 +17,21 @@
     if(!rows.length)messages.append(element('p','Ask about the current page or prepare an action. Changes require an exact preview and your approval.'));
   }
   function attach(row){if(!row?.run_id||!capabilities.run_events_sse){closeStream();return;}if(streamTurn===row.id)return;closeStream();const captured=generation;streamTurn=row.id;stream=new EventSource('/agents/api/assistant/conversations/'+conversation+'/turns/'+row.id+'/events');let text='';stream.addEventListener('delta',e=>{if(captured!==generation)return;try{text=(text+JSON.parse(e.data).text).slice(0,50000);partial.set(row.id,text);const answer=messages.querySelector('[data-turn="'+row.id+'"]');if(answer)answer.textContent=text;}catch{}});stream.addEventListener('refresh',()=>{closeStream();refresh();});stream.onerror=()=>{closeStream();};}
-  async function refresh(){if(!conversation||polling)return;polling=true;const captured=generation, id=conversation;try{const [data,proposals]=await Promise.all([api('/conversations/'+id),api('/conversations/'+id+'/proposals')]);if(captured!==generation)return;current=data.messages;capabilities=data.capabilities;if(data.detail)error.textContent=data.detail;render(current,proposals.items);controls();attach(current.find(t=>t.state==='running'));}catch(e){if(captured===generation)error.textContent=e.message;}finally{polling=false;clearTimeout(timer);if(!panel.hidden)timer=setTimeout(refresh,4000);}}
+  async function refresh(){if(!conversation||polling||panel.dataset.tab!=='conversation')return;polling=true;const captured=generation, id=conversation;try{const [data,proposals]=await Promise.all([api('/conversations/'+id),api('/conversations/'+id+'/proposals')]);if(captured!==generation)return;current=data.messages;capabilities=data.capabilities;if(data.detail)error.textContent=data.detail;render(current,proposals.items);controls();if(!panel.hidden&&panel.dataset.tab==='conversation')attach(current.find(t=>t.state==='running'));}catch(e){if(captured===generation)error.textContent=e.message;}finally{polling=false;clearTimeout(timer);if(!panel.hidden&&panel.dataset.tab==='conversation')timer=setTimeout(refresh,4000);}}
   async function list(){const data=await api('/conversations');selector.replaceChildren();for(const c of data.items){const option=element('option',c.name+' · '+new Date(c.created).toLocaleString());option.value=c.id;option.dataset.name=c.name;option.dataset.agent=c.agent_id;selector.append(option);}if(!data.items.some(c=>c.id===conversation))conversation=data.items[0]?.id||'';selector.value=conversation;showIdentity();}
   function showIdentity(){const option=selector.selectedOptions[0];if(option){$('butler-name').textContent='HARQIS Butler';$('butler-configure').href='/agents?agent='+encodeURIComponent(option.dataset.agent);}}
   async function newConversation(){const value=await api('/conversations',{request_id:crypto.randomUUID()});generation++;closeStream();pending=null;conversation=value.id;current=[];await list();await refresh();}
-  launch.onclick=async()=>{panel.hidden=false;launch.setAttribute('aria-expanded','true');error.textContent='';$('butler-context').textContent='Page context: '+location.pathname;try{const status=await api('');connected=status.connected&&status.active;$('butler-name').textContent='HARQIS Butler';$('butler-connection').textContent=(status.connected?'Connected to '+status.host:'Not connected')+' · separate frontend conversation';$('butler-configure').href='/agents?agent='+encodeURIComponent(status.agent_id);$('butler-new').disabled=!connected;error.textContent=status.detail||'';await list();if(conversation)await refresh();else controls();input.focus();}catch(e){error.textContent=e.message;}};
-  $('butler-close').onclick=()=>{panel.hidden=true;launch.setAttribute('aria-expanded','false');clearTimeout(timer);closeStream();launch.focus();};
-  panel.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('butler-preview').open){e.stopPropagation();$('butler-close').click();}});
+  async function openConversation(){error.textContent='';$('butler-context').textContent='Page context: '+location.pathname;try{const status=await api('');connected=status.connected&&status.active;$('butler-name').textContent='HARQIS Butler';$('butler-connection').textContent=(status.connected?'Connected to '+status.host:'Not connected')+' · separate frontend conversation';$('butler-configure').href='/agents?agent='+encodeURIComponent(status.agent_id);$('butler-new').disabled=!connected;error.textContent=status.detail||'';await list();if(conversation)await refresh();else controls();if(panel.dataset.tab==='conversation')input.focus();}catch(e){error.textContent=e.message;}}
+  launch.onclick=()=>{panel.hidden=false;launch.setAttribute('aria-expanded','true');panel.dispatchEvent(new Event('butler-opened'));if(panel.dataset.tab==='conversation')openConversation();};
+  panel.addEventListener('butler-tab-change',()=>{clearTimeout(timer);closeStream();if(panel.dataset.tab==='conversation'&&!panel.hidden)openConversation();});
+  function closeButler(restoreFocus=true){panel.hidden=true;launch.setAttribute('aria-expanded','false');clearTimeout(timer);closeStream();panel.dispatchEvent(new Event('butler-closed'));if(restoreFocus)launch.focus();}
+  $('butler-close').onclick=()=>closeButler();
+  document.addEventListener('pointerdown',event=>{
+    if(panel.hidden||event.button!==0||$('butler-preview').open)return;
+    const path=event.composedPath();
+    if(!path.includes(panel)&&!path.includes(launch))closeButler(false);
+  },true);
+  panel.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('butler-preview').open){e.stopPropagation();if(panel.dataset.tab==='settings'){panel.dispatchEvent(new CustomEvent('butler-view-request',{detail:'briefings'}));}else $('butler-close').click();}});
   selector.onchange=()=>{generation++;closeStream();pending=null;conversation=selector.value;showIdentity();current=[];messages.replaceChildren();refresh();};
   $('butler-new').onclick=async()=>{try{await newConversation();}catch(e){error.textContent=e.message;}};
   $('butler-form').onsubmit=async e=>{e.preventDefault();send.disabled=true;error.textContent='';try{if(!conversation)await newConversation();if(!pending)pending={message:input.value,request_id:crypto.randomUUID(),context:context()};await api('/conversations/'+conversation+'/messages',pending);input.value='';pending=null;await refresh();}catch(e){if(e.status===422)pending=null;error.textContent=e.message+(pending?' Retry keeps the same request.':'');}finally{controls();}};
@@ -39,23 +47,28 @@
     const response=await fetch('/agents/api/butler/schedule',{method:body===undefined?'GET':'POST',cache:'no-store',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},...(body===undefined?{}:{body:JSON.stringify(body)})});
     const value=await response.json();if(!response.ok)throw Error(typeof value.detail==='string'?value.detail:'Could not save or load the briefing schedule.');return value;
   }
-  $('butler-briefings-open').onclick=async()=>{
+  async function loadBriefingSettings(){
     const revision=++briefingRevision;briefingValue=null;briefingFields.disabled=true;briefingSave.disabled=true;
-    $('butler-briefings-error').textContent='';$('butler-briefings-loading').hidden=false;briefings.showModal();
-    try{const value=await schedule();if(revision!==briefingRevision||!briefings.open)return;briefingValue=value;
+    $('butler-briefings-error').textContent='';$('butler-briefings-loading').hidden=false;
+    try{const value=await schedule();if(revision!==briefingRevision||briefings.hidden||panel.hidden)return;briefingValue=value;
       for(const key of ['cadence','hour','weekday','timezone'])$('butler-briefings-'+key).value=value[key]??(key==='weekday'?0:'');
       briefingDay();briefingFields.disabled=false;briefingSave.disabled=false;
     }catch(e){if(revision===briefingRevision)$('butler-briefings-error').textContent=e.message;}
     finally{if(revision===briefingRevision)$('butler-briefings-loading').hidden=true;}
   };
+  panel.addEventListener('butler-tab-change',()=>{briefingRevision++;if(panel.dataset.tab==='settings'&&!panel.hidden)loadBriefingSettings();});
+  panel.addEventListener('butler-opened',()=>{if(panel.dataset.tab==='settings')loadBriefingSettings();});
+  panel.addEventListener('butler-closed',()=>{briefingRevision++;});
+  const backToBriefings=()=>panel.dispatchEvent(new CustomEvent('butler-view-request',{detail:'briefings'}));
   $('butler-briefings-cadence').onchange=briefingDay;
-  $('butler-briefings-close').onclick=()=>briefings.close();
-  briefings.addEventListener('close',()=>{briefingRevision++;$('butler-briefings-open').focus();});
+  $('butler-hour-up').onclick=()=>{ $('butler-briefings-hour').stepUp(); };
+  $('butler-hour-down').onclick=()=>{ $('butler-briefings-hour').stepDown(); };
+  $('butler-briefings-close').onclick=backToBriefings;
   $('butler-briefings-form').onsubmit=async event=>{
     event.preventDefault();if(!briefingValue||briefingSave.disabled)return;
     const revision=briefingRevision,body={...briefingValue,cadence:$('butler-briefings-cadence').value,hour:Number($('butler-briefings-hour').value),weekday:Number($('butler-briefings-weekday').value),timezone:$('butler-briefings-timezone').value};
     briefingFields.disabled=true;briefingSave.disabled=true;$('butler-briefings-error').textContent='';
-    try{await schedule(body);if(revision===briefingRevision)briefings.close();}
+    try{await schedule(body);if(revision===briefingRevision)backToBriefings();}
     catch(e){if(revision===briefingRevision)$('butler-briefings-error').textContent=e.message;}
     finally{if(revision===briefingRevision){briefingFields.disabled=false;briefingSave.disabled=false;}}
   };

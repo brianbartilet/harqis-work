@@ -6,15 +6,13 @@
 #butler-panel .butler-header-actions{display:flex;align-items:flex-start;gap:8px;margin-left:10px;flex:none}
 #butler-panel .butler-header-actions button{display:grid;place-items:center;box-sizing:border-box;flex:none;width:38px;height:38px;padding:0;line-height:1}
 #butler-panel .butler-header-actions button svg{display:block;width:18px;height:18px;pointer-events:none}
-#butler-briefings{position:fixed;inset:0;margin:auto;box-sizing:border-box;width:min(760px,calc(100vw - 32px));max-height:90dvh;overflow:auto;padding:0;border:1px solid #3b5069;border-radius:14px;background:#0c1829;color:#dbe7f5;box-shadow:0 30px 90px #0008}
-#butler-briefings::backdrop{background:#020617b8;backdrop-filter:blur(4px)}
-#butler-briefings header{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 24px;background:#102036;border-bottom:1px solid #293c53}
-#butler-briefings h2{font-size:18px;font-weight:500;margin:0}
-#butler-briefings-form{display:grid;gap:18px;padding:24px}
+#butler-briefings{flex:1;min-height:0;overflow:auto;color:#dbe7f5}
+#butler-briefings h2{font-size:16px;font-weight:500;margin:0}
+#butler-briefings-form{display:grid;gap:14px;padding:16px}
 #butler-briefings p{font-size:12px;line-height:1.6;color:#94a3b8;margin:0}
 #butler-briefings #butler-briefings-error{color:#fcd34d}
 #butler-briefings-error:empty{display:none}
-#butler-briefings fieldset{display:grid;gap:18px;border:0;padding:0;margin:0;min-width:0}
+#butler-briefings fieldset{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;border:0;padding:0;margin:0;min-width:0}
 #butler-briefings label{display:grid;gap:7px;font-size:12px;color:#b7c7da}
 #butler-briefings [hidden]{display:none}
 #butler-briefings input,#butler-briefings select,#butler-briefings button{box-sizing:border-box;font:inherit;font-size:13px;padding:9px 12px;border:1px solid #334155;border-radius:8px;background:#0f1c2e;color:#dbe7f5}
@@ -31,3 +29,51 @@
 #butler-launch{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:44px;padding:12px 20px;border-color:#3b82f6;border-radius:10px;background:#2563eb;color:#fff;font-size:14px;font-weight:600;line-height:1;box-shadow:0 4px 16px #2563eb40}
 #butler-launch:hover{background:#3b82f6}
 #butler-launch:focus-visible{outline:2px solid #67e8f9;outline-offset:3px}
+
+#butler-panel [hidden]{display:none!important}
+#butler-conversation-pane,#butler-briefings-pane{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+#butler-panel .butler-tabs{display:flex;align-items:center;gap:6px;flex:none}
+#butler-panel .butler-tabs button{border:1px solid #425e7e;background:#1a3049;color:#9fb1c6;border-radius:7px}
+#butler-panel .butler-tabs button[aria-selected=true]{border-color:#67e8f9;color:#cffafe;background:#164e63}
+#butler-panel .butler-tabs button:hover{background:#20334a}
+.butler-briefing-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;flex:none}
+.butler-briefing-toolbar p{font-size:12px;color:#9fb1c6;margin:0}
+#butler-panel #butler-briefing-refresh{display:grid;place-items:center;width:32px;height:32px;padding:0;flex:none}
+#butler-briefing-demo{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 16px 12px;padding:10px;border:1px solid #785f9455;border-radius:8px;background:#281f3b55;color:#c5b2db;font-size:11px}
+#butler-panel #butler-briefing-demo-load{font-size:11px;padding:6px 8px;flex:none;background:#281f3b;border-color:#785f94}
+#butler-briefing-error{margin:0 16px 12px;color:#fcd34d;font-size:12px}
+#butler-briefing-error:empty{display:none}
+#butler-briefing-list{flex:1;min-height:0;overflow:auto;padding:0 16px 16px;overscroll-behavior:contain}
+.butler-briefing-card{padding:14px;margin-bottom:12px;border:1px solid #293c53;border-radius:10px;background:#101e30}
+.butler-briefing-card-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}
+#butler-panel .butler-briefing-card h3,#butler-panel .butler-briefing-empty h3{font-size:14px;font-weight:500;margin:0;color:#dbe7f5}
+.butler-briefing-status{font-size:10px;padding:3px 7px;border-radius:12px;background:#20334a;color:#a7b9cf;white-space:nowrap}
+.butler-briefing-card[data-state=completed] .butler-briefing-status{background:#153d36;color:#99e4c3}
+.butler-briefing-card[data-state=running] .butler-briefing-status{background:#17385a;color:#9bcaff}
+.butler-briefing-card[data-state=failed] .butler-briefing-status{background:#482a36;color:#f4a8ba}
+.butler-briefing-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:#8ba4bf;font-size:11px;margin:7px 0 12px}
+.butler-briefing-mock{color:#deafff;border:1px solid #785f94;border-radius:10px;padding:1px 6px}
+.butler-briefing-answer{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.7;color:#c4d3e5}
+.butler-briefing-detail,.butler-briefing-empty p{color:#9fb1c6;font-size:12px;line-height:1.6;margin:0}
+.butler-briefing-empty{padding:24px 8px;text-align:center}
+.butler-briefing-empty p{margin-top:10px}
+
+#butler-briefings .butler-timezone-field{grid-column:1/-1}
+#butler-briefings fieldset:has(#butler-briefings-day:not([hidden])) .butler-timezone-field{grid-column:auto}
+#butler-briefings #butler-briefings-save{justify-self:end;padding:8px 16px}
+#butler-briefings .butler-hour-control{position:relative;min-width:0}
+#butler-briefings .butler-hour-control input{appearance:textfield;-moz-appearance:textfield;padding-right:36px}
+#butler-briefings .butler-hour-control input::-webkit-inner-spin-button,#butler-briefings .butler-hour-control input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+#butler-briefings .butler-hour-steppers{position:absolute;right:10px;top:50%;transform:translateY(-50%);display:grid;width:18px}
+#butler-briefings .butler-hour-steppers button{display:grid;place-items:center;width:18px;height:16px;padding:0;border:0;border-radius:3px;background:transparent;color:#67e8f9}
+#butler-briefings .butler-hour-steppers button:hover{background:#20334a}
+#butler-briefings .butler-hour-steppers svg{display:block;width:18px;height:18px;pointer-events:none}
+@media(max-width:420px){#butler-briefings fieldset:has(#butler-briefings-day:not([hidden])) .butler-timezone-field{grid-column:1/-1}}
+
+#butler-panel>header{padding:14px 16px;gap:10px;align-items:center;flex:none}
+#butler-panel .butler-header-identity{min-width:0;flex:1}
+#butler-panel .butler-header-identity strong{font-size:14px}
+#butler-panel .butler-header-actions{gap:8px;margin-left:0;align-items:center}
+#butler-panel .butler-header-actions button{width:34px;height:34px}
+#butler-briefings .butler-settings-actions{display:flex;justify-content:flex-end;gap:8px}
+@media(max-width:420px){#butler-panel>header{padding:12px;gap:8px}#butler-panel .butler-header-actions{gap:6px}#butler-panel .butler-header-actions button{width:30px;height:32px}#butler-panel .butler-tabs{gap:4px}#butler-panel header small{font-size:10px}}

@@ -295,6 +295,7 @@ def test_assistant_browser_preview_and_reconnect(gateway, authenticated_client, 
             # Primary selection is no longer an inspector action; Butler remains available.
             assert page.get_by_role('button', name='Make primary assistant', exact=True).count() == 0
             page.click('#butler-launch')
+            page.get_by_role('tab', name='Conversations', exact=True).click()
             page.wait_for_function("document.querySelector('#butler-name').textContent==='HARQIS Butler'")
             page.fill('#butler-message', 'Prepare a release checklist')
             page.click('#butler-send')
@@ -315,6 +316,7 @@ def test_assistant_browser_preview_and_reconnect(gateway, authenticated_client, 
             count = len(gateway[1])
             page.reload()
             page.click('#butler-launch')
+            page.get_by_role('tab', name='Conversations', exact=True).click()
             page.get_by_role('link', name='Open verified action', exact=True).wait_for()
             assert len(gateway[1]) == count
             page.click('#butler-close')

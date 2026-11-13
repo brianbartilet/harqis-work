@@ -1,10 +1,13 @@
 """Opt-in briefings use the existing Hermes sweep as their sole schedule owner."""
 import json
+import os
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from modules.agents import service
 from workflows.hfl.agent_fleet_store import FleetConflict
+
+PROMPT = 'Scheduled read-only briefing: summarize recent activity, open commitments, upcoming work and agent failures. Cite the evidence and its freshness. Do not perform writes, development, scheduling, or external communications.'
 
 DEFAULT = {'cadence':'off', 'hour':9, 'weekday':0, 'timezone':'Asia/Singapore', 'version':0}
 
@@ -45,9 +48,96 @@ def sweep(instant=None):
         local = (instant or datetime.now(ZoneInfo('UTC'))).astimezone(ZoneInfo(config['timezone']))
         if config['cadence']=='off' or local.hour < config['hour'] or (config['cadence']=='weekly' and local.weekday()!=config['weekday']):
             continue
-        key = str(uuid.uuid5(uuid.NAMESPACE_URL, 'fleet-briefing:' + user + ':' + local.date().isoformat()))
+        day = local.date().isoformat()
+        key = occurrence_key(user, day)
+        with service.store().connect() as db:
+            db.execute('INSERT OR IGNORE INTO fleet_briefing_deliveries VALUES (?,?,?,?)',
+                       (user, key, day, json.dumps({'cadence': config['cadence'], 'timezone': config['timezone']})))
         try:
-            send(user, {'request_id':key, 'message':'Scheduled read-only briefing: summarize recent activity, open commitments, upcoming work and agent failures. Cite the evidence and its freshness. Do not perform writes, development, scheduling, or external communications.',
+            send(user, {'request_id':key, 'message':PROMPT,
                         'context':{'path':'/agents','space':''}})
         except (HTTPException, ValueError, KeyError):
             continue  # Next sweep retries the same occurrence, never duplicates it.
+
+
+def occurrence_key(user, day):
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, 'fleet-briefing:' + user + ':' + day))
+
+
+def demo_available():
+    return os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1'
+
+
+def _recover_legacy(db, user):
+    # Require both the exact scheduler prompt and its deterministic occurrence ID.
+    # The UTC creation date can differ from the original local schedule by one day.
+    rows = db.execute('SELECT request_id,created FROM fleet_chat WHERE user=? AND message=?', (user, PROMPT))
+    for row in rows:
+        try:
+            created = datetime.fromisoformat(row['created']).date()
+        except (ValueError, TypeError):
+            continue
+        for offset in (-1, 0, 1):
+            day = (created + timedelta(days=offset)).isoformat()
+            if occurrence_key(user, day) == row['request_id']:
+                db.execute('INSERT OR IGNORE INTO fleet_briefing_deliveries VALUES (?,?,?,?)',
+                           (user, row['request_id'], day, json.dumps({'cadence': 'scheduled', 'legacy': True})))
+                break
+
+
+def history(user):
+    from modules.hfl_corpus.agent_bridge import bridge_store
+    with service.store().connect() as db:
+        _recover_legacy(db, user)
+        rows = list(db.execute('''
+            SELECT d.request_id,d.scheduled_date,d.payload,c.run_id,c.action_id
+            FROM fleet_briefing_deliveries d LEFT JOIN fleet_chat c
+            ON c.user=d.user AND c.request_id=d.request_id
+            WHERE d.user=? ORDER BY d.scheduled_date DESC,d.request_id DESC LIMIT 100
+        ''', (user,)))
+    items = []
+    for row in rows:
+        meta = json.loads(row['payload'])
+        if meta.get('mock') and not demo_available():
+            continue
+        item = {'id': row['request_id'], 'date': row['scheduled_date'],
+                'title': 'Weekly briefing' if meta.get('cadence') == 'weekly' else 'Daily briefing' if meta.get('cadence') == 'daily' else 'Scheduled briefing',
+                'timezone': meta.get('timezone', ''), 'mock': bool(meta.get('mock')),
+                'state': 'pending', 'answer': '', 'detail': 'Waiting for the scheduled worker.',
+                'run_id': row['run_id'] or ''}
+        if item['mock']:
+            item.update(state=meta['state'], answer=meta.get('answer', ''), detail=meta.get('detail', ''))
+        elif row['run_id']:
+            try:
+                run = bridge_store().get(row['run_id'])
+                state = run['state']
+                item['state'] = {'queued': 'pending', 'succeeded': 'completed', 'completed': 'completed',
+                                 'running': 'running', 'review': 'completed', 'accepting': 'completed'}.get(state, 'failed')
+                item['answer'] = str((run.get('result') or {}).get('summary') or '')[:50000]
+                item['detail'] = {'pending': 'Queued for the scheduled worker.', 'running': 'Preparing your briefing.',
+                                  'completed': '', 'failed': 'The worker could not complete this briefing.'}[item['state']]
+            except KeyError:
+                item.update(state='failed', detail='The worker result is no longer available.')
+        items.append(item)
+    return {'items': items, 'demo_available': demo_available()}
+
+
+def seed_demo(user):
+    from fastapi import HTTPException
+    if not demo_available():
+        raise HTTPException(404, 'Sample briefings are available only in local preview.')
+    samples = [
+        ('completed', 'Your morning overview\n\nFocus today\nReview the agent workspace release checklist and confirm the production gateway connection.\n\nOpen commitments\nTwo follow-ups are awaiting review. Check their owners and due dates before planning new work.\n\nUpcoming\nA project review is scheduled this afternoon. Prepare the latest notes and outstanding questions.\n\nEvidence: simulated activity, tasks and calendar entries. No live sources were consulted.', ''),
+        ('running', '', 'Preparing a sample briefing. This mock stays running for layout review.'),
+        ('pending', '', 'Sample briefing waiting for a worker. No job has been queued.'),
+        ('failed', '', 'Sample gateway timeout. This is simulated; no live request failed.'),
+        ('completed', 'Weekly review\n\nCompleted\nAligned the fleet graph, updated the inspector and verified desktop/mobile flows.\n\nNext week\nValidate briefing delivery, review pending work and confirm deployment readiness.\n\nEvidence: simulated release notes. This is not a live activity report.', ''),
+    ]
+    with service.store().connect() as db:
+        for index, (state, answer, detail) in enumerate(samples):
+            day = (datetime.now(timezone.utc).date() - timedelta(days=index)).isoformat()
+            meta = {'mock': True, 'cadence': 'weekly' if index == 4 else 'daily', 'state': state,
+                    'answer': answer, 'detail': detail, 'timezone': 'UTC'}
+            db.execute('INSERT INTO fleet_briefing_deliveries VALUES (?,?,?,?) ON CONFLICT(user,request_id) DO UPDATE SET scheduled_date=excluded.scheduled_date,payload=excluded.payload',
+                       (user, 'mock-briefing-' + str(index), day, json.dumps(meta)))
+    return history(user)
