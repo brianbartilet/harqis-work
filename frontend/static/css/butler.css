@@ -38,7 +38,7 @@
 #butler-panel .butler-tabs button:hover{background:#20334a}
 .butler-briefing-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;flex:none}
 .butler-briefing-toolbar p{font-size:12px;color:#9fb1c6;margin:0}
-#butler-panel #butler-briefing-refresh{display:grid;place-items:center;width:32px;height:32px;padding:0;flex:none}
+#butler-panel :is(#butler-briefing-refresh,#butler-briefing-playback){display:grid;place-items:center;width:32px;height:32px;padding:0;flex:none}
 #butler-briefing-demo{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 16px 12px;padding:10px;border:1px solid #785f9455;border-radius:8px;background:#281f3b55;color:#c5b2db;font-size:11px}
 #butler-panel #butler-briefing-demo-load{font-size:11px;padding:6px 8px;flex:none;background:#281f3b;border-color:#785f94}
 #butler-briefing-error{margin:0 16px 12px;color:#fcd34d;font-size:12px}
@@ -77,3 +77,14 @@
 #butler-panel .butler-header-actions button{width:34px;height:34px}
 #butler-briefings .butler-settings-actions{display:flex;justify-content:flex-end;gap:8px}
 @media(max-width:420px){#butler-panel>header{padding:12px;gap:8px}#butler-panel .butler-header-actions{gap:6px}#butler-panel .butler-header-actions button{width:30px;height:32px}#butler-panel .butler-tabs{gap:4px}#butler-panel header small{font-size:10px}}
+
+.butler-briefing-answer.markdown-body {white-space:normal;overflow-wrap:anywhere;line-height:1.7}
+.butler-briefing-answer :is(h1,h2,h3,h4){font-weight:650;margin:1.1em 0 .5em;color:#e2e8f0}
+.butler-briefing-answer :is(ul,ol){padding-left:1.4em;margin:.7em 0}
+.butler-briefing-answer ul{list-style:disc}.butler-briefing-answer ol{list-style:decimal}
+.butler-briefing-answer p{margin:.65em 0}.butler-briefing-answer a{color:#67e8f9;text-decoration:underline}
+.butler-briefing-answer pre{overflow:auto}.butler-briefing-card{animation:briefing-enter .35s ease-out}
+@keyframes briefing-enter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.butler-briefing-card{animation:none}}
+
+#butler-briefing-playback{margin-left:auto}

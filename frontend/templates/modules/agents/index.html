@@ -10,6 +10,11 @@
 {% block content %}
 {% with brain_loading_message='Loading your workspace...' %}{% include 'partials/second_brain_loading.html' %}{% endwith %}
 <main id="agent-fleet" class="fleet-shell" inert aria-busy="true" aria-label="Second Brain agent workspace"></main>
+
+<div hidden><div data-day-ideas></div><div data-day-actions></div><div data-activity-day-menu></div><button id="fleet-create-entry" data-create-entry-open>Entry</button></div>
+{% include 'modules/hfl_corpus/partials/timeline.html' %}
+{% include 'modules/hfl_corpus/partials/entry_capture.html' %}
+<script src="{{ static_asset('js/entry-capture.js') }}" defer></script>
 <script type="application/json" id="fleet-csrf">{{ csrf|tojson }}</script>
 <script type="application/json" id="fleet-hud-config">{{ {'sizes': hud_sizes, 'colors': hud_colors}|tojson }}</script>
 <script type="application/json" id="fleet-owner">{{ user|tojson }}</script>

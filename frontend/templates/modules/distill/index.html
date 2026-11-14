@@ -20,7 +20,7 @@
   <section class="distill-path" aria-label="From evidence to action">
     <a class="distill-door" href="/hfl-corpus"><span class="distill-eyebrow">Evidence</span><h2>Review your activity <span aria-hidden="true">↗︎</span></h2><p>Find moments, decisions, and source material.</p><span class="distill-destination">Activity Corpus</span></a>
     {% if corpus_entities_enabled %}<a class="distill-door" href="/hfl-corpus/graph"><span class="distill-eyebrow">Understanding</span><h2>Connect your ideas <span aria-hidden="true">↗︎</span></h2><p>Connect people, projects, and recurring themes.</p><span class="distill-destination">Activity Graph</span></a>{% else %}<div class="distill-door"><span class="distill-eyebrow">Understanding</span><h2>Connect your ideas</h2><p>Activity Graph is not enabled on this host. Explore related entries in the corpus.</p><a class="distill-destination" href="/hfl-corpus">Explore the corpus ↗︎</a></div>{% endif %}
-    <a class="distill-door" href="/hfl-corpus/actions"><span class="distill-eyebrow">Outcome</span><h2>Move work forward <span aria-hidden="true">↗︎</span></h2><p>Track next steps, agent work, and outcomes.</p><span class="distill-destination">Actions Kanban</span></a>
+    <a class="distill-door" href="/agents"><span class="distill-eyebrow">Outcome</span><h2>Move work forward <span aria-hidden="true">↗︎</span></h2><p>Track next steps, agent work, and outcomes.</p><span class="distill-destination">Second Brain</span></a>
   </section>
 
   <section class="distill-corpus" aria-labelledby="distill-corpus-title">
@@ -41,9 +41,9 @@
   </section>
 
   <section class="distill-work" aria-labelledby="distill-work-title">
-    <header><div><p class="distill-eyebrow">Put first things first</p><h2 id="distill-work-title">Actions Kanban</h2><p>Recent activity across your action cards, including completed work.</p></div><a href="/hfl-corpus/actions">Open <span aria-hidden="true">↗︎</span></a></header>
+    <header><div><p class="distill-eyebrow">Put first things first</p><h2 id="distill-work-title">Second Brain</h2><p>Recent activity across your action cards, including completed work.</p></div><a href="/agents">Open <span aria-hidden="true">↗︎</span></a></header>
     <div class="distill-recent-cards" data-distill-recent aria-label="Recently updated actions" aria-live="polite" aria-busy="true"><p class="distill-empty">Loading recent actions…</p></div>
-    <p data-distill-error role="status" hidden>Actions could not be loaded. <button type="button" data-distill-retry>Try again</button> or <a href="/hfl-corpus/actions">open Kanban</a>.</p>
+    <p data-distill-error role="status" hidden>Actions could not be loaded. <button type="button" data-distill-retry>Try again</button> or <a href="/agents">open Kanban</a>.</p>
   </section>
 
   <section class="distill-graph" aria-labelledby="distill-graph-title">

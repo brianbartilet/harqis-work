@@ -7,7 +7,7 @@ export function filterFleet(data,{query='',spaces=[],types=[],since='',until='',
   const spaceMatch=n=>!spaces.length||spaces.some(s=>(n.workspace_ids||[]).includes(s));
   const textMatch=n=>!q||[n.label,n.summary,n.source].some(v=>(v||'').toLowerCase().includes(q));
   const parents=n=>(n.agent_ids||[]).filter(id=>allowedAgents.has(id));
-  const objects=data.nodes.filter(n=>n.kind!=='agent'&&enabled.has(n.kind)&&parents(n).length&&spaceMatch(n)&&textMatch(n)&&(!since||n.created?.slice(0,10)>=since)&&(!until||n.created?.slice(0,10)<=until));
+  const objects=data.nodes.filter(n=>n.kind!=='agent'&&enabled.has(n.kind)&&(parents(n).length||(!service&&!(n.agent_ids||[]).length))&&spaceMatch(n)&&textMatch(n)&&(!since||n.created?.slice(0,10)>=since)&&(!until||n.created?.slice(0,10)<=until));
   const owners=new Set(objects.flatMap(parents));
   const nodes=[...data.nodes.filter(n=>n.kind==='agent'&&allowedAgents.has(n.agent_id)&&((spaceMatch(n)&&textMatch(n)&&!since&&!until)||owners.has(n.agent_id))),...objects];
   const ids=new Set(nodes.map(n=>n.id));

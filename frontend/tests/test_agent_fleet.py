@@ -17,6 +17,9 @@ def post(client, path, data):
 @pytest.fixture
 def fleet(bridge, monkeypatch, tmp_path):
     from modules.agents import service
+    from modules.agents import corpus_projection
+    from modules.hfl_corpus import ideas_api
+    monkeypatch.setattr(corpus_projection, 'read', lambda: (ideas_api.permitted_snapshot([]), []))
     monkeypatch.setenv('HARQIS_CONNECTORS_DB', str(tmp_path / 'connectors.sqlite3'))
     monkeypatch.delenv('HARQIS_HERMES_URL', raising=False)
     monkeypatch.delenv('HARQIS_HERMES_API_KEY', raising=False)
@@ -47,7 +50,7 @@ def test_seed_is_idempotent_and_migrates_presets(fleet):
     one = fleet.initialize().list()
     two = fleet.initialize().list()
     assert one == two
-    assert {a['name'] for a in one} == {'Default agent', 'HARQIS Butler', 'Research'}
+    assert {a['name'] for a in one} == {'Default agent', 'HARQIS Butler', 'Sharing', 'Research'}
     assert next(a for a in one if a['name'] == 'Research')['overrides']['agent_model'] == 'test-model'
 
 
@@ -260,7 +263,7 @@ def test_fleet_browser(fleet, authenticated_client, tmp_path):
         assert page.locator('.fleet-hud-heading h2').inner_text()=='HARQIS Butler'
         assert page.locator('.fleet-workspace.fleet-has-selection').count()==0
         page.wait_for_function("[...document.querySelectorAll('.fleet-graph-avatars .agent-avatar')].length>1 && [...document.querySelectorAll('.fleet-graph-avatars .agent-avatar')].every(el=>Number(el.style.opacity)===1)")
-        page.get_by_role('button',name='+ Add agent').click()
+        page.get_by_role('button',name='Add agent').click()
         page.get_by_label('Name',exact=True).fill('Research assistant')
         page.get_by_label('Description',exact=True).fill('Investigates sources and writes evidence-backed reports.')
         page.get_by_role('button',name='Save agent',exact=True).click()

@@ -98,6 +98,8 @@ def graph(user):
         edge('agent:' + agent_id, identity, relation)
 
     catalog = service.catalogue()
+    if 'sharing' in by_id and 'butler' in by_id:
+        edge('agent:butler', 'agent:sharing', 'delegates to')
     labels = {v['id']: v['name'] for v in catalog['skills'] + catalog['workflows']}
     for agent in agents:
         aid = agent['id']
@@ -161,6 +163,14 @@ def graph(user):
                 '/second-brain/hud', relation='monitors', source='HUD catalogue')
     except Exception:
         errors.append('Second Brain catalogue or feed unavailable. Other recorded outputs remain visible.')
+    corpus_available = True
+    try:
+        from modules.agents import corpus_projection
+        snapshot, entries = corpus_projection.read()
+        corpus_projection.extend(nodes, edges, agents, db.configs(), snapshot, entries)
+    except Exception:
+        corpus_available = False
+        errors.append('Corpus actions, ideas or activity could not refresh. Retry to load their current state.')
     for agent in agents:
         related = [n for n in nodes.values() if agent['id'] in n['agent_ids']]
         # Activity counters are metadata; the graph sizes nodes from visible edges.
@@ -168,12 +178,13 @@ def graph(user):
         cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
         recent = sum(n['kind'] not in {'configuration', 'hud'} and (n.get('created', '') >= cutoff or n['kind'] in {'workflow', 'trigger'}) for n in related)
         nodes['agent:' + agent['id']] = {'id': 'agent:' + agent['id'], 'kind': 'agent', 'label': agent['name'],
-            'agent_id': agent['id'], 'agent_ids': [agent['id']], 'summary': agent['description'], 'color': agent['color'],
+            'agent_id': agent['id'], 'agent_ids': [agent['id']], 'summary': agent['description'], 'color': agent['color'] if agent['active'] else '#94a3b8',
             'workspace_ids': agent['workspace_ids'], 'created': agent['created_at'],
             'activity_count': recent, 'configured_count': configured, 'state': agent['state'], 'mock': agent.get('mock', False)}
     return {'agents': agents, 'nodes': list(nodes.values()), 'edges': [e for e in edges.values() if e['source'] in nodes and e['target'] in nodes],
             'types': [{'id': k, 'name': k.replace('_', ' ').title(), 'color': v} for k, v in KINDS.items()],
-            'warnings': errors, 'demo_available': os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1', 'generated_at': now()}
+            'warnings': errors, 'corpus_available': corpus_available,
+            'demo_available': os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1', 'generated_at': now()}
 
 
 def seed_demo(user):

@@ -1,11 +1,12 @@
-<div class="activity-navigation{% if request.url.path in ['/hfl-corpus/actions', '/hfl-corpus/graph', '/hfl-corpus/entities'] %} is-active{% endif %}">
-  <button type="button" {% if corpus_entities_enabled %}aria-haspopup="true" aria-expanded="false"{% else %}disabled{% endif %}>Distill</button>
-  {% if corpus_entities_enabled %}
+{% set fleet_available = 'agents' in (modules | default([]) | map(attribute='key') | list) %}
+<div class="activity-navigation{% if request.url.path in ['/agents', '/second-brain', '/second-brain/hud', '/hfl-corpus/actions', '/hfl-corpus/graph', '/hfl-corpus/entities'] %} is-active{% endif %}">
+  <button type="button" {% if corpus_entities_enabled or fleet_available %}aria-haspopup="true" aria-expanded="false"{% else %}disabled{% endif %}>Distill</button>
+  {% if corpus_entities_enabled or fleet_available %}
   <details class="activity-navigation-menu">
     <summary hidden>Distill navigation</summary>
     <nav class="activity-navigation-options" aria-label="Distill views">
-      <a href="/hfl-corpus/actions" data-followups-open {% if request.url.path == '/hfl-corpus/actions' %}aria-current="page"{% endif %}>Actions Kanban</a>
-      <a href="/hfl-corpus/graph" {% if request.url.path == '/hfl-corpus/graph' %}aria-current="page"{% endif %}>Activity Graph</a>
+      {% if fleet_available %}<a href="/agents" {% if request.url.path == '/agents' %}aria-current="page"{% endif %}>Second Brain</a>{% endif %}
+      {% if corpus_entities_enabled %}<a href="/hfl-corpus/graph" {% if request.url.path == '/hfl-corpus/graph' %}aria-current="page"{% endif %}>Activity Graph</a>{% endif %}
     </nav>
   </details>
   {% endif %}

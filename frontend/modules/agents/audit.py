@@ -27,7 +27,7 @@ def deliver_pending():
         try:
             entry = HflEntry(when=datetime.fromisoformat(event['created']),
                              moment='Agent activity: ' + payload.get('agent_name', payload.get('name', event['agent_id'])),
-                             what_happened=json.dumps(payload, ensure_ascii=False, indent=2),
+                             what_happened=json.dumps({**payload, 'agent_id': event['agent_id']}, ensure_ascii=False, indent=2),
                              why_it_stayed='Links fleet configuration, execution and artifacts to their source.',
                              tags=('agents-activity', 'agent-execution'), source='agents-activity')
             result = submit_hfl_entry(entry, source='agents-activity', dedup_key='fleet:' + event['id'], synthesized=True)

@@ -890,7 +890,7 @@ def test_board_clone_destinations_and_idea_menu_browser(ideas, authenticated_cli
             page.wait_for_selector('#kg-workspace:not([inert])')
             page.locator('#kg-list').get_by_role('button').filter(has_text='Original idea').click()
             menu=page.get_by_role('menu',name='Orb actions')
-            for label in ('Edit idea','Dismiss idea','Promote to action','Create connected action','Clone idea'):
+            for label in ('Edit','Dismiss','Promote','Create connected action','Clone'):
                 expect(menu.get_by_role('menuitem',name=label,exact=True)).to_be_visible()
             assert menu.get_by_role('group',name='Board',exact=True).get_by_role('menuitem').all_text_contents()[-1]=='Remove from board'
             menu.get_by_role('menuitem',name='Board connections',exact=True).click()
@@ -898,7 +898,7 @@ def test_board_clone_destinations_and_idea_menu_browser(ideas, authenticated_cli
             expect(connections.locator('.board-connection-heading')).to_have_text('Packing')
             page.screenshot(path=str(tmp_path/'board-connections.png'))
             connections.get_by_role('button',name='Close editor',exact=True).click()
-            menu.get_by_role('menuitem',name='Clone idea',exact=True).click()
+            menu.get_by_role('menuitem',name='Clone',exact=True).click()
             editor=page.get_by_role('dialog',name='New idea',exact=True)
             expect(editor.get_by_role('button',name='Add to current board',exact=True)).to_be_visible()
             editor.get_by_role('button',name='Add to another board',exact=True).click()
@@ -919,7 +919,7 @@ def test_board_clone_destinations_and_idea_menu_browser(ideas, authenticated_cli
             expect(picker.locator('.idea-type-filters').get_by_role('button',name='ideas',exact=True)).to_have_attribute('aria-pressed','true')
             page.screenshot(path=str(tmp_path/'board-attach-filters.png'))
             picker.get_by_role('button',name='Close editor',exact=True).click()
-            menu.get_by_role('menuitem',name='Clone idea',exact=True).click()
+            menu.get_by_role('menuitem',name='Clone',exact=True).click()
             editor.get_by_role('button',name='Add to current board',exact=True).click()
             expect(editor).to_have_count(0)
             copy=next(i for i in ideas.ideas() if i['title']=='Original idea (2)')

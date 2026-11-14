@@ -3,6 +3,29 @@
   const root = document.getElementById('followup-agenda');
   if (!root) return;
   document.querySelector('[data-day-ideas]').append(root);root.hidden=false;
+  let assignedAgents={}, assigneesPending=false, assigneesQueued=false;
+  const assigneesLifecycle=new AbortController();
+  async function refreshAssignees(){
+    if(assigneesLifecycle.signal.aborted)return;
+    if(assigneesPending){assigneesQueued=true;return;}
+    assigneesPending=true;
+    try{
+      const response=await fetch('/hfl-corpus/agent-bridge/assignments',{cache:'no-store',signal:assigneesLifecycle.signal});
+      if(!response.ok)return;
+      const data=await response.json();
+      if(assigneesLifecycle.signal.aborted)return;
+      assignedAgents=data.items;document.querySelectorAll('[data-assignees-for]').forEach(paintAssignees);
+    }catch{}finally{
+      assigneesPending=false;
+      if(assigneesQueued&&!assigneesLifecycle.signal.aborted){assigneesQueued=false;refreshAssignees();}
+    }
+  }
+  function paintAssignees(host){host.replaceChildren();for(const agent of assignedAgents[host.dataset.assigneesFor]||[]){if(window.AgentAvatars)host.append(window.AgentAvatars.create(agent,{interactive:false}));else{const name=document.createElement('span');name.textContent=agent.name;host.append(name);}}}
+  if(document.querySelector('[data-actions-page]')){
+    refreshAssignees();window.addEventListener('hfl:agent-updated',refreshAssignees,{signal:assigneesLifecycle.signal});
+    const assigneesTimer=setInterval(()=>{if(!document.hidden)refreshAssignees();},15000);
+    window.addEventListener('hfl:view-replacing',()=>{clearInterval(assigneesTimer);assigneesLifecycle.abort();},{once:true});
+  }
   const actionsRoot=document.getElementById('timeline-actions');
   document.querySelector('[data-day-actions]').append(actionsRoot);actionsRoot.hidden=false;
   document.querySelector('[data-activity-day-menu]').append(document.getElementById('agenda-error'));
@@ -163,6 +186,7 @@
     management.append(button('History',()=>showHistory(item)));
     const resultsButton = button('Agents',()=>window.hflAgentBridge.open('actionable',item.id,item.title));
     resultsButton.className = 'action-results-button';
+    if(document.querySelector('[data-actions-page]')){const avatars=node('span',null,'action-agent-thumbnails');avatars.dataset.assigneesFor=item.id;paintAssignees(avatars);resultsButton.append(avatars);}
     views.append(resultsButton);
     const connections = button('Connections', () => window.HflActionConnections.open({...item,kind:'action'}, connections));
     connections.className = 'action-connections-button';

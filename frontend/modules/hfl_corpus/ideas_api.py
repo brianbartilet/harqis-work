@@ -31,18 +31,19 @@ def call(operation, *args, **kwargs):
         raise HTTPException(422, str(exc)) from None
 
 
-def canonical_snapshot():
+def canonical_snapshot(*, include_promoted=False):
     from config import get_settings
     settings = get_settings()
     if settings.hfl_corpus_api_url and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') != '1':
         try:
             response = httpx.get(settings.hfl_corpus_api_url.rstrip('/') + '/api/hfl/timeline/ideas/snapshot',
-                                headers={'Authorization': 'Bearer ' + settings.hfl_corpus_api_token}, timeout=45)
+                                headers={'Authorization': 'Bearer ' + settings.hfl_corpus_api_token},
+                                params={'include_promoted': 'true'} if include_promoted else None, timeout=45)
             response.raise_for_status()
             return response.json()
         except (httpx.HTTPError, ValueError):
             raise HTTPException(502, 'Ideas and actions could not load from the canonical host.') from None
-    return permitted_snapshot()
+    return permitted_snapshot(include_promoted=include_promoted)
 
 
 def permitted_snapshot(entries=None, *, include_promoted=False):
@@ -92,9 +93,12 @@ def check_node(identity, available=None):
 
 
 @router.get('/snapshot')
-def snapshot(request: Request):
+def snapshot(request: Request, include_promoted: bool = False):
     timeline.owner(request)
-    return permitted_snapshot()
+    if include_promoted:
+        from modules.hfl_corpus.fleet_entry_cache import current_entries
+        return permitted_snapshot(current_entries(), include_promoted=True)
+    return permitted_snapshot(include_promoted=include_promoted)
 
 
 @router.get('/share-context')

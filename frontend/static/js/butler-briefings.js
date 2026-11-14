@@ -7,6 +7,31 @@
   const demo = $('butler-briefing-demo-load');
   const csrf = JSON.parse($('butler-csrf').textContent);
   let timer, revision = 0;
+  const motion = matchMedia('(prefers-reduced-motion: reduce)');
+  const playback = document.createElement('button');
+  playback.type = 'button'; playback.id = 'butler-briefing-playback';
+  refresh.before(playback);
+  let playing = !motion.matches, lastTick = 0, loopAt = 0, carry = 0, rendered = '';
+  function playbackState() {
+    playback.setAttribute('aria-label', playing ? 'Pause briefing playback' : 'Play briefing playback');
+    playback.title = playback.getAttribute('aria-label');
+    playback.setAttribute('aria-pressed', String(playing));
+    playback.innerHTML = '<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">' + (playing ? '<path d="M8 5v14M16 5v14"/>' : '<path d="m8 5 11 7-11 7Z"/>') + '</svg>';
+  }
+  function pause(){playing=false;playbackState();}
+  playback.onclick=()=>{playing=!playing;lastTick=0;loopAt=0;playbackState();};
+  motion.addEventListener('change',()=>{if(motion.matches)pause();});
+  for(const event of ['wheel','touchstart','pointerdown','keydown'])list.addEventListener(event,pause,{passive:true});
+  list.tabIndex=0;
+  function tick(time){
+    const elapsed=Math.min(100,time-(lastTick||time));lastTick=time;
+    if(playing&&visible()&&!document.hidden&&list.scrollHeight>list.clientHeight){
+      if(list.scrollTop+list.clientHeight>=list.scrollHeight-1){if(!loopAt)loopAt=time+2500;if(time>=loopAt){list.scrollTop=0;loopAt=0;}}
+      else{carry+=elapsed*.018;const pixels=Math.floor(carry);if(pixels){list.scrollTop+=pixels;carry-=pixels;}loopAt=0;}
+    }
+    requestAnimationFrame(tick);
+  }
+  playbackState();requestAnimationFrame(tick);
   const visible = () => !panel.hidden && panel.dataset.tab === 'briefings';
   function text(tag, value, className) {
     const node = document.createElement(tag);
@@ -15,6 +40,9 @@
     return node;
   }
   function render(data) {
+    const signature=JSON.stringify(data.items);
+    if(signature===rendered)return;
+    rendered=signature;
     const fragment = document.createDocumentFragment();
     for (const item of data.items) {
       const card = document.createElement('article');
@@ -33,7 +61,12 @@
       meta.append(date);
       if (item.mock) meta.append(text('span', 'Mock', 'butler-briefing-mock'));
       card.append(meta);
-      if (item.answer) card.append(text('div', item.answer, 'butler-briefing-answer'));
+      if (item.answer) {
+        const answer=text('div', item.answer, 'butler-briefing-answer markdown-body');
+        // HTML is sanitized by the shared server Markdown renderer.
+        if(item.answer_html)answer.innerHTML=item.answer_html;
+        card.append(answer);
+      }
       if (item.detail) card.append(text('p', item.detail, 'butler-briefing-detail'));
       fragment.append(card);
     }

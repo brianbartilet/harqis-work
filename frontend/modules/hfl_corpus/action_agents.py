@@ -46,6 +46,16 @@ def default_configuration():
     return {'effective': settings, 'card': {'preset': '', 'overrides': {}}}
 
 
+@owner.get('/assignments')
+def assignments(user=Depends(bridge.owner_auth)):
+    from modules.agents.projection import listing
+    visible = {a['id']: {k: a.get(k, '') for k in ('id', 'name', 'runtime', 'classification', 'thumbnail', 'color')}
+               for a in listing(user)}
+    return {'items': {key[5:]: [visible[value['agent_id']]]
+                      for key, value in store().configs().items()
+                      if key.startswith('card:') and value.get('agent_id') in visible}}
+
+
 @owner.get('/actions/{source_id}/configuration')
 def configuration(source_id: str):
     from modules.agents.service import initialize

@@ -346,7 +346,7 @@
       pendingPayload = null;
       pendingFiles = [];
       progressStatus.textContent = 'Saved. Returning to Activity Corpus…';
-      window.location.assign(successUrl);
+      if(document.getElementById('agent-fleet')){reviewDialog.close();setSavingEntry(false);progressPanel.hidden=true;previewPanel.hidden=false;window.dispatchEvent(new Event('hfl:entry-created'));}else window.location.assign(successUrl);
     } catch (error) {
       setSavingEntry(false);
       reviewDialog.close();

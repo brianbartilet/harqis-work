@@ -234,7 +234,7 @@
       render(rows);error.hidden=true;
       updateCount(rows);
     }catch(e){if(ticket===sequence){error.textContent=e.message;error.hidden=false;status.textContent='Could not refresh. Displayed actions may be out of date. Use Refresh to retry.';}}
-    finally{if(ticket===sequence){pending=false;lanes.removeAttribute('aria-busy');}}
+    finally{if(ticket===sequence){pending=false;lanes.removeAttribute('aria-busy');if(page)window.BrainPageLoading?.finish();}}
   }
   async function move(id,state,order){
     const item=items.get(id);if(!item||moving)return;

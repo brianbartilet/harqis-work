@@ -7,7 +7,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from modules.agents import service
 from workflows.hfl.agent_fleet_store import FleetConflict
 
-PROMPT = 'Scheduled read-only briefing: summarize recent activity, open commitments, upcoming work and agent failures. Cite the evidence and its freshness. Do not perform writes, development, scheduling, or external communications.'
+LEGACY_PROMPT = 'Scheduled read-only briefing: summarize recent activity, open commitments, upcoming work and agent failures. Cite the evidence and its freshness. Do not perform writes, development, scheduling, or external communications.'
+PROMPT = LEGACY_PROMPT + ' Always write the briefing in Markdown with headings, lists, and evidence links. Do not wrap the whole answer in a code fence.'
 
 DEFAULT = {'cadence':'off', 'hour':9, 'weekday':0, 'timezone':'Asia/Singapore', 'version':0}
 
@@ -71,7 +72,7 @@ def demo_available():
 def _recover_legacy(db, user):
     # Require both the exact scheduler prompt and its deterministic occurrence ID.
     # The UTC creation date can differ from the original local schedule by one day.
-    rows = db.execute('SELECT request_id,created FROM fleet_chat WHERE user=? AND message=?', (user, PROMPT))
+    rows = db.execute('SELECT request_id,created FROM fleet_chat WHERE user=? AND message IN (?,?)', (user, PROMPT, LEGACY_PROMPT))
     for row in rows:
         try:
             created = datetime.fromisoformat(row['created']).date()
@@ -118,6 +119,8 @@ def history(user):
                                   'completed': '', 'failed': 'The worker could not complete this briefing.'}[item['state']]
             except KeyError:
                 item.update(state='failed', detail='The worker result is no longer available.')
+        from services.markdown import render_markdown
+        item['answer_html'] = str(render_markdown(item['answer']))
         items.append(item)
     return {'items': items, 'demo_available': demo_available()}
 

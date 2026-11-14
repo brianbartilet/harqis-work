@@ -43,3 +43,9 @@ test('fleet outputs use compact activity radii at both density thresholds',()=>{
   assert.equal(result.nodes.find(n=>n.kind==='agent').radius,4+4*Math.log2(36));
   assert.equal(filterFleet(dense,{types:[]}).nodes[0].radius,10);
 });
+
+test('unassigned intent survives without inventing an agent edge',()=>{
+ const data={agents:[],nodes:[{id:'action:orphan',kind:'action',label:'Manual task',agent_ids:[],workspace_ids:[]}],edges:[]};
+ assert.equal(filterFleet(data,{types:['action']}).nodes.length,1);
+ assert.equal(filterFleet(data,{types:['action'],service:'hermes'}).nodes.length,0);
+});

@@ -1,6 +1,6 @@
 (() => {
   const splash = document.getElementById('brain-page-loading');
-  const main = document.querySelector('#agent-fleet, #hud-surface');
+  const main = document.querySelector('#agent-fleet, #hud-surface, #kanban-surface');
   let timer;
   function show(message) {
     clearTimeout(timer);
@@ -23,8 +23,8 @@
     const link = event.target.closest('a[href]');
     if (!link || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.target || link.hasAttribute('download')) return;
     const url = new URL(link.href, location.href);
-    if (url.origin === location.origin && ['/agents', '/second-brain'].includes(url.pathname)) {
-      show(url.pathname === '/agents' ? 'Opening your workspace...' : 'Opening your dashboard...');
+    if (url.origin === location.origin && ['/agents', '/second-brain', '/hfl-corpus/actions'].includes(url.pathname)) {
+      show(url.pathname === '/agents' ? 'Opening your workspace...' : url.pathname === '/hfl-corpus/actions' ? 'Opening your Kanban...' : 'Opening your dashboard...');
     }
   });
   window.addEventListener('pageshow', event => { if (event.persisted) finish(); });

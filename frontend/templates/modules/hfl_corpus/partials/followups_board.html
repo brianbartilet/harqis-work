@@ -3,6 +3,7 @@
   <header class="agenda-dialog-header"><h2 id="followups-title">Activity Kanban</h2><button type="button" data-board-close aria-label="Close Activity Kanban">Close</button></header>
   {% endif %}
   <div class="followups-toolbar">
+    {% if actions_page %}<a class="board-fleet-return" href="/agents" aria-label="Back to Second Brain fleet" title="Back to Second Brain fleet"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 18V5a3 3 0 0 0-5.8-1 4 4 0 0 0-3.1 6.3A4 4 0 0 0 5 18a3.5 3.5 0 0 0 7 0Zm0 0V5a3 3 0 0 1 5.8-1 4 4 0 0 1 3.1 6.3A4 4 0 0 1 19 18a3.5 3.5 0 0 1-7 0ZM7 8c0 2-1 3-3 3m13-3c0 2 1 3 3 3M8 15c2 0 4 1 4 3m4-3c-2 0-4 1-4 3"/></svg></a>{% endif %}
     <details data-board-create-menu class="board-create-menu"><summary>Create</summary><div class="board-create-options">
       <button type="button" data-board-create-action>Action</button>
       <button type="button" data-board-create-idea>Idea</button>

@@ -43,6 +43,8 @@ def initialize():
     db.save({**defaults('Default agent'), 'description': 'Inherits shared execution defaults.'}, identity='default', seed=True)
     db.save({**defaults('HARQIS Butler'), 'description': 'Your HARQIS assistant', 'persona': 'Thoughtful, concise, evidence-led',
              'instructions': BUTLER, 'color': '#e9c96c'}, identity='butler', seed=True)
+    db.save({**defaults('Sharing'), 'description': 'Existing Hermes sharing assistant · shared-page questions, responses and audit activity.',
+             'color': '#c4b5fd', 'managed_sharing': True}, identity='sharing', seed=True)
     # Migrate the original seed once, preserving customized names and colors.
     with db.connect() as connection:
         connection.execute('BEGIN IMMEDIATE')
@@ -155,6 +157,8 @@ def validate(raw, existing=None):
 
 def execution(identity, require_active=True):
     agent = initialize().get(identity)
+    if agent.get('managed_sharing'):
+        raise ValueError('The sharing assistant runs from shared pages.')
     if agent.get('mock'):
         raise ValueError('Mock agents cannot execute work or become the live primary assistant.')
     if require_active and not agent['active']:
@@ -176,6 +180,8 @@ def execution(identity, require_active=True):
 
 
 def prepare(identity, user):
+    if identity == 'sharing':
+        raise ValueError('The sharing assistant runs from shared pages.')
     from modules.integrations.service import canonical
     from modules.hfl_corpus.action_agents import store as terminals
     agent = initialize().get(identity)

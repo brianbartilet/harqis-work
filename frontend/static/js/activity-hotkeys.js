@@ -20,7 +20,7 @@
   document.addEventListener('DOMContentLoaded',()=>{
     const board=query('[data-actions-page]'), graph=query('.kg-shell'), corpus=query('[data-corpus-index]'), fleet=query('#agent-fleet');
     if((!board&&!graph&&!corpus&&!fleet)||graph?.dataset.readonly==='true')return;
-    const pageKeys=fleet?[['Space','Show HUD dashboard'],['a','Toggle HUD animations'],['g','Add agent'],['f','Filters'],['r','Refresh'],['p','Fit view'],['[','Zoom in'],[']','Zoom out'],['\\','Toggle fullscreen']]:board?[['i','Ideas drawer'],['a','Create action'],['d','Create idea'],['m','Multiselect'],['Space','Refresh']]:graph?[['a','Explore activity graph'],['e','Entities'],['f','Filters'],['h','Board guide'],['r','Refresh'],['Space','Reapply preset and refresh'],['p','Fit view'],['[','Zoom in'],[']','Zoom out'],['\\','Toggle fullscreen']]:[['v','Open feed'],['q','Quick tags'],['e','Exclude tags'],['r','Advanced filters'],['a','Create action'],['d','Create idea'],['x','Secrets'],['t','Tags'],['c','Manage categories'],['Space','Show/hide memory signal']];
+    const pageKeys=fleet?[['Tab','Show Second Brain HUD dashboard'],['Space','Show Kanban'],['i','Toggle HUD animations'],['a','Create action'],['d','Create idea'],['g','Add agent'],['f','Filters'],['r','Refresh'],['p','Fit view'],['[','Zoom in'],[']','Zoom out'],['\\','Toggle fullscreen']]:board?[['i','Ideas drawer'],['a','Create action'],['d','Create idea'],['m','Multiselect'],['Space','Back to agents fleet'],['r','Refresh']]:graph?[['a','Explore activity graph'],['e','Entities'],['f','Filters'],['h','Board guide'],['r','Refresh'],['Space','Reapply preset and refresh'],['p','Fit view'],['[','Zoom in'],[']','Zoom out'],['\\','Toggle fullscreen']]:[['v','Open feed'],['q','Quick tags'],['e','Exclude tags'],['r','Advanced filters'],['a','Create action'],['d','Create idea'],['x','Secrets'],['t','Tags'],['c','Manage categories'],['Space','Show/hide memory signal']];
     const contextKeys=board?[['e','Edit'],['o','Move to done'],['a','Agents'],['i','Dismiss'],['h','History'],['x','Show/hide card sections']]:graph?[['t','Add thought'],['c','Connect on this board'],['n','Clone'],['d','Dismiss'],['r','Promote'],['e','Edit'],['u','Use as starting point'],['o','Board connections'],['x','Clear selection'],['f','Focus connection'],['Delete','Remove selected from board'],['↑ / ↓','Adjust orb sizes']]:[];
     const dialog=document.createElement('dialog');dialog.className='context-help';dialog.id='activity-hotkey-help';dialog.setAttribute('aria-labelledby','activity-hotkey-title');
     const header=document.createElement('header');header.className='context-help-header';
@@ -62,18 +62,21 @@
       if(fleet){
         if(event.altKey){if(key==='`'||event.code==='Backquote'||/^[1-9]$/.test(key)){event.preventDefault();document.dispatchEvent(new CustomEvent('fleet-space-key',{detail:event.code==='Backquote'||key==='`'?0:Number(key)}));}return;}
         if(key==='n'){event.preventDefault();click(query('.fleet-spaces [role=\"switch\"]'));return;}
-        if(key==='a'){event.preventDefault();document.dispatchEvent(new Event('fleet-hud-motion'));return;}
+        if(key==='i'){event.preventDefault();document.dispatchEvent(new Event('fleet-hud-motion'));return;}
+        if(key==='a'||key==='d'){event.preventDefault();window.HflIdeas?.openEditor(key==='a'?'actionable':'idea');return;}
         if(key===' '&&event.target.closest('button,a,summary,[role=\"button\"]'))return;
-        const selectors={' ':'.fleet-dashboard-link',g:'.fleet-toolbar-actions .fleet-primary',f:'.fleet-filter-trigger',r:'.fleet-toolbar [aria-label=\"Refresh\"]',p:'.fleet-map [aria-label=\"Fit view\"]','[':'.fleet-map [aria-label=\"Zoom in\"]',']':'.fleet-map [aria-label=\"Zoom out\"]','\\':'#fleet-exit-fullscreen,#fleet-enter-fullscreen'};
+        if(key==='tab'&&event.target.closest('button,a,summary,[role="button"],details[open]'))return;
+        const selectors={tab:'.fleet-dashboard-link[aria-label="Show second brain dashboard"]',' ':'.fleet-dashboard-link[aria-label="Show Kanban"]',g:'.fleet-toolbar-actions button.fleet-primary',f:'.fleet-filter-trigger',r:'.fleet-toolbar [aria-label=\"Refresh\"]',p:'.fleet-map [aria-label=\"Fit view\"]','[':'.fleet-map [aria-label=\"Zoom in\"]',']':'.fleet-map [aria-label=\"Zoom out\"]','\\':'#fleet-exit-fullscreen,#fleet-enter-fullscreen'};
         if(selectors[key]){event.preventDefault();click(query(selectors[key]));return;}
       }
       if(event.altKey){if((key==='`'||event.code==='Backquote'||/^[1-9]$/.test(key))&&window.HflSelectSpace){event.preventDefault();window.HflSelectSpace(event.code==='Backquote'||key==='`'?0:Number(key));}return;}
       if(key==='k'){event.preventDefault();help.click();return;}
       if(board){
+        if(key===' '&&event.target.closest('button,a,summary,[role="button"]'))return;
         const card=document.activeElement?.closest('[data-followup-id]')||query('[data-board-lanes] [data-followup-id]:hover');
         const labels={e:'Edit',o:'Done',a:'Agents',i:'Dismiss',h:'History'};
         if(card&&(labels[key]||key==='x')){event.preventDefault();if(key==='x'){const sections=[...card.querySelectorAll('details')],toggles=[...card.querySelectorAll('.checklist-cover-toggle')],open=sections.some(el=>!el.open)||toggles.some(el=>el.getAttribute('aria-expanded')==='false');sections.forEach(el=>el.open=open);toggles.forEach(el=>{if((el.getAttribute('aria-expanded')==='true')!==open)click(el);});}else{const button=named(card,new RegExp('^'+labels[key]+'$'));if(key==='o'||key==='i')confirmCommand(button,labels[key]+' this action');else click(button);}return;}
-        const selectors={i:'.ideas-drawer-toggle',a:'[data-board-create-action]',d:'[data-board-create-idea]',' ':'[data-board-refresh]',m:`[data-bulk-kind="${query('.ideas-drawer')?'idea':'action'}"] [data-bulk-toggle]`};
+        const selectors={i:'.ideas-drawer-toggle',a:'[data-board-create-action]',d:'[data-board-create-idea]',' ':'.board-fleet-return',r:'[data-board-refresh]',m:`[data-bulk-kind="${query('.ideas-drawer')?'idea':'action'}"] [data-bulk-toggle]`};
         if(selectors[key]){event.preventDefault();click(query(selectors[key]));return;}
       }
       for(const handler of handlers)if(handler(key,event)){event.preventDefault();return;}

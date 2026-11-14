@@ -2,11 +2,13 @@
 {% block body_class %}activity-modal-page activity-workspace-page{% endblock %}
 {% block title %}HARQIS — Activity Kanban{% endblock %}
 {% block head %}
+<link rel="stylesheet" href="{{ static_asset('css/second-brain-loading.css') }}">
 <link rel="stylesheet" href="{{ static_asset('css/hfl-timeline.css') }}">
 <link rel="stylesheet" href="{{ static_asset('css/corpus-workspaces.css') }}">
 {% endblock %}
 {% block content %}
-<main class="actions-page" data-actions-page>
+{% with brain_loading_message='Loading your Kanban...' %}{% include 'partials/second_brain_loading.html' %}{% endwith %}
+<main id="kanban-surface" class="actions-page" data-actions-page inert aria-busy="true">
   {% set actions_page = true %}
   {% include "modules/hfl_corpus/partials/followups_board.html" %}
 </main>

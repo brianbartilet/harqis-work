@@ -255,7 +255,8 @@
     if(key==='n'){event.preventDefault();window.HudSpaces.toggleDynamic();return;}
     // Preserve native Space activation on focused buttons, links and summaries.
     if(key===' '&&event.target.closest('button,a,summary,[role="button"]'))return;
-    const id={' ':'hud-workspace-return',a:'hud-motion',g:'hud-add',k:'hud-hotkeys',f:'hud-fullscreen',r:'hud-refresh'}[key];
+    if(key==='tab'&&event.target.closest('button,a,summary,[role="button"]'))return;
+    const id={tab:'hud-workspace-return',' ':'hud-motion',g:'hud-add',k:'hud-hotkeys',f:'hud-fullscreen',r:'hud-refresh'}[key];
     if(id){event.preventDefault();$(id).click();}
   });
   $('hud-build').onclick=()=>$('hud-builder').showModal();
