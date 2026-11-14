@@ -35,7 +35,7 @@ def page(request: Request):
     return templates.TemplateResponse(request, 'modules/agents/index.html', page_context(
         request, user, 'agents', csrf=make_csrf_token(user), memory_csrf=make_csrf_token(user),
         today_iso=datetime.now(ZoneInfo('Asia/Singapore')).date().isoformat(), entry_source_options=['manual-entry'],
-        hud_sizes=hud.SIZES, hud_colors=hud.PIN_COLORS))
+        hud_sizes=hud.SIZES, hud_colors=hud.PIN_COLORS, hud_catalog=hud.inventory()))
 
 
 @api.get('/catalogue')

@@ -311,7 +311,7 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 .fleet-owner{margin:18px 0}.fleet-owner img,.fleet-owner-avatar{width:32px;height:32px;flex:0 0 32px;border-radius:50%;object-fit:cover}.fleet-owner-avatar{display:grid;place-items:center;background:#a5b4fc;color:#10263c}
 .fleet-relationships{display:grid;gap:8px}.fleet-shell .fleet-relationship-card{display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;text-align:left;padding:12px;border:1px solid #30445e;border-radius:10px;background:#102033;white-space:normal}.fleet-relationship-card strong{display:block;overflow-wrap:anywhere}.fleet-relationship-card small{display:block;color:#93b4d1;margin-top:5px;line-height:1.5}.fleet-owner .fleet-relationship-card{justify-content:flex-start}
 .fleet-idea-assignment{display:grid;gap:8px;margin-top:16px}.fleet-idea-assignment label{display:grid;gap:6px}
-.fleet-hud-output{white-space:pre-wrap;overflow-wrap:anywhere}.fleet-hud-divider{display:block;max-width:100%;overflow:hidden;white-space:nowrap;line-height:1.3}.fleet-hud-add-dialog{width:min(440px,calc(100vw - 32px));max-height:85vh;overflow:auto;padding:20px;border:1px solid #334155;border-radius:14px;background:#0f1d30;color:#e2e8f0}.fleet-hud-catalog{display:grid;gap:8px}.fleet-hud-catalog button{display:flex;justify-content:space-between;gap:20px;padding:12px}.fleet-hud-heading .fleet-hud-expand{flex-shrink:0}
+.fleet-hud-output{white-space:pre-wrap;overflow-wrap:anywhere}.fleet-hud-divider{display:block;max-width:100%;overflow:hidden;white-space:nowrap;line-height:1.3}
 
 .fleet-description p{white-space:pre-line}
 
@@ -322,6 +322,41 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 /* Keep the initial force layout out of focus until the saved camera is restored. */
 .fleet-map canvas,.fleet-graph-avatars{transition:filter .2s ease,opacity .2s ease}
 .fleet-map-loading canvas,.fleet-map-loading .fleet-graph-avatars{filter:blur(12px);opacity:.35;pointer-events:none}
-.fleet-layout-loading{position:absolute;inset:0;z-index:4;display:grid;place-items:center;background:#09142166;color:#a9bed3;font-size:13px;cursor:wait;touch-action:none}
+.fleet-layout-loading{position:absolute;inset:0;z-index:4;display:grid;place-items:center;background:#09142188;color:#f0f9ff;font-size:16px;font-weight:600;text-align:center;padding:20px;cursor:wait;touch-action:none}
 .fleet-map-loading .fleet-map-footer{visibility:hidden}
 @media(prefers-reduced-motion:reduce){.fleet-map canvas,.fleet-graph-avatars{transition:none}}
+
+.fleet-layout-loading>span{max-width:100%;padding:18px 24px;border:1px solid #4e8198;border-radius:12px;background:#102237f2;box-shadow:0 12px 36px #0006,0 0 24px #67e8f918;line-height:1.5}
+
+/* Match the standalone HUD catalog and builder while keeping fleet styles scoped. */
+.fleet-hud-heading{flex-wrap:nowrap;gap:6px}
+.fleet-hud-heading h2{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fleet-hud-heading>small:empty{display:none}
+.fleet-hud-heading-actions{display:flex;align-items:center;gap:6px;margin-left:auto;flex:none}
+.fleet-hud-heading-actions .fleet-hud-expand{margin-left:0}
+.fleet-shell dialog.fleet-hud-add-dialog{position:fixed;inset:0;margin:auto;width:min(620px,calc(100vw - 24px));max-height:calc(100dvh - 32px);overflow:auto;padding:0;background:#0b1221;border-color:#334155;border-radius:16px;color:#e2e8f0}
+.fleet-shell dialog.fleet-hud-add-dialog::backdrop{background:rgba(2,6,23,.8);backdrop-filter:none}
+.fleet-hud-add-dialog .fleet-dialog-head{padding:16px 20px;background:#0b1221;border-color:#1e293b}
+.fleet-hud-add-dialog .fleet-dialog-head h2{font-size:18px;font-weight:600}
+.fleet-hud-add-dialog .fleet-dialog-head button{display:grid;place-items:center;width:32px;height:32px;padding:0;flex:none;background:#0f172a}
+.fleet-hud-add-dialog .fleet-form{padding:16px 20px 24px;gap:14px}
+.fleet-hud-add-dialog .fleet-form label{font-size:13px;color:#cbd5e1}
+.fleet-hud-add-dialog .fleet-form input,.fleet-hud-add-dialog .fleet-form textarea,.fleet-hud-catalog-body>input{background:#0b1728;border-color:#334155;color:#e2e8f0}
+.fleet-hud-add-dialog .fleet-form textarea{min-height:156px}
+.fleet-hud-add-dialog .fleet-form button[type=submit]{justify-self:start;background:#0c4a6e;border-color:#38bdf8;color:#e0f2fe;font-size:12px}
+.fleet-shell dialog.fleet-hud-add-dialog:not(.fleet-hud-build-dialog){max-height:72dvh}
+.fleet-hud-catalog-body{padding:14px 16px 16px}
+.fleet-hud-catalog-body>input{width:100%;padding:7px 9px}
+.fleet-hud-catalog{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.fleet-hud-catalog-card{display:flex;flex-wrap:wrap;align-content:space-between;justify-content:flex-end;gap:10px;padding:12px;border:1px solid #243448;border-radius:8px;background:#0b1728}
+.fleet-hud-catalog-card>div{flex:1 0 100%;min-width:0}
+.fleet-hud-catalog-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.fleet-hud-catalog-heading strong{font-size:13px;min-width:0;overflow-wrap:anywhere}
+.fleet-hud-catalog-spaces{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;max-width:55%;flex-shrink:0}
+.fleet-hud-catalog-spaces .hud-space-pill{min-width:0;color:#e2e8f0}
+.fleet-hud-catalog-card small{display:block;font-size:10px;color:#94a3b8;margin-top:6px}
+.fleet-shell .fleet-hud-catalog-card button{padding:5px 8px;font-size:11px;background:#0f172a}
+.fleet-hud-catalog-added{opacity:.5}
+.fleet-hud-catalog>p{grid-column:1 / -1;color:#94a3b8}
+.fleet-hud-dialog-error{margin:0;padding:0 20px 20px;color:#fca5a5}
+@media(max-width:479px){.fleet-hud-catalog{grid-template-columns:minmax(0,1fr)}}

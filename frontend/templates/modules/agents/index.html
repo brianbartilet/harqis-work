@@ -16,7 +16,7 @@
 {% include 'modules/hfl_corpus/partials/entry_capture.html' %}
 <script src="{{ static_asset('js/entry-capture.js') }}" defer></script>
 <script type="application/json" id="fleet-csrf">{{ csrf|tojson }}</script>
-<script type="application/json" id="fleet-hud-config">{{ {'sizes': hud_sizes, 'colors': hud_colors}|tojson }}</script>
+<script type="application/json" id="fleet-hud-config">{{ {'sizes': hud_sizes, 'colors': hud_colors, 'catalog': hud_catalog}|tojson }}</script>
 <script type="application/json" id="fleet-owner">{{ user|tojson }}</script>
 <script src="{{ static_asset('js/hfl-intent-reuse.js') }}" defer></script>
 <script src="{{ static_asset('js/agent-fleet.js') }}" defer></script>

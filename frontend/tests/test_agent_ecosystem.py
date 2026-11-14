@@ -116,6 +116,31 @@ def test_ecosystem_browser(fleet, authenticated_client, tmp_path, width, height)
             page.goto('https://fleet.test/agents')
             initial_hud=page.get_by_role('complementary',name='HARQIS Butler HUD feed')
             initial_hud.wait_for()
+            # HUD dialogs stay centered independently of the narrow feed panel.
+            add_button=initial_hud.get_by_role('button',name='Add HUD items',exact=True)
+            add_button.click()
+            catalog=page.get_by_role('dialog',name='Add a widget',exact=True)
+            catalog.wait_for()
+            box=catalog.bounding_box()
+            assert abs(box['x']+box['width']/2-width/2)<2
+            assert abs(box['y']+box['height']/2-height/2)<2
+            search=catalog.get_by_role('searchbox',name='Search widgets')
+            search.fill('no-such-widget-xyz')
+            assert catalog.get_by_text('No widgets match this search.').is_visible()
+            search.fill('Context feed')
+            assert catalog.get_by_role('button',name='Added',exact=True).is_disabled()
+            search.fill('')
+            page.screenshot(path=str(tmp_path/f'hud-catalog-{width}.png'))
+            page.keyboard.press('Escape')
+            assert add_button.evaluate('(el)=>el===document.activeElement')
+            initial_hud.get_by_role('button',name='Build new HUD with agent',exact=True).click()
+            builder=page.get_by_role('dialog',name='Build a HUD widget',exact=True)
+            box=builder.bounding_box()
+            assert abs(box['x']+box['width']/2-width/2)<2
+            assert abs(box['y']+box['height']/2-height/2)<2
+            assert builder.get_by_placeholder('Weekly delivery pulse').is_visible()
+            page.screenshot(path=str(tmp_path/f'hud-builder-{width}.png'))
+            builder.get_by_role('button',name='Close',exact=True).click()
             assert initial_hud.get_attribute('data-expanded')=='false'
             assert initial_hud.locator('.fleet-hud-grid').evaluate('(el)=>getComputedStyle(el).gridTemplateColumns.split(" ").length')==1
             initial_hud.get_by_role('button',name='Expand HUD panel',exact=True).click()
