@@ -8,7 +8,7 @@ export function IntentControls({node}) {
   if(!node.record)return;
   if(node.kind==='action'){
    const card=window.hflActions.card(node.record);
-   for(const part of card.querySelectorAll('.action-evidence-link,.action-controls'))root.append(part);
+   for(const part of card.querySelectorAll('.action-evidence-link,.action-controls button'))root.append(part);
    return;
   }
   const item=node.record, buttons=[
@@ -16,11 +16,11 @@ export function IntentControls({node}) {
    ['Create connected action',()=>window.HflIdeas.openEditor('actionable',{}, {id:'idea:'+item.id,kind:'ideas',object_id:item.id,label:item.title})],
    ['Clone',()=>window.HflIdeas.cloneObject('idea',item.id)],
    ['Edit',()=>window.HflIdeas.editIdea(item.id)],
-   [item.status==='dismissed'?'Restore':'Dismiss',async()=>{
+   ...(!['dismissed','done'].includes(item.status)?[['Dismiss',async()=>{
     const {item:latest}=await window.HflIdeas.api('/objects/'+item.id);
-    await window.HflIdeas.api('/objects/'+item.id,'PATCH',{version:latest.version,status:latest.status==='dismissed'?'suggested':'dismissed'});
-    window.dispatchEvent(new Event('hfl:ideas-updated'));
-   }]
+    const result=await window.HflIdeas.api('/objects/'+item.id,'PATCH',{version:latest.version,status:'dismissed'});
+    window.dispatchEvent(new CustomEvent('hfl:ideas-updated',{detail:{fleetUpdate:{id:node.id,item:result.item||{...latest,status:'dismissed'}}}}));
+   }]]:[])
   ];
   for(const [label,action] of buttons){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=async()=>{button.disabled=true;try{await action();setError('');}catch(e){setError(e.message);}finally{button.disabled=false;}};root.append(button);}
  },[node]);

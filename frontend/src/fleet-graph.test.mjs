@@ -82,3 +82,13 @@ test('Today uses exact rolling 24 hour bounds and preserves intents',()=>{
  const data={agents:[],nodes:[['boundary','2026-11-14T10:00:00Z'],['old','2026-11-14T09:59:59Z'],['now','2026-11-15T10:00:00Z'],['future','2026-11-15T10:00:01Z']].map(([id,created])=>({id,created,kind:'entry'})).concat([{id:'action',kind:'action',created:'2020-01-01'}]),edges:[]};
  assert.deepEqual(filterFleet(data,{types:['entry','action'],range:'1',now}).nodes.map(n=>n.id),['boundary','now','action']);
 });
+
+test('undated HUD catalog nodes survive date filters and global Space selection',()=>{
+ const input=structuredClone(data);
+ input.nodes.push({id:'hud:calendar',kind:'hud',label:'Calendar',agent_ids:['a'],workspace_ids:[]});
+ input.edges.push({source:'agent:a',target:'hud:calendar'});
+ const options={types:['hud'],spaces:['work'],since:'2026-10-01',until:'2026-10-02'};
+ assert.ok(filterFleet(input,options).nodes.some(n=>n.id==='hud:calendar'));
+ input.nodes.at(-1).workspace_ids=['personal'];
+ assert.ok(!filterFleet(input,options).nodes.some(n=>n.id==='hud:calendar'));
+});

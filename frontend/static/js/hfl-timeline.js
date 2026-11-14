@@ -106,7 +106,7 @@
   function button(label, fn) { const b = node('button', label); b.type='button'; b.addEventListener('click',fn); return b; }
   async function patch(item, changes, trigger) {
     trigger.disabled = true; error('agenda-error');
-    try { await api('/'+item.id, {method:'PATCH',body:JSON.stringify({version:item.version,...changes})}); await load(); window.dispatchEvent(new Event('hfl:actions-updated')); }
+    try { const result=await api('/'+item.id, {method:'PATCH',body:JSON.stringify({version:item.version,...changes})}); window.dispatchEvent(new CustomEvent('hfl:actions-updated',{detail:{fleetUpdate:{id:'action:'+item.id,item:result.item||{...item,...changes}}}})); await load(); }
     catch (e) { error('agenda-error',e.message); window.dispatchEvent(new CustomEvent('hfl:action-error',{detail:e.message})); } finally {trigger.disabled=false;}
   }
   let historySequence = 0;

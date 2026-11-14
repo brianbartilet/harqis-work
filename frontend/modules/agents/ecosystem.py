@@ -10,7 +10,7 @@ from modules.agents import service, projection
 from workflows.hfl.agent_fleet_store import now
 
 KINDS = {'configuration': '#94a3b8', 'workflow': '#60a5fa', 'trigger': '#c4b5fd',
-         'action': '#fb8ca6', 'idea': '#f9ca74', 'entry': '#77dcf5', 'file': '#70edbd',
+         'action': '#facc15', 'idea': '#00d4ff', 'entry': '#77dcf5', 'file': '#70edbd',
          'link': '#93c5fd', 'feed': '#5eead4', 'hud': '#e9c96c', 'task': '#a7f3d0', 'subagent': '#deafff'}
 
 

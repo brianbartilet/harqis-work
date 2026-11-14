@@ -1,4 +1,4 @@
-import {actionStatusNames,actionStatusColors} from './action-status.mjs';
+import {actionStatusNames} from './action-status.mjs';
 // Presentation only: canonical provenance edges remain unchanged.
 export function groupFleet(data,{showStatus=true}={}){
  const nodes=data.nodes.map(n=>({...n})),links=data.links.map(e=>({...e}));
@@ -14,7 +14,7 @@ export function groupFleet(data,{showStatus=true}={}){
   const key='fleet-status:'+JSON.stringify([n.kind,state]);
   if(!groups.has(key)){
    const label=n.kind==='action'?(actionStatusNames[state]||state):state.replaceAll('_',' ').replace(/^./,s=>s.toUpperCase());
-   groups.set(key,{id:key,kind:'status',label:(n.kind==='action'?'Actions':'Ideas')+' · '+label,color:actionStatusColors[state]||'#c4b5fd',groupParents:[],groupKind:n.kind,state,agent_ids:[],radius:13,count:0});
+   groups.set(key,{id:key,kind:'status',label,color:'#facc15',groupParents:[],groupKind:n.kind,state,agent_ids:[],radius:13,count:0});
   }
   const group=groups.get(key);group.count++;
   if(n.groupParent&&!group.groupParents.includes(n.groupParent))group.groupParents.push(n.groupParent);

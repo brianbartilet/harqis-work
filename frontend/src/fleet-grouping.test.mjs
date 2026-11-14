@@ -14,9 +14,9 @@ test('groups by assignment and entity kind without changing provenance',()=>{
 });
 test('status changes replace the group and edge; filtering removes empty groups',()=>{
  const before=groupFleet(data),changed=structuredClone(data);changed.nodes[2].state='done';
- const after=groupFleet(changed),oldId=before.nodes.find(n=>n.label==='Actions · In Review').id;
+ const after=groupFleet(changed),oldId=before.nodes.find(n=>n.label==='In Review').id;
  assert.ok(!after.nodes.some(n=>n.id===oldId));assert.ok(!after.links.some(e=>e.target===oldId));
- assert.ok(after.nodes.some(n=>n.label==='Actions · Done'));
+ assert.ok(after.nodes.some(n=>n.label==='Done'));
  const filtered=groupFleet({nodes:data.nodes.filter(n=>n.kind!=='action'),links:[]});
  assert.equal(filtered.nodes.filter(n=>n.kind==='status').length,1);
  const ids=new Set(after.nodes.map(n=>n.id));assert.ok(after.links.every(e=>ids.has(e.source)&&ids.has(e.target)));
@@ -46,7 +46,7 @@ test('matching statuses merge across owner and agents with unique hub connection
  input.nodes.find(n=>n.id==='action:owner').state='done';
  const changed=groupFleet(input);
  assert.equal(changed.nodes.find(n=>n.id===action.id).count,2);
- assert.equal(changed.links.find(e=>e.source==='action:owner'&&e.relation==='has status').target,changed.nodes.find(n=>n.label==='Actions · Done').id);
+ assert.equal(changed.links.find(e=>e.source==='action:owner'&&e.relation==='has status').target,changed.nodes.find(n=>n.label==='Done').id);
 });
 
 test('status changes do not reposition individual ideas and actions',()=>{
@@ -62,4 +62,10 @@ test('status links are visible without exerting clustering force',()=>{
  assert.equal(strength({relation:'produced'}),.035);
  assert.equal(distance,220);
  assert.ok(groupFleet(data).links.some(link=>link.grouping));
+});
+
+test('status nodes use a uniform bright yellow and concise labels',()=>{
+ const statuses=groupFleet(data).nodes.filter(n=>n.kind==='status');
+ assert.deepEqual(statuses.map(n=>n.label),['In Review','Suggested']);
+ assert.ok(statuses.every(n=>n.color==='#facc15'));
 });

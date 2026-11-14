@@ -16,7 +16,7 @@ def test_canonical_status_assignment_orphans_and_provenance():
     nodes, edges = {}, {}
     extend(nodes, edges, agents, {'card:a': {'agent_id':'leo'}}, snapshot, entries)
     assert nodes['action:a']['agent_ids'] == ['leo']
-    assert nodes['action:a']['color'] == '#fb8ca6'
+    assert nodes['action:a']['color'] == '#facc15'
     assert nodes['action:a']['status_color'] == '#4ade80'
     assert nodes['action:orphan']['agent_ids'] == []
     assert nodes['idea:i']['agent_ids'] == ['butler']
@@ -61,15 +61,19 @@ def test_assignment_thumbnails_follow_configuration(fleet, bridge, authenticated
     assert 'demo-action' not in authenticated_client.get('/hfl-corpus/agent-bridge/assignments').json()['items']
 
 
-def test_fleet_inline_intent_browser(fleet, bridge, authenticated_client):
+def test_fleet_inline_intent_browser(fleet, bridge, authenticated_client, tmp_path):
     import pytest
     from urllib.parse import urlparse
     from uuid import uuid4
     pw=pytest.importorskip('playwright.sync_api')
     from modules.hfl_corpus.action_agents import store
     from modules.agents import briefings
-    item=bridge[2].create({'request_id':str(uuid4()),'title':'Review fleet integration'},actor='owner')[0]
+    item=bridge[2].create({'request_id':str(uuid4()),'title':'Review fleet integration','expected_outcome':'## Inventory management\n\n- Review current stock\n- Confirm pending orders'},actor='owner')[0]
     store().configure('card:'+item['id'],{'agent_id':'butler'})
+    idea_response=authenticated_client.post('/hfl-corpus/timeline/ideas/objects',json={'request_id':str(uuid4()),'title':'Review fleet idea','description':'## Plan\n\n- Read the matched entries\n- Curate the next step'})
+    assert idea_response.status_code==200,idea_response.text
+    idea=idea_response.json()['item']
+    store().configure('idea:'+idea['id'],{'agent_id':'butler'})
     fleet.initialize()
     briefings.seed_demo('frontend-test-user')
     errors=[]
@@ -77,16 +81,87 @@ def test_fleet_inline_intent_browser(fleet, bridge, authenticated_client):
         browser=p.chromium.launch(channel='chrome',headless=True)
         page=browser.new_page(viewport={'width':1440,'height':1000})
         page.on('pageerror',lambda error:errors.append(str(error)))
+        workspace={'views':[{'id':'work','name':'Work','color':'#67e8f9','schedule':[{'days':[0,1,2,3,4,5,6],'start':'00:00','end':'23:59'}]}], 'preferences':{'dynamic':False,'manual':[],'revision':0},'active':[]}
         def route(r):
             u=urlparse(r.request.url)
+            if u.path=='/hfl-corpus/workspace-views':
+                r.fulfill(json=workspace);return
+            if u.path=='/hfl-corpus/view-preferences':
+                import json
+                workspace['preferences'].update(json.loads(r.request.post_data))
+                workspace['active']=['work'] if workspace['preferences']['dynamic'] else workspace['preferences']['manual']
+                r.fulfill(json=workspace);return
             response=authenticated_client.request(r.request.method,u.path+('?' + u.query if u.query else ''),content=r.request.post_data_buffer,
                 headers={k:v for k,v in r.request.headers.items() if k in {'content-type','x-csrf-token'}})
             r.fulfill(status=response.status_code,body=response.content,content_type=response.headers.get('content-type','text/html'))
         page.route('https://fleet.test/**',route)
         try:
             page.goto('https://fleet.test/agents?agent=butler')
+            page.locator('.fleet-layout-loading').wait_for(state='hidden')
+            position_script="JSON.parse(localStorage.getItem('harqis:fleet:graph:v2:frontend-test-user')).positions"
+            before=page.evaluate(position_script)
+            assert 'action:'+item['id'] in before
+            page.reload()
+            page.locator('.fleet-layout-loading').wait_for(state='hidden')
+            assert page.evaluate(position_script)==before
+            search=page.get_by_label('Search agents and outputs')
+            search.fill('no-matching-entity')
+            page.wait_for_timeout(200)
+            search.fill('')
+            page.wait_for_timeout(1600)
+            page.evaluate("window.dispatchEvent(new Event('pagehide'))")
+            assert page.evaluate(position_script)==before
+            # Both manual and scheduled Space transitions preserve hidden children.
+            page.evaluate("document.dispatchEvent(new CustomEvent('fleet-space-key',{detail:1}))")
+            page.wait_for_function("document.querySelector('.activity-view-name').textContent==='Work'")
+            page.evaluate("document.dispatchEvent(new CustomEvent('fleet-space-key',{detail:0}))")
+            page.wait_for_function("document.querySelector('.activity-view-name').textContent==='All activity'")
+            page.locator('.fleet-spaces > details > summary').click()
+            page.get_by_role('switch',name='Dynamic mode').check()
+            page.wait_for_function("document.querySelector('.activity-dynamic-badge').textContent==='Dynamic ON'")
+            page.get_by_role('switch',name='Dynamic mode').uncheck()
+            page.wait_for_function("document.querySelector('.activity-dynamic-badge').textContent==='Dynamic OFF'")
+            page.keyboard.press('Escape')
+            page.wait_for_timeout(1600)
+            page.evaluate("window.dispatchEvent(new Event('pagehide'))")
+            assert page.evaluate(position_script)==before
+            if page.locator('.fleet-spaces > details').get_attribute('open') is not None:
+                page.locator('.fleet-spaces > details > summary').click()
+            search.fill(item['title'])
+            page.locator('.fleet-owner .fleet-relationship-card').click()
+            pw.expect(page.locator('.fleet-relationships .fleet-relationship-card')).to_have_count(1)
+            assert page.locator('.fleet-relationships .fleet-relationship-type').inner_text()=='action'
+            assert page.get_by_role('button',name='Show more',exact=False).count()==0
+            search.fill('')
+            page.locator('.fleet-map canvas').click(position={'x':5,'y':5})
+            page.get_by_role('button',name='Select HARQIS Butler',exact=True).click()
+            page.locator('.fleet-output-list button').filter(has_text=idea['title']).click()
+            idea_controls=page.locator('.fleet-intent-controls')
+            assert idea_controls.get_by_role('button',name='Restore',exact=True).count()==0
+            assert page.locator('.fleet-idea-assignment').count()==0
+            assert idea_controls.get_by_role('button',name='Dismiss',exact=True).evaluate('(el)=>getComputedStyle(el).gridColumn')=='1 / -1'
+            page.locator('.fleet-description-details').get_by_text('View description',exact=True).click()
+            page.screenshot(path=str(tmp_path/'fleet-idea-desktop.png'))
+            idea_controls.get_by_role('button',name='Dismiss',exact=True).click()
+            pw.expect(page.locator('.fleet-agent-overview')).to_be_visible()
+            assert authenticated_client.get('/hfl-corpus/timeline/ideas/objects/'+idea['id']).json()['item']['status']=='dismissed'
+            page.get_by_role('button',name='Select HARQIS Butler',exact=True).click()
+
             page.locator('.fleet-output-list button').filter(has_text=item['title']).click()
             controls=page.locator('.fleet-intent-controls')
+            description=page.locator('.fleet-description-details')
+            assert description.get_attribute('open') is None
+            description.get_by_text('View description',exact=True).click()
+            assert description.get_attribute('open') is not None
+            assert page.locator('.fleet-idea-assignment').count()==0
+            assert page.locator('.fleet-relationship-type').count()>0
+            assert controls.evaluate('(el)=>getComputedStyle(el).gridTemplateColumns.split(" ").length')==2
+            page.screenshot(path=str(tmp_path/'fleet-inspector-desktop.png'))
+            page.set_viewport_size({'width':390,'height':844})
+            page.screenshot(path=str(tmp_path/'fleet-inspector-mobile.png'))
+            assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+            page.set_viewport_size({'width':1440,'height':1000})
+
             page.get_by_role('button',name='Fullscreen',exact=True).click()
             controls.get_by_role('button',name='Edit',exact=True).click()
             pw.expect(page.locator('#followup-editor')).to_be_visible()
@@ -95,7 +170,7 @@ def test_fleet_inline_intent_browser(fleet, bridge, authenticated_client):
             page.keyboard.press('Escape')
             page.get_by_role('button',name='Exit fullscreen',exact=True).click()
             controls.get_by_role('button',name='Done',exact=True).click()
-            pw.expect(page.locator('.fleet-inspector>.fleet-badge')).to_have_text('Done')
+            pw.expect(page.locator('.fleet-agent-overview')).to_be_visible()
             page.get_by_role('link',name='Show Kanban',exact=True).click()
             card=page.locator('[data-board-lanes] [data-followup-id="'+item['id']+'"]')
             pw.expect(card).to_be_visible()

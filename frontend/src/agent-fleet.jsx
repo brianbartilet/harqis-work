@@ -1,7 +1,6 @@
 import {isFleetAnchor,pinFleetAnchors,releaseFleetNeighbors} from './fleet-drag.mjs';
 import {groupFleet,configureFleetLinks} from './fleet-grouping.mjs';
-import {OwnerCard,Description,Relationships,IdeaAssignment} from './fleet-presentation.jsx';
-import {statusColor} from './action-status.mjs';
+import {OwnerCard,Description,Relationships} from './fleet-presentation.jsx';
 import {graphDateRange} from './graph-dates.mjs';
 import {IntentControls,CreateIntent} from './fleet-intent.jsx';
 import {NodConnection,NodStatus} from './nod-connection.jsx';
@@ -128,6 +127,7 @@ function savedView(){try{const {demo,...view}=JSON.parse(localStorage.getItem(vi
 const initialView=savedView();
 if(initialView.types&&!initialView.statusNodesRestored&&!initialView.types.includes('status'))initialView.types.push('status');
 function FleetGraph({data,loaded,selected,select,agents,animation,animationMenuOpen,reset,fullscreen,setFullscreen}) {
+  const previousModel=useRef(null);
   const host=useRef(),graph=useRef(),positions=useRef(initialView.positions||{}),targets=useRef(new Map()),released=useRef(new Set()),dragging=useRef(false),avatarLayer=useRef(),avatarNodes=useRef(new Map()),fitted=useRef(false);
   const [size,setSize]=useState({width:800,height:640});
   const [layoutReady,setLayoutReady]=useState(false);
@@ -143,10 +143,15 @@ function FleetGraph({data,loaded,selected,select,agents,animation,animationMenuO
   const motionTime=useRef(0),lastFrame=useRef(0),lastInteraction=useRef(0);
   const agentMap=useMemo(()=>new Map(agents.map(a=>[a.id,a])),[agents]);
   const model=useMemo(()=>{
+    // Keep hidden children in the position map when filters or Spaces change.
+    if(previousModel.current)for(const n of previousModel.current.nodes){
+      const base=n.fx!==undefined?targets.current.get(n.id):n;
+      if(Number.isFinite(base?.x)&&Number.isFinite(base?.y))positions.current[n.id]={x:base.x,y:base.y,manual:!!n.manual};
+    }
 
-    const nodes=data.nodes.map((n,i)=>{const parent={x:n.clusterX??0,y:n.clusterY??0},phase=phaseFor(n.id),cached=positions.current[n.id],prior=Number.isFinite(cached?.x)&&Number.isFinite(cached?.y)?cached:null;const node={...n,radius:n.radius,...(prior||{x:parent.x+(isFleetAnchor(n)?0:100*Math.cos(phase+i)),y:parent.y+(isFleetAnchor(n)?0:100*Math.sin(phase+i))})};if(prior?.manual||isFleetAnchor(node)){node.fx=node.x;node.fy=node.y;}return node;});
+    const nodes=data.nodes.map((n,i)=>{const parent={x:n.clusterX??0,y:n.clusterY??0},phase=phaseFor(n.id),cached=positions.current[n.id],prior=Number.isFinite(cached?.x)&&Number.isFinite(cached?.y)?cached:null;const node={...n,radius:n.radius,...(prior||{x:parent.x+(isFleetAnchor(n)?0:100*Math.cos(phase+i)),y:parent.y+(isFleetAnchor(n)?0:100*Math.sin(phase+i))})};if(prior||isFleetAnchor(node)){node.fx=node.x;node.fy=node.y;}return node;});
     targets.current=new Map(nodes.map(n=>[n.id,{x:n.x,y:n.y}]));
-    return {nodes,links:data.links.map(l=>({...l}))};
+    const next={nodes,links:data.links.map(l=>({...l}))};previousModel.current=next;return next;
   },[data]);
   // Native images animate even when ForceGraph has paused canvas redraws.
   useEffect(()=>{
@@ -173,7 +178,7 @@ function FleetGraph({data,loaded,selected,select,agents,animation,animationMenuO
     }
     position();return()=>cancelAnimationFrame(frame);
   },[model,agentMap,size]);
-  function savePositions(){const visible=Object.fromEntries(model.nodes.map(n=>[n.id,{...(targets.current.get(n.id)||{x:n.x,y:n.y}),manual:!!n.manual}]).filter(([,p])=>Number.isFinite(p.x)&&Number.isFinite(p.y)));positions.current={...positions.current,...visible};try{localStorage.setItem(viewKey,JSON.stringify({...savedView(),positions:positions.current}));}catch{}}
+  function savePositions(){const visible=Object.fromEntries(model.nodes.map(n=>[n.id,{...(n.fx!==undefined?targets.current.get(n.id)||{x:n.x,y:n.y}:{x:n.x,y:n.y}),manual:!!n.manual}]).filter(([,p])=>Number.isFinite(p.x)&&Number.isFinite(p.y)));positions.current={...positions.current,...visible};try{localStorage.setItem(viewKey,JSON.stringify({...savedView(),positions:positions.current}));}catch{}}
   function saveViewport(){if(!fitted.current||!graph.current||!model.nodes.length)return;const center=graph.current.centerAt(),zoom=graph.current.zoom();if(!Number.isFinite(center.x)||!Number.isFinite(center.y)||!Number.isFinite(zoom))return;try{localStorage.setItem(viewKey,JSON.stringify({...savedView(),viewport:{...center,zoom}}));}catch{}}
   const persist=useRef();persist.current=()=>{savePositions();saveViewport();};
   useEffect(()=>{const save=()=>persist.current();const hidden=()=>{if(document.hidden)save();};window.addEventListener('pagehide',save);document.addEventListener('visibilitychange',hidden);return()=>{window.removeEventListener('pagehide',save);document.removeEventListener('visibilitychange',hidden);};},[]);
@@ -199,18 +204,17 @@ function FleetGraph({data,loaded,selected,select,agents,animation,animationMenuO
   const linked=l=>active&&(endpointId(l.source)===active||endpointId(l.target)===active);
   function draw(n,ctx,scale){
     if(!Number.isFinite(n.x)||!Number.isFinite(n.y)||!Number.isFinite(scale)||scale<=0)return;
-    const isAgent=n.kind==='agent',agent=agentMap.get(n.agent_id),r=n.radius/scale,ink=n.color||'#60a5fa',statusInk=statusColor(n),emphasis=active===n.id||selected===n.id;
+    const isAgent=n.kind==='agent',agent=agentMap.get(n.agent_id),r=n.radius/scale,ink=n.color||'#60a5fa',emphasis=active===n.id||selected===n.id;
     ctx.save();ctx.globalAlpha=(agent?.active===false||n.state==='dismissed'?.35:1)*(visible(n)?1:.075);
     // Use Activity's screen-space halo and lighting.
     const halo=(emphasis?30:18)/scale;
     const glow=ctx.createRadialGradient(n.x,n.y,0,n.x,n.y,halo);
-    glow.addColorStop(0,(statusInk||ink)+(emphasis?'75':'35'));glow.addColorStop(1,(statusInk||ink)+'00');
+    glow.addColorStop(0,ink+(emphasis?'75':'35'));glow.addColorStop(1,ink+'00');
     ctx.fillStyle=glow;ctx.beginPath();ctx.arc(n.x,n.y,halo,0,Math.PI*2);ctx.fill();
     const fill=ctx.createRadialGradient(n.x-r*.3,n.y-r*.4,0,n.x,n.y,r*1.6);
     fill.addColorStop(0,'#effbff');fill.addColorStop(.3,ink);fill.addColorStop(1,ink+'70');
     ctx.beginPath();ctx.arc(n.x,n.y,r,0,Math.PI*2);ctx.fillStyle=fill;ctx.fill();
     ctx.beginPath();ctx.arc(n.x,n.y,r,0,Math.PI*2);ctx.strokeStyle=ink;ctx.lineWidth=.8/scale;ctx.stroke();
-    if(statusInk){ctx.beginPath();ctx.arc(n.x,n.y,r+2/scale,0,Math.PI*2);ctx.strokeStyle=statusInk;ctx.lineWidth=1.5/scale;ctx.stroke();}
     if(emphasis){ctx.beginPath();ctx.arc(n.x,n.y,r+5/scale,0,Math.PI*2);ctx.strokeStyle=ink+'aa';ctx.lineWidth=1/scale;ctx.stroke();}
     if(isAgent&&['running','succeeded','failed','Mock'].includes(n.state)){ctx.beginPath();ctx.arc(n.x+r*.75,n.y+r*.75,4/scale,0,Math.PI*2);ctx.fillStyle={running:'#60a5fa',succeeded:'#4ade80',failed:'#facc15',Mock:'#c4b5fd'}[n.state];ctx.fill();}
     ctx.restore();}
@@ -250,16 +254,25 @@ function App(){
  useEffect(()=>{if((initialGraph&&initialSpaces&&catalog)||error)window.BrainPageLoading?.finish();},[initialGraph,initialSpaces,catalog,error]);
 
  useEffect(()=>{if(!fullscreen)return;const shell=document.getElementById('agent-fleet');shell.classList.add('fleet-fullscreen');const outside=[...document.body.children].filter(el=>el!==shell&&el.id!=='activity-hotkey-help'&&!['SCRIPT','STYLE','DIALOG'].includes(el.tagName)).map(el=>[el,el.inert]);outside.forEach(([el])=>el.inert=true);document.getElementById('fleet-exit-fullscreen')?.focus();const escape=e=>{if(e.key==='Escape'&&!document.querySelector('dialog[open]')){e.preventDefault();setFullscreen(false);}};document.addEventListener('keydown',escape);return()=>{shell.classList.remove('fleet-fullscreen');outside.forEach(([el,wasInert])=>el.inert=wasInert);document.removeEventListener('keydown',escape);document.getElementById('fleet-enter-fullscreen')?.focus();};},[fullscreen]);
- async function refresh(){if(refreshing.current){refreshQueued.current=true;return;}refreshing.current=true;try{const id=++epoch.current;const [next,p]=await Promise.all([api('/graph'),api('/assistant?probe=false')]);if(id!==epoch.current)return;next.types=[...next.types.filter(t=>t.id!=='status'),{id:'status',name:'Status',color:'#c4b5fd'}];setData(old=>{if(next.corpus_available===false){const retained=old.nodes.filter(n=>n.record||n.corpus_entry),ids=new Set(retained.map(n=>n.id));next.nodes=[...next.nodes.filter(n=>!ids.has(n.id)),...retained];const keys=new Set(next.edges.map(e=>JSON.stringify(e)));next.edges.push(...old.edges.filter(e=>(ids.has(e.source)||ids.has(e.target))&&!keys.has(JSON.stringify(e))));}return JSON.stringify({...old,generated_at:''})===JSON.stringify({...next,generated_at:''})?old:next;});setPrimary(p);setInitialGraph(true);setTypes(old=>old||next.types.map(t=>t.id));}finally{refreshing.current=false;if(refreshQueued.current){refreshQueued.current=false;refresh().catch(e=>setError(e.message));}}}
+ async function refresh(){if(refreshing.current){refreshQueued.current=true;return;}refreshing.current=true;try{const id=++epoch.current;const [next,p]=await Promise.all([api('/graph'),api('/assistant?probe=false')]);if(id!==epoch.current)return;next.types=[...next.types.filter(t=>t.id!=='status'),{id:'status',name:'Status',color:'#facc15'}];setData(old=>{if(next.corpus_available===false){const retained=old.nodes.filter(n=>n.record||n.corpus_entry),ids=new Set(retained.map(n=>n.id));next.nodes=[...next.nodes.filter(n=>!ids.has(n.id)),...retained];const keys=new Set(next.edges.map(e=>JSON.stringify(e)));next.edges.push(...old.edges.filter(e=>(ids.has(e.source)||ids.has(e.target))&&!keys.has(JSON.stringify(e))));}return JSON.stringify({...old,generated_at:''})===JSON.stringify({...next,generated_at:''})?old:next;});setPrimary(p);setInitialGraph(true);setTypes(old=>old||next.types.map(t=>t.id));}finally{refreshing.current=false;if(refreshQueued.current){refreshQueued.current=false;refresh().catch(e=>setError(e.message));}}}
  async function reloadCatalog(){setCatalog(await api('/catalogue'));}
  useEffect(()=>{Promise.all([refresh(),reloadCatalog(),fetch('/hfl-corpus/workspace-views').then(r=>r.json()).then(d=>setSpaces(d.views||[]))]).catch(e=>setError(e.message));const timer=setInterval(()=>{if(!document.hidden)refresh().catch(e=>setError(e.message));},15000);return()=>{clearInterval(timer);epoch.current++;};},[]);
  useEffect(()=>{try{localStorage.setItem(viewKey,JSON.stringify({...savedView(),statusNodesRestored:1,query,space,types,since,until,range,runtime,animation,inactive,dismissed,includeOwnerActivity}));}catch{}},[query,space,types,since,until,range,runtime,animation,inactive,dismissed,includeOwnerActivity]);
 
  useEffect(()=>{refresh().catch(e=>setError(e.message));},[space.join(',')]);
- useEffect(()=>{const changed=()=>refresh().catch(e=>setError(e.message));const names=['hfl:actions-updated','hfl:ideas-updated','hfl:agent-updated','hfl:entry-created'];names.forEach(n=>window.addEventListener(n,changed));return()=>names.forEach(n=>window.removeEventListener(n,changed));},[]);
+ useEffect(()=>{const changed=event=>{
+  const update=event.detail?.fleetUpdate;
+  if(update){
+   ++epoch.current;
+   setData(old=>({...old,nodes:old.nodes.map(n=>n.id===update.id?{...n,state:update.item.status,record:{...n.record,...update.item}}:n)}));
+   if(['dismissed','done'].includes(update.item.status))setSelected(current=>current===update.id?'':current);
+  }
+  refresh().catch(e=>setError(e.message));
+ };const names=['hfl:actions-updated','hfl:ideas-updated','hfl:agent-updated','hfl:entry-created'];names.forEach(n=>window.addEventListener(n,changed));return()=>names.forEach(n=>window.removeEventListener(n,changed));},[]);
  useEffect(()=>{const update=()=>{setClock(Date.now());const dates=graphDateRange(range);if(dates){setSince(dates.since);setUntil(dates.until);}};update();const timer=setInterval(update,60000);return()=>clearInterval(timer);},[range]);
  const filtered=useMemo(()=>groupFleet(filterFleet(data,{query,spaces:space,types:types||[],since,until,inactive,dismissed,includeOwnerActivity,range,now:clock,service:runtime}),{showStatus:types?.includes('status')!==false}),[data,query,space,types,since,until,inactive,dismissed,includeOwnerActivity,range,clock,runtime]);
- const agent=selected.startsWith('agent:')?data.agents.find(a=>a.id===selected.slice(6)):null,node=filtered.nodes.find(n=>n.id===selected)||data.nodes.find(n=>n.id===selected),outputs=filtered.nodes.filter(n=>n.kind!=='agent'&&n.agent_ids?.includes(agent?.id));
+ useEffect(()=>{if(initialGraph&&selected&&!filtered.nodes.some(n=>n.id===selected))setSelected('');},[initialGraph,selected,filtered]);
+ const agent=selected.startsWith('agent:')?data.agents.find(a=>a.id===selected.slice(6)):null,node=filtered.nodes.find(n=>n.id===selected),outputs=filtered.nodes.filter(n=>n.kind!=='agent'&&n.agent_ids?.includes(agent?.id));
  const hudAgent=agent||data.agents.find(a=>a.id==='butler');
  const hud=useRef(),[hudNotice,setHudNotice]=useState('');
  useEffect(()=>{setHudNotice('');setTab('outputs');},[selected]);
@@ -282,7 +295,7 @@ function App(){
  <div id="fleet-agent-panel" className="fleet-agent-panel" role="tabpanel" aria-labelledby={'fleet-tab-'+activeTab} tabIndex={0}>
  {activeTab==='conversation'&&agent.runtime==='hermes'&&!agent.mock&&!agent.managed_sharing?<FleetConversation key={agent.id} agent={agent} configure={()=>setEditor(agent)}/>:activeTab==='outputs'?<><p>Produced work and monitored sources. Object filters also apply here.</p><div className="fleet-output-list">{outputs.map(o=><button key={o.id} onClick={()=>setSelected(o.id)}><span className="fleet-output-kind" style={{color:o.color}}>{o.kind}{o.mock?' · mock':''}</span><strong>{o.label}</strong><small>{o.state||o.source||'Configured'}{o.created?' · '+new Date(o.created).toLocaleDateString():''}</small></button>)}{!outputs.length&&<p>No matching recorded outputs yet.</p>}</div></>:<><h3>Persona</h3><p>{agent.persona||'No persona set'}</p><h3>Execution</h3><p>{agent.mock?'Simulated profile; execution is disabled.':agent.runtime==='hermes'?(agent.gateway?.enabled?'Per-agent gateway configured. Open Conversation to chat or run tasks; Open session uses the existing action bridge.':'Configured Hermes worker; task execution uses the existing action bridge.'):agent.runtime==='nod'?'Nod runs externally. Task dispatch, status polling and result capture are not connected yet. Manage execution and schedules in Nod.':'Execution is managed by the service. Activating or deactivating here controls visibility in this fleet; it does not stop the remote service.'}</p><h3>Capabilities</h3>{['skills','tools','workflows','triggers','subagents'].map(k=><div key={k}><h3>{k}</h3><div className="fleet-related">{agent[k].map(v=><span key={v} className="fleet-badge">{(catalog?.skills.find(s=>s.id===v)||catalog?.workflows.find(s=>s.id===v)||data.agents.find(a=>a.id===v))?.name||v}</span>)}{!agent[k].length&&<span className="fleet-status">None linked</span>}</div></div>)}<h3>Spaces</h3><p>{agent.workspace_ids.map(id=>spaces.find(s=>s.id===id)?.name||'Unavailable Space').join(', ')||'All activity'}</p></>}
  </div>
- </>:node?<><span className="fleet-eyebrow">{node.kind}{node.temporary?' / TEMPORARY SUBAGENT':''}</span><h2>{node.label}</h2>{node.mock&&<span className="fleet-badge fleet-mock">Simulated output</span>}<span className="fleet-badge">{({open:'In Review',active:'Ready',in_progress:'In Progress',incomplete:'Incomplete',done:'Done',dismissed:'Dismissed'}[node.state])||node.state||node.source||'Recorded'}</span><Description node={node}/>{node.created&&<time>{new Date(node.created).toLocaleString()}</time>}{node.kind==='hud'?<><button type="button" className="fleet-record-link" onClick={viewHud}>View</button>{hudNotice&&<p role="status">{hudNotice}</p>}</>:sourceLink&&!node.record&&<a className="fleet-record-link" href={sourceLink.href} target={sourceLink.external?'_blank':undefined} rel="noopener noreferrer">{sourceLink.label}</a>}{node.record&&<><IntentControls node={node}/>{node.kind==='idea'&&<IdeaAssignment key={node.id+node.assigned_agent_id} node={node} agents={data.agents} api={api}/>}</>}<h3>Provenance & relationships</h3><Relationships key={node.id} node={node} data={{...data,nodes:[...data.nodes,...filtered.nodes.filter(n=>n.kind==='status')],edges:[...data.edges,...filtered.links.filter(e=>e.grouping)]}} onSelect={setSelected}/></>:null}
+ </>:node?<><span className="fleet-eyebrow">{node.kind}{node.temporary?' / TEMPORARY SUBAGENT':''}</span><h2>{node.label}</h2>{node.mock&&<span className="fleet-badge fleet-mock">Simulated output</span>}<span className="fleet-badge">{({open:'In Review',active:'Ready',in_progress:'In Progress',incomplete:'Incomplete',done:'Done',dismissed:'Dismissed'}[node.state])||node.state||node.source||'Recorded'}</span><Description key={'description:'+node.id} node={node}/>{node.created&&<time>{new Date(node.created).toLocaleString()}</time>}{node.kind==='hud'?<><button type="button" className="fleet-record-link" onClick={viewHud}>View</button>{hudNotice&&<p role="status">{hudNotice}</p>}</>:sourceLink&&!node.record&&<a className="fleet-record-link" href={sourceLink.href} target={sourceLink.external?'_blank':undefined} rel="noopener noreferrer">{sourceLink.label}</a>}{node.record&&<><IntentControls node={node}/></>}<h3>Provenance & relationships</h3><Relationships key={node.id} node={node} data={{nodes:filtered.nodes,edges:filtered.links,types:data.types}} onSelect={setSelected}/></>:null}
 </aside></div>
  {editor&&catalog&&<Editor agent={editor.id?editor:null} agents={data.agents} catalog={catalog} spaces={spaces} close={()=>setEditor(null)} saved={refresh} reloadCatalog={reloadCatalog}/>} {defaults&&<Defaults close={()=>setDefaults(false)}/>}</>;
 }
