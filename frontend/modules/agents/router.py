@@ -92,6 +92,38 @@ def ecosystem_graph(user=Depends(owner_auth)):
     return graph(user)
 
 
+@api.post('/ideas/{identity}/assignment')
+def assign_idea(identity: str, raw: dict, user=Depends(owner_auth)):
+    from modules.hfl_corpus.ideas_api import canonical_snapshot
+    from modules.hfl_corpus.action_agents import store
+    from modules.agents.projection import listing
+    if not any(i['id'] == identity for i in canonical_snapshot(include_promoted=True).get('ideas', [])):
+        raise HTTPException(404, 'Idea unavailable or protected.')
+    agent_id = raw.get('agent_id', '')
+    if not isinstance(agent_id, str) or (agent_id and not any(a['id'] == agent_id and a['active'] for a in listing(user))):
+        raise HTTPException(422, 'Choose an active fleet agent.')
+    import json
+    with store().connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        row = db.execute('SELECT value FROM action_agent_configs WHERE key=?', ('idea:' + identity,)).fetchone()
+        current = json.loads(row['value']).get('agent_id', '') if row else ''
+        if raw.get('previous_agent_id', '') != current:
+            raise HTTPException(409, 'Assignment changed. Refresh and try again.')
+        db.execute('INSERT INTO action_agent_configs VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
+                   ('idea:' + identity, json.dumps({'agent_id': agent_id})))
+    return {'agent_id': agent_id}
+
+
+@api.get('/entries/{identity}/description')
+def entry_description(identity: str):
+    from modules.hfl_corpus.fleet_entry_cache import current_entries
+    from modules.agents.corpus_projection import description_html
+    entry = next((entry for entry in current_entries() if entry['id'] == identity), None)
+    if entry is None:
+        raise HTTPException(404, 'Entry unavailable or protected.')
+    return {'html': description_html(entry.get('text', ''))}
+
+
 @api.post('/observations')
 def ecosystem_observation(raw: dict, user=Depends(owner_auth)):
     from modules.agents.ecosystem import record

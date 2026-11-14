@@ -134,3 +134,10 @@ test('camera motion holds labels then lays out once settled; selection stays imm
   assert.equal(scans,3);
   assert.equal(selected[0].font,14);
 });
+
+
+test('status suffix remains visible when long action labels are shortened',()=>{
+ const labels=placeLabels([{id:'a',label:'A very long action title that would hide its status · In Progress',labelSuffix:' · In Progress',kind:'actions',x:100,y:100,radius:5,degree:1,emphasis:true}],{width:800,height:400,zoom:1},text=>text.length*6);
+ assert.equal(labels.length,1);
+ assert.ok(labels[0].text.endsWith(' · In Progress'));
+});

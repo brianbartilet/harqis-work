@@ -1,9 +1,24 @@
 """Read canonical, permission-filtered intent and activity into the owner fleet."""
 import json
+from functools import lru_cache
 from urllib.parse import quote, urlencode
 
 STATUS_COLORS = {'open': '#facc15', 'active': '#facc15', 'in_progress': '#facc15',
                  'incomplete': '#f87171', 'done': '#4ade80', 'dismissed': '#94a3b8'}
+
+
+@lru_cache(maxsize=512)
+def description_html(text):
+    """Present corpus field records as sections; sanitize all Markdown centrally."""
+    import re
+    from services.markdown import render_markdown
+    text = text or ''
+    # Corpus hashtags are metadata, not Markdown heading markers.
+    text = re.sub(r'^(\s*Tags:[ \t]*)([^\n]*)$',
+                  lambda m: m[1] + m[2].replace('#', r'\#'), text, flags=re.M)
+    fields = r'(Source|Machine|Entry ID|Synthesized|Moment|What happened|Why it stayed|Possible use|Tags|References|Event|Share|Question|Answer)'
+    text = re.sub(r'^\s*' + fields + r':\s*', lambda m: '\n\n**' + m[1] + '**\n\n', text, flags=re.M)
+    return str(render_markdown(text))
 
 
 def receipt_owner(entry, agents):
@@ -33,6 +48,7 @@ def extend(nodes, edges, agents, configs, snapshot, entries):
 
     # Remove prior assignments in one pass instead of rescanning all edges per card.
     canonical_actions = {'action:' + item['id'] for item in snapshot.get('actions', [])}
+    canonical_actions.update('idea:' + item['id'] for item in snapshot.get('ideas', []))
     removed = []
     for key in list(edges):
         if key[1] in canonical_actions and key[2] == 'assigned to':
@@ -60,13 +76,19 @@ def extend(nodes, edges, agents, configs, snapshot, entries):
                 'url': '/hfl-corpus/actions?' + urlencode({'edit': item['id'], 'edit_kind': 'actionable' if kind == 'action' else 'idea'}),
                 'created': item.get('created_at', ''), 'workspace_ids': item.get('workspace_ids', []),
                 'agent_ids': list(previous.get('agent_ids', [])), 'state': item['status'],
-                'color': STATUS_COLORS.get(item['status'], '#f9ca74') if kind == 'action' or item['status'] == 'dismissed' else '#f9ca74',
+                'color': '#fb8ca6' if kind == 'action' else '#f9ca74',
+                'status_color': STATUS_COLORS.get(item['status'], '') if kind == 'action' or item['status'] == 'dismissed' else '',
+                'summary_html': description_html(item.get('description') or item.get('body') or item.get('expected_outcome', '')),
                 'source': item.get('origin', 'Activity Corpus'), 'record': item}
             if kind == 'action':
                 assigned = configs.get('card:' + item['id'], {}).get('agent_id')
                 link(assigned, identity, 'assigned to')
             elif item.get('origin') != 'manual':
                 link('butler', identity, 'monitors generated idea')
+            if kind == 'idea':
+                assigned = configs.get('idea:' + item['id'], {}).get('agent_id', '')
+                nodes[identity]['assigned_agent_id'] = assigned
+                link(assigned, identity, 'assigned to')
             for agent in item.get('agent_ids', []):
                 link(agent, identity, 'produced')
             for origin in item.get('origin_idea_ids', []):
@@ -80,8 +102,6 @@ def extend(nodes, edges, agents, configs, snapshot, entries):
         owners = {owner} if owner else set()
         if source == 'sharing-audit' and 'sharing' in known:
             owners.add('sharing')
-        if not owners:
-            continue
         identity = 'entry:' + entry['id']
         nodes[identity] = {'id': identity, 'kind': 'entry', 'label': entry.get('title', 'Agent activity'),
             'summary': text[:5000], 'created': entry.get('date', ''), 'source': source,
@@ -103,6 +123,19 @@ def extend(nodes, edges, agents, configs, snapshot, entries):
             if agent_node.startswith('agent:') and object_node in nodes and agent_node[6:] in known:
                 if agent_node[6:] not in nodes[object_node]['agent_ids']:
                     nodes[object_node]['agent_ids'].append(agent_node[6:])
+
+
+def add_owner(nodes, edges):
+    from modules.profile.store import get_profile_store
+    profile = get_profile_store().get()
+    identity = 'owner:corpus'
+    nodes[identity] = {'id': identity, 'kind': 'owner', 'label': profile.display_name or 'Corpus owner',
+        'summary': profile.bio or 'Owner of this activity corpus.', 'color': '#a5b4fc',
+        'avatar_url': profile.avatar_data_uri, 'agent_ids': [], 'workspace_ids': [], 'created': ''}
+    for node in list(nodes.values()):
+        if node['kind'] in {'entry', 'action', 'idea'}:
+            key = (node['id'], identity, 'belongs to corpus')
+            edges[key] = dict(zip(('source', 'target', 'relation'), key))
 
 
 def read():

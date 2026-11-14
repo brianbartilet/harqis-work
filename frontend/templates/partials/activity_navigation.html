@@ -5,7 +5,7 @@
   <details class="activity-navigation-menu">
     <summary hidden>Distill navigation</summary>
     <nav class="activity-navigation-options" aria-label="Distill views">
-      {% if fleet_available %}<a href="/agents" {% if request.url.path == '/agents' %}aria-current="page"{% endif %}>Second Brain</a>{% endif %}
+      {% if fleet_available %}<a href="/agents" {% if request.url.path in ['/agents', '/second-brain', '/second-brain/hud', '/hfl-corpus/actions'] %}aria-current="page"{% endif %}>Second Brain</a>{% endif %}
       {% if corpus_entities_enabled %}<a href="/hfl-corpus/graph" {% if request.url.path == '/hfl-corpus/graph' %}aria-current="page"{% endif %}>Activity Graph</a>{% endif %}
     </nav>
   </details>

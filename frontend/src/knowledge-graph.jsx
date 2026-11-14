@@ -1,3 +1,4 @@
+import {statusLabel,statusColor,statusSuffix} from './action-status.mjs';
 import {connectionRadius} from './graph-sizing.mjs';
 import {readGraphState} from './graph-state.mjs';
 import {graphDateRange} from './graph-dates.mjs';
@@ -435,7 +436,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(!Number.isFinite(node.x)||!Number.isFinite(node.y)||!Number.isFinite(globalScale)||globalScale<=0)return;
       const visible=!activeId||node.id===activeId||near.has(node.id);
       const radius=node.radius/globalScale;
-      const ink=color(node.kind),emphasis=node.id===activeId||node.id===selectedId||window.HflIdeas?.maps.selection.has(node.id);
+      const ink=color(node.kind),statusInk=statusColor(node),emphasis=node.id===activeId||node.id===selectedId||window.HflIdeas?.maps.selection.has(node.id);
       ctx.save();ctx.globalAlpha=(visible?(node.status==='dismissed'?.35:node.outside_workspace?.55:1):.075)*arrivalAlpha(nodeArrivals.get(node.id));
       // Thousands of per-entry gradients dominate mobile drawing time. Keep
       // detailed lighting for hubs and selected nodes, and compact activity dots.
@@ -443,12 +444,13 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
         ctx.fillStyle=ink;ctx.beginPath();ctx.arc(node.x,node.y,radius,0,2*Math.PI);ctx.fill();ctx.restore();return;
       }
       const glow=ctx.createRadialGradient(node.x,node.y,0,node.x,node.y,(emphasis?30:18)/globalScale);
-      glow.addColorStop(0,ink+(emphasis?'75':'35'));glow.addColorStop(1,ink+'00');
+      glow.addColorStop(0,(statusInk||ink)+(emphasis?'75':'35'));glow.addColorStop(1,(statusInk||ink)+'00');
       ctx.fillStyle=glow;ctx.beginPath();ctx.arc(node.x,node.y,(emphasis?30:18)/globalScale,0,2*Math.PI);ctx.fill();
       const fill=ctx.createRadialGradient(node.x-radius*.3,node.y-radius*.4,0,node.x,node.y,radius*1.6);
       fill.addColorStop(0,'#effbff');fill.addColorStop(.3,ink);fill.addColorStop(1,ink+'70');
       ctx.beginPath();ctx.arc(node.x,node.y,radius,0,2*Math.PI);ctx.fillStyle=fill;ctx.fill();
       ctx.strokeStyle=ink;ctx.lineWidth=.8/globalScale;ctx.stroke();
+      if(statusInk){ctx.beginPath();ctx.arc(node.x,node.y,radius+2/globalScale,0,2*Math.PI);ctx.strokeStyle=statusInk;ctx.lineWidth=1.5/globalScale;ctx.stroke();}
       if(data.nodes.length<=35&&node.kind!=='entries'){
         const mark=node.kind==='people'?node.label.slice(0,1):node.kind==='tools'?'⌘':'◇';
         ctx.font=`600 ${14/globalScale}px ${uiFont}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#10263c';ctx.fillText(mark,node.x,node.y);ctx.textAlign='left';
@@ -490,7 +492,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
           ctx.save();ctx.strokeStyle=color(connectorNode.kind);ctx.lineWidth=1.5/scale;ctx.setLineDash([4/scale,4/scale]);ctx.beginPath();ctx.moveTo(connectorNode.x,connectorNode.y);ctx.lineTo(target.x,target.y);ctx.stroke();ctx.restore();
         }
         const projectLabel=n=>({
-          id:n.id,label:n.label,kind:n.kind,x:(n.x-origin.x)*scale,y:(n.y-origin.y)*scale,
+          id:n.id,label:statusLabel(n),labelSuffix:statusSuffix(n),kind:n.kind,x:(n.x-origin.x)*scale,y:(n.y-origin.y)*scale,
           radius:n.radius,degree:n.visibleDegree,preferred:n.kind===(preset==='timeline'?'daily':preset)||defaultLabelKinds.has(n.kind),
           pinned:!!n.manual,emphasis:n.id===activeId||n.id===selectedId
         });

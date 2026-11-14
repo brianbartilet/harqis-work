@@ -1,11 +1,12 @@
+{% set compact_space = request.url.path.rstrip('/') != '/hfl-corpus' %}
 <link rel="stylesheet" href="{{ static_asset('css/share-activity.css') }}">
 <script defer src="{{ static_asset('js/share-activity.js') }}"></script>
 <details class="workspace-menu" data-workspace-menu>
   <summary class="corpus-header-link workspace-select">Space</summary>
-  <div class="workspace-menu-panel">
+  <div class="workspace-menu-panel" {% if compact_space %}data-compact-space{% endif %}>
     <div class="workspace-label-row">
       <span class="workspace-focus-label">Focus on</span>
-      <button type="button" data-workspace-help-open class="workspace-help-button" aria-label="About saved views" aria-haspopup="dialog" aria-controls="workspace-help"><span aria-hidden="true">ⓘ</span></button>
+      <button type="button" data-workspace-help-open {% if compact_space %}hidden{% endif %} class="workspace-help-button" aria-label="About saved views" aria-haspopup="dialog" aria-controls="workspace-help"><span aria-hidden="true">ⓘ</span></button>
     </div>
     <details class="workspace-view-picker" data-view-picker>
       <summary id="workspace-selection" class="workspace-select" aria-label="Focus on"><span data-view-picker-caption>All activity</span></summary>
@@ -15,10 +16,10 @@
         <p>Selections apply when you close this list.</p>
       </div>
     </details>
-    <div class="workspace-dynamic-row"><span>Dynamic mode</span><button type="button" data-visualize-open aria-haspopup="dialog" aria-controls="view-visualizer">Visualize</button><label class="workspace-dynamic-toggle"><span class="sr-only">Dynamic mode</span><input type="checkbox" role="switch" aria-describedby="dynamic-schedule-hint" data-dynamic-toggle></label></div>
+    <div class="workspace-dynamic-row"><span>Dynamic mode</span><button type="button" data-visualize-open {% if compact_space %}hidden{% endif %} aria-haspopup="dialog" aria-controls="view-visualizer">Visualize</button><label class="workspace-dynamic-toggle"><span class="sr-only">Dynamic mode</span><input type="checkbox" role="switch" aria-describedby="dynamic-schedule-hint" data-dynamic-toggle></label></div>
     <p id="dynamic-schedule-hint" class="workspace-adaptive-status" data-dynamic-hint hidden>Add a time block in Organize → Spaces to enable Dynamic mode.</p>
     <p class="workspace-adaptive-status" data-adaptive-status role="status"></p>
-    <div class="workspace-share-actions">
+    <div class="workspace-share-actions" {% if compact_space %}hidden{% endif %}>
       <button type="button" data-corpus-share-generate>Generate share recipe</button>
       <button type="button" data-corpus-share-preview>Sharing preview</button>
     </div>
@@ -60,7 +61,7 @@
   <p data-corpus-share-status role="status" aria-live="polite"></p>
   <form data-corpus-share-form>
     <div data-corpus-share-content></div>
-    <div class="workspace-share-actions">
+    <div class="workspace-share-actions" {% if compact_space %}hidden{% endif %}>
       <button type="button" data-corpus-share-generate>Generate share recipe</button>
     </div>
   </form>

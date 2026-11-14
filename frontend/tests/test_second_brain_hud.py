@@ -284,12 +284,13 @@ def test_workspace_dashboard_navigation_and_space_sync(authenticated_client, tmp
         playwright.expect(page.locator('.fleet-spaces .activity-view-name')).to_have_text('All activity')
         other = context.new_page()
         other.goto('https://brain.test/second-brain')
-        other.evaluate("""async ({id, csrf}) => {
-            const data = await fetch('/hfl-corpus/workspace-views').then(r=>r.json());
-            await fetch('/hfl-corpus/view-preferences', {method:'PUT', headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
-                body:JSON.stringify({...data.preferences,manual:[id],dynamic:false})});
-            localStorage.setItem('corpus:workspace-change',String(Date.now()));
-        }""", dict(id=view['id'], csrf=headers()['X-CSRF-Token']))
+        with page.expect_response(lambda response: '/agents/hud/data' in response.url):
+            other.evaluate("""async ({id, csrf}) => {
+                const data = await fetch('/hfl-corpus/workspace-views').then(r=>r.json());
+                await fetch('/hfl-corpus/view-preferences', {method:'PUT', headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
+                    body:JSON.stringify({...data.preferences,manual:[id],dynamic:false})});
+                localStorage.setItem('corpus:workspace-change',String(Date.now()));
+            }""", dict(id=view['id'], csrf=headers()['X-CSRF-Token']))
         playwright.expect(page.locator('.fleet-spaces .activity-view-name')).to_have_text('Work')
         assert len(hud_reads) >= 2
         other.close()
@@ -311,7 +312,7 @@ def test_workspace_dashboard_navigation_and_space_sync(authenticated_client, tmp
         assert workspace_return.get_attribute('href') == '/agents?agent=butler'
         assert workspace_return.get_attribute('title') == 'Back to Second Brain workspace'
         assert page.get_by_role('navigation', name='Breadcrumb').count() == 0
-        assert page.locator('nav[aria-label="Express tools"] a[href="/agents"]').first.get_attribute('aria-current') == 'page'
+        assert page.locator('nav[aria-label="Distill views"] a[href="/agents"]').first.get_attribute('aria-current') == 'page'
         assert page.locator('nav[aria-label="Build tools"] a[href="/agents"]').count() == 0
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.screenshot(path=str(tmp_path / f'brain-dashboard-{width}.png'), full_page=True)

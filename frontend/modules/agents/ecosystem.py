@@ -181,6 +181,8 @@ def graph(user):
             'agent_id': agent['id'], 'agent_ids': [agent['id']], 'summary': agent['description'], 'color': agent['color'] if agent['active'] else '#94a3b8',
             'workspace_ids': agent['workspace_ids'], 'created': agent['created_at'],
             'activity_count': recent, 'configured_count': configured, 'state': agent['state'], 'mock': agent.get('mock', False)}
+    from modules.agents.corpus_projection import add_owner
+    add_owner(nodes, edges)
     return {'agents': agents, 'nodes': list(nodes.values()), 'edges': [e for e in edges.values() if e['source'] in nodes and e['target'] in nodes],
             'types': [{'id': k, 'name': k.replace('_', ' ').title(), 'color': v} for k, v in KINDS.items()],
             'warnings': errors, 'corpus_available': corpus_available,

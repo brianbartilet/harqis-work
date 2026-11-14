@@ -305,3 +305,16 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 .fleet-shell .fleet-toolbar > input[type=search]{height:38px;min-height:38px}
 .fleet-shell .fleet-toolbar :is(.fleet-toolbar-actions > button,.fleet-toolbar-actions > a,.fleet-create > summary,.fleet-spaces > .workspace-menu > summary,.fleet-filter-trigger){font-size:13px}
 @media(max-width:900px){.fleet-shell .fleet-toolbar .fleet-toolbar-actions{flex-wrap:wrap}}
+
+.fleet-date-fields>label:first-child{grid-column:1/-1}
+.fleet-description{line-height:1.65;overflow-wrap:anywhere;margin:14px 0}.fleet-plain-description{white-space:pre-wrap}.fleet-description p{margin:.65em 0}.fleet-description pre{white-space:pre-wrap}.fleet-description ul,.fleet-description ol{padding-left:22px}
+.fleet-owner{margin:18px 0}.fleet-owner img,.fleet-owner-avatar{width:32px;height:32px;flex:0 0 32px;border-radius:50%;object-fit:cover}.fleet-owner-avatar{display:grid;place-items:center;background:#a5b4fc;color:#10263c}
+.fleet-relationships{display:grid;gap:8px}.fleet-shell .fleet-relationship-card{display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;text-align:left;padding:12px;border:1px solid #30445e;border-radius:10px;background:#102033;white-space:normal}.fleet-relationship-card strong{display:block;overflow-wrap:anywhere}.fleet-relationship-card small{display:block;color:#93b4d1;margin-top:5px;line-height:1.5}.fleet-owner .fleet-relationship-card{justify-content:flex-start}
+.fleet-idea-assignment{display:grid;gap:8px;margin-top:16px}.fleet-idea-assignment label{display:grid;gap:6px}
+.fleet-hud-output{white-space:pre-wrap;overflow-wrap:anywhere}.fleet-hud-divider{display:block;max-width:100%;overflow:hidden;white-space:nowrap;line-height:1.3}.fleet-hud-add-dialog{width:min(440px,calc(100vw - 32px));max-height:85vh;overflow:auto;padding:20px;border:1px solid #334155;border-radius:14px;background:#0f1d30;color:#e2e8f0}.fleet-hud-catalog{display:grid;gap:8px}.fleet-hud-catalog button{display:flex;justify-content:space-between;gap:20px;padding:12px}.fleet-hud-heading .fleet-hud-expand{flex-shrink:0}
+
+.fleet-description p{white-space:pre-line}
+
+.fleet-description :is(h1,h2,h3,h4){line-height:1.5;margin:14px 0 8px}.fleet-description h1{font-size:17px}.fleet-description h2{font-size:15px}.fleet-description :is(h3,h4){font-size:14px}
+
+.fleet-filter-date-hint{font-size:12px;line-height:1.6;color:#94a3b8}

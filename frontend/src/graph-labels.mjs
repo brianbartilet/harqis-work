@@ -9,7 +9,8 @@ export function placeLabels(candidates, {width, height, zoom, fullTitles = false
       || Number(!!b.pinned)-Number(!!a.pinned) || Number(b.preferred)-Number(a.preferred) || a.id.localeCompare(b.id));
   for (const node of ranked) {
     if (placed.length >= budget && !node.emphasis) continue;
-    const text = !fullTitles && node.label.length > 34 ? node.label.slice(0,32)+'…' : node.label;
+    const suffix=node.labelSuffix||'';
+    const text = !fullTitles && node.label.length > 34 ? node.label.slice(0,Math.max(8,32-suffix.length))+'…'+suffix : node.label;
     const font = node.emphasis ? 14 : 12, lines = [];
     if (fullTitles) {
       const maxWidth = Math.max(40, Math.min(240, width - 24));

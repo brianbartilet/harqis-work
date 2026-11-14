@@ -16,13 +16,14 @@ def test_canonical_status_assignment_orphans_and_provenance():
     nodes, edges = {}, {}
     extend(nodes, edges, agents, {'card:a': {'agent_id':'leo'}}, snapshot, entries)
     assert nodes['action:a']['agent_ids'] == ['leo']
-    assert nodes['action:a']['color'] == '#4ade80'
+    assert nodes['action:a']['color'] == '#fb8ca6'
+    assert nodes['action:a']['status_color'] == '#4ade80'
     assert nodes['action:orphan']['agent_ids'] == []
     assert nodes['idea:i']['agent_ids'] == ['butler']
-    assert nodes['idea:m']['agent_ids'] == [] and nodes['idea:m']['color'] == '#94a3b8'
+    assert nodes['idea:m']['agent_ids'] == [] and nodes['idea:m']['status_color'] == '#94a3b8'
     assert nodes['entry:e']['agent_ids'] == ['ada']
     assert nodes['entry:s']['agent_ids'] == ['sharing']
-    assert 'entry:unattributed' not in nodes
+    assert nodes['entry:unattributed']['agent_ids'] == []
     snapshot['links']=[{'source':'agent:ada','target':'idea:m','relation':'supports'}]
     extend(nodes, edges, agents, {'card:a': {'agent_id':'ada'}}, snapshot, entries)
     assert nodes['action:a']['agent_ids'] == ['ada']
@@ -124,3 +125,54 @@ def test_fleet_inline_intent_browser(fleet, bridge, authenticated_client):
             assert not errors,errors
         finally:
             browser.close()
+
+
+def test_owner_links_history_without_inventing_authorship(fleet, monkeypatch):
+    from types import SimpleNamespace
+    from modules.agents.corpus_projection import extend, add_owner, description_html
+    from modules.profile import store as profiles
+    monkeypatch.setattr(profiles, 'get_profile_store', lambda: SimpleNamespace(get=lambda: SimpleNamespace(display_name='Corpus Owner',bio='My corpus',avatar_data_uri='')))
+    nodes, edges = {}, {}
+    extend(nodes, edges, [{'id':'butler'}], {}, {'actions':[{'id':'a','title':'Manual action','status':'open'}]},
+           [{'id':'old','source':'manual-entry','text':'Source: manual-entry\nWhat happened: A historical note\nNext line','path':'history.md','date':'2020-01-01'}])
+    add_owner(nodes, edges)
+    assert nodes['owner:corpus']['label'] == 'Corpus Owner'
+    assert nodes['entry:old']['agent_ids'] == []
+    assert ('entry:old','owner:corpus','belongs to corpus') in edges
+    assert ('action:a','owner:corpus','belongs to corpus') in edges
+    html = description_html('What happened: Example\n\n<script>alert(1)</script>\n\n## Heading')
+    assert '<strong>What happened</strong>' in html and '<h2>Heading</h2>' in html
+    assert '<script' not in html
+
+
+def test_idea_assignment_validates_and_preserves_other_relationships(fleet, authenticated_client, monkeypatch):
+    from modules.hfl_corpus import ideas_api
+    from modules.hfl_corpus.action_agents import store
+    from modules.agents.corpus_projection import extend
+    fleet.initialize()
+    idea={'id':'i','title':'Generated idea','status':'suggested'}
+    monkeypatch.setattr(ideas_api,'canonical_snapshot',lambda **kw:{'ideas':[idea]})
+    client=authenticated_client
+    assert post(client,'/ideas/missing/assignment',{'agent_id':'butler'}).status_code == 404
+    assert post(client,'/ideas/i/assignment',{'agent_id':'missing'}).status_code == 422
+    assert post(client,'/ideas/i/assignment',{'agent_id':'butler'}).status_code == 200
+    assert post(client,'/ideas/i/assignment',{'agent_id':'','previous_agent_id':''}).status_code == 409
+    nodes,edges={},{}
+    extend(nodes,edges,[{'id':'butler'}],store().configs(),{'ideas':[idea]},[])
+    assert ('agent:butler','idea:i','assigned to') in edges
+    assert ('agent:butler','idea:i','monitors generated idea') in edges
+    assert post(client,'/ideas/i/assignment',{'agent_id':'','previous_agent_id':'butler'}).status_code == 200
+    extend(nodes,edges,[{'id':'butler'}],store().configs(),{'ideas':[idea]},[])
+    assert ('agent:butler','idea:i','assigned to') not in edges
+    assert ('agent:butler','idea:i','monitors generated idea') in edges
+
+
+def test_entry_description_only_reads_permitted_entries(fleet, authenticated_client, monkeypatch):
+    from modules.hfl_corpus import fleet_entry_cache
+    monkeypatch.setattr(fleet_entry_cache,'current_entries',lambda:[{'id':'allowed','text':'What happened: Note\nTags: #sharing #audit\n\n<script>bad()</script>'}])
+    response=authenticated_client.get('/agents/api/entries/allowed/description')
+    assert response.status_code == 200
+    html=response.json()['html']
+    assert '<strong>What happened</strong>' in html
+    assert '#sharing #audit' in html and '<h1>' not in html and '<script' not in html
+    assert authenticated_client.get('/agents/api/entries/protected/description').status_code == 404

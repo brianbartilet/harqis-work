@@ -49,3 +49,24 @@ test('unassigned intent survives without inventing an agent edge',()=>{
  assert.equal(filterFleet(data,{types:['action']}).nodes.length,1);
  assert.equal(filterFleet(data,{types:['action'],service:'hermes'}).nodes.length,0);
 });
+
+
+test('corpus owner follows visible records without becoming an assigned agent',()=>{
+ const data={agents:[],nodes:[{id:'owner:corpus',kind:'owner',label:'Owner'},{id:'action:manual',kind:'action',label:'Manual',agent_ids:[],workspace_ids:['work'],created:'2020-01-01'}],edges:[{source:'action:manual',target:'owner:corpus',relation:'belongs to corpus'}]};
+ const visible=filterFleet(data,{types:['action'],spaces:['work']});
+ assert.deepEqual(visible.nodes.map(n=>n.id),['owner:corpus','action:manual']);
+ assert.equal(visible.links.length,1);
+ assert.equal(filterFleet(data,{types:['action'],spaces:['other']}).nodes.length,0);
+ assert.equal(filterFleet(data,{types:['action'],since:'2026-01-01'}).nodes.length,2);
+});
+
+
+test('dates preserve actions and ideas including Done but hide dismissed intent',()=>{
+ const intent=(id,kind,state,created='2020-01-01')=>({id,kind,state,created,label:id,agent_ids:[],workspace_ids:['work']});
+ const data={agents:[],nodes:[intent('old-action','action','open'),intent('done','action','done'),intent('future-idea','idea','suggested','2030-01-01'),intent('dismissed-action','action','dismissed'),intent('dismissed-idea','idea','dismissed'),intent('old-entry','entry','recorded'),intent('recent-entry','entry','recorded','2026-11-14')],edges:[]};
+ const filters={types:['action','idea','entry'],since:'2026-11-01',until:'2026-11-30'};
+ assert.deepEqual(filterFleet(data,filters).nodes.map(n=>n.id),['old-action','done','future-idea','recent-entry']);
+ assert.equal(filterFleet(data,{...filters,spaces:['other']}).nodes.length,0);
+ assert.deepEqual(filterFleet(data,{...filters,query:'old-action'}).nodes.map(n=>n.id),['old-action']);
+ assert.deepEqual(filterFleet(data,{types:['action','idea']}).nodes.map(n=>n.id),['old-action','done','future-idea']);
+});
