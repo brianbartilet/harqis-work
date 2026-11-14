@@ -376,7 +376,14 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 .fleet-inspector .fleet-description :is(pre,blockquote){margin:6px 0;padding:8px;max-width:100%;overflow:auto}
 .fleet-intent-controls{grid-template-columns:minmax(0,1fr);gap:6px;margin:12px 0}
 .fleet-shell .fleet-intent-controls>button{width:100%;min-width:0;padding:8px;font-size:12px;margin:0;white-space:normal}
-.fleet-intent-controls>.action-evidence-link{grid-column:1 / -1;font-size:12px}
+.fleet-intent-controls>.action-evidence-link{grid-column:1 / -1;font-size:12px;margin:0}
+.fleet-intent-controls>.action-evidence-link>:is(a,span){display:block;width:100%;padding:8px;border:1px solid #334155;border-radius:8px;background:#0f1c2e;color:#dbe7f5;text-align:center;text-decoration:none;font-size:12px;line-height:inherit}
+.fleet-intent-controls>.action-evidence-link>a:hover{background:#20334a;border-color:#64748b}
+.fleet-intent-controls>.action-evidence-link>[aria-disabled=true]{opacity:.45;cursor:default}
+.fleet-selection-meta{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.fleet-inspector .fleet-selection-meta>time{display:block;margin:0 0 0 auto;font-size:10px;line-height:1.4;color:#8298b0;text-align:right}
+.fleet-inspector .fleet-description-details{margin:8px 0}
+.fleet-description-details+.fleet-intent-controls{margin-top:8px}
 .fleet-inspector .fleet-relationship-card{padding:10px 12px;text-align:left}
 .fleet-inspector .fleet-relationship-card>span{min-width:0}
 .fleet-inspector .fleet-relationship-card strong{font-weight:500;font-size:13px;line-height:1.4}
