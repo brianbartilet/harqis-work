@@ -271,3 +271,22 @@ def test_feed_preserves_filter_disclosures(editor_page, advanced_corpus, advance
     expect(page.locator('[data-feed-close]')).not_to_be_visible()
     assert advanced.evaluate('(el) => el.open') == advanced_open
     assert tags.evaluate('(el) => el.open') == tags_open
+
+def test_today_is_rolling_24_hours(advanced_corpus, monkeypatch):
+    from datetime import timedelta, timezone
+    from modules.hfl_corpus import view_scope
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 11, 15, 10, tzinfo=timezone.utc)
+    monkeypatch.setattr(view_scope, 'datetime', Clock)
+    state = view_scope.resolved(WorkspaceState(rolling=1, date_field='entry'))
+    check = view_scope.predicate(state)
+    for stamp, expected in [('2026-11-14T10:00:00+00:00', True), ('2026-11-14T09:59:59+00:00', False), ('2026-11-15T10:00:00+00:00', True), ('2026-11-15T10:00:01+00:00', False), ('2026-11-14T18:00:00+08:00', True)]:
+        entry = replace(advanced_corpus.entries[0], header=stamp)
+        assert check(advanced_corpus, entry) is expected
+    state = view_scope.resolved(WorkspaceState(rolling=1, date_field='created'))
+    check = view_scope.predicate(state)
+    for hours, expected in [(23, True), (25, False), (-1, False)]:
+        doc = replace(advanced_corpus, created_at=Clock.now()-timedelta(hours=hours))
+        assert check(doc, doc.entries[0]) is expected

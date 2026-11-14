@@ -802,10 +802,10 @@ async def hfl_corpus_page(
         last = next((view for view in saved_workspaces['views'] if view['id'] == saved_workspaces['last_used']), None)
         if last:
             return RedirectResponse('/hfl-corpus?' + urlencode({**last['state'], 'workspace': last['id']}), status_code=303)
-    rolling = rolling if rolling in {7, 30, 90} else 0
+    rolling = rolling if rolling in {1, 7, 30, 90} else 0
     if rolling:
         date_to = date.today().isoformat()
-        date_from = (date.today() - timedelta(days=rolling - 1)).isoformat()
+        date_from = (date.today() - timedelta(days=1 if rolling == 1 else rolling - 1)).isoformat()
     if date_field not in {"created", "updated", "entry"}:
         date_field = "created"
     if sort not in {"asc", "desc"}:
@@ -853,6 +853,7 @@ async def hfl_corpus_page(
                     **{key: request.query_params.get(key, "") for key in ("exclude_tags", "expression", "order_by")},
                     "has_media": request.query_params.get("has_media", "false"),
                     "scope": effective_scope.model_dump_json() if effective_scope.any else request.query_params.get("scope", ""),
+                    "rolling": str(rolling),
                     "date_field": date_field,
                     "date_from": date_from,
                     "date_to": date_to,

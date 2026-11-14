@@ -21,7 +21,7 @@ class WorkspaceState(BaseModel):
     date_field: Literal['created', 'updated', 'entry'] = 'created'
     date_from: str = ''
     date_to: str = ''
-    rolling: Literal[0, 7, 30, 90] = 0
+    rolling: Literal[0, 1, 7, 30, 90] = 0
     sort: Literal['asc', 'desc'] = 'desc'
     order_by: str = Field(default='', max_length=200)
     page_size: Literal[20, 50, 100] = 20

@@ -67,6 +67,18 @@ test('dates preserve actions and ideas including Done but hide dismissed intent'
  const filters={types:['action','idea','entry'],since:'2026-11-01',until:'2026-11-30'};
  assert.deepEqual(filterFleet(data,filters).nodes.map(n=>n.id),['old-action','done','future-idea','recent-entry']);
  assert.equal(filterFleet(data,{...filters,spaces:['other']}).nodes.length,0);
+ assert.deepEqual(filterFleet(data,{...filters,dismissed:true}).nodes.map(n=>n.id),['old-action','done','future-idea','dismissed-action','dismissed-idea','recent-entry']);
+ assert.equal(filterFleet(data,{...filters,dismissed:true,spaces:['other']}).nodes.length,0);
  assert.deepEqual(filterFleet(data,{...filters,query:'old-action'}).nodes.map(n=>n.id),['old-action']);
  assert.deepEqual(filterFleet(data,{types:['action','idea']}).nodes.map(n=>n.id),['old-action','done','future-idea']);
+});
+
+test('owner activity switch preserves agent entries and all intent',()=>{
+ const data={agents:[{id:'a',active:true}],nodes:[{id:'owner-entry',kind:'entry',agent_ids:[]},{id:'agent-entry',kind:'entry',agent_ids:['a']},{id:'action',kind:'action',agent_ids:[]},{id:'idea',kind:'idea',agent_ids:[]}],edges:[]};
+ assert.deepEqual(filterFleet(data,{types:['entry','action','idea'],includeOwnerActivity:false}).nodes.map(n=>n.id),['agent-entry','action','idea']);
+});
+test('Today uses exact rolling 24 hour bounds and preserves intents',()=>{
+ const now=Date.parse('2026-11-15T10:00:00Z');
+ const data={agents:[],nodes:[['boundary','2026-11-14T10:00:00Z'],['old','2026-11-14T09:59:59Z'],['now','2026-11-15T10:00:00Z'],['future','2026-11-15T10:00:01Z']].map(([id,created])=>({id,created,kind:'entry'})).concat([{id:'action',kind:'action',created:'2020-01-01'}]),edges:[]};
+ assert.deepEqual(filterFleet(data,{types:['entry','action'],range:'1',now}).nodes.map(n=>n.id),['boundary','now','action']);
 });

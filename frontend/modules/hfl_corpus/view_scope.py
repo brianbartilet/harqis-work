@@ -1,7 +1,7 @@
 """Entry-level union of view filters, shared by corpus and sharing."""
 from collections import Counter
 from dataclasses import replace
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pydantic import BaseModel, ConfigDict, Field
 from modules.hfl_corpus.workspace_views import WorkspaceState
 from modules.hfl_corpus.corpus import entry_occurrence_date, parse_search_query
@@ -23,6 +23,9 @@ def parse_scope(raw):
 
 def resolved(state, today=None):
     values = state.model_dump() if isinstance(state, WorkspaceState) else dict(state)
+    if values.get('rolling') == 1:
+        values.update(date_from='', date_to='')
+        return values
     if values.get('rolling'):
         today = today or date.today()
         values.update(date_from=(today-timedelta(days=values['rolling']-1)).isoformat(), date_to=today.isoformat(), rolling=0)
@@ -39,11 +42,21 @@ def predicate(state):
     start = date.fromisoformat(state['date_from']) if state.get('date_from') else None
     end = date.fromisoformat(state['date_to']) if state.get('date_to') else None
     field = state.get('date_field', 'created')
+    now = datetime.now(timezone.utc)
+    recent = state.get('rolling') == 1
     nested = parse_scope(state.get('entry_scope', ''))
     nested_any = [predicate(resolved(item)) for item in nested.any]
     nested_all = predicate(resolved(nested.all)) if state.get('entry_scope') else None
 
     def matches(document, entry):
+        if recent:
+            try:
+                when = datetime.fromisoformat(entry.header.strip()) if field == 'entry' else getattr(document, field+'_at')
+                when = when.astimezone(timezone.utc)
+                if not now-timedelta(hours=24) <= when <= now:
+                    return False
+            except (ValueError, TypeError):
+                return False
         if not expression_matches(document, entry):
             return False
         if excluded.intersection(tag.casefold().lstrip('#') for tag in entry.tags):
