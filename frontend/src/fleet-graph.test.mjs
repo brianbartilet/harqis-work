@@ -61,16 +61,16 @@ test('corpus owner follows visible records without becoming an assigned agent',(
 });
 
 
-test('dates preserve actions and ideas including Done but hide dismissed intent',()=>{
+test('dates preserve active intent while the toggle controls done and dismissed items',()=>{
  const intent=(id,kind,state,created='2020-01-01')=>({id,kind,state,created,label:id,agent_ids:[],workspace_ids:['work']});
  const data={agents:[],nodes:[intent('old-action','action','open'),intent('done','action','done'),intent('future-idea','idea','suggested','2030-01-01'),intent('dismissed-action','action','dismissed'),intent('dismissed-idea','idea','dismissed'),intent('old-entry','entry','recorded'),intent('recent-entry','entry','recorded','2026-11-14')],edges:[]};
  const filters={types:['action','idea','entry'],since:'2026-11-01',until:'2026-11-30'};
- assert.deepEqual(filterFleet(data,filters).nodes.map(n=>n.id),['old-action','done','future-idea','recent-entry']);
+ assert.deepEqual(filterFleet(data,filters).nodes.map(n=>n.id),['old-action','future-idea','recent-entry']);
  assert.equal(filterFleet(data,{...filters,spaces:['other']}).nodes.length,0);
  assert.deepEqual(filterFleet(data,{...filters,dismissed:true}).nodes.map(n=>n.id),['old-action','done','future-idea','dismissed-action','dismissed-idea','recent-entry']);
  assert.equal(filterFleet(data,{...filters,dismissed:true,spaces:['other']}).nodes.length,0);
  assert.deepEqual(filterFleet(data,{...filters,query:'old-action'}).nodes.map(n=>n.id),['old-action']);
- assert.deepEqual(filterFleet(data,{types:['action','idea']}).nodes.map(n=>n.id),['old-action','done','future-idea']);
+ assert.deepEqual(filterFleet(data,{types:['action','idea']}).nodes.map(n=>n.id),['old-action','future-idea']);
 });
 
 test('owner activity switch preserves agent entries and all intent',()=>{

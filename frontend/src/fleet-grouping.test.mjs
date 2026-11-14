@@ -29,3 +29,20 @@ test('status filter hides only visual status nodes and their edges',()=>{
  assert.deepEqual(result.links,data.links);
  assert.equal(groupFleet(data).nodes.filter(n=>n.kind==='status').length,2);
 });
+
+test('matching statuses merge across owner and agents with unique hub connections',()=>{
+ const input=structuredClone(data);
+ input.nodes.push({id:'action:owner',kind:'action',state:'open',agent_ids:[]},{id:'action:other',kind:'action',state:'open',agent_ids:['a']},{id:'idea:agent',kind:'idea',state:'suggested',agent_ids:['a']});
+ const result=groupFleet(input),statuses=result.nodes.filter(n=>n.kind==='status');
+ assert.equal(statuses.length,2);
+ const action=statuses.find(n=>n.groupKind==='action');assert.equal(action.count,3);
+ assert.deepEqual(action.groupParents,['agent:a','owner']);
+ assert.equal(result.links.filter(e=>e.target===action.id&&e.relation==='has status').length,3);
+ assert.equal(result.links.filter(e=>e.target===action.id&&e.relation==='status group').length,2);
+ const members=result.nodes.filter(n=>n.statusGroup===action.id);
+ assert.ok(members.every(n=>n.clusterX===action.clusterX&&n.clusterY===action.clusterY));
+ input.nodes.find(n=>n.id==='action:owner').state='done';
+ const changed=groupFleet(input);
+ assert.equal(changed.nodes.find(n=>n.id===action.id).count,2);
+ assert.equal(changed.links.find(e=>e.source==='action:owner'&&e.relation==='has status').target,changed.nodes.find(n=>n.label==='Actions · Done').id);
+});

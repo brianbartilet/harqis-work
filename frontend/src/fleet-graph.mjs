@@ -9,8 +9,8 @@ export function filterFleet(data,{query='',spaces=[],types=[],since='',until='',
   const parents=n=>(n.agent_ids||[]).filter(id=>allowedAgents.has(id));
   const isIntent=n=>['action','idea'].includes(n.kind);
   const dateMatch=n=>isIntent(n)||(range==='1'?(Date.parse(n.created)>=now-86400000&&Date.parse(n.created)<=now):((!since||n.created?.slice(0,10)>=since)&&(!until||n.created?.slice(0,10)<=until)));
-  const isArchived=n=>isIntent(n)&&['dismissed','archived'].includes(n.state||n.status||n.record?.status);
-  const objects=data.nodes.filter(n=>!['agent','owner'].includes(n.kind)&&enabled.has(n.kind)&&(parents(n).length||(!service&&!(n.agent_ids||[]).length))&&spaceMatch(n)&&textMatch(n)&&dateMatch(n)&&(includeOwnerActivity||n.kind!=='entry'||(n.agent_ids||[]).length>0)&&(dismissed||!isArchived(n)));
+  const isClosedIntent=n=>isIntent(n)&&['done','dismissed','archived'].includes(n.state||n.status||n.record?.status);
+  const objects=data.nodes.filter(n=>!['agent','owner'].includes(n.kind)&&enabled.has(n.kind)&&(parents(n).length||(!service&&!(n.agent_ids||[]).length))&&spaceMatch(n)&&textMatch(n)&&dateMatch(n)&&(includeOwnerActivity||n.kind!=='entry'||(n.agent_ids||[]).length>0)&&(dismissed||!isClosedIntent(n)));
   const owners=new Set(objects.flatMap(parents));
   const nodes=[...data.nodes.filter(n=>n.kind==='agent'&&allowedAgents.has(n.agent_id)&&((spaceMatch(n)&&textMatch(n)&&!since&&!until)||owners.has(n.agent_id))),...objects];
   const owner=data.nodes.find(n=>n.kind==='owner');if(owner&&(objects.length||(!query&&!spaces.length&&!since&&!until&&!service)))nodes.unshift(owner);
