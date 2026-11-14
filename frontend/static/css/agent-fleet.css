@@ -362,21 +362,20 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 @media(max-width:479px){.fleet-hud-catalog{grid-template-columns:minmax(0,1fr)}}
 
 /* Compact, consistent entity inspector. */
-.fleet-inspector .fleet-description-details{margin:12px 0;border:1px solid #293c53;border-radius:8px;background:#0b1728}
-.fleet-description-details>summary{position:relative;cursor:pointer;list-style:none;padding:10px 36px 10px 12px;font-size:13px;color:#cbd5e1}
-.fleet-description-details>summary::-webkit-details-marker{display:none}
-.fleet-description-details>summary::after{content:"";position:absolute;right:10px;top:50%;width:20px;height:20px;transform:translateY(-50%);pointer-events:none;background:center/20px no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%2367e8f9' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
-.fleet-description-details[open]>summary::after{transform:translateY(-50%) rotate(180deg)}
-.fleet-inspector .fleet-description{margin:0;padding:0 12px 12px;font-size:12px;line-height:1.45;color:#b7c7da}
+/* Match the timeline card's lightweight native disclosure. */
+.fleet-inspector .fleet-description-details{margin:12px 0;border:0;border-radius:0;background:transparent;font-size:13px;color:#94a3b8}
+.fleet-description-details>summary{display:list-item;cursor:pointer;list-style:disclosure-closed inside;padding:0;color:#7dd3fc}
+.fleet-description-details[open]>summary{list-style-type:disclosure-open}
+.fleet-description-details>summary::marker{color:#7dd3fc}
+.fleet-inspector .fleet-description{margin:8px 0 0;padding:0;font-size:12px;line-height:1.45;color:#b7c7da}
 .fleet-inspector .fleet-description p{font-size:inherit;line-height:inherit;margin:6px 0;white-space:normal}
 .fleet-inspector .fleet-description :is(h1,h2,h3,h4,h5,h6){font-size:13px;font-weight:600;text-transform:none;letter-spacing:normal;line-height:1.4;margin:10px 0 5px;padding:0;border:0}
 .fleet-inspector .fleet-description :is(ul,ol){margin:6px 0;padding-left:18px}
 .fleet-inspector .fleet-description li{margin:3px 0}
 .fleet-inspector .fleet-description li>p{margin:2px 0}
 .fleet-inspector .fleet-description :is(pre,blockquote){margin:6px 0;padding:8px;max-width:100%;overflow:auto}
-.fleet-intent-controls{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:12px 0}
+.fleet-intent-controls{grid-template-columns:minmax(0,1fr);gap:6px;margin:12px 0}
 .fleet-shell .fleet-intent-controls>button{width:100%;min-width:0;padding:8px;font-size:12px;margin:0;white-space:normal}
-.fleet-intent-controls>button:last-child:nth-of-type(odd){grid-column:1 / -1}
 .fleet-intent-controls>.action-evidence-link{grid-column:1 / -1;font-size:12px}
 .fleet-inspector .fleet-relationship-card{padding:10px 12px;text-align:left}
 .fleet-inspector .fleet-relationship-card>span{min-width:0}

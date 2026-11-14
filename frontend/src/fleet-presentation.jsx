@@ -4,7 +4,7 @@ export function Description({node}){
  const [loaded,setLoaded]=useState(null),[error,setError]=useState('');
  useEffect(()=>{setLoaded(null);setError('');if(!node.corpus_entry)return;const controller=new AbortController();fetch('/agents/api/entries/'+encodeURIComponent(node.id.slice(6))+'/description',{signal:controller.signal}).then(async response=>{if(!response.ok)throw Error('Formatted description unavailable. Open the entry for details.');const data=await response.json();if(!controller.signal.aborted)setLoaded({id:node.id,html:data.html});}).catch(e=>{if(!controller.signal.aborted)setError(e.message);});return()=>controller.abort();},[node.id,node.summary]);
  const html=node.summary_html||(loaded?.id===node.id?loaded.html:'');
- return <details className="fleet-description-details"><summary>View description</summary>{html?<div className="fleet-description markdown-body" dangerouslySetInnerHTML={{__html:html}}/>:<div className="fleet-description fleet-plain-description">{node.summary}</div>}{error&&<p role="status">{error}</p>}</details>;
+ return <details className="fleet-description-details"><summary>Description</summary>{html?<div className="fleet-description markdown-body" dangerouslySetInnerHTML={{__html:html}}/>:<div className="fleet-description fleet-plain-description">{node.summary}</div>}{error&&<p role="status">{error}</p>}</details>;
 }
 export function Relationships({node,data,onSelect}){
  const [limit,setLimit]=useState(30),groups=new Map(),nodes=new Map(data.nodes.map(n=>[n.id,n]));

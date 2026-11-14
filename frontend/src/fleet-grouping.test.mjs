@@ -64,8 +64,8 @@ test('status links are visible without exerting clustering force',()=>{
  assert.ok(groupFleet(data).links.some(link=>link.grouping));
 });
 
-test('status nodes use a uniform bright yellow and concise labels',()=>{
+test('status nodes use a uniform blue-gray and concise labels',()=>{
  const statuses=groupFleet(data).nodes.filter(n=>n.kind==='status');
  assert.deepEqual(statuses.map(n=>n.label),['In Review','Suggested']);
- assert.ok(statuses.every(n=>n.color==='#facc15'));
+ assert.ok(statuses.every(n=>n.color==='#94a3b8'));
 });

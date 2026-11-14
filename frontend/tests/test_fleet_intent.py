@@ -139,8 +139,8 @@ def test_fleet_inline_intent_browser(fleet, bridge, authenticated_client, tmp_pa
             idea_controls=page.locator('.fleet-intent-controls')
             assert idea_controls.get_by_role('button',name='Restore',exact=True).count()==0
             assert page.locator('.fleet-idea-assignment').count()==0
-            assert idea_controls.get_by_role('button',name='Dismiss',exact=True).evaluate('(el)=>getComputedStyle(el).gridColumn')=='1 / -1'
-            page.locator('.fleet-description-details').get_by_text('View description',exact=True).click()
+            assert idea_controls.evaluate('(el)=>getComputedStyle(el).gridTemplateColumns.split(" ").length')==1
+            page.locator('.fleet-description-details').get_by_text('Description',exact=True).click()
             page.screenshot(path=str(tmp_path/'fleet-idea-desktop.png'))
             idea_controls.get_by_role('button',name='Dismiss',exact=True).click()
             pw.expect(page.locator('.fleet-agent-overview')).to_be_visible()
@@ -151,11 +151,11 @@ def test_fleet_inline_intent_browser(fleet, bridge, authenticated_client, tmp_pa
             controls=page.locator('.fleet-intent-controls')
             description=page.locator('.fleet-description-details')
             assert description.get_attribute('open') is None
-            description.get_by_text('View description',exact=True).click()
+            description.get_by_text('Description',exact=True).click()
             assert description.get_attribute('open') is not None
             assert page.locator('.fleet-idea-assignment').count()==0
             assert page.locator('.fleet-relationship-type').count()>0
-            assert controls.evaluate('(el)=>getComputedStyle(el).gridTemplateColumns.split(" ").length')==2
+            assert controls.evaluate('(el)=>getComputedStyle(el).gridTemplateColumns.split(" ").length')==1
             page.screenshot(path=str(tmp_path/'fleet-inspector-desktop.png'))
             page.set_viewport_size({'width':390,'height':844})
             page.screenshot(path=str(tmp_path/'fleet-inspector-mobile.png'))
