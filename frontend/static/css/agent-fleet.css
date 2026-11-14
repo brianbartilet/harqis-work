@@ -318,3 +318,10 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 .fleet-description :is(h1,h2,h3,h4){line-height:1.5;margin:14px 0 8px}.fleet-description h1{font-size:17px}.fleet-description h2{font-size:15px}.fleet-description :is(h3,h4){font-size:14px}
 
 .fleet-filter-date-hint{font-size:12px;line-height:1.6;color:#94a3b8}
+
+/* Keep the initial force layout out of focus until the saved camera is restored. */
+.fleet-map canvas,.fleet-graph-avatars{transition:filter .2s ease,opacity .2s ease}
+.fleet-map-loading canvas,.fleet-map-loading .fleet-graph-avatars{filter:blur(12px);opacity:.35;pointer-events:none}
+.fleet-layout-loading{position:absolute;inset:0;z-index:4;display:grid;place-items:center;background:#09142166;color:#a9bed3;font-size:13px;cursor:wait;touch-action:none}
+.fleet-map-loading .fleet-map-footer{visibility:hidden}
+@media(prefers-reduced-motion:reduce){.fleet-map canvas,.fleet-graph-avatars{transition:none}}
