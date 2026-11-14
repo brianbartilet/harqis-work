@@ -141,3 +141,17 @@ test('status suffix remains visible when long action labels are shortened',()=>{
  assert.equal(labels.length,1);
  assert.ok(labels[0].text.endsWith(' · In Progress'));
 });
+
+test('always-visible status labels survive low zoom, budget and collisions',()=>{
+ const statuses=Array.from({length:10},(_,i)=>({id:'status'+i,label:'Actions - In Review',kind:'status',x:150,y:100,radius:13,degree:0,alwaysShow:true}));
+ const labels=placeLabels(statuses,{width:300,height:200,zoom:.01,obstacles:[{x:0,y:0,w:300,h:200}]},measure);
+ assert.equal(labels.length,statuses.length);
+ assert.ok(labels.every(box=>box.x>=0&&box.y>=0&&box.x+box.w<=300&&box.y+box.h<=200));
+});
+test('always-visible labels render immediately without a fade gap',async()=>{
+ const {createLabelLayout}=await import('../src/graph-labels.mjs');
+ const layout=createLabelLayout(),status={...node('status'),alwaysShow:true};
+ const labels=layout([status],viewport,measure,0,'status');
+ assert.equal(labels.length,1);
+ assert.equal(labels[0].alpha,1);
+});

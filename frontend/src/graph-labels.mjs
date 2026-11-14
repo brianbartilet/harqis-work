@@ -4,11 +4,11 @@ export function placeLabels(candidates, {width, height, zoom, fullTitles = false
   const placed = [];
   const ranked = candidates.filter(n => Number.isFinite(n.x) && Number.isFinite(n.y)
     && n.x >= 0 && n.x <= width && n.y >= 0 && n.y <= height
-    && (fullTitles || n.emphasis || n.preferred || n.pinned || zoom >= (n.kind === 'entries' ? 2.5 : 0.8)))
-    .sort((a,b) => Number(!!b.emphasis)-Number(!!a.emphasis) || Number(previous.has(b.id))-Number(previous.has(a.id)) || b.degree-a.degree
+    && (fullTitles || n.alwaysShow || n.emphasis || n.preferred || n.pinned || zoom >= (n.kind === 'entries' ? 2.5 : 0.8)))
+    .sort((a,b) => Number(!!b.alwaysShow)-Number(!!a.alwaysShow) || Number(!!b.emphasis)-Number(!!a.emphasis) || Number(previous.has(b.id))-Number(previous.has(a.id)) || b.degree-a.degree
       || Number(!!b.pinned)-Number(!!a.pinned) || Number(b.preferred)-Number(a.preferred) || a.id.localeCompare(b.id));
   for (const node of ranked) {
-    if (placed.length >= budget && !node.emphasis) continue;
+    if (placed.length >= budget && !node.emphasis && !node.alwaysShow) continue;
     const suffix=node.labelSuffix||'';
     const text = !fullTitles && node.label.length > 34 ? node.label.slice(0,Math.max(8,32-suffix.length))+'…'+suffix : node.label;
     const font = node.emphasis ? 14 : 12, lines = [];
@@ -32,10 +32,10 @@ export function placeLabels(candidates, {width, height, zoom, fullTitles = false
     const old = previous.get(node.id);
     if (old && old.text === text && old.font === font) options.unshift({x:node.x+old.dx,y:node.y+old.dy});
     if (fullTitles) options.push(...options.map(b=>({x:Math.max(0,Math.min(width-w,b.x)),y:Math.max(0,Math.min(height-h,b.y))})));
-    if (node.emphasis) options.push({x:Math.max(0,Math.min(width-w,node.x+gap)),y:Math.max(0,Math.min(height-h,node.y-h/2))});
+    if (node.emphasis || node.alwaysShow) options.push({x:Math.max(0,Math.min(width-w,node.x+gap)),y:Math.max(0,Math.min(height-h,node.y-h/2))});
     const collides = (b, p) => b.x < p.x+p.w+4 && b.x+w+4 > p.x && b.y < p.y+p.h+4 && b.y+h+4 > p.y;
     const box = options.find(b => b.x >= 0 && b.y >= 0 && b.x+w <= width && b.y+h <= height
-      && !placed.some(p => collides(b,p)) && !obstacles.some(p => collides(b,p)));
+      && !placed.some(p => collides(b,p)) && !obstacles.some(p => collides(b,p))) || (node.alwaysShow ? options.at(-1) : null);
     if (box) placed.push({...box,w,h,text,lines,font,node});
   }
   return placed;
@@ -70,7 +70,7 @@ export function createLabelLayout() {
         const old = current.get(box.node.id), dx=box.x-box.node.x, dy=box.y-box.node.y;
         const same = old && old.text===box.text && old.font===box.font && Math.abs(old.dx-dx)<0.5 && Math.abs(old.dy-dy)<0.5;
         next.set(box.node.id,{...box,dx,dy,fadeAt:same?old.fadeAt:now});
-        if(old&&!same)outgoing.set(box.node.id,old);
+        if(old&&!same&&!box.node.alwaysShow)outgoing.set(box.node.id,old);
       }
       for(const [id,box] of current)if(!next.has(id))outgoing.set(id,box);
       current=next;lastKey=key;nextUpdate=now+8000;changedAt=now;cameraUpdate=Infinity;
@@ -84,7 +84,7 @@ export function createLabelLayout() {
       if(node&&alpha>0)result.push({...box,node,x:node.x+box.dx,y:node.y+box.dy,alpha});
     };
     if(!reducedMotion&&elapsed<200)for(const box of outgoing.values())append(box,1-elapsed/200);
-    for(const box of current.values())append(box,reducedMotion?1:Math.max(0,Math.min(1,(now-box.fadeAt-200)/200)));
+    for(const box of current.values())append(box,reducedMotion||box.node.alwaysShow?1:Math.max(0,Math.min(1,(now-box.fadeAt-200)/200)));
     if (elapsed>=200) outgoing.clear();
     result.nextUpdate=Math.min(nextUpdate,cameraUpdate);
     result.fadeUntil=reducedMotion?0:fadeUntil;
