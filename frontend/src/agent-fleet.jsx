@@ -1,3 +1,4 @@
+import {isFleetAnchor,pinFleetAnchors,releaseFleetNeighbors} from './fleet-drag.mjs';
 import {groupFleet,configureFleetLinks} from './fleet-grouping.mjs';
 import {OwnerCard,Description,Relationships,IdeaAssignment} from './fleet-presentation.jsx';
 import {statusColor} from './action-status.mjs';
@@ -14,7 +15,7 @@ import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import ForceGraph2D from 'react-force-graph-2d';
 import {motionOffset, phaseFor} from './graph-presets.mjs';
-import {configureDragForces, releaseDragNeighbors, settleDragNodes} from './graph-drag.mjs';
+import {configureDragForces, settleDragNodes} from './graph-drag.mjs';
 import {filterFleet, activityKind} from './fleet-graph.mjs';
 import {createLabelLayout} from './graph-labels.mjs';
 
@@ -141,7 +142,7 @@ function FleetGraph({data,selected,select,agents,animation,animationMenuOpen,res
   const agentMap=useMemo(()=>new Map(agents.map(a=>[a.id,a])),[agents]);
   const model=useMemo(()=>{
 
-    const nodes=data.nodes.map((n,i)=>{const parent={x:n.clusterX??0,y:n.clusterY??0},phase=phaseFor(n.id),cached=positions.current[n.id],prior=Number.isFinite(cached?.x)&&Number.isFinite(cached?.y)?cached:null;const node={...n,radius:n.radius,...(prior||{x:parent.x+(n.kind==='agent'?0:100*Math.cos(phase+i)),y:parent.y+(n.kind==='agent'?0:100*Math.sin(phase+i))})};if(prior?.manual){node.fx=node.x;node.fy=node.y;}return node;});
+    const nodes=data.nodes.map((n,i)=>{const parent={x:n.clusterX??0,y:n.clusterY??0},phase=phaseFor(n.id),cached=positions.current[n.id],prior=Number.isFinite(cached?.x)&&Number.isFinite(cached?.y)?cached:null;const node={...n,radius:n.radius,...(prior||{x:parent.x+(isFleetAnchor(n)?0:100*Math.cos(phase+i)),y:parent.y+(isFleetAnchor(n)?0:100*Math.sin(phase+i))})};if(prior?.manual||isFleetAnchor(node)){node.fx=node.x;node.fy=node.y;}return node;});
     targets.current=new Map(nodes.map(n=>[n.id,{x:n.x,y:n.y}]));
     return {nodes,links:data.links.map(l=>({...l}))};
   },[data]);
@@ -176,7 +177,7 @@ function FleetGraph({data,selected,select,agents,animation,animationMenuOpen,res
   useEffect(()=>{const save=()=>persist.current();const hidden=()=>{if(document.hidden)save();};window.addEventListener('pagehide',save);document.addEventListener('visibilitychange',hidden);return()=>{window.removeEventListener('pagehide',save);document.removeEventListener('visibilitychange',hidden);};},[]);
   useEffect(()=>{const observer=new ResizeObserver(([entry])=>setSize({width:Math.floor(entry.contentRect.width),height:Math.floor(entry.contentRect.height)}));observer.observe(host.current);return()=>observer.disconnect();},[]);
   useEffect(()=>{if(!graph.current)return;dragging.current=false;released.current.clear();setDragActive(false);configureDragForces(graph.current,false);configureFleetLinks(graph.current);graph.current.d3ReheatSimulation();},[model]);
-  useEffect(()=>{if(!reset)return;positions.current={};targets.current.clear();try{const view=savedView();delete view.viewport;view.positions={};localStorage.setItem(viewKey,JSON.stringify(view));}catch{}for(const n of model.nodes){delete n.fx;delete n.fy;n.manual=false;}released.current.clear();dragging.current=false;setDragActive(false);configureDragForces(graph.current,false);configureFleetLinks(graph.current);graph.current.d3ReheatSimulation();fitted.current=false;},[reset]);
+  useEffect(()=>{if(!reset)return;positions.current={};targets.current.clear();try{const view=savedView();delete view.viewport;view.positions={};localStorage.setItem(viewKey,JSON.stringify(view));}catch{}for(const n of model.nodes){delete n.fx;delete n.fy;n.manual=false;}pinFleetAnchors(model.nodes);released.current.clear();dragging.current=false;setDragActive(false);configureDragForces(graph.current,false);configureFleetLinks(graph.current);graph.current.d3ReheatSimulation();fitted.current=false;},[reset]);
   function stopped(){if(dragging.current||!model.nodes.length)return;if(released.current.size){settleDragNodes(released.current,targets.current,(n,target)=>motionOffset(animation,target,motionTime.current,phaseFor(n.id)));released.current.clear();lastFrame.current=performance.now();setDragActive(false);savePositions();return;}setDragActive(false);for(const n of model.nodes){n.fx=n.x;n.fy=n.y;targets.current.set(n.id,{x:n.x,y:n.y});}savePositions();if(!fitted.current){const view=savedView().viewport;fitted.current=true;if(view&&Number.isFinite(view.x)&&Number.isFinite(view.y)&&Number.isFinite(view.zoom)&&view.zoom>0){graph.current?.centerAt(view.x,view.y,0);graph.current?.zoom(view.zoom,0);}else graph.current?.zoomToFit(reducedMotion?0:1000,80);}}
 
   function animate(now){const elapsed=Math.min(100,now-(lastFrame.current||now));lastFrame.current=now;const paused=dragging.current||released.current.size||document.hidden||selected||animationMenuOpen||pointers.current.size||now-lastInteraction.current<250||document.querySelector('dialog[open]');
@@ -184,12 +185,12 @@ function FleetGraph({data,selected,select,agents,animation,animationMenuOpen,res
     const clock=labelClock.current;
     setKeepDrawing(!document.hidden&&(!!moving||now>=clock.nextUpdate||now<clock.fadeUntil+50));
     if(!moving)return;
-    motionTime.current+=elapsed;let unsettled=false;const blend=1-Math.exp(-elapsed/120);for(const n of model.nodes){if(n.fx===undefined||n.manual)continue;const base=targets.current.get(n.id);if(!base)continue;const offset=motionOffset(reducedMotion?'off':animation,base,motionTime.current,phaseFor(n.id));if(Math.abs(base.x+offset.x-n.x)+Math.abs(base.y+offset.y-n.y)>.05)unsettled=true;n.x+=(base.x+offset.x-n.x)*blend;n.y+=(base.y+offset.y-n.y)*blend;n.fx=n.x;n.fy=n.y;}motionSettling.current=unsettled;}
+    motionTime.current+=elapsed;let unsettled=false;const blend=1-Math.exp(-elapsed/120);for(const n of model.nodes){if(n.fx===undefined||n.manual||isFleetAnchor(n))continue;const base=targets.current.get(n.id);if(!base)continue;const offset=motionOffset(reducedMotion?'off':animation,base,motionTime.current,phaseFor(n.id));if(Math.abs(base.x+offset.x-n.x)+Math.abs(base.y+offset.y-n.y)>.05)unsettled=true;n.x+=(base.x+offset.x-n.x)*blend;n.y+=(base.y+offset.y-n.y)*blend;n.fx=n.x;n.fy=n.y;}motionSettling.current=unsettled;}
   const animateRef=useRef();animateRef.current=animate;
   useEffect(()=>{let frame;const tick=now=>{animateRef.current(now);frame=requestAnimationFrame(tick);};frame=requestAnimationFrame(tick);return()=>cancelAnimationFrame(frame);},[]);
   useEffect(()=>{motionSettling.current=true;},[animation]);
   useEffect(()=>{const release=e=>{if(pointers.current.delete(e.pointerId))lastInteraction.current=performance.now();};window.addEventListener('pointerup',release);window.addEventListener('pointercancel',release);return()=>{window.removeEventListener('pointerup',release);window.removeEventListener('pointercancel',release);};},[]);
-  function followDrag(n,delta={x:0,y:0}){lastInteraction.current=performance.now();if(dragging.current===n)return;dragging.current=n;releaseDragNeighbors(n,model.nodes,model.links,released.current,{x:n.x-delta.x,y:n.y-delta.y});configureDragForces(graph.current,true);setDragActive(true);}
+  function followDrag(n,delta={x:0,y:0}){lastInteraction.current=performance.now();if(dragging.current===n)return;dragging.current=n;releaseFleetNeighbors(n,model.nodes,model.links,released.current,{x:n.x-delta.x,y:n.y-delta.y});configureDragForces(graph.current,true);setDragActive(true);}
   function endDrag(n){dragging.current=false;n.manual=true;n.fx=n.x;n.fy=n.y;targets.current.set(n.id,{x:n.x,y:n.y});lastInteraction.current=performance.now();savePositions();graph.current.d3ReheatSimulation();}
 
   const endpointId=n=>typeof n==='object'?n.id:n;
@@ -239,7 +240,7 @@ function FleetListAvatar({agent}){
 }
 function App(){
  const [initialGraph,setInitialGraph]=useState(false),[initialSpaces,setInitialSpaces]=useState(false);
- const [data,setData]=useState({agents:[],nodes:[],edges:[],types:[],warnings:[]}),[primary,setPrimary]=useState(null),[catalog,setCatalog]=useState(null),[spaces,setSpaces]=useState([]),[selected,setSelected]=useState(()=>{const id=new URLSearchParams(location.search).get('agent');return id?'agent:'+id:'';});
+ const [data,setData]=useState({agents:[],nodes:[],edges:[],types:[],warnings:[]}),[primary,setPrimary]=useState(null),[catalog,setCatalog]=useState(null),[spaces,setSpaces]=useState([]),[selected,setSelected]=useState(()=>{if(performance.getEntriesByType('navigation')[0]?.type==='reload')return '';const id=new URLSearchParams(location.search).get('agent');return id?'agent:'+id:'';});
  const [range,setRange]=useState(initialView.range||'0');
  const [includeOwnerActivity,setIncludeOwnerActivity]=useState(initialView.includeOwnerActivity!==false),[clock,setClock]=useState(Date.now());
  const [query,setQuery]=useState(initialView.query||''),[space,setSpace]=useState(initialView.space||[]),[types,setTypes]=useState(initialView.types||null),[since,setSince]=useState(initialView.since||''),[until,setUntil]=useState(initialView.until||''),[runtime,setRuntime]=useState(initialView.runtime||''),[inactive,setInactive]=useState(initialView.inactive===true),[dismissed,setDismissed]=useState(initialView.dismissed===true),[animation,setAnimation]=useState(matchMedia('(prefers-reduced-motion: reduce)').matches?'off':initialView.animation||'off'),[reset,setReset]=useState(0);
