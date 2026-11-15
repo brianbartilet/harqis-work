@@ -4198,6 +4198,55 @@
       "status": "ui",
       "tools": [],
       "reason": "Browser HUD layout preferences for the owner workspace; not an agent execution API."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/butler/read-receipts",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner-session read acknowledgments for Butler briefing presentation; browser read state, not work acceptance or completion."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/butler/read-receipts",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner-session revision-checked updates to Butler briefing read state; does not accept or complete agent work."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/entries/{identity}/description",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner-session sanitized HTML description for a visible cached Fleet entry; browser presentation rather than a canonical entry retrieval API."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/work",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session paginated work projection with Space scope, assignments, execution attention and commitments; dedicated machine-facing authentication and MCP service contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/work/focus",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session revision-checked pinning of visible actions as personal commitments; dedicated machine-facing authentication and MCP service contract is deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/ideas/{identity}/assignment",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session assignment of a visible idea to an active Fleet agent with conflict detection; dedicated machine-facing authentication and MCP service contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/hfl-corpus/agent-bridge/assignments",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-session projection of action assignments to visible Fleet agents; dedicated machine-facing authentication and MCP service contract is deferred."
     }
   ]
 }
