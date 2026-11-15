@@ -10,7 +10,7 @@
         <button type="button" id="butler-hour-down" aria-label="Decrease hour"><svg aria-hidden="true" viewBox="0 0 20 20" fill="none"><path d="m5 7.5 5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       </span></div></div>
       <div class="butler-briefing-field" id="butler-briefings-day" hidden><label for="butler-briefings-weekday">Day</label><select id="butler-briefings-weekday" name="weekday">{% for day in ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] %}<option value="{{ loop.index0 }}">{{ day }}</option>{% endfor %}</select></div>
-      <label class="butler-timezone-field">Timezone<input id="butler-briefings-timezone" name="timezone" required></label>
+      <label class="butler-timezone-field">Timezone<input id="butler-briefings-timezone" readonly aria-describedby="butler-timezone-help"><span id="butler-timezone-help">Uses your <a href="/profile">Profile timezone</a>.</span></label>
     </fieldset>
     <p id="butler-briefings-error" role="alert"></p>
     <div class="butler-settings-actions"><button type="button" id="butler-briefings-close">Cancel</button><button type="submit" id="butler-briefings-save" disabled>Save schedule</button></div>

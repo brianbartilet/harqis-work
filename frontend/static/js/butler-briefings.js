@@ -11,13 +11,15 @@
   const reviewKey='harqis:butler:reviewed:v1:'+owner;
   let reviewed={};try{const saved=JSON.parse(localStorage.getItem(reviewKey)||'{}');if(saved&&typeof saved==='object'&&!Array.isArray(saved))reviewed=saved;}catch{}
   const controls=text('div',undefined,'butler-update-controls'), agentFilter=document.createElement('select');
-  agentFilter.setAttribute('aria-label','Briefing agent');
-  const reviewedLabel=text('label'), showReviewed=document.createElement('input');showReviewed.type='checkbox';
-  reviewedLabel.append(showReviewed,document.createTextNode(' Show reviewed'));
+  agentFilter.setAttribute('aria-label','Briefing agent');agentFilter.className='butler-agent-filter';
+  const showReviewed=text('button','Show reviewed');showReviewed.type='button';
+  showReviewed.setAttribute('aria-pressed','false');
   const reviewAll=text('button','Mark all as reviewed');reviewAll.type='button';
-  const reviewActions=text('div',undefined,'butler-review-actions');reviewActions.append(reviewAll,reviewedLabel);
-  controls.append(agentFilter,reviewActions);list.before(controls);
-  agentFilter.onchange=showReviewed.onchange=()=>{rendered='';if(latest)render(latest);};
+  const reviewActions=text('div',undefined,'butler-review-actions');reviewActions.append(reviewAll,showReviewed);
+  controls.append(reviewActions);list.before(controls);
+  refresh.before(agentFilter);
+  agentFilter.onchange=()=>{rendered='';if(latest)render(latest);};
+  showReviewed.onclick=()=>{showReviewed.setAttribute('aria-pressed',String(showReviewed.getAttribute('aria-pressed')!=='true'));rendered='';if(latest)render(latest);};
   const updateKey=item=>{let hash=2166136261;for(const character of (item.title+' '+item.answer)){hash=Math.imul(hash^character.charCodeAt(0),16777619);}return item.id+':'+item.date+':'+item.state+':'+(hash>>>0);};
 
   const launch=$('butler-launch'), unreadStatus=text('span',undefined,'sr-only');
@@ -79,7 +81,7 @@
     const chosen=agentFilter.value;
     agentFilter.replaceChildren(...['All agents',...new Set(data.items.map(item=>item.agent_name||'HARQIS Butler'))].map((name,index)=>{const option=text('option',name);option.value=index?name:'';return option;}));
     agentFilter.value=[...agentFilter.options].some(o=>o.value===chosen)?chosen:'';
-    const visibleItems=data.items.filter(item=>(!agentFilter.value||(item.agent_name||'HARQIS Butler')===agentFilter.value)&&(showReviewed.checked||!reviewed[updateKey(item)]));
+    const visibleItems=data.items.filter(item=>(!agentFilter.value||(item.agent_name||'HARQIS Butler')===agentFilter.value)&&(showReviewed.getAttribute('aria-pressed')==='true'||!reviewed[updateKey(item)]));
     reviewAll.disabled=!data.items.some(item=>matchesAgent(item)&&reviewable(item)&&!reviewed[updateKey(item)]);
     const signature=JSON.stringify(visibleItems);
 

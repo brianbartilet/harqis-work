@@ -55,7 +55,7 @@ def test_unread_launcher_detects_closed_panel_updates(fleet, authenticated_clien
             page.reload()
             pw.expect(launch).to_have_attribute('data-unread','false')
             launch.click()
-            pane.get_by_label('Show reviewed').check()
+            pane.get_by_role('button', name='Show reviewed', exact=True).click()
             pane.get_by_role('button',name='Mark unread',exact=True).click()
             pw.expect(launch).to_have_attribute('data-unread','true')
             # A review in another tab updates the launcher without a new fetch.
@@ -166,10 +166,10 @@ def test_briefings_browser_without_gateway(fleet, authenticated_client, tmp_path
             assert pane.get_by_text('Failed', exact=True).is_visible()
             pane.get_by_role('button', name='Reviewed', exact=True).first.click()
             pw.expect(pane.locator('.butler-briefing-card')).to_have_count(4)
-            pane.get_by_label('Show reviewed').check()
+            pane.get_by_role('button', name='Show reviewed', exact=True).click()
             pw.expect(pane.locator('.butler-briefing-card')).to_have_count(5)
             pane.get_by_role('button', name='Mark unread', exact=True).click()
-            pane.get_by_label('Show reviewed').uncheck()
+            pane.get_by_role('button', name='Show reviewed', exact=True).click()
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.screenshot(path=str(tmp_path / f'briefings-{width}.png'))
             # Briefings opens by default after reload, with no gateway submission.
@@ -209,3 +209,27 @@ def test_briefings_browser_without_gateway(fleet, authenticated_client, tmp_path
             assert not errors, errors
         finally:
             browser.close()
+
+
+def test_briefing_timezone_follows_profile(fleet, authenticated_client, monkeypatch):
+    from modules.agents import briefings
+    from modules.profile.store import get_profile_store
+    from modules.agents import butler
+    from dataclasses import replace
+    store = get_profile_store()
+    profile = store.get()
+    store.save(replace(profile, timezone='America/New_York'))
+    saved = briefings.save(USER, {**briefings.DEFAULT, 'cadence':'daily', 'timezone':'Asia/Tokyo'})
+    assert saved['timezone'] == 'America/New_York'
+    store.save(replace(store.get(), timezone='Europe/London'))
+    assert briefings.read(USER)['timezone'] == 'Europe/London'
+    calls = []
+    monkeypatch.setattr(butler, 'send', lambda *args: calls.append(args))
+    briefings.sweep(datetime(2026, 11, 15, 8, tzinfo=timezone.utc))
+    assert not calls
+    briefings.sweep(datetime(2026, 11, 15, 9, tzinfo=timezone.utc))
+    assert len(calls) == 1
+    page = authenticated_client.get('/profile').text
+    assert '<select class="profile-input" id="timezone"' in page
+    assert 'profile-timezones' not in page
+    assert 'readonly aria-describedby="butler-timezone-help"' in page

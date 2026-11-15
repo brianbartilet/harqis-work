@@ -3,7 +3,7 @@ import json
 import os
 import uuid
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
 from modules.agents import service
 from workflows.hfl.agent_fleet_store import FleetConflict
 
@@ -13,10 +13,16 @@ PROMPT = LEGACY_PROMPT + ' Always write the briefing in Markdown with headings, 
 DEFAULT = {'cadence':'off', 'hour':9, 'weekday':0, 'timezone':'Asia/Singapore', 'version':0}
 
 
+def profile_timezone():
+    from modules.profile.store import get_profile_store
+    return get_profile_store().get().timezone
+
+
 def read(user):
     with service.store().connect() as db:
         row = db.execute('SELECT * FROM fleet_briefings WHERE user=?', (user,)).fetchone()
-    return {**json.loads(row['payload']), 'version':row['version']} if row else dict(DEFAULT)
+    config = {**json.loads(row['payload']), 'version':row['version']} if row else dict(DEFAULT)
+    return {**config, 'timezone': profile_timezone()}
 
 
 def save(user, raw):
@@ -25,10 +31,7 @@ def save(user, raw):
     for key, maximum in [('hour',23),('weekday',6)]:
         if type(raw[key]) is not int or not 0 <= raw[key] <= maximum:
             raise ValueError('Invalid briefing ' + key + '.')
-    try:
-        ZoneInfo(raw['timezone'])
-    except (ZoneInfoNotFoundError, TypeError, ValueError):
-        raise ValueError('Choose an IANA timezone.') from None
+    raw = {**raw, 'timezone': profile_timezone()}
     with service.store().connect() as db:
         db.execute('BEGIN IMMEDIATE')
         row = db.execute('SELECT version FROM fleet_briefings WHERE user=?', (user,)).fetchone()
@@ -46,6 +49,7 @@ def sweep(instant=None):
     with service.store().connect() as db:
         schedules = [(r['user'],json.loads(r['payload'])) for r in db.execute('SELECT * FROM fleet_briefings')]
     for user, config in schedules:
+        config['timezone'] = profile_timezone()
         local = (instant or datetime.now(ZoneInfo('UTC'))).astimezone(ZoneInfo(config['timezone']))
         if config['cadence']=='off' or local.hour < config['hour'] or (config['cadence']=='weekly' and local.weekday()!=config['weekday']):
             continue
