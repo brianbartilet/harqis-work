@@ -17,5 +17,7 @@ test('execution and canonical status stay independent; current agent scopes the 
  assert.deepEqual(groups.recent.map(n=>n.id),['d']);
  assert.equal(groups.running.length,0);
  assert.equal(agentWork(nodes).running.length,1);
+ assert.deepEqual(agentWork(nodes).assigned.map(n=>n.id),['b']);
+ assert.equal(Object.values(agentWork(nodes,'empty-agent')).flat().length,0);
  assert.equal(nodes[0].state,'in_progress');
 });

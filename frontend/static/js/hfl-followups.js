@@ -84,7 +84,7 @@ window.HflDrawerIndicator = (button, name) => {
     const now=Date.now(), weekAgo=now-7*24*60*60*1000;
     const recentSuggestions=ideaRows.filter(item=>{
       const created=Date.parse(item.generated_at||item.created_at);
-      return item.status==='suggested'&&!item.promoted_to&&!item.followup_id&&created>=weekAgo&&created<=now;
+      return item.status==='suggested'&&item.origin!=='manual'&&!item.promoted_to&&!item.followup_id&&created>=weekAgo&&created<=now;
     });
     ideaIndicator?.(recentSuggestions.map(item=>item.id),recentSuggestions.length,ideasOpen);
     const signature=JSON.stringify([rows,ideasOpen,ideaRows,actionQuery,ideaQuery]);

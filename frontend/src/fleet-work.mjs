@@ -4,6 +4,7 @@ export function agentWork(nodes, agentId='') {
   for(const node of nodes){
     if(!['action','task'].includes(node.kind))continue;
     const execution=node.execution;
+    if(!(node.agent_ids||[]).length&&!execution?.agent_id)continue;
     if(agentId&&!(node.agent_ids||[]).includes(agentId)&&execution?.agent_id!==agentId)continue;
 
     const closed=['done','dismissed','archived'].includes(node.record?.status||node.state);

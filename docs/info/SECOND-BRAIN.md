@@ -10,9 +10,11 @@ Dashboard remains at `/second-brain`; Fleet and agent deep links remain at
 `/agents`. Activity Graph stays under Distill for memory retrieval.
 
 Fleet's **Agent work** drawer replaces its embedded HUD. Its agent picker is
-available on desktop and mobile. It shows attention,
+available on desktop and mobile and retains agents with no matching work. It shows attention,
 running, queued and assigned canonical open work independently of graph display filters, narrowed to
-a selected agent. Execution state is separate from canonical action status;
+a selected agent before pagination. Unassigned actions without agent runs remain in Kanban and Focus.
+Cards show status pills and agent thumbnails, and open canonical actions or runs directly.
+The Space label matches the toolbar's name and color. Execution state is separate from canonical action status;
 missing execution records never imply that an agent is idle. At mobile widths,
 selection replaces the drawer with the existing inspector; **All agent work**
 returns to the overview. HUD widgets, layouts and collectors remain in Dashboard.
@@ -65,7 +67,8 @@ The header provides icon buttons for refresh, help, and close. Help explains Foc
 in a compact popover; Escape dismisses help before closing the drawer. Empty sections explain
 what to do next. Focus shows a filled bright-yellow corner dot whenever open items
 are available. Ideas shows the same filled yellow dot only for undismissed,
-unadopted suggestions from the past seven days in the current scope. Opening Ideas
+unadopted agent-generated suggestions from the past seven days in the current scope;
+manually created ideas do not count. Opening Ideas
 does not clear its dot. Both hide the dot when no qualifying items remain. Ideas, Focus and Butler
 indicators are 5px corner dots that do not move the button text.
 Tooltips and accessible descriptions provide counts. Opening the panel acknowledges

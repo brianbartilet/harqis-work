@@ -38,6 +38,22 @@ def test_focus_unassigned_limits_and_conflicts(fleet, bridge, authenticated_clie
     assert len(data['state']['pins'])==3
 
 
+def test_fleet_work_filters_before_pagination(fleet, bridge, authenticated_client, monkeypatch):
+    from types import SimpleNamespace
+    from modules.agents import work
+    from modules.hfl_corpus import ideas_api, workspace_views, action_agents
+    rows=[{'id':str(i),'title':'Action '+str(i),'status':'active','workspace_ids':[]} for i in range(105)]
+    monkeypatch.setattr(ideas_api,'canonical_snapshot',lambda **kw:{'actions':rows})
+    monkeypatch.setattr(workspace_views,'listing',lambda:{'active':[],'views':[],'preferences':{'revision':1}})
+    agent=fleet.initialize().list()[0]['id']
+    monkeypatch.setattr(action_agents,'store',lambda:SimpleNamespace(list=lambda **kw:[],configs=lambda:{'card:104':{'agent_id':agent}}))
+    assert work.listing('owner',limit=1)['coverage']['actions']['total']==105
+    result=work.listing('owner',limit=1,assigned_only=True,agent_id=agent)
+    assert [i['record_id'] for i in result['items']]==['104']
+    assert result['coverage']['actions']['total']==1
+    assert work.listing('owner',assigned_only=True,agent_id='empty')['items']==[]
+
+
 def test_read_receipts_are_owner_scoped_and_revision_checked(fleet):
     from modules.agents import read_receipts
     saved=read_receipts.save('a',{'version':0,'keys':['result:v1'],'reviewed':True})
@@ -139,9 +155,10 @@ def test_focus_drawer_keyboard_and_width(editor_page, width, tmp_path):
     expect(dot).to_have_css('background-color','rgb(255, 255, 0)')
     expect(dot).to_have_css('position','absolute')
     page.screenshot(path=str(tmp_path / f'ideas-compact-{width}.png'))
-    for change in ({'status':'dismissed'}, {'status':'adopted'}, {'created_at':(now-timedelta(days=8)).isoformat()}, {'created_at':'invalid'}, {'created_at':(now+timedelta(days=1)).isoformat()}):
+    for change in ({'origin':'manual'}, {'status':'dismissed'}, {'status':'adopted'}, {'created_at':(now-timedelta(days=8)).isoformat()}, {'created_at':'invalid'}, {'created_at':(now+timedelta(days=1)).isoformat()}):
         idea_rows[:]=[{**idea,**change}]
-        page.evaluate("window.dispatchEvent(new Event('hfl:ideas-updated'))")
+        with page.expect_response('**/reuse/board-ideas?*'):
+            page.evaluate("window.dispatchEvent(new Event('hfl:ideas-updated'))")
         expect(ideas_toggle).to_have_attribute('data-items','empty')
         expect(dot).not_to_be_visible()
     idea_rows[:]=[idea]

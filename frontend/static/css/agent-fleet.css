@@ -404,3 +404,15 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 @media(max-width:900px){.fleet-work-panel{padding-bottom:64px}}
 
 .fleet-work-agent{display:grid;gap:5px;font-size:11px;color:#9fb1c6;margin:8px 0}.fleet-work-agent select{width:100%;min-width:0}
+.fleet-graph-help{position:fixed;inset:auto;margin:0;width:320px;max-width:calc(100vw - 16px);box-sizing:border-box;max-height:60vh;overflow:auto;padding:12px;border:1px solid #1e40af;border-radius:8px;background:#020617;color:#cbd5e1;box-shadow:0 12px 24px #0006;font-size:12px;font-weight:400;line-height:1.55}
+.fleet-graph-help strong{color:#e2e8f0}.fleet-graph-help p{margin:7px 0 0;line-height:1.55}
+.fleet-work-scope{margin:6px 0 12px;min-width:0}.fleet-work-scope .activity-view-name{max-width:100%;white-space:normal}
+.fleet-work-card-meta{display:flex;align-items:center;justify-content:space-between;gap:8px}.fleet-work-avatars{display:flex;gap:3px}.fleet-work-avatars .agent-avatar{width:24px;height:24px;font-size:10px}
+.fleet-work-pill{display:inline-flex;justify-self:start;width:fit-content;padding:2px 6px;border:1px solid #475569;border-radius:5px;background:#1e293b;color:#cbd5e1;font-size:10px;line-height:1.5}
+.fleet-work-pill:is([data-status=open],[data-status=active],[data-status=review],[data-status=awaiting_input]){background:#382a13;border-color:#78551f;color:#fde68a}
+.fleet-work-pill:is([data-status=in_progress],[data-status=running],[data-status=queued]){background:#172d45;border-color:#315b8a;color:#93c5fd}
+.fleet-work-pill:is([data-status=done],[data-status=succeeded],[data-status=completed]){background:#063c35;border-color:#0f766e;color:#5eead4}
+.fleet-work-pill:is([data-status=incomplete],[data-status=failed],[data-status=interrupted]){background:#3d1c26;border-color:#9f3d50;color:#fda4af}
+.fleet-work-panel .fleet-work-title{padding:0;color:#dbe7f5;font-size:13px;font-weight:600;text-decoration:none;line-height:1.5}.fleet-work-panel .fleet-work-title:hover{text-decoration:underline}
+.fleet-work-panel .fleet-work-open{display:block;width:100%;text-align:center;padding:8px;border:1px solid #334155;border-radius:8px;background:#0f1c2e;color:#dbe7f5;text-decoration:none}.fleet-work-panel .fleet-work-open:hover{background:#20334a;border-color:#64748b}
+.fleet-work-panel .fleet-work-more{display:block;width:100%}

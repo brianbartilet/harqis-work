@@ -105,9 +105,9 @@ def measured(request, produce):
 
 
 @api.get('/work')
-def work_items(request: Request, offset: int = 0, limit: int = 40, user=Depends(owner_auth)):
+def work_items(request: Request, offset: int = 0, limit: int = 40, assigned_only: bool = False, agent_id: str = '', user=Depends(owner_auth)):
     from modules.agents.work import listing
-    return measured(request, lambda: checked(listing, user, offset, limit))
+    return measured(request, lambda: checked(listing, user, offset, limit, assigned_only, agent_id))
 
 
 @api.post('/work/focus')

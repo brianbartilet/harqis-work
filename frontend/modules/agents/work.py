@@ -40,7 +40,7 @@ def pin(user, raw):
     return state(user)
 
 
-def listing(user, offset=0, limit=40):
+def listing(user, offset=0, limit=40, assigned_only=False, agent_id=''):
     from modules.hfl_corpus.ideas_api import canonical_snapshot
     from modules.hfl_corpus.workspace_views import listing as spaces
     from modules.hfl_corpus.action_agents import store
@@ -78,6 +78,10 @@ def listing(user, offset=0, limit=40):
             continue
         aid = configs.get('card:' + item['id'], {}).get('agent_id')
         execution = executions.get(item['id'])
+        if assigned_only and aid not in agents and not execution:
+            continue
+        if agent_id and aid != agent_id and (not execution or execution['agent_id'] != agent_id):
+            continue
         reasons = []
         if item['id'] in saved['pins']: reasons.append('Your commitment')
         if item.get('matrix') in {'Q1', 'Q2'}: reasons.append('Important (' + item['matrix'] + ')')
