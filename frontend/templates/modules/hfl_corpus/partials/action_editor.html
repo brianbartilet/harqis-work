@@ -5,6 +5,7 @@
       <p id="followup-evidence" class="agenda-evidence" hidden></p>
       <h3 class="object-section-heading">Details</h3>
       <label>Action<input name="title" required maxlength="200" placeholder="Check Essential Space sync feasibility"></label>
+      <div id="followup-state-label" data-action-status-field class="action-status-field"><span>Status</span><select name="status"><option value="open">In Review</option><option value="active">Ready</option><option value="in_progress">In Progress</option><option value="incomplete">Incomplete</option><option value="done">Done</option><option value="dismissed">Dismissed</option></select></div>
       <label>Markdown description<textarea name="body" maxlength="60000" rows="5"></textarea></label>
       <label>Initial prompt<textarea name="prompt" rows="5" maxlength="20000" placeholder="Write instructions for an LLM. Plain text or Markdown is supported."></textarea><small>Use In Review to draft and refine instructions. Move to Ready when you want execution. Ready actions with saved instructions are picked up automatically using their configured agent.</small></label>
       <details class="action-details action-triage" data-action-agent-settings>
@@ -16,7 +17,6 @@
           <div class="agent-configure-row"><a href="/settings" target="_blank" rel="noopener noreferrer" title="Open App Settings in a new tab to change shared agent defaults">Agent default settings</a></div>
         </div>
       </details>
-      <label id="followup-state-label">Status<select name="status"><option value="open">In Review</option><option value="active">Ready</option><option value="in_progress">In Progress</option><option value="incomplete">Incomplete</option><option value="done">Done</option><option value="dismissed">Dismissed</option></select></label>
       <div data-object-attachments>
       {% include "modules/hfl_corpus/partials/input_attachments.html" %}
       </div>

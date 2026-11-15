@@ -1,3 +1,4 @@
+import entitySemantics from '../static/entity-semantics.json';
 import {statusLabel,statusColor,statusSuffix} from './action-status.mjs';
 import {connectionRadius} from './graph-sizing.mjs';
 import {readGraphState} from './graph-state.mjs';
@@ -53,7 +54,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   $('info').addEventListener('blur',()=>{infoPaused=false;});
   let configuredTypes = new Map();
   const kindLabel = kind => configuredTypes.get(kind)?.name || ({companies:'organizations', drafts:'thoughts', thoughts:'list thoughts'}[kind] || kind.replaceAll('_', ' '));
-  const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3', ideas:'#f9ca74', actions:'#fb8ca6', goals:'#a7f3d0', drafts:'#c4b5fd', lists:'#5eead4', thoughts:'#c4b5fd', boards:'#93c5fd'};
+  const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3', ideas:entitySemantics.idea.color, actions:entitySemantics.action.color, goals:'#a7f3d0', drafts:'#c4b5fd', lists:'#5eead4', thoughts:'#c4b5fd', boards:'#93c5fd'};
   const color = kind => configuredTypes.get(kind)?.color || palette[kind] || '#e9c96c';
   window.HflGraphAppearance = {color, kindLabel};
   const defaultLabelKinds = new Set(['sources', 'people', 'tools', 'companies']);

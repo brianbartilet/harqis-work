@@ -100,9 +100,9 @@
         const label=node('label',operation==='status'?'Status':operation==='board_ids'?'Board':'Space');
         select=node('select');select.required=true;select.name='target';label.append(select);d.body.append(label);
         if(operation==='status'){
-          const choices=kind==='action'?[['open','In Review'],['active','Ready'],['in_progress','In Progress'],['incomplete','Incomplete'],['done','Done'],['dismissed','Dismissed']]:[['suggested','Open'],['adopted','Has actions'],['dismissed','Dismissed']];
+          const choices=Object.entries(window.HflEntitySemantics[kind==='action'?'action':'idea'].labels);
           choices.forEach(([value,text])=>{const option=node('option',text);option.value=value;select.append(option);});
-          if(kind==='idea')d.body.append(node('p','Has actions changes status only. These ideas will leave this drawer; no actions are created.','board-hint'));
+          if(kind==='idea')d.body.append(node('p','Adopted changes status only. These ideas will leave this drawer; no actions are created.','board-hint'));
         }else{
           if(operation==='board_ids'&&kind==='action')d.body.append(node('p','Adding actions to a new board returns them to In Review, matching individual card updates.','board-hint'));
           submit.disabled=true;select.disabled=true;select.append(node('option','Loading…'));

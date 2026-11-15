@@ -2,6 +2,29 @@
 (() => {
   const element = (tag, text) => { const n=document.createElement(tag); if(text!==undefined)n.textContent=text; return n; };
   const api = (...args) => window.HflIdeas.api(...args);
+  // Keep the canonical form value and change event shared by every action editor.
+  window.HflActionStatus = root => {
+    const select=root.querySelector('[data-action-status-field] select[name=status]');if(!select)return;
+    const field=select.closest('[data-action-status-field]');
+    field.querySelector('.action-status-options')?.remove();
+    const group=element('div');group.className='action-status-options';group.setAttribute('role','radiogroup');group.setAttribute('aria-label','Status');
+    const buttons=[...select.options].map(option=>{
+      const button=element('button',option.textContent);button.type='button';button.dataset.status=option.value;button.setAttribute('role','radio');
+      button.onclick=()=>{if(select.value===option.value)return;select.value=option.value;select.dispatchEvent(new Event('change',{bubbles:true}));};
+      group.append(button);return button;
+    });
+    const sync=()=>buttons.forEach(button=>{const selected=button.dataset.status===select.value;button.setAttribute('aria-checked',String(selected));button.tabIndex=selected?0:-1;});
+    if(select.statusButtonsSync)select.removeEventListener('change',select.statusButtonsSync);
+    select.statusButtonsSync=sync;select.addEventListener('change',sync);
+    group.onkeydown=event=>{const index=buttons.indexOf(event.target);if(index<0)return;let next;
+      if(['ArrowRight','ArrowDown'].includes(event.key))next=(index+1)%buttons.length;
+      else if(['ArrowLeft','ArrowUp'].includes(event.key))next=(index+buttons.length-1)%buttons.length;
+      else if(event.key==='Home')next=0;else if(event.key==='End')next=buttons.length-1;else return;
+      event.preventDefault();buttons[next].focus();buttons[next].click();
+    };
+    select.hidden=true;field.append(group);sync();
+  };
+
   window.HflCopyIdButton = (kind, id) => {
     const button=element('button');button.type='button';button.className='intent-copy-id';
     const label='Copy '+kind+' ID';button.title=label+': '+id;button.setAttribute('aria-label',label);

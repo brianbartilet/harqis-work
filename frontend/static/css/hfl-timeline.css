@@ -324,7 +324,7 @@
 .followups-toolbar [data-board-create]:focus-visible { outline:2px solid #93c5fd; outline-offset:3px; }
 
 .actions-page { height:100dvh; padding:12px; box-sizing:border-box; }
-.actions-page .followups-board { display:flex; flex-direction:column; width:100%; max-width:none; height:100%; max-height:none; margin:0; border:0; }
+.actions-page .followups-board { display:flex; flex-direction:column; width:100%; max-width:none; height:100%; max-height:none; margin:0; border:0; border-radius:0; }
 .actions-page .followups-lanes { flex:1; min-height:0; }
 .actions-page .agenda-dialog-header { flex-shrink:0; }
 @media(max-width:640px) {
@@ -471,3 +471,8 @@
 .action-controls .action-results-button{min-height:38px}
 .action-results-button .action-agent-thumbnails{position:absolute;right:8px;top:50%;transform:translateY(-50%);display:inline-flex;align-items:center;gap:3px;margin:0}
 .action-agent-thumbnails .agent-avatar{position:relative;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;overflow:hidden;background:var(--agent-color,#67e8f9);color:#10263c;font-size:10px}.action-agent-thumbnails img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+
+/* Match Fleet's compact 8px workspace inset without stacking toolbar padding. */
+.actions-page{padding:8px}
+.actions-page .followups-toolbar{padding:0 0 8px;gap:8px}
+.actions-page .followups-lanes{padding:8px 0 0;gap:8px}

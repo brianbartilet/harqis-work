@@ -92,7 +92,7 @@
 .butler-update-controls{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;font-size:11px}.butler-update-controls select{max-width:55%;min-width:0}.butler-update-controls label{display:flex;gap:5px;align-items:center}.butler-briefing-card>a{display:inline-block;margin:8px 10px 0 0;color:#67e8f9}.butler-briefing-card>button{margin-top:8px;padding:5px 10px}
 
 /* A steady cyan dot signals unread results without animating the launcher. */
-#butler-launch{display:inline-flex;align-items:center;justify-content:center;gap:10px}#butler-launch[data-unread=true]::after{content:"";display:block;flex:none;width:8px;height:8px;border-radius:50%;background:#67e8f9;box-shadow:0 0 0 2px #172b46;pointer-events:none}
+#butler-launch{display:inline-flex;align-items:center;justify-content:center;gap:10px}#butler-launch[data-unread=true]::after{content:"";display:block;position:absolute;top:5px;right:5px;width:5px;height:5px;border-radius:50%;background:#ffff00;box-shadow:0 0 0 1px #172b46;pointer-events:none}
 
 .butler-update-controls{flex-wrap:wrap;padding:0 16px 12px;box-sizing:border-box;flex:none}
 #butler-panel .butler-agent-filter{flex:1;width:0;min-width:0;max-width:none;box-sizing:border-box;min-height:36px;padding:8px 36px 8px 12px;border:1px solid #334155;border-radius:8px;background-color:#0f1c2e;color:#dbe7f5;color-scheme:dark;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%2367e8f9' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;background-size:18px}
@@ -103,3 +103,5 @@
 #butler-panel .butler-review-button{display:block;margin:12px auto 0}
 
 #butler-panel .butler-review-actions button[aria-pressed="true"]{background:#164e63;border-color:#22d3ee;color:#cffafe}
+
+#butler-launch{padding-right:26px}

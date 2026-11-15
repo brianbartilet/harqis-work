@@ -19,6 +19,8 @@ def state(user):
 def pin(user, raw):
     from modules.hfl_corpus.ideas_api import canonical_snapshot
     identity = raw.get('id')
+    if not isinstance(identity, str) or not 1 <= len(identity) <= 400:
+        raise ValueError('Choose an action ID.')
     if type(raw.get('pinned')) is not bool or type(raw.get('version')) is not int:
         raise ValueError('Provide a pin decision and current version.')
     if raw['pinned'] and not any(i['id'] == identity and i['status'] not in {'done', 'dismissed'} for i in canonical_snapshot()['actions']):
@@ -46,6 +48,7 @@ def listing(user, offset=0, limit=40):
     started = perf_counter()
     if offset < 0 or not 1 <= limit <= 100:
         raise ValueError('Use a nonnegative offset and limit from 1 to 100.')
+    saved = state(user)
     snapshot = canonical_snapshot(include_promoted=True)
     scope = spaces()
     active = set(scope['active'])
@@ -60,6 +63,14 @@ def listing(user, offset=0, limit=40):
         identity = run['source_key'].partition(':')[2]
         executions.setdefault(identity, {'id': run['id'], 'agent_id': aid, 'state': run['state'], 'updated_at': run['updated_at'], 'url': '/hfl-corpus/actions?' + urlencode({'integration_agent': identity})})
     configs = db.configs()
+    # Reconcile against the complete canonical set, before Space filtering.
+    # A concurrent pin change wins; retry cleanup on the next refresh.
+    available = {item['id'] for item in snapshot['actions'] if item['status'] not in {'done', 'dismissed'}}
+    remaining = [identity for identity in saved['pins'] if identity in available]
+    if remaining != saved['pins']:
+        with service.store().connect() as connection:
+            connection.execute('UPDATE fleet_work_state SET version=version+1,payload=? WHERE user=? AND version=?',
+                               (json.dumps(remaining), user, saved['version']))
     saved = state(user)
     rows = []
     for item in snapshot['actions']:
@@ -73,10 +84,14 @@ def listing(user, offset=0, limit=40):
         if item.get('due_date'): reasons.append('Due ' + item['due_date'])
         if item.get('review_date'): reasons.append('Review ' + item['review_date'])
         attention = bool(execution and execution['state'] in {'review','failed','interrupted','awaiting_input','accepting'})
-        rows.append({'id': 'action:' + item['id'], 'record_id': item['id'], 'kind': 'action', 'label': item['title'], 'record': item, 'goals':[{'id':g['id'],'title':g['title']} for g in snapshot.get('goals',[]) if 'action:'+item['id'] in g.get('linked_objects',[])], 'state': item['status'], 'agent_ids': [aid] if aid in agents else [], 'owner': agents[aid]['name'] if aid in agents else 'Unassigned', 'execution': execution, 'pinned': item['id'] in saved['pins'], 'attention': attention, 'reasons': reasons or ['No explicit priority set'], 'url': '/hfl-corpus/actions?' + urlencode({'edit': item['id'], 'edit_kind': 'actionable'})})
+        rows.append({'id': 'action:' + item['id'], 'record_id': item['id'], 'kind': 'action', 'label': item['title'], 'record': {k:(v[:1200] if k == 'expected_outcome' and isinstance(v,str) else v) for k,v in item.items() if k in {'id','title','status','matrix','due_date','review_date','created_at','expected_outcome'}}, 'goals':[{'id':g['id'],'title':g['title']} for g in snapshot.get('goals',[]) if 'action:'+item['id'] in g.get('linked_objects',[])], 'state': item['status'], 'agent_ids': [aid] if aid in agents else [], 'owner': agents[aid]['name'] if aid in agents else 'Unassigned', 'execution': execution, 'pinned': item['id'] in saved['pins'], 'attention': attention, 'reasons': reasons or ['No explicit priority set'], 'url': '/hfl-corpus/actions?' + urlencode({'edit': item['id'], 'edit_kind': 'actionable'})})
     rows.sort(key=lambda n: priority_key(n['record']))
     commitments = sorted((n for n in rows if n['pinned']), key=lambda n: saved['pins'].index(n['record_id']))
     attention = [n for n in rows if n['attention']]
     candidates = [n for n in rows if not n['pinned'] and not n['attention']]
     visible_ids = {n['record_id'] for n in rows}
-    return {'items': rows[offset:offset+limit], 'commitments': commitments, 'attention': attention[:5], 'attention_total': len(attention), 'suggestions': candidates[:5], 'state': saved, 'outside_focus': [i for i in saved['pins'] if i not in visible_ids], 'agents': [{'id': a['id'], 'name': a['name']} for a in agents.values()], 'scope': {'active': scope['active'], 'revision': scope['preferences'].get('revision'), 'label': ' + '.join(v['name'] for v in scope['views'] if v['id'] in active) or 'All activity'}, 'coverage': {'actions': {'returned': len(rows[offset:offset+limit]), 'total': len(rows), 'has_more': offset+limit < len(rows), 'next_offset': offset+limit if offset+limit < len(rows) else None}, 'executions': {'returned': min(len(runs),200), 'limit':200, 'has_more':len(runs)>200, 'total':None}}, 'generated_at':now(), 'projection_ms':round((perf_counter()-started)*1000,1)}
+    from services.markdown import render_markdown
+    visible = {n['id']:n for n in [*rows[offset:offset+limit],*commitments,*attention[:5],*candidates[:5]]}
+    for node in visible.values():
+        node['outcome_html'] = str(render_markdown((node['record'].get('expected_outcome') or '')[:1200]))
+    return {'items': rows[offset:offset+limit], 'commitments': commitments, 'attention': attention[:5], 'attention_total': len(attention), 'suggestions': candidates[:5], 'state': saved, 'outside_focus': [i for i in saved['pins'] if i not in visible_ids], 'agents': [{key: a.get(key, '') for key in ('id', 'name', 'runtime', 'classification', 'thumbnail', 'color')} for a in agents.values()], 'scope': {'active': scope['active'], 'revision': scope['preferences'].get('revision'), 'label': ' + '.join(v['name'] for v in scope['views'] if v['id'] in active) or 'All activity'}, 'coverage': {'actions': {'returned': len(rows[offset:offset+limit]), 'total': len(rows), 'has_more': offset+limit < len(rows), 'next_offset': offset+limit if offset+limit < len(rows) else None}, 'executions': {'returned': min(len(runs),200), 'limit':200, 'has_more':len(runs)>200, 'total':None}}, 'generated_at':now(), 'projection_ms':round((perf_counter()-started)*1000,1)}

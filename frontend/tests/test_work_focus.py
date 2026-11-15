@@ -22,8 +22,20 @@ def test_focus_unassigned_limits_and_conflicts(fleet, bridge, authenticated_clie
     assert work.state('someone-else')['pins']==[]
     rows[0]['status']='done'
     data=work.listing('owner')
-    assert len(data['commitments'])==4 and rows[0]['id'] in data['outside_focus']
-    work.pin('owner',{'id':rows[0]['id'],'pinned':False,'version':5})
+    assert len(data['commitments'])==4 and data['outside_focus']==[]
+    assert rows[0]['id'] not in work.state('owner')['pins']
+    assert data['state']['version']==6
+    assert work.listing('owner')['state']['version']==6
+    work.pin('owner',{'id':rows[5]['id'],'pinned':True,'version':6})
+    rows[1]['status']='dismissed'
+    removed=rows.pop(2)['id']
+    rows[2]['workspace_ids']=['other']
+    monkeypatch.setattr(workspace_views,'listing',lambda:{'active':['current'],'views':[],'preferences':{'revision':1}})
+    data=work.listing('owner')
+    assert rows[1]['id'] not in data['state']['pins'] and removed not in data['state']['pins']
+    assert rows[2]['id'] in data['state']['pins']
+    assert data['outside_focus']==[rows[2]['id']]
+    assert len(data['state']['pins'])==3
 
 
 def test_read_receipts_are_owner_scoped_and_revision_checked(fleet):
@@ -37,23 +49,110 @@ def test_read_receipts_are_owner_scoped_and_revision_checked(fleet):
 
 
 @pytest.mark.parametrize('width',[390,1440])
-def test_focus_drawer_keyboard_and_width(editor_page, width):
+def test_focus_drawer_keyboard_and_width(editor_page, width, tmp_path):
     from playwright.sync_api import expect
     page,client=editor_page
     page.set_viewport_size({'width':width,'height':900})
-    item={'id':'action:a','record_id':'a','label':'Ship report','record':{'expected_outcome':'Approved report'},'owner':'Unassigned','reasons':['Important (Q2)'],'pinned':False,'url':'/hfl-corpus/actions?edit=a'}
-    data={'items':[item],'commitments':[],'attention':[],'attention_total':0,'suggestions':[item],'state':{'pins':[],'version':0},'outside_focus':[],'scope':{'label':'All activity'},'coverage':{'actions':{'total':1,'returned':1,'has_more':False},'executions':{'has_more':False}},'generated_at':'2026-11-15T00:00:00Z'}
+    item={'id':'action:a','record_id':'a','label':'Ship report','record':{'expected_outcome':'Approved report','matrix':'Q2','status':'active'},'agent_ids':['helper'],'owner':'Helper','reasons':['Important (Q2)'],'pinned':False,'url':'/hfl-corpus/actions?edit=a'}
+    data={'agents':[{'id':'helper','name':'Helper','runtime':'codex','classification':'coding','color':'#67e8f9','thumbnail':'missing-test.png'}],'items':[item],'commitments':[],'attention':[],'attention_total':0,'suggestions':[item],'state':{'pins':[],'version':0},'outside_focus':[],'scope':{'label':'All activity'},'coverage':{'actions':{'total':1,'returned':1,'has_more':False},'executions':{'has_more':False}},'generated_at':'2026-11-15T00:00:00Z'}
     page.route('**/agents/api/work?*',lambda r:r.fulfill(json=data))
     page.goto('https://editing.test/hfl-corpus/actions')
     toggle=page.get_by_role('button',name='Show Focus',exact=True)
     expect(toggle).to_be_visible()
+    for asset in ('focus-work.js','hfl-followups.js'):
+        assert '?v=' in page.locator(f'script[src*="{asset}"]').get_attribute('src')
+    assert '?v=' in page.locator('link[href*="hfl-intent-reuse.css"]').get_attribute('href')
+    expect(toggle).to_have_attribute('data-items','new')
     page.locator('[data-board-refresh]').focus()
     page.keyboard.press('o');drawer=page.get_by_role('dialog',name='Focus',exact=True)
     expect(drawer).to_be_visible()
-    expect(drawer.get_by_text('Unassigned · Important (Q2)').first).to_be_visible()
+    expect(toggle).to_have_attribute('data-items','existing')
+    expect(drawer.get_by_text('Choose up to five actions below to keep your next outcomes in view.')).to_be_visible()
+    page.screenshot(path=str(tmp_path / f'focus-compact-{width}.png'))
+    assert drawer.evaluate('(e) => e.scrollWidth <= e.clientWidth')
+    expect(drawer.get_by_text('Helper · Important (Q2)').first).to_be_visible()
+    expect(drawer.get_by_role('button',name='Commit',exact=True).first).to_be_visible()
+    expect(drawer.locator('.focus-agent-avatars .agent-avatar').first).to_be_visible()
+    expect(drawer.locator('.agent-avatar-initials').first).to_have_text('H')
+    help_button=drawer.get_by_role('button',name='How Focus works')
+    help_button.click()
+    expect(drawer.get_by_text('Choose your next outcomes')).to_be_visible()
+    bounds=drawer.locator('.focus-help-tip').bounding_box()
+    assert bounds['x'] >= 0 and bounds['x']+bounds['width'] <= width
+    page.screenshot(path=str(tmp_path / f'focus-help-{width}.png'))
+    page.keyboard.press('Escape')
+    expect(drawer).to_be_visible()
+    expect(help_button).to_have_attribute('aria-expanded','false')
+    help_button.click()
+    drawer.get_by_role('button',name='Refresh Focus').click()
+    expect(help_button).to_have_attribute('aria-expanded','false')
     assert abs(drawer.bounding_box()['width']-min(340,width-40))<2
+    from test_action_editing import create_action
+    action=create_action(client)
+    page.route('**/hfl-corpus/timeline/items/a',lambda r:r.fulfill(json={'item':action}))
+    page.evaluate("window.focusEditNavigationGuard=true")
+    drawer.get_by_role('link',name='Ship report').first.click()
+    editor=page.locator('#followup-editor')
+    expect(editor).to_be_visible()
+    assert drawer.evaluate('(e)=>e.open')
+    assert page.evaluate("window.focusEditNavigationGuard") is True
+    editor.get_by_role('button',name='Close follow-up editor').focus()
+    page.keyboard.press('o')
+    assert drawer.evaluate('(e)=>e.open')
+    expect(editor).to_be_visible()
+    page.screenshot(path=str(tmp_path / f'focus-edit-{width}.png'))
+    editor.get_by_role('button',name='Close follow-up editor').click()
+    expect(editor).not_to_be_visible()
+    expect(drawer).to_be_visible()
+    expect(drawer.get_by_role('link',name='Ship report').first).to_be_focused()
+    drawer.get_by_role('link',name='Ship report').first.click()
+    editor.locator('[name=title]').fill('Edited from Focus')
+    editor.locator('[name=title]').press('Tab')
+    expect(editor.locator('.editor-save-status')).to_have_text('Saved')
+    assert client.get('/hfl-corpus/timeline/items/'+action['id']).json()['item']['title']=='Edited from Focus'
+    editor.get_by_role('button',name='Close follow-up editor').click()
+    expect(drawer.get_by_role('link',name='Ship report').first).to_be_focused()
     page.keyboard.press('o');expect(drawer).not_to_be_visible()
     expect(toggle).to_be_focused()
+    data['items']=[];data['suggestions']=[];data['coverage']['actions']['total']=0;data['coverage']['actions']['returned']=0
+    page.evaluate("window.dispatchEvent(new Event('hfl:actions-updated'))")
+    expect(toggle).to_have_attribute('data-items','empty')
+    page.keyboard.press('o')
+    expect(drawer.get_by_text('No suggestions right now. Create an action in Kanban or explore another Space.')).to_be_visible()
+    page.keyboard.press('Escape')
+    ideas_toggle=page.get_by_role('button',name='Show ideas',exact=True)
+    expect(ideas_toggle).to_have_attribute('data-items','empty')
+    ideas_toggle.click()
+    expect(page.get_by_text('No ideas yet. Use Create → Idea to capture something worth exploring.')).to_be_visible()
+    page.keyboard.press('Escape')
+    idea={'id':'test-idea','title':'Explore a compact view','status':'new','origin':'manual','created_at':'2026-11-15'}
+    page.route('**/reuse/board-ideas?*',lambda r:r.fulfill(json={'items':[idea]}))
+    page.evaluate("window.dispatchEvent(new Event('hfl:ideas-updated'))")
+    expect(ideas_toggle).to_have_attribute('data-items','new')
+    ideas_toggle.click()
+    expect(ideas_toggle).to_have_attribute('data-items','existing')
+    expect(page.get_by_text('Explore a compact view',exact=True)).to_be_visible()
+    page.screenshot(path=str(tmp_path / f'ideas-compact-{width}.png'))
 
 from test_action_editing import editor_page
 from test_hfl_ideas import ideas
+
+
+def test_graph_budget_and_conditional_response(fleet, authenticated_client, monkeypatch):
+    from modules.agents import ecosystem
+    from copy import deepcopy
+    data={'nodes':[{'id':'entry:'+str(i),'kind':'entry'} for i in range(1200)]+[{'id':'agent:a','kind':'agent'}],
+          'edges':[{'source':'agent:a','target':'entry:'+str(i)} for i in range(1200)],
+          'coverage':{},'warnings':[],'generated_at':'2026-11-15'}
+    monkeypatch.setattr(ecosystem,'graph',lambda user:deepcopy(data))
+    first=authenticated_client.get('/agents/api/graph')
+    assert first.status_code==200
+    body=first.json();ids={n['id'] for n in body['nodes']}
+    assert len(ids)==1000 and 'agent:a' in ids
+    assert all(e['source'] in ids and e['target'] in ids for e in body['edges'])
+    assert body['coverage']['graph']['total']==1201 and body['warnings']
+    assert int(first.headers['x-projection-bytes'])==len(first.content)
+    assert 'projection;dur=' in first.headers['server-timing']
+    second=authenticated_client.get('/agents/api/graph',headers={'If-None-Match':first.headers['etag']})
+    assert second.status_code==304 and not second.content
+    assert authenticated_client.get('/agents/api/graph?node_limit=99999').status_code==422

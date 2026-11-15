@@ -7,10 +7,11 @@ from urllib.parse import urlsplit, quote
 
 from fastapi import HTTPException
 from modules.agents import service, projection
+from modules.agents.semantics import ENTITY_SEMANTICS
 from workflows.hfl.agent_fleet_store import now
 
 KINDS = {'configuration': '#94a3b8', 'workflow': '#60a5fa', 'trigger': '#c4b5fd',
-         'action': '#facc15', 'idea': '#00d4ff', 'entry': '#77dcf5', 'file': '#70edbd',
+         'action': ENTITY_SEMANTICS['action']['color'], 'idea': ENTITY_SEMANTICS['idea']['color'], 'entry': '#77dcf5', 'file': '#70edbd',
          'link': '#93c5fd', 'feed': '#5eead4', 'hud': '#e9c96c', 'task': '#a7f3d0', 'subagent': '#deafff'}
 
 
@@ -133,13 +134,13 @@ def graph(user):
                 add(agent_id, 'evidence:' + run['id'] + ':' + str(i), 'link', 'Evidence link', '', link, run['updated_at'], source='Action bridge')
                 edge('action:' + source, 'evidence:' + run['id'] + ':' + str(i), 'supports result')
     with service.store().connect() as connection:
-        objects = [json.loads(r[0]) for r in connection.execute('SELECT payload FROM fleet_objects WHERE user=? ORDER BY rowid DESC LIMIT 500', (user,))]
+        objects = [json.loads(r[0]) for r in connection.execute('SELECT payload FROM fleet_objects WHERE user=? ORDER BY rowid DESC LIMIT 501', (user,))]
         receipts = [json.loads(r[0]) for r in connection.execute("SELECT payload FROM fleet_assistant WHERE user=? AND kind='proposal'", (user,))]
     for item in receipts:
         if item.get('state') == 'verified':
             add(item['agent_id'], 'action:' + item['action_id'], 'action', item['payload']['title'], item['payload']['expected_outcome'],
                 item['url'], item.get('verified_at', ''), source='Approved assistant action', state='verified')
-    for item in objects:
+    for item in objects[:500]:
         if item.get('mock') and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') != '1':
             continue
         extra = {k: item[k] for k in ('state', 'source', 'mock', 'temporary') if k in item}
@@ -156,10 +157,12 @@ def graph(user):
             edge('agent:' + parent, item['id'], 'receives output')
         if item.get('delegation_id'):
             edge(item['delegation_id'], item['id'], 'returns artifact')
+    feed_items = []
     # Butler is the monitor, not a fabricated author of deterministic results.
     try:
         from modules.second_brain.service import get_second_brain_store
-        for item in get_second_brain_store().feed_snapshot(client='web', limit=80)['items']:
+        feed_items = get_second_brain_store().feed_snapshot(client='web', limit=81)['items']
+        for item in feed_items[:80]:
             add('butler', 'brain:' + item.get('logical_key', item.get('id', '')), 'feed', item.get('title', 'Second Brain update'),
                 item.get('summary', ''), '/second-brain/feed', item.get('generated_at', ''), relation='monitors', source='Second Brain')
         from modules.second_brain.hud import inventory
@@ -192,6 +195,7 @@ def graph(user):
             'types': [{'id': k, 'name': k.replace('_', ' ').title(), 'color': v} for k, v in KINDS.items()],
             'warnings': errors, 'corpus_available': corpus_available,
             'execution_limited': len(runs) > 200,
+            'coverage': {'runs': {'returned':min(len(runs),200),'limit':200,'has_more':len(runs)>200}, 'observations':{'returned':min(len(objects),500),'limit':500,'has_more':len(objects)>500}, 'context_feed':{'returned':min(len(feed_items),80),'limit':80,'has_more':len(feed_items)>80}, 'corpus':{'available':corpus_available,'total':None}},
             'demo_available': os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1', 'generated_at': now()}
 
 

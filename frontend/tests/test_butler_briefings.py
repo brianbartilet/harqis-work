@@ -41,7 +41,7 @@ def test_unread_launcher_detects_closed_panel_updates(fleet, authenticated_clien
             pw.expect(page.locator('#butler-panel')).not_to_be_visible()
             pw.expect(launch).to_have_attribute('aria-describedby','butler-unread-status')
             pw.expect(page.locator('#butler-unread-status')).to_have_text('1 unread briefing or agent update')
-            assert launch.evaluate("el=>getComputedStyle(el,'::after').backgroundColor")=='rgb(103, 232, 249)'
+            assert launch.evaluate("el=>getComputedStyle(el,'::after').backgroundColor")=='rgb(255, 255, 0)'
             assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
             page.screenshot(path=str(tmp_path/f'butler-unread-{width}.png'))
             launch.click()
@@ -199,7 +199,8 @@ def test_briefings_browser_without_gateway(fleet, authenticated_client, tmp_path
             assert page.locator('#butler-launch').evaluate('(el)=>el===document.activeElement')
             page.click('#butler-launch')
             page.get_by_role('tab', name='Briefing settings', exact=True).click()
-            page.get_by_label('Timezone', exact=True).click()
+            pw.expect(page.locator('#butler-briefings-timezone')).to_have_attribute('readonly', '')
+            page.locator('#butler-briefings-timezone').click()
             pw.expect(page.locator('#butler-panel')).to_be_visible()
             page.mouse.click(4, 100)
             pw.expect(page.locator('#butler-panel')).to_be_hidden()

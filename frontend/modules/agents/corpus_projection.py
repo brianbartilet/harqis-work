@@ -1,4 +1,5 @@
 """Read canonical, permission-filtered intent and activity into the owner fleet."""
+from modules.agents.semantics import ENTITY_SEMANTICS
 import json
 from functools import lru_cache
 from urllib.parse import quote, urlencode
@@ -76,7 +77,7 @@ def extend(nodes, edges, agents, configs, snapshot, entries):
                 'url': '/hfl-corpus/actions?' + urlencode({'edit': item['id'], 'edit_kind': 'actionable' if kind == 'action' else 'idea'}),
                 'created': item.get('created_at', ''), 'workspace_ids': item.get('workspace_ids', []),
                 'agent_ids': list(previous.get('agent_ids', [])), 'state': item['status'],
-                'color': '#facc15' if kind == 'action' else '#00d4ff',
+                'color': ENTITY_SEMANTICS[kind]['color'],
                 'status_color': STATUS_COLORS.get(item['status'], '') if kind == 'action' or item['status'] == 'dismissed' else '',
                 'summary_html': description_html(item.get('description') or item.get('body') or item.get('expected_outcome', '')),
                 'source': item.get('origin', 'Activity Corpus'), 'record': item}

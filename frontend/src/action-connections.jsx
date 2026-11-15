@@ -1,15 +1,16 @@
+import entitySemantics from '../static/entity-semantics.json';
 import React, {useEffect, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import ForceGraph2D from 'react-force-graph-2d';
 import {GraphIcon} from './graph-icons.jsx';
 import {placeLabels} from './graph-labels.mjs';
 
-const colors = {actions:'#fb8ca6', ideas:'#f9ca74', drafts:'#c4b5fd', boards:'#93c5fd',
+const colors = {actions:entitySemantics.action.color, ideas:entitySemantics.idea.color, drafts:'#c4b5fd', boards:'#93c5fd',
   goals:'#a7f3d0', entries:'#77dcf5', daily:'#95a7c3', people:'#ffbd91', tools:'#70edbd'};
 const kindName = kind => ({actions:'Action', ideas:'Idea', drafts:'Thought', boards:'Board',
   goals:'Goal', entries:'Entry', daily:'Date', companies:'Organization'}[kind] || kind);
 const identity = node => typeof node === 'object' ? node.id : node;
-const statusLabel = status => ({open:'In Review',active:'Ready',suggested:'Available'}[status] || status.replace(/[_-]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase()));
+const statusLabel = status => ({...entitySemantics.action.labels,...entitySemantics.idea.labels}[status] || status.replace(/[_-]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase()));
 const tooltip = text => {const span = document.createElement('span'); span.textContent = text; return span;};
 let activeDialog;
 

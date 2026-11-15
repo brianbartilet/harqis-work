@@ -75,6 +75,7 @@
     form.elements.hide_ticked.checked = !!item?.hide_ticked;
     window.hflActionChecklists?.set(item?.checklists || []);
     form.elements.status.value = desiredStatus || item?.status || 'open';
+    window.HflActionStatus(form);
     document.getElementById('followup-state-label').hidden = !item;
     document.getElementById('followup-editor-title').textContent = item ? (desiredStatus === 'done' ? 'Complete action' : 'Edit action') : 'New action';
     showEvidence(); stateFields(); error('followup-save-error'); editor.showModal();

@@ -147,3 +147,76 @@
 
 .followups-lane>h3{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .followups-board .bulk-list-select{padding:0;margin-left:auto;white-space:nowrap;font-weight:400}
+
+.focus-drawer{position:fixed;inset:0 auto 0 0;margin:0;width:min(340px,calc(100vw - 40px));height:100dvh;max-height:100dvh;max-width:none;box-sizing:border-box;border:1px solid #334155;border-left:3px solid #22d3ee;border-radius:.8rem;padding:1rem;background:#101e30;color:#dbe7f5;overflow-y:auto}.focus-drawer::backdrop{background:#02061780}.focus-drawer p,.focus-drawer small{font-size:12px;line-height:1.6}.focus-drawer h3{font-size:14px;margin:14px 0 8px}.focus-card{padding:12px;border:1px solid #334155;border-radius:9px;margin:10px 0}.focus-card a{color:#cffafe;font-weight:600}.focus-card small{display:block;color:#9fb1c6}.focus-drawer button{padding:7px 10px;margin-top:8px;border:1px solid #425e7e;border-radius:8px;background:#20334a;color:#dbe7f5}.focus-drawer button:disabled{opacity:.5}.focus-toggle{display:inline-flex;align-items:center;gap:6px}
+
+.focus-outcome{font-size:12px;line-height:1.5;max-height:9rem;overflow:auto;margin:8px 0}.focus-outcome :is(h1,h2,h3,h4){font-size:12px;font-weight:600;margin:6px 0}.focus-outcome p{margin:4px 0}.focus-outcome ul,.focus-outcome ol{padding-left:18px;margin:4px 0}.focus-outcome a{overflow-wrap:anywhere}
+/* Compact drawers reuse Kanban's card surface and metadata hierarchy. */
+.followups-board .ideas-drawer-toggle .drawer-item-indicator{display:block;flex:none;width:8px;height:8px;box-sizing:border-box;border-radius:50%;border:1.5px solid #a5f3fc;box-shadow:0 0 0 2px #172b46;margin-left:4px}
+.followups-board .ideas-drawer-toggle[data-items=new] .drawer-item-indicator{background:#67e8f9;border-color:#67e8f9}
+.followups-board .ideas-drawer-toggle:not([data-items]) .drawer-item-indicator,.followups-board .ideas-drawer-toggle[data-items=empty] .drawer-item-indicator{display:none}
+.drawer-indicator-hint{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip-path:inset(50%);white-space:nowrap!important;border:0!important}
+.focus-drawer{padding:12px;background:#0f172a}
+.focus-drawer .ideas-drawer-header{margin:0 0 8px;gap:6px}
+.focus-drawer .ideas-drawer-header h3{margin:0;font-size:14px}
+.focus-drawer button{margin:0;min-height:32px;padding:5px 9px;font-size:12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#cbd5e1;cursor:pointer}
+.focus-drawer button:hover{background:#1e293b;border-color:#475569}
+.focus-drawer :is(button,a,summary):focus-visible{outline:2px solid #67e8f9;outline-offset:2px}
+.focus-drawer .focus-scope{margin:0;color:#cbd5e1;font-size:12px;overflow-wrap:anywhere}
+.focus-drawer .focus-status{margin:3px 0 10px;font-size:11px;line-height:1.4;color:#94a3b8}
+.focus-drawer section>h3{margin:14px 0 7px;font-size:12px;color:#cbd5e1;font-weight:600}
+.focus-drawer .focus-card{padding:9px 10px;margin:0 0 7px;border:1px solid #1e293b;border-left:3px solid #155e75;border-radius:8px;background:#0b1221;overflow-wrap:anywhere;min-width:0}
+.focus-drawer .focus-card[data-matrix=Q1]{border-left-color:#c58a5b}.focus-drawer .focus-card[data-matrix=Q2]{border-left-color:#b8a052}.focus-drawer .focus-card[data-matrix=Q3]{border-left-color:#628fb8}.focus-drawer .focus-card[data-matrix=Q4]{border-left-color:#5b9e82}
+.focus-card .agenda-card-meta{gap:4px;margin-bottom:5px;font-size:10px}
+.focus-card .focus-card-title{display:block;color:#e2e8f0;font-size:13px;line-height:1.4;font-weight:600;text-decoration:none}
+.focus-card .focus-card-title:hover{color:#7dd3fc;text-decoration:underline}
+.focus-card .focus-outcome{font-size:12px;line-height:1.45;color:#cbd5e1;margin:5px 0;max-height:3.1em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.focus-card .focus-outcome>*{margin:0;font-size:inherit}.focus-card .focus-outcome :is(img,video){display:none}
+.focus-card small{font-size:11px;line-height:1.45;color:#94a3b8}
+.focus-card .agenda-card-actions{justify-content:flex-end;margin-top:7px;gap:5px}
+.focus-drawer>div>details{margin-top:12px;font-size:12px}.focus-drawer>div>details>summary{cursor:pointer;color:#7dd3fc;margin-bottom:8px}
+.focus-drawer .drawer-empty,.ideas-drawer .drawer-empty{padding:12px;margin:6px 0 10px;border:1px dashed #334155;border-radius:8px;color:#94a3b8;font-size:12px;line-height:1.5}
+.ideas-drawer .agenda-card{padding:10px;margin-bottom:8px}
+.ideas-drawer .agenda-card h3{font-size:13px;line-height:1.4}
+.ideas-drawer .agenda-card-meta{gap:4px;font-size:10px;margin-bottom:6px}
+.ideas-drawer .agenda-card-actions.action-controls{margin-top:8px}
+.ideas-drawer .action-management-controls>button{font-size:11px;min-height:32px}
+@media(pointer:coarse){.focus-drawer button,.ideas-drawer .action-management-controls>button{min-height:40px}}
+.focus-drawer .ideas-drawer-header{position:relative}
+.focus-drawer .focus-icon-button{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;flex:none}
+.focus-help-tip{position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:5;padding:12px;border:1px solid #1e40af;border-radius:8px;background:#020617;color:#cbd5e1;box-shadow:0 12px 24px #0006;font-size:12px;font-weight:400;line-height:1.55}
+.focus-help-tip[hidden]{display:none}.focus-help-tip strong{color:#e2e8f0}.focus-help-tip p{margin:7px 0 0;line-height:1.55}
+.focus-card .agenda-card-meta{align-items:center}
+.focus-card .agenda-card-meta .focus-agent-avatars{display:inline-flex;gap:4px;margin-left:auto;padding:0;background:none}
+.focus-card .focus-agent-avatars .agent-avatar{position:relative;display:inline-grid;place-items:center;color:#081423;box-shadow:0 0 0 1px #ffffff40;width:24px;height:24px;flex:0 0 24px;padding:0;border-radius:50%;background:var(--agent-color,#67e8f9)}
+.focus-card .focus-agent-avatars .agent-avatar-initials{padding:0;background:none;font-size:10px}
+.focus-card .agent-avatar-tooltip{right:0;left:auto;max-width:240px;white-space:normal}
+@media(pointer:coarse){.focus-drawer .focus-icon-button{width:40px;height:40px}}
+
+.focus-card .focus-agent-avatars .agent-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+
+/* Separate destination navigation from the blue board tools. */
+.followups-toolbar .second-brain-navigation::after{content:"";display:block;width:1px;height:24px;margin:0 5px 0 7px;background:#334155;flex:none}
+.followups-board .ideas-drawer-toggle{position:relative;width:auto;height:36px;min-height:36px;padding:7px 10px;gap:6px}
+.followups-board .ideas-drawer-toggle .drawer-item-indicator{position:static;width:8px;height:8px;margin-left:3px;box-shadow:0 0 0 2px #172b46}
+
+/* Shared single-choice status controls, including cloned graph editors. */
+.action-status-field{margin:0 0 1rem;font-size:.85rem;color:#cbd5e1}
+.action-status-field>span{display:block;margin-bottom:6px}
+.action-status-field select[hidden]{display:none!important}
+.action-status-options{display:flex;flex-wrap:wrap;gap:6px}
+.agenda-dialog .action-status-options button{min-height:36px;padding:7px 10px;border:1px solid #334155;border-radius:6px;background:#0b1221;color:#94a3b8;font-size:12px;line-height:1.3;white-space:nowrap}
+.agenda-dialog .action-status-options button:hover{border-color:#60a5fa;color:#e2e8f0}
+.agenda-dialog .action-status-options button[aria-checked=true]{border-color:#38bdf8;background:#0c4a6e;color:#e0f2fe;font-weight:650;box-shadow:inset 0 0 0 1px #38bdf8}
+.agenda-dialog .action-status-options button:focus-visible{outline:2px solid #67e8f9;outline-offset:2px}
+@media(pointer:coarse){.agenda-dialog .action-status-options button{min-height:40px}}
+
+.focus-drawer .ideas-drawer-header .focus-icon-button{box-sizing:border-box;margin:0;align-self:center;line-height:1}
+.focus-drawer .focus-icon-button svg{display:block;width:18px;height:18px;flex:none}
+
+.followups-board .focus-toggle .drawer-item-indicator{position:absolute;top:5px;right:5px;width:5px;height:5px;margin:0;border-width:1px;box-shadow:0 0 0 1px #172b46;pointer-events:none}
+
+.followups-board .focus-toggle{padding-right:16px}
+
+.followups-board .focus-toggle .drawer-item-indicator{background:#ffff00;border-color:#ffff00}
+.followups-board .focus-toggle[data-items=new] .drawer-item-indicator{background:#ffff00;border-color:#ffff00}

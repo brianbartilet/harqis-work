@@ -21,6 +21,9 @@ class AgentFleetStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
             db.executescript('''
+                CREATE TABLE IF NOT EXISTS fleet_work_state (user TEXT PRIMARY KEY, version INTEGER NOT NULL, payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS fleet_receipt_versions (user TEXT PRIMARY KEY, version INTEGER NOT NULL);
+                CREATE TABLE IF NOT EXISTS fleet_read_receipts (user TEXT NOT NULL, item_key TEXT NOT NULL, reviewed INTEGER NOT NULL, PRIMARY KEY(user,item_key));
                 CREATE TABLE IF NOT EXISTS fleet_agents (
                     id TEXT PRIMARY KEY, version INTEGER NOT NULL, payload TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS fleet_assets (

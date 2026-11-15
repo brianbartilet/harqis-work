@@ -27,7 +27,11 @@
   launch.after(unreadStatus);
   const reviewable=item=>!['pending','queued','running'].includes(item.state);
   const matchesAgent=item=>!agentFilter.value||(item.agent_name||'HARQIS Butler')===agentFilter.value;
-  reviewAll.onclick=()=>{for(const item of latest?.items||[]){if(matchesAgent(item)&&reviewable(item))reviewed[updateKey(item)]=Date.now();}try{localStorage.setItem(reviewKey,JSON.stringify(Object.fromEntries(Object.entries(reviewed).slice(-500))));}catch{}rendered='';render(latest);};
+  let receiptVersion=0,receiptBusy=false,receiptsReady=false;
+  async function readReceipts(){if(receiptBusy)return;const response=await fetch('/agents/api/butler/read-receipts',{cache:'no-store'});if(!response.ok)throw Error('Read acknowledgments could not refresh.');const data=await response.json();if(receiptBusy||data.version<receiptVersion)return;receiptVersion=data.version;const legacy=Object.keys(reviewed).filter(k=>reviewed[k]&&!(k in data.items)).slice(0,500);reviewed=data.items;receiptsReady=true;if(legacy.length){await saveReceipts(legacy,true,false);}return data;}
+  async function saveReceipts(keys,value,redraw=true){if(receiptBusy||!receiptsReady)return;receiptBusy=true;try{const response=await fetch('/agents/api/butler/read-receipts',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({keys,reviewed:value,version:receiptVersion})});const data=await response.json();if(!response.ok)throw Error(data.detail||'Read state could not save.');receiptVersion=data.version;reviewed=data.items;try{localStorage.setItem(reviewKey,JSON.stringify(reviewed));}catch{}updateIndicator();if(redraw&&latest){rendered='';render(latest);}}catch(e){error.textContent=e.message;}finally{receiptBusy=false;}}
+  reviewAll.title='Mark all loaded completed updates for the selected agent as read; this does not accept action results.';
+  reviewAll.onclick=()=>saveReceipts((latest?.items||[]).filter(item=>matchesAgent(item)&&reviewable(item)).map(updateKey),true);
   function updateIndicator(){
     const count=(latest?.items||[]).filter(item=>reviewable(item)&&!reviewed[updateKey(item)]).length;
     launch.dataset.unread=String(count>0);
@@ -116,7 +120,7 @@
       if(item.url){const link=text('a','Open source');link.href=item.url;card.append(link);}
       if(reviewable(item)){
         const acknowledge=text('button',reviewed[updateKey(item)]?'Mark unread':'Reviewed');acknowledge.type='button';acknowledge.className='butler-review-button';
-        acknowledge.onclick=()=>{const key=updateKey(item);if(reviewed[key])delete reviewed[key];else reviewed[key]=Date.now();try{localStorage.setItem(reviewKey,JSON.stringify(Object.fromEntries(Object.entries(reviewed).slice(-500))));}catch{}rendered='';render(latest);};card.append(acknowledge);
+        acknowledge.onclick=()=>saveReceipts([updateKey(item)],!reviewed[updateKey(item)]);card.append(acknowledge);
       }
       fragment.append(card);
     }
@@ -151,6 +155,8 @@
       if (!response.ok) throw Error('Briefings are unavailable. Try Refresh again.');
       const data = await response.json();
       if (token !== revision || document.hidden) return;
+      await readReceipts();
+      if(token!==revision)return;
       latest=data;updateIndicator();
       if(visible()){render(data);error.textContent=data.updates_error||'';}
       repeat = data.items.some(item => !item.mock && ['pending', 'running'].includes(item.state));

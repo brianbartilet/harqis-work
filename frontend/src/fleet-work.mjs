@@ -5,7 +5,7 @@ export function agentWork(nodes, agentId='') {
     if(!['action','task'].includes(node.kind))continue;
     const execution=node.execution;
     if(agentId&&!(node.agent_ids||[]).includes(agentId)&&execution?.agent_id!==agentId)continue;
-    if(!(node.agent_ids||[]).length&&!execution)continue;
+
     const closed=['done','dismissed','archived'].includes(node.record?.status||node.state);
     const state=execution?.state||(!node.record?node.state:'');
     const group=attention.has(state)?'attention':state==='running'?'running':state==='queued'?'queued':closed||['succeeded','completed'].includes(state)?'recent':'assigned';

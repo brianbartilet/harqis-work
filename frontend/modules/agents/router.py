@@ -86,10 +86,55 @@ def new_agent_conversation(identity: str, raw: dict, user=Depends(owner_auth)):
     return checked(assistant.create_fleet_conversation, user, identity, raw)
 
 
+def measured(request, produce):
+    from time import perf_counter
+    import hashlib, json
+    from fastapi.responses import JSONResponse
+    start = perf_counter()
+    data = produce()
+    stable = {k:v for k,v in data.items() if k not in {'generated_at','projection_ms'}}
+    etag = '"' + hashlib.sha256(json.dumps(stable,sort_keys=True,default=str).encode()).hexdigest() + '"'
+    response = JSONResponse(data)
+    response.headers['ETag'] = etag
+    response.headers['Cache-Control'] = 'private, no-cache'
+    response.headers['Server-Timing'] = 'projection;dur=' + str(round((perf_counter()-start)*1000,1))
+    response.headers['X-Projection-Bytes'] = str(len(response.body))
+    if request.headers.get('if-none-match') == etag:
+        return Response(status_code=304, headers={k:v for k,v in response.headers.items() if k not in {'content-length','content-type'}})
+    return response
+
+
+@api.get('/work')
+def work_items(request: Request, offset: int = 0, limit: int = 40, user=Depends(owner_auth)):
+    from modules.agents.work import listing
+    return measured(request, lambda: checked(listing, user, offset, limit))
+
+
+@api.post('/work/focus')
+def focus_work(raw: dict, user=Depends(owner_auth)):
+    from modules.agents.work import pin
+    return checked(pin, user, raw)
+
+
 @api.get('/graph')
-def ecosystem_graph(user=Depends(owner_auth)):
+def ecosystem_graph(request: Request, node_limit: int = 1000, user=Depends(owner_auth)):
     from modules.agents.ecosystem import graph
-    return graph(user)
+    if not 100 <= node_limit <= 5000:
+        raise HTTPException(422, 'Choose a graph limit from 100 to 5000.')
+    def bounded():
+        data = graph(user)
+        total = len(data['nodes'])
+        ranked = sorted(data['nodes'], key=lambda n: (n['kind'] not in {'owner','agent'}, n['kind'] not in {'action','idea','status'}, n['id']))
+        data['nodes'] = ranked[:node_limit]
+        ids = {n['id'] for n in data['nodes']}
+        data['edges'] = [e for e in data['edges'] if e['source'] in ids and e['target'] in ids]
+        data['coverage']['graph'] = {'returned':len(data['nodes']),'total':total,'limit':node_limit,'has_more':total>node_limit}
+        for name, source in data['coverage'].items():
+            if name != 'graph' and source.get('has_more'):
+                data['warnings'].append(name.replace('_',' ').capitalize() + ' shows only the latest ' + str(source['limit']) + ' records; older records may exist.')
+        if total>node_limit:data['warnings'].append('Graph shows '+str(node_limit)+' of '+str(total)+' projected nodes. Use Activity Graph for memory retrieval; Agent work is independent.')
+        return data
+    return measured(request, bounded)
 
 
 @api.post('/ideas/{identity}/assignment')
@@ -207,6 +252,18 @@ def assistant_proposal(identity: str, raw: dict, user=Depends(owner_auth)):
 def assistant_decide(identity: str, raw: dict, user=Depends(owner_auth)):
     from modules.agents import assistant
     return checked(assistant.decide, user, identity, raw)
+
+
+@api.get('/butler/read-receipts')
+def briefing_read_receipts(user=Depends(owner_auth)):
+    from modules.agents.read_receipts import read
+    return checked(read, user)
+
+
+@api.post('/butler/read-receipts')
+def save_briefing_read_receipts(raw: dict, user=Depends(owner_auth)):
+    from modules.agents.read_receipts import save
+    return checked(save, user, raw)
 
 
 @api.get('/butler/briefings')

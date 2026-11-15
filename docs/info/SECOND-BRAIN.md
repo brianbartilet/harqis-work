@@ -1,4 +1,4 @@
-# Thinking Second Brain
+# Second Brain workspace and context engine
 
 ## Workspace navigation
 
@@ -11,7 +11,7 @@ Dashboard remains at `/second-brain`; Fleet and agent deep links remain at
 
 Fleet's **Agent work** drawer replaces its embedded HUD. Its agent picker is
 available on desktop and mobile. It shows attention,
-running, queued, assigned and recent work from the filtered graph, narrowed to
+running, queued and assigned canonical open work independently of graph display filters, narrowed to
 a selected agent. Execution state is separate from canonical action status;
 missing execution records never imply that an agent is idle. At mobile widths,
 selection replaces the drawer with the existing inspector; **All agent work**
@@ -21,8 +21,8 @@ Butler owns scheduled briefings and attributed recorded agent updates. The
 existing schedule owner is unchanged, and its prompts receive a bounded set of
 attributed recorded agent results. Updates deduplicate attempts by source,
 exclude existing Butler delivery runs, and link back to their records. Agent
-filtering and per-owner browser-local Reviewed state reduce repeat noise. A steady
-cyan dot on the Butler launcher indicates unread completed results or attention
+filtering and owner-scoped server Reviewed receipts reduce repeat noise. Existing browser acknowledgments migrate on first load; local storage remains a cross-tab cache. Concurrent edits use revisions and return a refresh conflict instead of overwriting another device. A steady
+bright-yellow dot on the Butler launcher indicates unread completed results or attention
 updates. Pending, queued and running items do not light it. Opening the panel
 does not mark items reviewed; Reviewed and Mark unread update the dot across
 tabs. Visible pages check for updates every 30 seconds while the panel is closed. The
@@ -39,11 +39,10 @@ evidence links, with their source and relationship. Activity Graph opens
 separately, preserving the work view. Run artifacts and evidence explicitly
 link back to their action rather than only to their producing agent.
 
-The product workspace and the advisory engine below share the Second Brain
-name but have different responsibilities. Work navigation does not change the
+Second Brain names the Express work workspace. The advisory subsystem below is the **context engine**; existing module names, API routes and configuration keys remain compatible. Work navigation does not change the
 advisory feed's categories, allowlist, clients or execution schedules.
 
-The Thinking Second Brain is an advisory, context-aware feed that activates
+The context engine is an advisory, context-aware feed that activates
 allowlisted read-only operations for the user's current categories. Categories
 are owner-configurable; a fresh store contains only the non-archivable `default`
 category. Stable IDs survive display-name changes and historical items from a
@@ -52,6 +51,78 @@ removed category remain visibly labelled as an archived source.
 The authenticated web module is enabled by default. Telegram, Rainmeter, and
 the CLI are presentation adapters over the same canonical feed and remain
 disabled until an owner enables them.
+
+
+## Focus and state ownership
+
+**Focus** sits immediately after Ideas in the Kanban toolbar and opens a matching
+340px side drawer. **O** toggles it outside typing fields; Escape closes it.
+Focus uses compact Kanban-style cards with status and priority pills and a two-line
+outcome preview and assigned agent avatars. Clicking an action title opens its editor
+over Focus without navigation; closing the editor refreshes the still-open drawer
+and restores focus to the action. Modified clicks retain normal link navigation.
+The header provides icon buttons for refresh, help, and close. Help explains Focus
+in a compact popover; Escape dismisses help before closing the drawer. Empty sections explain
+what to do next. Focus shows a filled bright-yellow corner dot whenever open items
+are available. Ideas shows a filled cyan dot for newly discovered items and an
+outlined dot for existing items. Both hide the dot when empty. Focus and Butler
+indicators are 5px corner dots that do not move the button text.
+Tooltips and accessible descriptions provide counts. Opening the panel acknowledges
+its fetched items for the current page session only; it does not accept results or
+change action status. Reloading resets this discovery cue. Focus also treats a
+changed execution state as new; its cue covers the bounded fetched work set.
+Closed drawers refresh their indicators approximately every 30 seconds while the
+page is visible, and on relevant update events.
+
+Done remains available on action buttons. Focus has at most five explicit
+commitments, a separate bounded decision queue, and explained next suggestions.
+Suggestions follow the canonical priority order; they do not automatically commit
+work or start agents. Cards show the intended outcome, linked goals, assignment,
+and recorded execution state. Unassigned actions remain eligible. Completed, dismissed, or unavailable actions are automatically removed from Focus
+on refresh, freeing their slots without changing canonical actions. Commitments in
+other Spaces remain saved without a notice in the current drawer; switch to their
+Space to view or release them.
+
+| State | Owner and persistence |
+| --- | --- |
+| Actions, ideas, goals, status and evidence | Existing canonical corpus records |
+| Active Spaces and Dynamic schedule | Shared Space preferences, configured from Corpus |
+| Focus commitments | Owner-scoped server action IDs, five-item limit, revision checked |
+| Reviewed briefings | Owner-scoped server receipts keyed by result fingerprint; reading is not acceptance |
+| Fleet filters and saved positions | View-local presentation; never overwrite shared Space preferences |
+| Butler attached context | Temporary, visible and removable |
+
+Focus and Agent work use `/agents/api/work`, independently of graph display/date
+filters. Explicit action Space memberships narrow the work projection; actions
+without memberships remain global. Saved retrieval predicates do not automatically
+hide commitments. Changing Space does not reset local Fleet filters or positions.
+
+## Coverage and scaling boundaries
+
+Work retrieval supports offset pagination (up to 100 actions per request). The
+Focus drawer exposes the first 100 open actions and directs larger browsing to
+Kanban. Fleet work discloses bounded results. Execution enrichment uses the latest
+200 runs; missing execution is unknown, never proof of inactivity.
+
+Fleet renders at most 1,000 projected nodes by default, prioritizing owner/agent
+and work/status nodes. API callers may choose 100–5,000. Edges only connect returned
+nodes. Coverage includes returned counts, limits and truncation; graph warnings
+explain omitted nodes. Other bounded projections retain source coverage metadata.
+Activity Graph remains the separate memory-retrieval destination.
+
+Graph and work responses expose `Server-Timing`, `X-Projection-Bytes`, and private
+ETags. Fleet polls every 30 seconds and reuses unchanged graph responses; browser
+performance entries record graph request time. ETags reduce response transfer,
+**not projection computation**. Full corpus projection still happens before the
+graph cap. An indexed cursor projection and incremental invalidation remain the
+next scaling step when measurements justify them; these guards are not a claim
+that arbitrary corpus sizes are cheap. Measure production p95 projection and
+render times, payload size, cache hit rate and omitted counts before raising caps.
+
+`frontend/static/entity-semantics.json` defines canonical display labels and entity
+colors for the work surfaces and graph palettes. Actions are yellow, ideas cyan,
+status nodes gray-blue. Canonical transition APIs and existing editors remain the
+source of behavior; layout and purpose may differ between graphs.
 
 ## Architecture
 
@@ -225,3 +296,17 @@ The `manage-second-brain` repository skill can inspect health, validate
 mappings, preview or apply category configuration, attach registered operations,
 change delivery opt-ins, reconcile, and run focused tests. It cannot register
 arbitrary import paths or cross the advisory-only boundary.
+
+## Validation of the Focus rollout
+
+Targeted checks cover the five-commitment bound, unassigned actions, stale revision
+conflicts, unavailable commitments, owner-isolated read receipts, desktop/mobile
+keyboard navigation, and graph truncation with edge integrity and conditional
+responses. A 1,201-node synthetic projection verifies the default 1,000-node cap.
+The isolated local preview also verifies committing and releasing real fixture
+actions. These are functional checks, not production capacity benchmarks.
+
+Remaining operational follow-up: benchmark production-size projections before
+selecting an indexed/incremental retrieval design; define receipt archival and
+retention before owner history grows without bound. Neither follow-up should
+silently discard unread results or change canonical action state.

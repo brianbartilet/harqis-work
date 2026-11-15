@@ -34,7 +34,7 @@ def test_fleet_work_shortcuts(fleet, authenticated_client, tmp_path, width, heig
             key('k')
             help=page.get_by_role('dialog',name='Keyboard shortcuts',exact=True)
             pw.expect(help).to_be_visible()
-            pw.expect(help.get_by_text('Open Butler',exact=True)).to_be_visible()
+            pw.expect(help.get_by_text('Show/hide Butler',exact=True)).to_be_visible()
             page.screenshot(path=str(tmp_path/'fleet-shortcuts.png'))
             key('b')
             pw.expect(help).not_to_be_visible()

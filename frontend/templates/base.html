@@ -255,6 +255,7 @@
 <script src="{{ static_asset('js/activity-modals.js') }}"></script>
 <link rel="stylesheet" href="{{ static_asset('css/context-help.css') }}">
 
+<script>window.HflEntitySemantics={{ entity_semantics|default({})|tojson }};</script>
 <script src="{{ static_asset('js/activity-hotkeys.js') }}"></script>
 <script src="{{ static_asset('js/activity-dialog-dismiss.js') }}"></script>
 {% if user and butler_csrf %}

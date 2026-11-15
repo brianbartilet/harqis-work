@@ -149,9 +149,9 @@ window.HflObjectDescription = (item = {}) => {
         template.querySelectorAll('input,textarea,select').forEach(n => { if (n.name) n.value = item[n.name] || (n.name === 'status' ? 'open' : ''); });
         template.querySelector('[name=body]').value = window.HflObjectDescription(item);
         template.querySelectorAll('details').forEach(n => { n.open = false; });
-        template.querySelector('[name=status]').closest('label').hidden = !current;
+        template.querySelector('[name=status]').closest('[data-action-status-field]').hidden = !current;
         const completion = template.querySelector('[name=completion_note]').closest('label');
-        const status = template.querySelector('[name=status]'); const updateStatus = () => { completion.hidden = status.value !== 'done'; }; status.onchange = updateStatus; updateStatus();
+        const status = template.querySelector('[name=status]'); const updateStatus = () => { completion.hidden = status.value !== 'done'; }; status.onchange = updateStatus; updateStatus(); window.HflActionStatus(template);
         template.querySelector('[name=matrix]').onchange = event => { if (!event.target.value) for (const name of ['matrix_confidence','matrix_reason']) template.querySelector(`[name=${name}]`).value = ''; };
         template.querySelector('.agenda-evidence')?.remove(); template.querySelector('.agenda-error')?.remove();
         d.body.append(...template.children); checklistRoot = d.body.querySelector('[data-action-checklists]');
@@ -162,7 +162,7 @@ window.HflObjectDescription = (item = {}) => {
         field(details, 'title', 'Idea', item.title, 'text', true, 200);
         field(details, 'body', 'Markdown description', window.HflObjectDescription(item), 'textarea', false, 60000);
         const attachments = el('div'); attachments.dataset.objectAttachments = ''; details.append(attachments);
-        if (current) selectField(details, 'status', 'Status', [['suggested', 'Available'], ['adopted', 'Has actions'], ['dismissed', 'Dismissed']], item.status);
+        if (current) selectField(details, 'status', 'Status', Object.entries(window.HflEntitySemantics.idea.labels), item.status);
         const checklistSection = section('Checklists');
         const checklistHeader = el('div', undefined, 'idea-checklists-heading');
         checklistToolbar = el('div');
@@ -246,7 +246,7 @@ window.HflObjectDescription = (item = {}) => {
           if (conversion) await maps.flush();
           save.textContent='Save now';
           if(kind==='idea')save.hidden=true;
-          if(kind==='actionable')d.form.querySelector('[name=status]').closest('label').hidden=false;
+          if(kind==='actionable')d.form.querySelector('[name=status]').closest('[data-action-status-field]').hidden=false;
           window.HflEditorLocation(kind,current.id); changed(null, false, !!conversion);
       };
       state=window.HflBindEditor(d.node,d.form,{
@@ -608,7 +608,7 @@ window.HflObjectDescription = (item = {}) => {
     if (node.status) {
       const status = String(node.status).toLowerCase().replaceAll('_', ' ').replaceAll('-', ' ');
       const row = el('p', undefined, 'idea-inspector-status idea-inspector-status-row');
-      const pill = el('span', (node.kind==='actions' && status==='open' ? 'In Review' : node.kind==='actions' && status==='active' ? 'Ready' : node.kind==='ideas' && status==='suggested' ? 'Available' : status.replace(/\b\w/g, letter => letter.toUpperCase())), 'idea-status-pill');
+      const pill = el('span', window.HflEntitySemantics?.[node.kind==='actions'?'action':'idea']?.labels[node.status]||status, 'idea-status-pill');
       pill.dataset.status = status.replaceAll(' ', '-');
       row.append(el('span', 'Status'), pill);root.append(row);
     }

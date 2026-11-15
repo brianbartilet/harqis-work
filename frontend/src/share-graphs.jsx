@@ -1,3 +1,4 @@
+import entitySemantics from '../static/entity-semantics.json';
 import React, {useEffect, useId, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {createPortal} from 'react-dom';
@@ -8,7 +9,7 @@ import {PRESETS, presetLayout, motionOffset, phaseFor} from './graph-presets.mjs
 import {shareTimeline, timelineBounds} from './share-timeline.mjs';
 
 // Same type palette and sizing conventions as the Activity Graph.
-const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3', ideas:'#f9ca74', actions:'#fb8ca6', goals:'#a7f3d0', drafts:'#c4b5fd', lists:'#5eead4', thoughts:'#c4b5fd', boards:'#93c5fd', sources:'#e9c96c'};
+const palette = {entries:'#77dcf5', people:'#ffbd91', companies:'#deafff', tools:'#70edbd', topics:'#9bafff', daily:'#95a7c3', ideas:entitySemantics.idea.color, actions:entitySemantics.action.color, goals:'#a7f3d0', drafts:'#c4b5fd', lists:'#5eead4', thoughts:'#c4b5fd', boards:'#93c5fd', sources:'#e9c96c'};
 const kindName = kind => ({daily:'Date', entries:'Entry', people:'Person', companies:'Company', ideas:'Idea', actions:'Action', thoughts:'Thought', boards:'Board', goals:'Goal', lists:'List', sources:'Source', tools:'Tool', topics:'Topic'}[kind] || kind);
 const legendLabel = kind => ({daily:'dates', companies:'organizations', drafts:'thoughts', thoughts:'list thoughts'}[kind] || kind.replaceAll('_', ' ')).toLowerCase();
 const identity = value => typeof value === 'object' ? value.id : value;

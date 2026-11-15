@@ -641,3 +641,41 @@ def test_kanban_creation_notice_auto_dismisses(editor_page, width):
     assert abs(box['x'] + box['width'] / 2 - width / 2) < 1
     assert 0 <= box['x'] and box['x'] + box['width'] <= width
     expect(notice).to_have_count(0, timeout=5500)
+
+@pytest.mark.parametrize('width', [390, 1440])
+@pytest.mark.parametrize('surface', ['kanban', 'shared'])
+def test_action_status_buttons_shared_editors(editor_page, width, surface, tmp_path):
+    from playwright.sync_api import expect
+    page, client = editor_page
+    item = create_action(client)
+    page.set_viewport_size({'width': width, 'height': 1000})
+    page.goto('https://editing.test/hfl-corpus/actions')
+    def open_editor():
+        if surface == 'kanban':
+            current = client.get('/hfl-corpus/timeline/items/' + item['id']).json()['item']
+            page.evaluate('(item)=>window.hflActions.openEditor(item)', current)
+            return page.locator('#followup-editor')
+        page.evaluate('(id)=>window.HflIdeas.openAction(id)', item['id'])
+        return page.locator('.idea-dialog').last
+    editor = open_editor()
+    group = editor.get_by_role('radiogroup', name='Status')
+    expect(group.get_by_role('radio')).to_have_count(6)
+    expect(group.get_by_role('radio', name='In Review', exact=True)).to_be_checked()
+    title = editor.locator('[name=title]').bounding_box()
+    status = group.bounding_box()
+    description = editor.locator('[name=body]').bounding_box()
+    assert title['y'] < status['y'] < description['y']
+    assert group.evaluate('(e)=>e.scrollWidth <= e.clientWidth')
+    group.get_by_role('radio', name='Ready', exact=True).click()
+    expect(editor.locator('.editor-save-status')).to_have_text('Saved')
+    assert client.get('/hfl-corpus/timeline/items/' + item['id']).json()['item']['status'] == 'active'
+    page.keyboard.press('ArrowRight')
+    expect(group.get_by_role('radio', name='In Progress', exact=True)).to_be_checked()
+    expect(editor.locator('.editor-save-status')).to_have_text('Saved')
+    group.get_by_role('radio', name='Done', exact=True).click()
+    expect(editor.locator('[name=completion_note]')).to_be_visible()
+    expect(editor.locator('.editor-save-status')).to_have_text('Saved')
+    page.screenshot(path=str(tmp_path / f'status-buttons-{surface}-{width}.png'))
+    editor.locator('.agenda-dialog-footer').get_by_role('button', name='Close', exact=True).click()
+    editor = open_editor()
+    expect(editor.get_by_role('radio', name='Done', exact=True)).to_be_checked()

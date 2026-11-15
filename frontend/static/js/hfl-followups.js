@@ -1,3 +1,20 @@
+/* Session-local discovery cues; opening a drawer does not change item status. */
+window.HflDrawerIndicator = (button, name) => {
+  const dot = document.createElement('span'); dot.className = 'drawer-item-indicator';
+  dot.setAttribute('aria-hidden', 'true'); button.append(dot);
+  const hint = document.createElement('span'); hint.className = 'drawer-indicator-hint';
+  hint.id = 'drawer-hint-' + name.toLowerCase(); button.append(hint);
+  button.setAttribute('aria-describedby', hint.id);
+  const seen = new Set();
+  return (ids, total, opened) => {
+    if (opened) ids.forEach(id => seen.add(id));
+    const fresh = ids.filter(id => !seen.has(id)).length;
+    button.dataset.items = total ? (fresh ? 'new' : 'existing') : 'empty';
+    const message = total ? `${total} items available${fresh ? ` · ${fresh} new since opening this panel` : ' · no new items'}` : 'No items yet';
+    hint.textContent = name + ': ' + message;
+    button.title = hint.textContent + (name === 'Focus' ? ' (O)' : '');
+  };
+};
 /* The board shares cards and commands with the day/period Actions panel. */
 (() => {
   const dialog = document.getElementById('followups-board');
@@ -10,11 +27,11 @@
   let workspaceNames=[], workspaceLoadState='loading';
   const status = $('[data-board-status]'), error = $('[data-board-error]');
   const states = ['open','active','in_progress','incomplete','done','dismissed'];
-  const label = value => value === 'open' ? 'In Review' : value === 'active' ? 'Ready' : value === 'in_progress' ? 'In Progress' : value[0].toUpperCase()+value.slice(1);
+  const label = value => window.HflEntitySemantics?.action.labels[value]||value;
   const listeners = new AbortController();
   let sequence = 0, pending = false, moving = false, dragging = null, disposed = false;
   let items = new Map(), rendered = '', timer, sorters = [];
-  let ideasOpen=false, ideaRows=[];
+  let ideasOpen=false, ideaRows=[], ideaIndicator, ideasCheckedAt=0;
   const actionSearch = $('[data-board-search]');
   const ideaSearch = document.createElement('input');
   ideaSearch.type='search';ideaSearch.className='board-card-search idea-card-search';
@@ -64,6 +81,7 @@
   function render(rows) {
     const actionQuery=query(actionSearch), ideaQuery=query(ideaSearch);
     const visibleIdeas=ideaRows.filter(item=>matches(item,ideaQuery));
+    ideaIndicator?.(ideaRows.map(item=>item.id),ideaRows.length,ideasOpen);
     const signature=JSON.stringify([rows,ideasOpen,ideaRows,actionQuery,ideaQuery]);
     if(signature===rendered)return;
     const expanded=new Set([...lanes.querySelectorAll('details[open]')].map(el=>el.closest('[data-followup-id]').dataset.followupId+':'+el.querySelector('summary').textContent));
@@ -129,7 +147,7 @@
       const ideaToolbar=node('div',null,'ideas-bulk-toolbar'),ideaBulk=node('div'),ideaRefresh=node('button','Refresh');
       ideaRefresh.type='button';ideaRefresh.onclick=()=>refresh(true);ideaToolbar.append(ideaBulk,ideaRefresh);section.append(ideaToolbar);
       const newestIdeas=[...visibleIdeas].sort((a,b)=>(Date.parse(b.created_at)||0)-(Date.parse(a.created_at)||0));
-      if(!newestIdeas.length)section.append(node('p',ideaQuery?'No matching ideas':'No ideas','agenda-description'));
+      if(!newestIdeas.length)section.append(node('p',ideaQuery?'No matching ideas. Try a different search.':'No ideas yet. Use Create → Idea to capture something worth exploring.','drawer-empty'));
       for(const item of newestIdeas){
         const oldCard=oldIdeaCards.get(item.id), itemSignature=JSON.stringify(item);
         if(oldCard?.ideaSignature===itemSignature){section.append(oldCard);continue;}
@@ -144,7 +162,7 @@
           const time=node('time',new Intl.DateTimeFormat('en-SG',{day:'numeric',month:'short',year:'numeric',timeZone:'Asia/Singapore'}).format(date));
           time.dateTime=timestamp;datePill.title=(item.generated_at?'Generated':'Created')+' '+date.toLocaleString('en-SG',{timeZone:'Asia/Singapore'})+' SGT';datePill.append(time);
         }else{datePill.textContent='Date unavailable';}
-        meta.append(datePill,node('span',item.status==='adopted'?'Has actions':'Idea'),node('span',item.origin==='manual'?'Manual':'Agent generated','action-source'));
+        meta.append(datePill,node('span',window.HflEntitySemantics.idea.labels[item.status]||'Idea'),node('span',item.origin==='manual'?'Manual':'Agent generated','action-source'));
         if(item.origin!=='manual'){
           meta.append(node('span',item.confidence?label(item.confidence)+' confidence':'Confidence unassessed','idea-confidence'));
           if(item.analysis_status==='uncertain')meta.append(node('span','Uncertain','idea-analysis-status'));
@@ -226,10 +244,11 @@
         if(!data.items.length)break;
       }while(rows.length<total);
       if(dragging||moving||pointerHeld||savingCards||bulk.busy||bulk.editing&&!force)return;
-      if(ideasOpen){
+      if(ideasOpen||page&&(force||Date.now()-ideasCheckedAt>30000)){
         const ideaParams=new URLSearchParams(params);ideaParams.delete('offset');ideaParams.set('dismissed','0');
         ideaRows=(await window.HflIdeas.api('/reuse/board-ideas?'+ideaParams)).items.filter(item=>item.status!=='adopted'&&!item.promoted_to&&!item.followup_id);
         if(ticket!==sequence)return;
+        ideasCheckedAt=Date.now();
       }
       render(rows);error.hidden=true;
       updateCount(rows);
@@ -299,7 +318,7 @@
     ideasOpen=false;dialog.querySelector('.ideas-drawer-toggle')?.setAttribute('aria-expanded','false');render([...items.values()]);dialog.querySelector('.ideas-drawer-toggle')?.focus();
   }
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&ideasOpen&&!document.querySelector('dialog[open]')){event.preventDefault();closeIdeasDrawer();}},{signal:listeners.signal});
-  if(page){const toggle=node('button',null,'ideas-drawer-toggle');toggle.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3ZM4 2v4M2 4h4M20 18v4M18 20h4"/></svg>';toggle.type='button';toggle.append(node('span','Ideas'));toggle.setAttribute('aria-label','Show ideas');toggle.setAttribute('aria-controls','board-ideas-drawer');toggle.title='Show ideas';toggle.setAttribute('aria-expanded','false');toggle.onclick=()=>{if(ideasOpen){closeIdeasDrawer();return;}ideasOpen=true;toggle.setAttribute('aria-expanded','true');render([...items.values()]);refresh(true);};createMenu.before(toggle);open();}
+  if(page){const toggle=node('button',null,'ideas-drawer-toggle');toggle.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3ZM4 2v4M2 4h4M20 18v4M18 20h4"/></svg>';toggle.type='button';toggle.append(node('span','Ideas'));toggle.setAttribute('aria-label','Show ideas');toggle.setAttribute('aria-controls','board-ideas-drawer');toggle.title='Show ideas';toggle.setAttribute('aria-expanded','false');toggle.onclick=()=>{if(ideasOpen){closeIdeasDrawer();return;}ideasOpen=true;toggle.setAttribute('aria-expanded','true');render([...items.values()]);refresh(true);};createMenu.before(toggle);ideaIndicator=window.HflDrawerIndicator(toggle,'Ideas');open();}
   window.addEventListener('hfl:ideas-updated',()=>refresh(true),{signal:listeners.signal});
   try{const restore=JSON.parse(sessionStorage.getItem('hfl:followups-restore')||'null');sessionStorage.removeItem('hfl:followups-restore');if(restore){all.checked=restore.all;requestAnimationFrame(open);}}catch(_){}
 })();

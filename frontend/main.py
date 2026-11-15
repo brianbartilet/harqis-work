@@ -306,7 +306,8 @@ async def add_security_headers(request: Request, call_next):
     request.state.csp_nonce = secrets.token_urlsafe(24)
     response = await call_next(request)
     duration_ms = (time.perf_counter() - started_at) * 1_000
-    response.headers["Server-Timing"] = f"app;dur={duration_ms:.1f}"
+    existing_timing = response.headers.get("Server-Timing")
+    response.headers["Server-Timing"] = f"app;dur={duration_ms:.1f}" + (", " + existing_timing if existing_timing else "")
     if duration_ms >= max(1.0, settings.frontend_slow_request_ms):
         logger.warning(
             "Slow request method=%s path=%s status=%s duration_ms=%.1f",
