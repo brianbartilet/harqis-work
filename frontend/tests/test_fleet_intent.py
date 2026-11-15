@@ -88,7 +88,11 @@ def test_fleet_inline_intent_browser(fleet, bridge, authenticated_client, tmp_pa
                 r.fulfill(json=workspace);return
             if u.path=='/hfl-corpus/view-preferences':
                 import json
-                workspace['preferences'].update(json.loads(r.request.post_data))
+                requested=json.loads(r.request.post_data)
+                if requested.get('revision') != workspace['preferences']['revision']:
+                    r.fulfill(status=409,json={'detail':'View settings changed in another tab. Reload and retry.'});return
+                workspace['preferences'].update(requested)
+                workspace['preferences']['revision']+=1
                 workspace['active']=['work'] if workspace['preferences']['dynamic'] else workspace['preferences']['manual']
                 r.fulfill(json=workspace);return
             response=authenticated_client.request(r.request.method,u.path+('?' + u.query if u.query else ''),content=r.request.post_data_buffer,
@@ -111,6 +115,40 @@ def test_fleet_inline_intent_browser(fleet, bridge, authenticated_client, tmp_pa
             page.wait_for_timeout(1600)
             page.evaluate("window.dispatchEvent(new Event('pagehide'))")
             assert page.evaluate(position_script)==before
+            # Exercise real keyboard events and the nested Space picker.
+            page.locator('.fleet-hotkeys').click()
+            pw.expect(page.locator('#activity-hotkey-help')).to_be_visible()
+            page.keyboard.press('k')
+            pw.expect(page.locator('#activity-hotkey-help')).not_to_be_visible()
+            page.keyboard.press('f')
+            pw.expect(page.locator('#fleet-filter-drawer')).to_be_visible()
+            page.keyboard.press('Escape')
+            page.get_by_role('button',name='Fullscreen',exact=True).click()
+            page.locator('.fleet-spaces > details > summary').click()
+            page.get_by_label('Focus on',exact=True).click()
+            page.locator('.fleet-spaces .workspace-view-options input[value="work"]').check()
+            workspace['preferences']['revision']+=1
+            page.locator('.fleet-spaces > details > summary').click()
+            page.wait_for_function("document.querySelector('.activity-view-name').textContent==='Work'")
+            page.locator('.fleet-hotkeys').focus()
+            page.keyboard.press('Alt+Backquote')
+            page.wait_for_function("document.querySelector('.activity-view-name').textContent==='All activity'")
+            page.keyboard.press('Alt+1')
+            page.wait_for_function("document.querySelector('.activity-view-name').textContent==='Work'")
+            page.keyboard.press('Alt+Backquote')
+            page.wait_for_function("document.querySelector('.activity-view-name').textContent==='All activity'")
+            page.keyboard.press('n')
+            page.wait_for_function("document.querySelector('.activity-dynamic-badge').textContent==='Dynamic ON'")
+            pw.expect(page.locator('.fleet-spaces [role=switch]')).to_be_enabled()
+            page.keyboard.press('n')
+            page.wait_for_function("document.querySelector('.activity-dynamic-badge').textContent==='Dynamic OFF'")
+            page.screenshot(path=str(tmp_path/'fleet-fullscreen-controls.png'))
+            page.set_viewport_size({'width':390,'height':844})
+            pw.expect(page.locator('.fleet-spaces > details > summary')).to_be_visible()
+            assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+            page.screenshot(path=str(tmp_path/'fleet-fullscreen-mobile.png'))
+            page.set_viewport_size({'width':1440,'height':1000})
+            page.get_by_role('button',name='Exit fullscreen',exact=True).click()
             # Both manual and scheduled Space transitions preserve hidden children.
             page.evaluate("document.dispatchEvent(new CustomEvent('fleet-space-key',{detail:1}))")
             page.wait_for_function("document.querySelector('.activity-view-name').textContent==='Work'")
@@ -118,6 +156,10 @@ def test_fleet_inline_intent_browser(fleet, bridge, authenticated_client, tmp_pa
             page.wait_for_function("document.querySelector('.activity-view-name').textContent==='All activity'")
             page.locator('.fleet-spaces > details > summary').click()
             page.get_by_role('switch',name='Dynamic mode').check()
+            page.get_by_role('switch',name='Dynamic mode').focus()
+            page.keyboard.press('k')
+            pw.expect(page.locator('#activity-hotkey-help')).to_be_visible()
+            page.keyboard.press('k')
             page.wait_for_function("document.querySelector('.activity-dynamic-badge').textContent==='Dynamic ON'")
             page.get_by_role('switch',name='Dynamic mode').uncheck()
             page.wait_for_function("document.querySelector('.activity-dynamic-badge').textContent==='Dynamic OFF'")
@@ -127,6 +169,30 @@ def test_fleet_inline_intent_browser(fleet, bridge, authenticated_client, tmp_pa
             assert page.evaluate(position_script)==before
             if page.locator('.fleet-spaces > details').get_attribute('open') is not None:
                 page.locator('.fleet-spaces > details > summary').click()
+            # Fleet filters are independent of manual and scheduled Space changes.
+            search.fill('Review')
+            page.locator('.fleet-filter-trigger').click()
+            page.get_by_label('Service',exact=True).select_option('hermes')
+            page.get_by_label('From date',exact=True).fill('2026-01-01')
+            page.get_by_label('Through date',exact=True).fill('2026-12-31')
+            page.get_by_role('switch',name='Show done and dismissed items').check()
+            page.keyboard.press('Escape')
+            filters_script="""() => {const v=JSON.parse(localStorage.getItem('harqis:fleet:graph:v2:frontend-test-user'));return Object.fromEntries(['query','range','since','until','runtime','types','inactive','dismissed','includeOwnerActivity'].map(k=>[k,v[k]]));}"""
+            saved_filters=page.evaluate(filters_script)
+            page.locator('.fleet-hotkeys').focus()
+            page.keyboard.press('Alt+1')
+            page.wait_for_function("document.querySelector('.activity-view-name').textContent==='Work'")
+            assert page.evaluate(filters_script)==saved_filters
+            # A scheduled transition arrives through the periodic snapshot loader.
+            workspace['preferences']['dynamic']=True
+            workspace['active']=[]
+            page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+            page.wait_for_function("document.querySelector('.activity-view-name').textContent==='All activity'")
+            assert page.evaluate(filters_script)==saved_filters
+            assert page.locator('.fleet-spaces .activity-view-modified').count()==0
+            page.locator('.fleet-filter-trigger').click()
+            page.get_by_role('button',name='Reset filters',exact=True).click()
+            page.keyboard.press('Escape')
             search.fill(item['title'])
             page.locator('.fleet-owner .fleet-relationship-card').click()
             pw.expect(page.locator('.fleet-relationships .fleet-relationship-card')).to_have_count(1)

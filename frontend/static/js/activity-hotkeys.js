@@ -41,8 +41,9 @@
     else query('.corpus-navigation-actions .corpus-create-menu').before(help);
     let opener;help.onclick=()=>{opener=document.activeElement;dialog.showModal();close.focus();};dialog.onclose=()=>opener?.focus();
     document.addEventListener('keydown',event=>{
-      if(event.defaultPrevented||event.repeat||event.isComposing||event.metaKey||event.shiftKey||event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),.xterm,[role="textbox"]') )return;
+      if(event.defaultPrevented||event.repeat||event.isComposing||event.metaKey||event.shiftKey||event.target.closest('input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=button]):not([type=submit]),textarea,select,[contenteditable]:not([contenteditable="false"]),.xterm,[role="textbox"]') )return;
       const key=event.key.toLowerCase();
+      if(key===' '&&event.target.closest('input'))return;
       if(query('#butler-panel:not([hidden])'))return;
       const activeDialog=query('dialog[open]:not(#followups-board):not(#activity-standalone)');
       if(activeDialog){
@@ -64,15 +65,15 @@
         if(key==='n'){event.preventDefault();click(query('.fleet-spaces [role=\"switch\"]'));return;}
         if(key==='i'){event.preventDefault();document.dispatchEvent(new Event('fleet-hud-motion'));return;}
         if(key==='a'||key==='d'){event.preventDefault();window.HflIdeas?.openEditor(key==='a'?'actionable':'idea');return;}
-        if(key===' '&&event.target.closest('button,a,summary,[role=\"button\"]'))return;
-        if(key==='tab'&&event.target.closest('button,a,summary,[role="button"],details[open]'))return;
+        if(key===' '&&event.target.closest('button,a,summary,input,[role=\"button\"]'))return;
+        if(key==='tab'&&event.target.closest('button,a,summary,input,[role="button"],details[open]'))return;
         const selectors={tab:'.fleet-dashboard-link[aria-label="Show second brain dashboard"]',' ':'.fleet-dashboard-link[aria-label="Show Kanban"]',g:'.fleet-toolbar-actions button.fleet-primary',f:'.fleet-filter-trigger',r:'.fleet-toolbar [aria-label=\"Refresh\"]',p:'.fleet-map [aria-label=\"Fit view\"]','[':'.fleet-map [aria-label=\"Zoom in\"]',']':'.fleet-map [aria-label=\"Zoom out\"]','\\':'#fleet-exit-fullscreen,#fleet-enter-fullscreen'};
         if(selectors[key]){event.preventDefault();click(query(selectors[key]));return;}
       }
       if(event.altKey){if((key==='`'||event.code==='Backquote'||/^[1-9]$/.test(key))&&window.HflSelectSpace){event.preventDefault();window.HflSelectSpace(event.code==='Backquote'||key==='`'?0:Number(key));}return;}
       if(key==='k'){event.preventDefault();help.click();return;}
       if(board){
-        if(key===' '&&event.target.closest('button,a,summary,[role="button"]'))return;
+        if(key===' '&&event.target.closest('button,a,summary,input,[role="button"]'))return;
         const card=document.activeElement?.closest('[data-followup-id]')||query('[data-board-lanes] [data-followup-id]:hover');
         const labels={e:'Edit',o:'Done',a:'Agents',i:'Dismiss',h:'History'};
         if(card&&(labels[key]||key==='x')){event.preventDefault();if(key==='x'){const sections=[...card.querySelectorAll('details')],toggles=[...card.querySelectorAll('.checklist-cover-toggle')],open=sections.some(el=>!el.open)||toggles.some(el=>el.getAttribute('aria-expanded')==='false');sections.forEach(el=>el.open=open);toggles.forEach(el=>{if((el.getAttribute('aria-expanded')==='true')!==open)click(el);});}else{const button=named(card,new RegExp('^'+labels[key]+'$'));if(key==='o'||key==='i')confirmCommand(button,labels[key]+' this action');else click(button);}return;}
