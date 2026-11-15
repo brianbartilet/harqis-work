@@ -1,6 +1,11 @@
 // Calendar arithmetic stays in browser-local time, including DST transitions.
 export function graphDateRange(mode, now = new Date()) {
   if (mode === '0') return null;
+  if (mode === '24h') mode = '1';
+  if (mode === 'today') {
+    const date=[now.getFullYear(),String(now.getMonth()+1).padStart(2,'0'),String(now.getDate()).padStart(2,'0')].join('-');
+    return {since:date,until:date};
+  }
   const days = Number(mode);
   if (mode !== 'week' && (!Number.isInteger(days) || days < 1)) return null;
   const end = new Date(now), start = new Date(now);

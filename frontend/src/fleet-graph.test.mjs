@@ -77,10 +77,10 @@ test('owner activity switch preserves agent entries and all intent',()=>{
  const data={agents:[{id:'a',active:true}],nodes:[{id:'owner-entry',kind:'entry',agent_ids:[]},{id:'agent-entry',kind:'entry',agent_ids:['a']},{id:'action',kind:'action',agent_ids:[]},{id:'idea',kind:'idea',agent_ids:[]}],edges:[]};
  assert.deepEqual(filterFleet(data,{types:['entry','action','idea'],includeOwnerActivity:false}).nodes.map(n=>n.id),['agent-entry','action','idea']);
 });
-test('Today uses exact rolling 24 hour bounds and preserves intents',()=>{
+test('Last 24 hours uses exact rolling bounds and preserves intents',()=>{
  const now=Date.parse('2026-11-15T10:00:00Z');
  const data={agents:[],nodes:[['boundary','2026-11-14T10:00:00Z'],['old','2026-11-14T09:59:59Z'],['now','2026-11-15T10:00:00Z'],['future','2026-11-15T10:00:01Z']].map(([id,created])=>({id,created,kind:'entry'})).concat([{id:'action',kind:'action',created:'2020-01-01'}]),edges:[]};
- assert.deepEqual(filterFleet(data,{types:['entry','action'],range:'1',now}).nodes.map(n=>n.id),['boundary','now','action']);
+ assert.deepEqual(filterFleet(data,{types:['entry','action'],range:'24h',now}).nodes.map(n=>n.id),['boundary','now','action']);
 });
 
 test('undated HUD catalog nodes survive date filters and global Space selection',()=>{
@@ -91,4 +91,11 @@ test('undated HUD catalog nodes survive date filters and global Space selection'
  assert.ok(filterFleet(input,options).nodes.some(n=>n.id==='hud:calendar'));
  input.nodes.at(-1).workspace_ids=['personal'];
  assert.ok(!filterFleet(input,options).nodes.some(n=>n.id==='hud:calendar'));
+});
+
+test('Today starts at local midnight rather than 24 hours ago',()=>{
+ const now=new Date(2026,10,15,10,0,0).getTime(),midnight=new Date(2026,10,15).getTime();
+ const data={agents:[],edges:[],nodes:[['yesterday',midnight-1],['midnight',midnight],['now',now],['future',now+1]].map(([id,time])=>({id,created:new Date(time).toISOString(),kind:'entry'}))};
+ assert.deepEqual(filterFleet(data,{types:['entry'],range:'today',now}).nodes.map(n=>n.id),['midnight','now']);
+ assert.deepEqual(filterFleet(data,{types:['entry'],range:'24h',now}).nodes.map(n=>n.id),['yesterday','midnight','now']);
 });

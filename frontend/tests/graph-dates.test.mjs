@@ -29,3 +29,9 @@ test('rolling windows remain inclusive and fixed dates remain untouched', () => 
   for(const mode of ['0','invalid','-1',null])assert.equal(graphDateRange(mode,now),null);
   assert.equal(now.getDate(),2);
 });
+
+test('fleet Today and Last 24 hours display distinct local date bounds',()=>{
+ const now=new Date(2026,10,15,10);
+ assert.deepEqual(graphDateRange('today',now),{since:'2026-11-15',until:'2026-11-15'});
+ assert.deepEqual(graphDateRange('24h',now),{since:'2026-11-14',until:'2026-11-15'});
+});
