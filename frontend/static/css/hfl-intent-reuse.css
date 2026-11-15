@@ -13,7 +13,7 @@
 .checklist-markdown { flex:1; min-width:0; padding:.4rem; cursor:text; overflow-wrap:anywhere; font-size:.85rem; }
 .checklist-markdown p,.checklist-card-cover p { margin:0; }
 .checklist-markdown a,.checklist-card-cover a { color:#7dd3fc; text-decoration:underline; }
-.checklist-markdown:focus-visible { outline:2px solid #7dd3fc; }
+.checklist-markdown:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); }
 .idea-check-row input[hidden],.checklist-markdown[hidden] { display:none; }
 .action-clone-handle { float:right; position:relative; margin-right:.35rem; min-height:32px; color:#94a3b8; padding:.2rem .4rem; border-radius:.3rem; }
 .action-clone-handle:hover { color:#e2e8f0; background:#334155; }
@@ -22,7 +22,7 @@
 .followups-board .ideas-drawer-toggle svg { width:18px; height:18px; flex-shrink:0; color:inherit; }
 .followups-board .ideas-drawer-toggle span { color:#fff; opacity:1; }
 .followups-board .ideas-drawer-toggle:hover,.followups-board .ideas-drawer-toggle[aria-expanded=true] { background:#3b82f6; color:#fff; box-shadow:none; }
-.followups-board .ideas-drawer-toggle:focus-visible { outline:2px solid #60a5fa; outline-offset:2px; }
+.followups-board .ideas-drawer-toggle:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
 @media(prefers-reduced-motion:reduce) { .followups-board .ideas-drawer-toggle { transition:none; } }
 .ideas-drawer-overlay .ideas-drawer { border:1px solid #665333; border-left:3px solid #f9ca74; }
 .ideas-drawer .agenda-card { position:relative; padding:.75rem; }
@@ -43,7 +43,7 @@
 
 .followups-toolbar .board-workspace-filter > summary { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; height:44px; min-height:44px; padding:.5rem 2.5rem .5rem 1rem; border:0; border-radius:.5rem; font-size:.875rem; font-weight:600; line-height:1.25rem; white-space:nowrap; background-color:#2563eb; color:#fff; box-shadow:0 10px 15px -3px #17255466; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2367e8f9' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m2.5 4.5 3.5 3 3.5-3'/%3E%3C/svg%3E"); background-position:right .85rem center; background-repeat:no-repeat; background-size:.8rem .8rem; }
 .followups-toolbar .board-workspace-filter > summary:hover { background-color:#3b82f6; }
-.followups-toolbar .board-workspace-filter > summary:focus-visible { outline:2px solid #60a5fa; outline-offset:2px; }
+.followups-toolbar .board-workspace-filter > summary:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
 
 .ideas-drawer-overlay { position:fixed; inset:0; z-index:100; pointer-events:none; }
 .ideas-drawer-backdrop { position:absolute; inset:0; background:#02061780; pointer-events:auto; }
@@ -57,7 +57,7 @@
 .ideas-drawer-header .ideas-drawer-close { float:none; padding:.25rem .5rem; }
 .followups-board .board-card-search { box-sizing:border-box; height:36px; min-width:0; padding:7px 10px; border:1px solid #334155; border-radius:8px; background:#0b1322; color:#e2e8f0; font:inherit; font-size:12px; }
 .followups-board .board-card-search::placeholder { color:#94a3b8; }
-.followups-board .board-card-search:focus-visible { outline:2px solid #60a5fa; outline-offset:2px; }
+.followups-board .board-card-search:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
 .followups-toolbar > .board-card-search { flex:0 1 240px; width:240px; min-width:120px; }
 .ideas-drawer .idea-card-search { display:block; width:100%; margin:0 0 10px; }
 @media(max-width:700px) { .followups-toolbar > .board-card-search { flex:1 1 150px; width:150px; } }
@@ -71,7 +71,7 @@
 .idea-drag-preview { z-index:110!important; pointer-events:none; }
 .agenda-card .agenda-card-meta .action-promoted { display:inline-flex; align-items:center; margin:0; padding:.15rem .4rem; min-height:0; border:1px solid #0e7490; border-radius:.25rem; background:#083344; color:#a5f3fc; font:inherit; font-size:.65rem; line-height:1.4; cursor:pointer; }
 .agenda-card .agenda-card-meta .action-promoted:hover { background:#164e63; color:#ecfeff; }
-.agenda-card .agenda-card-meta .action-promoted:focus-visible { outline:2px solid #7dd3fc; outline-offset:2px; }
+.agenda-card .agenda-card-meta .action-promoted:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
 @media(max-width:600px) { .idea-promotion-dropzone { inset:auto 12px 12px; min-height:150px; padding:20px; } .idea-promotion-hint strong { font-size:1.1rem; } }
 .followups-board .followups-lane .agenda-card > :is(.action-clone-handle,.action-drag-handle) { display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; width:32px; height:32px; min-height:32px; padding:0; border:1px solid #334155; border-radius:.6rem; font-size:.85rem; line-height:1; background:transparent; }
 
@@ -113,7 +113,7 @@
 .idea-card-description a { color:#7dd3fc; text-decoration:underline; }
 .agenda-card h3 .intent-copy-id { display:inline-flex; align-items:center; justify-content:center; vertical-align:-2px; width:16px; height:16px; min-height:0; padding:0; margin:0 0 0 3px; line-height:1; border:0; border-radius:3px; background:transparent; color:#94a3b8; cursor:pointer; }
 .agenda-card h3 .intent-copy-id:hover { color:#7dd3fc; background:#1e293b; }
-.agenda-card h3 .intent-copy-id:focus-visible { outline:2px solid #7dd3fc; outline-offset:2px; }
+.agenda-card h3 .intent-copy-id:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
 
 /* Bulk controls use the board toolbar and editor palette. */
 .bulk-controls,.ideas-bulk-toolbar { display:flex; align-items:center; gap:.4rem; flex-wrap:wrap; }
@@ -122,7 +122,7 @@
 #followups-board .bulk-controls > button,#followups-board .bulk-menu > button { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; padding:0; border:1px solid #475569; border-radius:.5rem; color:#cbd5e1; background:#16263e; }
 #followups-board .bulk-controls button[aria-pressed=true] { background:#2563eb; border-color:#60a5fa; color:#fff; }
 #followups-board .bulk-controls button:disabled { opacity:.4; cursor:default; }
-.bulk-controls button:focus-visible,.bulk-card-check:focus-visible { outline:2px solid #7dd3fc; outline-offset:3px; }
+.bulk-controls button:focus-visible,.bulk-card-check:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:var(--harqis-focus-offset, 2px); }
 .bulk-selection-count { font-size:.75rem; color:#94a3b8; white-space:nowrap; }
 .board-selection-summary { display:inline-flex; align-items:center; gap:.4rem; white-space:nowrap; font-size:.75rem; color:#94a3b8; }
 #followups-board .followups-toolbar [data-board-refresh] { display:inline-flex; align-items:center; justify-content:center; width:38px; min-width:38px; height:38px; min-height:38px; padding:0; }
@@ -161,7 +161,7 @@
 .focus-drawer .ideas-drawer-header h3{margin:0;font-size:14px}
 .focus-drawer button{margin:0;min-height:32px;padding:5px 9px;font-size:12px;border:1px solid #334155;border-radius:6px;background:#0f172a;color:#cbd5e1;cursor:pointer}
 .focus-drawer button:hover{background:#1e293b;border-color:#475569}
-.focus-drawer :is(button,a,summary):focus-visible{outline:2px solid #67e8f9;outline-offset:2px}
+.focus-drawer :is(button,a,summary):focus-visible{outline:2px solid var(--harqis-focus-color, #38bdf8);outline-offset:2px}
 .focus-drawer .focus-scope{margin:0;color:#cbd5e1;font-size:12px;overflow-wrap:anywhere}
 .focus-drawer .focus-status{margin:3px 0 10px;font-size:11px;line-height:1.4;color:#94a3b8}
 .focus-drawer section>h3{margin:14px 0 7px;font-size:12px;color:#cbd5e1;font-weight:600}
@@ -208,7 +208,7 @@
 .agenda-dialog .action-status-options button{min-height:36px;padding:7px 10px;border:1px solid #334155;border-radius:6px;background:#0b1221;color:#94a3b8;font-size:12px;line-height:1.3;white-space:nowrap}
 .agenda-dialog .action-status-options button:hover{border-color:#60a5fa;color:#e2e8f0}
 .agenda-dialog .action-status-options button[aria-checked=true]{border-color:#38bdf8;background:#0c4a6e;color:#e0f2fe;font-weight:650;box-shadow:inset 0 0 0 1px #38bdf8}
-.agenda-dialog .action-status-options button:focus-visible{outline:2px solid #67e8f9;outline-offset:2px}
+.agenda-dialog .action-status-options button:focus-visible{outline:2px solid var(--harqis-focus-color, #38bdf8);outline-offset:2px}
 @media(pointer:coarse){.agenda-dialog .action-status-options button{min-height:40px}}
 
 .focus-drawer .ideas-drawer-header .focus-icon-button{box-sizing:border-box;margin:0;align-self:center;line-height:1}

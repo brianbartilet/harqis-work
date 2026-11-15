@@ -319,8 +319,8 @@
 .files-source-form { max-width: 620px; }
 #files-app summary { cursor: pointer; }
 #files-app :is(button, input, select, summary):focus-visible {
-  outline: 2px solid var(--file-accent);
-  outline-offset: 3px;
+  outline: 2px solid var(--harqis-focus-color, #38bdf8);
+  outline-offset:var(--harqis-focus-offset, 2px);
 }
 .files-folder-entries { min-height: 120px; max-height: 42vh; overflow-y: auto; }
 .files-folder-row { padding: 10px 0; border-bottom: 1px solid var(--file-line); }

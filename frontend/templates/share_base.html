@@ -40,7 +40,6 @@
       color: #f8fafc; padding: 10px 12px;
     }
     textarea { resize: vertical; }
-    input:focus, textarea:focus { border-color: #38bdf8; outline: 2px solid rgba(56,189,248,.2); }
     button, .button {
       display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 9px;
       background: #0284c7; color: white; cursor: pointer; font-weight: 700; padding: 10px 15px;
@@ -114,7 +113,7 @@
     .drawer-head h2 { margin:0; font-size:.96rem; }
     .drawer-close, .drawer-toggle { display:grid; width:36px; height:36px; flex:0 0 36px; place-items:center; border:0; border-radius:9px; background:#172033; color:#cbd5e1; cursor:pointer; font-weight:700; padding:0; user-select:none; }
     .drawer-toggle-label { display:none; }
-    .drawer-close:focus-visible, .drawer-toggle:focus-visible { outline:2px solid #38bdf8; outline-offset:2px; }
+    .drawer-close:focus-visible, .drawer-toggle:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
     .drawer-search { border-bottom:1px solid #1e293b; padding:12px; }
     .drawer-search, .drawer-search input { width:100%; min-width:0; max-width:100%; }
     .drawer-search-row { display:grid; min-width:0; grid-template-columns:minmax(0,1fr) auto; gap:7px; }
@@ -134,7 +133,7 @@
     .drawer-tag-option > span { display:inline-flex; align-items:center; gap:4px; border:1px solid #1e3a8a; border-radius:999px; background:#172554; color:#bfdbfe; font-size:.64rem; font-weight:600; line-height:1; padding:5px 7px; }
     .drawer-tag-option small { color:#64748b; font-size:.58rem; font-weight:500; }
     .drawer-tag-option input:checked + span { border-color:#38bdf8; background:#075985; color:#f0f9ff; box-shadow:0 0 0 2px rgba(56,189,248,.12); }
-    .drawer-tag-option input:focus-visible + span { outline:2px solid #38bdf8; outline-offset:2px; }
+    .drawer-tag-option input:focus-visible + span { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
     .drawer-tag-empty { margin:0; color:#64748b; font-size:.66rem; }
     .drawer-clear-tags { margin-top:7px; border:0; background:transparent; color:#7dd3fc; font-size:.64rem; font-weight:600; padding:2px 1px; }
     .drawer-count { margin:9px 0 0; color:#64748b; font-size:.7rem; }
@@ -319,6 +318,7 @@
       .manifesto-content code { font-size:.72rem; }
     }
   </style>
+  <link rel="stylesheet" href="{{ share_asset('css/control-focus.css') }}">
 </head>
 <body>
   <header class="header">

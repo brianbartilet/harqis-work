@@ -26,5 +26,5 @@
 [data-activity-all][aria-checked=true] .activity-switch-track{background:#0891b2}
 [data-activity-all][aria-checked=true] .activity-switch-track::after{transform:translateX(12px);background:#fff}
 @media(prefers-reduced-motion:reduce){.activity-switch-track,.activity-switch-track::after{transition:none}}
-:where(button,a,input,select,summary):focus-visible{outline:2px solid #67e8f9;outline-offset:2px}
+:where(button,a,input,select,summary):focus-visible{outline:2px solid var(--harqis-focus-color, #38bdf8);outline-offset:2px}
 @media(max-width:760px){.activity-modal{inset:2px;width:calc(100% - 4px);height:calc(100dvh - 4px);border-radius:10px}.activity-modal-page .kg-workspace{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(200px,1fr) minmax(100px,28%)}.activity-modal-page .kg-inspector{border-top:1px solid #334155}.activity-modal-page .kg-main-toolbar{gap:6px}.activity-modal-page .kg-toolbar-actions{flex-wrap:wrap}.activity-modal-page .kg-inline-info{max-width:100%;font-size:11px}}

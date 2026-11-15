@@ -3,7 +3,7 @@
 .entity-connections-dialog header,.entity-connections-dialog footer{display:flex;justify-content:space-between;align-items:center;gap:12px}
 .entity-connections-dialog h2{font-size:20px;color:#fff;margin:0}.entity-connections-dialog h3{font-size:16px;margin:24px 0 12px}
 .entity-connections-dialog button{border:1px solid #465d79;border-radius:8px;background:#172b43;color:#dbe5ef;padding:10px 14px;cursor:pointer;font:inherit}
-.entity-connections-dialog button:disabled{opacity:.5;cursor:default}.entity-connections-dialog :focus-visible{outline:2px solid #38bdf8;outline-offset:2px}
+.entity-connections-dialog button:disabled{opacity:.5;cursor:default}.entity-connections-dialog :focus-visible{outline:2px solid var(--harqis-focus-color, #38bdf8);outline-offset:2px}
 .entity-connections-dialog label{display:block;color:#94a3b8;font-size:12px;margin:16px 0;min-width:0}
 .entity-connections-dialog input,.entity-connections-dialog select,.entity-connections-dialog textarea{box-sizing:border-box;display:block;width:100%;min-height:44px;margin-top:8px;padding:10px;border:1px solid #334155;border-radius:8px;background:#020617;color:#cbd5e1;font:14px/1.5 system-ui}
 .entity-connections-dialog select{appearance:none;padding-right:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2360a5fa' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 7.5 5 5 5-5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:20px}

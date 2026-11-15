@@ -65,7 +65,7 @@
   .activity-day-menu[data-matches-expanded="true"] { width:min(24rem, calc(100vw - 1rem)); }
   .activity-day-menu-action { display:flex; width:100%; min-height:2.35rem; align-items:center; border-radius:.5rem; padding:.55rem .65rem; font-size:.75rem; font-weight:650; text-align:left; }
   .activity-day-menu-action:hover { background:#0f172a; color:#cffafe; }
-  .activity-day-menu-action:focus-visible { outline:2px solid #22d3ee; outline-offset:1px; }
+  .activity-day-menu-action:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:1px; }
   .activity-day-menu-disabled { color:#475569; cursor:not-allowed; }
   .memory-dialog { position:fixed; inset:0; margin:auto; max-height:calc(100dvh - 2rem); overflow-y:auto; width:min(31rem,calc(100vw - 1.5rem)); border:1px solid #334155; border-radius:1rem; background:#07101f; color:#e2e8f0; padding:0; box-shadow:0 26px 80px rgba(2,6,23,.82); }
   .memory-prompt-preview { padding:.75rem; border:1px solid #1e293b; border-radius:.55rem; background:#020617; max-height:16rem; overflow:auto; overflow-wrap:anywhere; font-size:.8rem; }
@@ -74,7 +74,7 @@
   .memory-instructions-heading .memory-dialog-label { margin:0; }
   .memory-instructions-help summary { display:grid; place-items:center; width:1rem; height:1rem; border:1px solid #475569; border-radius:50%; color:#94a3b8; font-size:.65rem; line-height:1; padding:0; cursor:pointer; list-style:none; }
   .memory-instructions-help summary::-webkit-details-marker { display:none; }
-  .memory-instructions-help summary:focus-visible { outline:2px solid #67e8f9; outline-offset:2px; }
+  .memory-instructions-help summary:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
   .memory-instructions-help-content { position:absolute; left:0; top:calc(100% + .5rem); z-index:5; width:min(20rem,calc(100vw - 7rem)); padding:.75rem; border:1px solid #334155; border-radius:.6rem; background:#0f172a; color:#cbd5e1; font-size:.75rem; line-height:1.6; box-shadow:0 8px 24px #020617; }
   .memory-dialog textarea[data-prompt-input] { display:block; min-height:10rem; height:10rem; max-height:none; resize:vertical; overflow:auto; line-height:1.6; }
   .memory-prompt-preview > :first-child { margin-top:0; }
@@ -178,7 +178,7 @@
   .corpus-navigation-actions{display:flex;align-items:center;gap:.5rem}
   .corpus-navigation-actions .corpus-create-entry,.corpus-header-link{display:inline-flex;align-items:center;justify-content:center;min-height:2.75rem;padding:.5rem 1rem;border-radius:.5rem;font-size:.875rem;font-weight:600;line-height:1.25rem;white-space:nowrap;margin-top:0;width:auto}
   .corpus-header-link{background:#2563eb;color:#fff;box-shadow:0 10px 15px -3px #17255466;text-decoration:none}
-  .corpus-header-link:hover{background:#3b82f6}.corpus-header-link:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
+  .corpus-header-link:hover{background:#3b82f6}.corpus-header-link:focus-visible{outline:2px solid var(--harqis-focus-color, #38bdf8);outline-offset:2px}
   @media(max-width:639px){.activity-panel-header{flex-wrap:wrap}.activity-panel-header [data-activity-header-actions]{width:100%;max-width:100%;justify-content:flex-end}.corpus-workspace-controls{flex:1;gap:.5rem}.corpus-workspace-controls .activity-view-context{flex:1;justify-content:flex-start}.corpus-workspace-controls .workspace-menu-panel{width:18rem;max-width:calc(100vw - 2rem)}.corpus-navigation-actions .corpus-header-link{padding:.5rem .65rem}}
   @media(min-width:640px){.corpus-navigation-actions{margin-top:0}.corpus-header-actions{justify-content:space-between}.corpus-page-header{min-width:0}}
 

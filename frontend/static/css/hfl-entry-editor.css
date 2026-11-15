@@ -10,10 +10,10 @@
 .entry-editor label,.entry-editor-label,.entry-editor h3 { display:block; min-width:0; color:#94a3b8; font-size:.68rem; font-weight:650; }
 .entry-editor input:not([type=file]),.entry-editor textarea { display:block; box-sizing:border-box; width:100%; min-width:0; margin-top:.4rem; padding:.65rem .75rem; border:1px solid #334155; border-radius:.5rem; color:#f1f5f9; background:#020617; font-family:inherit; font-size:.85rem; font-weight:400; line-height:1.5; color-scheme:dark; }
 .entry-editor textarea { resize:vertical; }
-.entry-editor :is(input,textarea,summary):focus-visible { outline:2px solid #7dd3fc; outline-offset:3px; }
+.entry-editor :is(input,textarea,summary):focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:var(--harqis-focus-offset, 2px); }
 .entry-editor button { min-height:44px; padding:.5rem .8rem; border:1px solid #334155; border-radius:.5rem; background:#0f172a; color:#e2e8f0; }
 .entry-editor button:hover { background:#1e293b; }
-.entry-editor button:focus-visible { outline:2px solid #7dd3fc; outline-offset:2px; }
+.entry-editor button:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
 .entry-editor button:disabled { opacity:.5; cursor:wait; }
 .entry-editor [data-entry-editor-save] { background:#0c4a6e; border-color:#38bdf8; color:#e0f2fe; font-weight:650; }
 .entry-editor [data-entry-editor-save]:hover { background:#075985; }

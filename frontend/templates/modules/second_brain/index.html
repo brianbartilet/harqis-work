@@ -96,7 +96,7 @@
   .brain-locked-list > summary { cursor:pointer; color:#64748b; }
   .brain-locked-list > summary:hover { color:#94a3b8; }
   .brain-number-stepper { display:grid; grid-template-columns:2.5rem minmax(0,1fr) 2.5rem; min-height:2.65rem; overflow:hidden; border:1px solid #334155; border-radius:.6rem; background:#0f172a; }
-  .brain-number-stepper:focus-within { border-color:#22d3ee; box-shadow:0 0 0 2px rgba(34,211,238,.18); }
+  /* Individual fields/buttons own focus; the wrapper stays neutral. */
   .brain-number-stepper button { border:0; background:#1e293b; color:#cbd5e1; font-size:1.1rem; }
   .brain-number-stepper button:hover { background:#334155; color:white; }
   .brain-number-stepper input { min-width:0; border:0; background:transparent; padding:.55rem .75rem; color:white; text-align:center; outline:none; appearance:textfield; }
@@ -105,7 +105,7 @@
   .brain-notice[data-tone="error"] { border-color:#fb7185; color:#ffe4e6; }
   .brain-notice[data-tone="success"] { border-color:#22d3ee; color:#cffafe; }
   .brain-notice[hidden] { display:none; }
-  .brain-primary-action:focus-visible,.brain-mode-pill:focus-visible,.brain-control-summary:focus-visible,.brain-card-toggle:focus-visible,.brain-number-stepper button:focus-visible,.brain-manage-button:focus-visible { outline:2px solid #67e8f9; outline-offset:-2px; }
+  .brain-primary-action:focus-visible,.brain-mode-pill:focus-visible,.brain-control-summary:focus-visible,.brain-card-toggle:focus-visible,.brain-number-stepper button:focus-visible,.brain-manage-button:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:-2px; }
   .brain-pulse { animation:brain-breathe 2.4s ease-in-out infinite; }
   @keyframes brain-breathe { 50% { opacity:.35; transform:scale(.8); } }
   @media (min-width:1024px) {

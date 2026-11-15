@@ -1,5 +1,5 @@
 .activity-hotkey-trigger{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:8px;border:1px solid #334155;border-radius:9px;color:#7dd3fc;background:#0f172a}
-.activity-hotkey-trigger:focus-visible{outline:2px solid #38bdf8;outline-offset:3px}
+.activity-hotkey-trigger:focus-visible{outline:2px solid var(--harqis-focus-color, #38bdf8);outline-offset:var(--harqis-focus-offset, 2px)}
 .kg-shell .kg-main-toolbar .kg-toolbar-actions>.activity-hotkey-trigger,
 #followups-board .followups-toolbar>.activity-hotkey-trigger,
 [data-corpus-index] .corpus-navigation-actions>.activity-hotkey-trigger{width:38px;min-width:38px;flex:0 0 38px;padding:8px;box-sizing:border-box}

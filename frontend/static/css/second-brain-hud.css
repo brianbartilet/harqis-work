@@ -75,7 +75,7 @@
   stroke-linejoin:round;
 }
 .hud-toolbar-icon:focus-visible {
-  outline:2px solid #67e8f9;
+  outline:2px solid var(--harqis-focus-color, #38bdf8);
   outline-offset:2px;
 }
 .hud-surface button:hover,.hud-tools>a:hover {
@@ -153,7 +153,7 @@
 .agent-avatar-group:empty {display:none;}
 .agent-avatar {position:relative;display:inline-grid;place-items:center;flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:var(--agent-color,#67e8f9);color:#081423;font:700 10px/1 system-ui;box-shadow:0 0 0 1px #ffffff40;vertical-align:middle;}
 .agent-avatar img {position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;}
-.agent-avatar:focus-visible {outline:2px solid #e9c96c;outline-offset:3px;}
+.agent-avatar:focus-visible {outline:2px solid var(--harqis-focus-color, #38bdf8);outline-offset:var(--harqis-focus-offset, 2px);}
 .agent-avatar-tooltip {display:none;}
 .agent-avatar:focus .agent-avatar-tooltip {display:block;position:absolute;right:0;top:calc(100% + 6px);z-index:20;min-width:160px;max-width:240px;padding:8px;background:#0f172a;color:#f1f5f9;border:1px solid #4082aa;border-radius:5px;white-space:normal;line-height:1.5;box-shadow:0 4px 12px #0008;}
 .hud-surface .hud-widget-header button {
@@ -542,13 +542,13 @@
 .hud-settings-menu legend { color:#94adbd; font-size:11px; margin-bottom:6px; }
 .hud-settings-menu button { border:1px solid #365367; border-radius:4px; padding:6px; background:#142630; color:#d5e7f1; font-size:11px; }
 .hud-settings-menu button:hover { background:#223d4c; }
-.hud-settings-menu :focus-visible { outline:2px solid #67e8f9; outline-offset:2px; }
+.hud-settings-menu :focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
 .hud-size-options { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; }
 .hud-size-options label,.hud-motion-options label { position:relative; cursor:pointer; border:1px solid #365367; border-radius:4px; background:#0a151e; }
 .hud-size-options label { display:flex; flex-direction:column; align-items:center; justify-content:end; gap:4px; height:58px; padding:5px; font-size:10px; }
 .hud-size-options input,.hud-motion-options input,.hud-accent-options input { position:absolute; opacity:0; width:1px; height:1px; }
 .hud-size-options label:has(:checked),.hud-motion-options label:has(:checked) { border-color:#67e8f9; background:#183b4b; color:#a5f3fc; }
-.hud-size-options label:has(:focus-visible),.hud-motion-options label:has(:focus-visible),.hud-accent-options label:has(:focus-visible) { outline:2px solid #67e8f9; outline-offset:2px; }
+.hud-size-options label:has(:focus-visible),.hud-motion-options label:has(:focus-visible),.hud-accent-options label:has(:focus-visible) { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
 .hud-size-preview { display:block; width:calc(var(--size-cols)*8px); height:calc(var(--size-rows)*7px); border:1px solid #67e8f9; border-radius:2px; background:repeating-linear-gradient(0deg,transparent 0 6px,#67e8f933 6px 7px),repeating-linear-gradient(90deg,#38bdf822 0 7px,#67e8f933 7px 8px); }
 .hud-motion-options { display:flex; gap:4px; }
 .hud-motion-options label { flex:1; text-align:center; padding:6px 2px; font-size:11px; }
@@ -632,7 +632,7 @@
 .hud-tools .hud-workspace-return{display:grid;place-items:center;flex:none;width:36px;height:36px;padding:7px;border-radius:8px;border-color:#22d3ee;background:#083344;color:#a5f3fc;box-shadow:0 0 12px #22d3ee22}
 .hud-workspace-return svg{width:20px;height:20px}
 .hud-tools .hud-workspace-return:hover{background:#155e75;color:#fff}
-.hud-workspace-return:focus-visible{outline:2px solid #67e8f9;outline-offset:3px}
+.hud-workspace-return:focus-visible{outline:2px solid var(--harqis-focus-color, #38bdf8);outline-offset:var(--harqis-focus-offset, 2px)}
 
 /* Keep the toolbar at the same inset as the Fleet workspace. */
 .hud-surface{padding:8px 8px 28px}

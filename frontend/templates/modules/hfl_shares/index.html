@@ -14,7 +14,7 @@
   .control { width:100%; border:1px solid #334155; border-radius:.55rem; background:#020617; color:#f8fafc; padding:.65rem .75rem; }
   .control:focus-visible, .selector > summary:focus-visible, .expand-panel > summary:focus-visible,
   .owner-list-panel > summary:focus-visible, .btn:focus-visible {
-    outline:2px solid #38bdf8;
+    outline:2px solid var(--harqis-focus-color, #38bdf8);
     outline-offset:2px;
   }
   .select-wrap { position:relative; }
@@ -42,7 +42,7 @@
   .clear-tags:hover:not(:disabled) { background:#172554; color:#e0f2fe; }
   .clear-tags:disabled { color:#475569; cursor:not-allowed; }
   .help-icon { display:inline-flex; width:1.1rem; height:1.1rem; align-items:center; justify-content:center; margin-left:.3rem; border:1px solid #475569; border-radius:999px; color:#93c5fd; font-size:.68rem; line-height:1; cursor:help; }
-  .help-icon:focus-visible { outline:2px solid #60a5fa; outline-offset:2px; }
+  .help-icon:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
   .field-heading { display:flex; align-items:baseline; gap:.3rem; margin-bottom:.4rem; }
   .field-heading label { margin-bottom:0; }
   .field-help { margin:0 0 .6rem; border-left:2px solid #38bdf8; padding:.45rem .65rem; background:#172554; color:#bfdbfe; font-size:.78rem; line-height:1.5; }
@@ -84,7 +84,7 @@
   .success-toast { display:flex; align-items:center; gap:1rem; }
   .toast-close { display:inline-flex; flex-shrink:0; min-height:1.75rem; min-width:1.75rem; align-items:center; justify-content:center; border-radius:.4rem; color:#67e8f9; line-height:1; }
   .toast-close:hover { background:#164e63; color:#ecfeff; }
-  .toast-close:focus-visible { outline:2px solid #22d3ee; outline-offset:2px; }
+  .toast-close:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
   .owner-sidebar .btn { display:inline-flex; min-height:2.3rem; align-items:center; justify-content:center; line-height:1.25; cursor:pointer; }
   .owner-sidebar .btn:disabled { opacity:.5; cursor:not-allowed; }
   .owner-sidebar .actions { align-items:center; padding-top:.85rem; }
@@ -98,7 +98,7 @@
   .owner-sidebar .card-actions { flex:0 0 auto; flex-wrap:nowrap; gap:.35rem; padding:0; margin:0; }
   .owner-sidebar .card-actions .btn { width:1.875rem; height:1.875rem; min-height:1.875rem; padding:0; border:1px solid transparent; border-radius:.45rem; flex:0 0 auto; background:#1e293b; color:#cbd5e1; }
   .owner-sidebar .card-actions .btn:hover:not(:disabled) { background:#334155; color:#f1f5f9; }
-  .owner-sidebar .card-actions .btn:focus-visible { outline:2px solid #94a3b8; outline-offset:2px; }
+  .owner-sidebar .card-actions .btn:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
   .owner-sidebar .card-actions svg { width:.875rem; height:.875rem; }
   .owner-sidebar .card-actions form { width:auto; }
   .share-status-row { padding-top:.5rem; margin-top:auto; }
@@ -109,7 +109,7 @@
   .recipe-actions form { display:inline-flex; margin:0; }
   .instant-share-button { flex:0 0 auto; border:1px solid #1d4ed8; background:#172554; color:#bfdbfe; }
   .instant-share-button:hover { background:#1e3a8a; color:#eff6ff; }
-  .instant-share-button:focus-visible { outline:2px solid #60a5fa; outline-offset:2px; }
+  .instant-share-button:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
   .recipe-title-help { display:flex; align-items:center; gap:4px; }
   .recipe-header-actions { display:flex; flex:0 0 auto; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:.55rem; }
   .selected-entity-cards { display:grid; gap:.5rem; margin:.5rem 0; }
@@ -123,7 +123,7 @@
   .share-with-panel .entity-result-card { display:flex; flex-direction:column; align-items:flex-start; gap:.6rem; min-width:0; padding:.8rem; border:1px solid #334155; border-radius:.65rem; background:#111d30; color:#e2e8f0; text-align:left; cursor:pointer; transition:background .15s,border-color .15s; }
   .share-with-panel .entity-result-card:hover { background:#172c43; border-color:#38bdf8; }
   .share-with-panel .selected-entity-card { border-color:color-mix(in srgb, var(--entity-color, #95a7c3) 45%, #334155); border-left:3px solid var(--entity-color, #95a7c3); }
-  .entity-result-card:focus-visible { outline:2px solid #38bdf8; outline-offset:2px; }
+  .entity-result-card:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
   .entity-result-name { font-size:.875rem; font-weight:600; line-height:1.4; overflow-wrap:anywhere; }
   .entity-result-meta { display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; margin-top:auto; }
   .entity-result-kind { border:1px solid color-mix(in srgb, var(--entity-color, #95a7c3) 45%, transparent); border-radius:999px; padding:.1rem .45rem; background:color-mix(in srgb, var(--entity-color, #95a7c3) 12%, #0f172a); color:var(--entity-color, #95a7c3); font-size:.65rem; line-height:1.5; text-transform:capitalize; }

@@ -9,7 +9,7 @@
 .brain-page-loading progress:indeterminate{background:linear-gradient(90deg,#1e293b 0%,#38bdf8 45%,#1e293b 90%);background-size:200% 100%;animation:brain-loading-progress 1.5s linear infinite}
 .brain-page-loading progress:indeterminate::-webkit-progress-bar{background:transparent}
 .brain-page-loading a{color:#93c5fd;text-decoration:underline;text-underline-offset:3px}
-.brain-page-loading a:focus-visible{outline:2px solid #38bdf8;outline-offset:4px}
+.brain-page-loading a:focus-visible{outline:2px solid var(--harqis-focus-color, #38bdf8);outline-offset:var(--harqis-focus-offset, 2px)}
 #brain-page-loading-slow{margin-top:22px}
 @keyframes brain-loading-progress{to{background-position:-200% 0}}
 @media(prefers-reduced-motion:reduce){.brain-page-loading progress:indeterminate{animation:none}}

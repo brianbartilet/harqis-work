@@ -26,7 +26,7 @@
 
     :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
       outline: 2px solid var(--harqis-signal);
-      outline-offset: 3px;
+      outline-offset: var(--harqis-focus-offset, 2px);
     }
 
     /* Scrollbar styling */
@@ -188,6 +188,7 @@
   <script defer src="{{ static_asset('js/activity-navigation.js') }}"></script>
   {% block head %}{% endblock %}
   <link rel="stylesheet" href="{{ static_asset('css/activity-modals.css') }}">
+  <link rel="stylesheet" href="{{ static_asset('css/control-focus.css') }}">
 </head>
 <body class="h-full bg-slate-950 text-slate-100 antialiased {% block body_class %}{% endblock %}"
       x-data="{ customize: false, workflowTab: '{{ default_workflow | default('') }}' }">

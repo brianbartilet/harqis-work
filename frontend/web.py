@@ -45,7 +45,7 @@ def static_asset(relative_path: str) -> str:
 templates.env.globals["static_asset"] = static_asset
 
 SHARE_ASSETS = frozenset({
-    'favicon.svg', 'css/share-activity.css', 'css/share-guest.css',
+    'favicon.svg', 'css/share-activity.css', 'css/share-guest.css', 'css/control-focus.css',
     'js/share-graphs.js', 'js/share-activity.js',
     'js/share-graphs.js.LEGAL.txt', 'js/share-graphs.LICENSES.txt',
 })

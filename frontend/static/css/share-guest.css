@@ -68,7 +68,7 @@ body .preview-toast{top:148px}
 }
 @media(max-height:540px){.share-main-view{overflow:auto}.share-main-view .shared-graph{min-height:260px}}
 .share-workspace .is-cited-evidence{outline:2px solid #38bdf8;outline-offset:-2px;border-radius:8px}
-.share-main-view :is(button,select):focus-visible,.share-sidebar-view :is(button,a):focus-visible{outline:2px solid #38bdf8;outline-offset:2px}
+.share-main-view :is(button,select):focus-visible,.share-sidebar-view :is(button,a):focus-visible{outline:2px solid var(--harqis-focus-color, #38bdf8);outline-offset:2px}
 @media(max-width:900px){
   .shared-graph .share-entity-orbs-toggle{display:flex;align-items:center;justify-content:space-between;flex:none;min-height:44px;margin:2px 0;padding:8px 10px;background:#1e293b;color:#cbd5e1;cursor:pointer;text-align:left}
   .shared-graph .share-entity-orbs-toggle svg{width:16px;height:16px;cursor:inherit}

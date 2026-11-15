@@ -6,6 +6,21 @@
   --harqis-focus-offset: 2px;
 }
 
+/* Shared fallback also serves standalone dialogs and recipient pages. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--harqis-focus-color);
+  outline-offset: var(--harqis-focus-offset);
+}
+
+/* Legacy utility rings otherwise stack with the unlayered page outline.
+   Only replace focus-ring utilities, leaving ordinary borders and shadows alone. */
+body :is(a, button, summary)[class*="focus-visible:ring-"]:focus-visible,
+body :is(a, button, summary)[class*="focus:ring-"]:focus-visible {
+  outline: 2px solid var(--harqis-focus-color);
+  outline-offset: var(--harqis-focus-offset);
+  box-shadow: none;
+}
+
 body :is(select, textarea, input:not([type=checkbox], [type=radio], [type=range], [type=color], [type=hidden], [type=button], [type=submit], [type=reset], [type=file])):focus-visible {
   outline: 2px solid var(--harqis-focus-color) !important;
   outline-offset: -1px !important;

@@ -70,7 +70,7 @@ dialog.idea-dialog.agenda-dialog.connection-picker-dialog { padding:24px; width:
 .board-active-row input::before { content:''; display:block; width:18px; height:18px; border-radius:50%; background:#f8fafc; }
 .idea-dialog .agenda-form-body .board-active-row input:checked { background:#2563eb; border-color:#60a5fa; }
 .board-active-row input:checked::before { transform:translateX(18px); }
-.board-active-row input:focus-visible { outline:2px solid #67e8f9; outline-offset:4px; }
+.board-active-row input:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:var(--harqis-focus-offset, 2px); }
 .board-workspace-field { margin:16px 0; min-width:0; }
 .board-field-label { margin:0 0 6px; color:#94a3b8; font-size:.8rem; font-weight:650; }
 .board-settings-dialog .workspace-view-options { max-height:240px; overflow-y:auto; }
@@ -110,7 +110,7 @@ dialog.idea-dialog.agenda-dialog.connection-picker-dialog { padding:24px; width:
 .idea-add-options { position:absolute; top:calc(100% + 6px); left:0; right:0; z-index:30; display:grid; padding:.5rem; background:#0f172a; border:1px solid #334155; border-radius:.65rem; box-shadow:0 12px 24px #0008; }
 .idea-add-options[hidden] { display:none; }
 .kg-shell #kg-detail .idea-add-options button { width:100%; margin:0; padding:.55rem .65rem; border:0; border-radius:.35rem; background:transparent; color:#e2e8f0; font:inherit; font-size:.8rem; text-align:left; cursor:pointer; }
-.kg-shell #kg-detail .idea-add-options button:hover, .kg-shell #kg-detail .idea-add-options button:focus-visible { background:#1e293b; outline:1px solid #475569; }
+.kg-shell #kg-detail .idea-add-options button:hover, .kg-shell #kg-detail .idea-add-options button:focus-visible { background:#1e293b; outline:1px solid var(--harqis-focus-color, #38bdf8); }
 .corpus-idea-action { display:inline-flex; padding:.45rem .7rem; border:1px solid #475569; border-radius:.4rem; font-size:.75rem; color:#fde68a; }
 @media(max-width:560px) { .idea-dialog { padding:14px; } .idea-check-row { flex-wrap:wrap; } .idea-map-tools { gap:3px; } }
 .idea-dialog.agenda-dialog { width:min(620px,calc(100% - 24px)); padding:0; background:#0b1221; font-family:inherit; }
@@ -160,7 +160,7 @@ dialog.idea-dialog.agenda-dialog.connection-picker-dialog { padding:24px; width:
 .checklist-card-cover .checklist-card-create { flex:0 0 28px; width:28px; height:28px; padding:6px; margin:.35rem 0 0; color:#94a3b8; background:transparent; border:0; border-radius:.3rem; }
 .checklist-card-create svg { width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:1.5; }
 .checklist-card-cover .checklist-card-create:hover { color:#e2e8f0; background:#334155; }
-.checklist-card-create:focus-visible { outline:2px solid #7dd3fc; outline-offset:2px; }
+.checklist-card-create:focus-visible { outline:2px solid var(--harqis-focus-color, #38bdf8); outline-offset:2px; }
 .idea-dialog .action-triage { border:1px solid #334155; padding:.75rem; border-radius:.65rem; margin-bottom:1rem; }
 .idea-dialog .action-triage > summary { cursor:pointer; font-size:.85rem; font-weight:600; }
 .idea-dialog .idea-error:not(:empty) { margin:0 1.25rem 1rem; }
@@ -248,7 +248,7 @@ dialog.idea-dialog.agenda-dialog.connection-picker-dialog { padding:24px; width:
 .kg-boards [data-section]{margin-top:14px;min-width:0}
 .kg-boards [data-section]>summary{padding:8px 6px;margin-bottom:8px;border-radius:6px}
 .kg-boards [data-section]>summary:focus:not(:focus-visible){outline:none}
-.kg-boards [data-section]>summary:focus-visible{outline:2px solid #67e8f9;outline-offset:-2px;background:#122034}
+.kg-boards [data-section]>summary:focus-visible{outline:2px solid var(--harqis-focus-color, #38bdf8);outline-offset:-2px;background:#122034}
 .kg-boards .board-add-menu{margin:0}
 .kg-boards .board-add-menu>.idea-add-toggle{position:relative;padding:12px 32px 12px 12px;border-color:#38bdf8;background:#0c4a6e;color:#e0f2fe;font-weight:700}
 .board-add-menu .idea-add-toggle::after{top:50%;margin-top:-5px}
@@ -353,7 +353,7 @@ dialog.idea-dialog.agenda-dialog.connection-picker-dialog { padding:24px; width:
 .kg-boards .board-toolbar .idea-add-toggle:hover{background:#17263a;color:#e2e8f0}
 .board-toolbar .board-add-menu{min-width:0}
 .board-toolbar .idea-add-options{min-width:160px}
-.board-toolbar button:focus-visible{outline:2px solid #67e8f9;outline-offset:2px}
+.board-toolbar button:focus-visible{outline:2px solid var(--harqis-focus-color, #38bdf8);outline-offset:2px}
 .board-guide.idea-dialog{width:min(760px,calc(100% - 24px))}
 .board-guide .agenda-form-body{font-size:.85rem;line-height:1.65;color:#cbd5e1}
 .board-guide .board-guide-intro{font-size:.95rem;color:#e2e8f0;margin:0 0 24px}
