@@ -237,7 +237,7 @@ def test_fleet_inline_intent_browser(fleet, bridge, authenticated_client, tmp_pa
             page.get_by_role('button',name='Exit fullscreen',exact=True).click()
             controls.get_by_role('button',name='Done',exact=True).click()
             pw.expect(page.locator('.fleet-agent-overview')).to_be_visible()
-            page.get_by_role('link',name='Show Kanban',exact=True).click()
+            page.get_by_role('link',name='Kanban',exact=True).click()
             card=page.locator('[data-board-lanes] [data-followup-id="'+item['id']+'"]')
             pw.expect(card).to_be_visible()
             assert '/hfl-corpus/actions' in page.url
@@ -258,7 +258,7 @@ def test_fleet_inline_intent_browser(fleet, bridge, authenticated_client, tmp_pa
             page.clock.fast_forward(45000)
             page.evaluate("window.dispatchEvent(new Event('hfl:agent-updated'))")
             assert assignment_requests == []
-            page.get_by_role('link',name='Back to Second Brain fleet',exact=True).click()
+            page.get_by_role('link',name='Fleet',exact=True).click()
             pw.expect(page.locator('.fleet-inspector')).to_be_visible()
             page.locator('.fleet-create summary').click()
             page.locator('.fleet-create').get_by_role('button',name='Idea',exact=True).click()

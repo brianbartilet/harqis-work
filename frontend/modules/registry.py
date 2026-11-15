@@ -15,9 +15,9 @@ class ModuleDefinition:
 
 
 MODULES: tuple[ModuleDefinition, ...] = (
-    ModuleDefinition(key="agents", label="Second Brain", route="/agents",
-                     description="Agent fleet, capabilities and sessions.",
-                     detail="Configure Space-aware agents, trace their work and open the HARQIS butler."),
+    ModuleDefinition(key="agents", label="Second Brain", route="/hfl-corpus/actions",
+                     description="Actions, agent work and operational signals.",
+                     detail="Advance commitments in Kanban, monitor your Dashboard and inspect Fleet work. Butler consolidates agent updates and briefings."),
     ModuleDefinition(
         key="home",
         label="Home",

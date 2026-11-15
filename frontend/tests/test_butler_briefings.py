@@ -12,6 +12,62 @@ USER = 'frontend-test-user'
 URL = '/agents/api/butler/briefings'
 
 
+@pytest.mark.parametrize('width', [1440, 390])
+def test_unread_launcher_detects_closed_panel_updates(fleet, authenticated_client, tmp_path, width):
+    pw = pytest.importorskip('playwright.sync_api')
+    data = {'items':[{'id':'notification-demo','title':'Review delivery','date':'2026-11-15',
+                     'state':'running','answer':'','mock':True}], 'demo_available':False}
+    with pw.sync_playwright() as engine:
+        browser=engine.chromium.launch(channel='chrome',headless=True)
+        try:
+            context=browser.new_context(viewport={'width':width,'height':844})
+            page=context.new_page()
+            errors=[]
+            page.on('pageerror',lambda error:errors.append(str(error)))
+            def route(r):
+                u=urlparse(r.request.url)
+                if u.path==URL:r.fulfill(json=data);return
+                response=authenticated_client.request(r.request.method,u.path+('?' + u.query if u.query else ''),
+                    content=r.request.post_data_buffer,headers={k:v for k,v in r.request.headers.items() if k in {'content-type','x-csrf-token'}})
+                r.fulfill(status=response.status_code,body=response.content,content_type=response.headers.get('content-type','text/html'))
+            context.route('https://unread.test/**',route)
+            page.clock.install()
+            page.goto('https://unread.test/home')
+            launch=page.locator('#butler-launch')
+            pw.expect(launch).to_have_attribute('data-unread','false')
+            data['items'][0].update(state='completed',answer='Your report is ready.')
+            page.clock.fast_forward(31000)
+            pw.expect(launch).to_have_attribute('data-unread','true')
+            pw.expect(page.locator('#butler-panel')).not_to_be_visible()
+            pw.expect(launch).to_have_attribute('aria-describedby','butler-unread-status')
+            pw.expect(page.locator('#butler-unread-status')).to_have_text('1 unread briefing or agent update')
+            assert launch.evaluate("el=>getComputedStyle(el,'::after').backgroundColor")=='rgb(103, 232, 249)'
+            assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
+            page.screenshot(path=str(tmp_path/f'butler-unread-{width}.png'))
+            launch.click()
+            pane=page.get_by_role('tabpanel',name='Briefings',exact=True)
+            pw.expect(pane.get_by_text('Your report is ready.',exact=True)).to_be_visible()
+            pw.expect(launch).to_have_attribute('data-unread','true')
+            pane.get_by_role('button',name='Reviewed',exact=True).click()
+            pw.expect(launch).to_have_attribute('data-unread','false')
+            review_key='harqis:butler:reviewed:v1:'+USER
+            saved=page.evaluate('(key)=>localStorage.getItem(key)',review_key)
+            page.reload()
+            pw.expect(launch).to_have_attribute('data-unread','false')
+            launch.click()
+            pane.get_by_label('Show reviewed').check()
+            pane.get_by_role('button',name='Mark unread',exact=True).click()
+            pw.expect(launch).to_have_attribute('data-unread','true')
+            # A review in another tab updates the launcher without a new fetch.
+            other=context.new_page()
+            other.goto('https://unread.test/home')
+            other.evaluate('([key,value])=>localStorage.setItem(key,value)',[review_key,saved])
+            pw.expect(launch).to_have_attribute('data-unread','false')
+            assert not errors,errors
+        finally:
+            browser.close()
+
+
 def test_scheduled_worker_result_is_visible_once_and_owner_scoped(fleet, bridge, authenticated_client):
     from modules.agents import briefings
     client = authenticated_client
@@ -101,13 +157,19 @@ def test_briefings_browser_without_gateway(fleet, authenticated_client, tmp_path
                 assert icon.inner_text() == ''
             pw.expect(page.get_by_role('tab', name='Briefings', exact=True)).to_have_attribute('aria-selected', 'true')
             pane = page.get_by_role('tabpanel', name='Briefings', exact=True)
-            pane.get_by_role('heading', name='No briefings yet').wait_for()
+            pane.get_by_role('heading', name='No unread updates').wait_for()
             assert not page.locator('#butler-form').is_visible()
             pane.get_by_role('button', name='Load sample briefings').click()
             pw.expect(pane.locator('.butler-briefing-card')).to_have_count(5)
             assert pane.get_by_text('Mock', exact=True).count() == 5
             assert pane.get_by_text('Completed', exact=True).count() == 2
             assert pane.get_by_text('Failed', exact=True).is_visible()
+            pane.get_by_role('button', name='Reviewed', exact=True).first.click()
+            pw.expect(pane.locator('.butler-briefing-card')).to_have_count(4)
+            pane.get_by_label('Show reviewed').check()
+            pw.expect(pane.locator('.butler-briefing-card')).to_have_count(5)
+            pane.get_by_role('button', name='Mark unread', exact=True).click()
+            pane.get_by_label('Show reviewed').uncheck()
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.screenshot(path=str(tmp_path / f'briefings-{width}.png'))
             # Briefings opens by default after reload, with no gateway submission.

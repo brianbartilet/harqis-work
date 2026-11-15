@@ -83,12 +83,12 @@ def page_context(raw, user=None):
     """Only owner-authorized callers reach this resolver. Spaces are organization,
     not authorization. Never fetch a client-supplied URL or use browser text."""
     from modules.registry import MODULES
-    if not isinstance(raw, dict) or set(raw) - {'version', 'path', 'action_id', 'revision'} or raw.get('version') != 1:
+    if not isinstance(raw, dict) or set(raw) - {'version', 'path', 'action_id', 'revision', 'agent_id', 'workspace_ids'} or raw.get('version') != 1:
         raise ValueError('Use version 1 page context with a route and optional action.')
     path = raw.get('path', '')
     if not isinstance(path, str) or len(path) > 200 or not re.fullmatch(r'/[A-Za-z0-9/_-]*', path):
         raise ValueError('Invalid page route.')
-    module = next((m for m in MODULES if path == m.route or path.startswith(m.route.rstrip('/') + '/')), None)
+    module = next((m for m in MODULES if (path == '/agents' and m.key == 'agents') or path == m.route or path.startswith(m.route.rstrip('/') + '/')), None)
     result = {'version': 1, 'path': path, 'page': module.label if module else 'HARQIS',
               'purpose': module.detail if module else '', 'resolved_at': now(), 'records': []}
     identity = raw.get('action_id')
@@ -101,12 +101,30 @@ def page_context(raw, user=None):
         result['records'].append({**{k: item.get(k) for k in ('id', 'version', 'title', 'status')},
                                   'expected_outcome': str(item.get('expected_outcome', ''))[:4000],
                                   'url': '/hfl-corpus/actions?integration_agent=' + identity})
-    if user and path == '/agents':
+    agent_id = raw.get('agent_id', '')
+    spaces = raw.get('workspace_ids', [])
+    if not isinstance(agent_id, str) or len(agent_id) > 160:
+        raise ValueError('Invalid agent context.')
+    if not isinstance(spaces, list) or len(spaces) > 50 or any(not isinstance(s, str) or len(s) > 100 for s in spaces):
+        raise ValueError('Invalid Space context.')
+    result['workspace_ids'] = spaces
+    if user and (path == '/agents' or agent_id or spaces):
         from modules.agents.ecosystem import graph
         ecosystem = graph(user)
-        recorded = [n for n in ecosystem['nodes'] if n['kind'] not in {'agent', 'configuration', 'hud'} and not n.get('mock')]
-        result['agent_activity'] = [{**{k: n.get(k) for k in ('kind', 'label', 'source', 'state', 'url')}, 'summary': n.get('summary', '')[:700]}
-                                    for n in sorted(recorded, key=lambda n: n.get('created', ''), reverse=True)[:8]]
+        agents = {a['id']: a for a in ecosystem['agents'] if not a.get('mock')}
+        if agent_id and agent_id not in agents:
+            raise HTTPException(404, 'Agent context unavailable.')
+        result['selected_agent'] = {'id': agent_id, 'name': agents[agent_id]['name']} if agent_id else None
+        recorded = [n for n in ecosystem['nodes'] if n['kind'] not in {'agent', 'owner', 'configuration', 'hud'} and not n.get('mock')
+                    and (not agent_id or agent_id in n.get('agent_ids', []))
+                    and (not spaces or set(spaces).intersection(n.get('workspace_ids', [])))]
+        result['agent_activity'] = [{**{k: n.get(k) for k in ('kind', 'label', 'source', 'state', 'url', 'execution')},
+                                    'agents': [agents[a]['name'] for a in n.get('agent_ids', []) if a in agents],
+                                    'recorded_at': n.get('execution', {}).get('updated_at') or n.get('created', ''),
+                                    'summary': n.get('summary', '')[:700]}
+                                    for n in sorted(recorded, key=lambda n: n.get('execution', {}).get('updated_at') or n.get('created', ''), reverse=True)[:8]]
+        result['activity_scope'] = 'Up to 8 recent matching records; not a complete execution history.'
+        result['warnings'] = ecosystem.get('warnings', [])
     return result
 
 

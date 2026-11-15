@@ -112,21 +112,26 @@ def graph(user):
                 edge('agent:' + aid, 'agent:' + child, 'delegates to')
 
     db = terminals()
-    for run in db.list(limit=200):
+    runs = db.list(limit=201)
+    for run in runs[:200]:
         agent_id = run['snapshot'].get('execution_settings', {}).get('fleet_agent', {}).get('id')
         if agent_id not in by_id:
             continue
         source = run['source_key'].partition(':')[2]
         url = '/hfl-corpus/actions?integration_agent=' + quote(source)
         result = run.get('result') or {}
-        add(agent_id, 'action:' + source, 'action', run['snapshot'].get('title', 'Agent action'),
-            result.get('summary', ''), url, run['updated_at'], state=run['state'], source='Action bridge')
+        add(agent_id, 'action:' + source, 'action', run['snapshot'].get('source', {}).get('title', 'Agent action'),
+            result.get('summary', ''), url, run['updated_at'], state=run['state'], source='Action bridge',
+            execution={'id': run['id'], 'agent_id': agent_id, 'state': run['state'],
+                       'updated_at': run['updated_at'], 'url': url})
         for artifact in db.artifacts(run['id']):
             add(agent_id, 'artifact:' + run['id'] + ':' + artifact['digest'], 'file', artifact['name'],
                 str(artifact['size']) + ' bytes · open the action to download', url, run['updated_at'], source='Action bridge')
+            edge('action:' + source, 'artifact:' + run['id'] + ':' + artifact['digest'], 'returned artifact')
         for i, link in enumerate(result.get('evidence', [])[:20]):
             if isinstance(link, str) and safe_url(link):
                 add(agent_id, 'evidence:' + run['id'] + ':' + str(i), 'link', 'Evidence link', '', link, run['updated_at'], source='Action bridge')
+                edge('action:' + source, 'evidence:' + run['id'] + ':' + str(i), 'supports result')
     with service.store().connect() as connection:
         objects = [json.loads(r[0]) for r in connection.execute('SELECT payload FROM fleet_objects WHERE user=? ORDER BY rowid DESC LIMIT 500', (user,))]
         receipts = [json.loads(r[0]) for r in connection.execute("SELECT payload FROM fleet_assistant WHERE user=? AND kind='proposal'", (user,))]
@@ -186,6 +191,7 @@ def graph(user):
     return {'agents': agents, 'nodes': list(nodes.values()), 'edges': [e for e in edges.values() if e['source'] in nodes and e['target'] in nodes],
             'types': [{'id': k, 'name': k.replace('_', ' ').title(), 'color': v} for k, v in KINDS.items()],
             'warnings': errors, 'corpus_available': corpus_available,
+            'execution_limited': len(runs) > 200,
             'demo_available': os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1', 'generated_at': now()}
 
 

@@ -1,11 +1,11 @@
-<div class="activity-navigation{% if active_module in ['sharing'] %} is-active{% endif %}">
+<div class="activity-navigation{% if active_module in ['sharing', 'agents', 'second_brain'] or request.url.path == '/hfl-corpus/actions' %} is-active{% endif %}">
   <button type="button" aria-haspopup="true" aria-expanded="false">Express</button>
   <details class="activity-navigation-menu">
     <summary hidden>Express navigation</summary>
     <nav class="activity-navigation-options" aria-label="Express tools">
-      {% for key in ['sharing'] %}
+      {% for key in ['agents', 'sharing'] %}
       {% for child in modules | default([]) if child.key == key %}
-      <a href="{{ child.route }}" {% if active_module == child.key or (child.key == 'agents' and active_module == 'second_brain') %}aria-current="page"{% endif %}>{{ 'Share Activity' if child.key == 'sharing' else 'Second Brain' if child.key == 'agents' else child.label }}</a>
+      <a href="{{ child.route }}" {% if active_module == child.key or (child.key == 'agents' and (active_module == 'second_brain' or request.url.path == '/hfl-corpus/actions')) %}aria-current="page"{% endif %}>{{ 'Share Activity' if child.key == 'sharing' else 'Second Brain' if child.key == 'agents' else child.label }}</a>
       {% endfor %}
       {% endfor %}
     </nav>

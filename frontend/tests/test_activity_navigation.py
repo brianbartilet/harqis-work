@@ -57,7 +57,7 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
             menu = nav.get_by_role('navigation', name='Distill views', include_hidden=True)
             nav.get_by_role('button', name='Distill', exact=True).hover()
             playwright.expect(menu).to_be_visible()
-            menu.get_by_role('link', name='Actions Kanban').hover()
+            menu.get_by_role('link', name='Activity Graph').hover()
             page.wait_for_timeout(350)
             playwright.expect(menu).to_be_visible()
             page.get_by_role('link', name='HARQIS home').hover()
@@ -65,15 +65,15 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
             toggle.focus()
             toggle.press('ArrowDown')
             playwright.expect(menu).to_be_visible()
-            playwright.expect(menu.get_by_role('link', name='Actions Kanban')).to_be_focused()
+            playwright.expect(menu.get_by_role('link', name='Activity Graph')).to_be_focused()
             assert menu.get_by_role('link', name='Activity Corpus').count() == 0
             toggle.click()
             assert page.url == 'http://navigation.test/home'
-            assert menu.get_by_role('link', name='Actions Kanban').get_attribute('href') == '/hfl-corpus/actions'
+            assert menu.get_by_role('link', name='Activity Graph').get_attribute('href') == '/hfl-corpus/graph'
             bounds = menu.bounding_box()
             assert bounds['x'] >= 0 and bounds['x'] + bounds['width'] <= width
             # Detect clipping by the horizontally scrolling mobile navigation.
-            assert menu.get_by_role('link', name='Actions Kanban').evaluate(
+            assert menu.get_by_role('link', name='Activity Graph').evaluate(
                 '(el) => { const r = el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)); }')
             page.screenshot(path=str(tmp_path / f'activity-navigation-{width}.png'))
             menu.get_by_role('link', name='Activity Graph').press('Escape')
@@ -106,13 +106,15 @@ def test_activity_navigation_keyboard_and_destinations(authenticated_client, mon
                 assert header.bounding_box()['y'] == 0
                 assert page.locator('[data-board-close], .kg-shell > .activity-modal-heading').count() == 0
                 page.screenshot(path=str(tmp_path / f'{destination.rsplit("/", 1)[-1]}-header-{width}.png'))
-            for label, destination in [('Activity Graph', '/hfl-corpus/graph'), ('Actions Kanban', '/hfl-corpus/actions')]:
+            for label, destination in [('Activity Graph', '/hfl-corpus/graph'), ('Second Brain', '/hfl-corpus/actions')]:
                 page.route('http://navigation.test' + destination + '**',
                            lambda route: route.fulfill(content_type='text/html', body='<h1>Destination</h1>'))
                 page.goto('http://navigation.test/hfl-corpus?source=notes&q=launch')
                 assert page.locator('.corpus-tools').count() == 0
-                toggle.press('ArrowDown')
-                menu.get_by_role('link', name=label).click()
+                destination_toggle = nav.get_by_role('button', name='Express' if label == 'Second Brain' else 'Distill', exact=True)
+                destination_menu = nav.get_by_role('navigation', name='Express tools' if label == 'Second Brain' else 'Distill views')
+                destination_toggle.press('ArrowDown')
+                destination_menu.get_by_role('link', name=label).click()
                 page.wait_for_url('**' + destination + '**')
                 query = parse_qs(urlsplit(page.url).query)
                 # Page-local Corpus filters must not follow navigation to another surface.

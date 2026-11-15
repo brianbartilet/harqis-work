@@ -291,7 +291,10 @@ def test_assistant_browser_preview_and_reconnect(gateway, authenticated_client, 
                               content_type=response.headers.get('content-type', 'text/html'))
             page.route('https://assistant.test/**', route_request)
             page.goto('https://assistant.test/agents')
-            page.get_by_role('button', name='Select Default agent', exact=True).click()
+            if width <= 900:
+                page.get_by_label('Work agent', exact=True).select_option('default')
+            else:
+                page.get_by_role('button', name='Select Default agent', exact=True).click()
             # Primary selection is no longer an inspector action; Butler remains available.
             assert page.get_by_role('button', name='Make primary assistant', exact=True).count() == 0
             page.click('#butler-launch')

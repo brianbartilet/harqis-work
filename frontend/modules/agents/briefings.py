@@ -86,6 +86,49 @@ def _recover_legacy(db, user):
                 break
 
 
+def agent_updates(user):
+    """Bounded recorded updates, never agent dispatch or a second schedule.
+
+    Scheduled Butler answers already have delivery cards. Exclude those runs,
+    retain only the newest attempt per source, and keep stable run identities.
+    """
+    from modules.agents import projection
+    from modules.hfl_corpus.action_agents import store as terminals
+    from urllib.parse import quote
+    agents = {a['id']: a for a in service.initialize().list()
+              if not a.get('mock') and projection.visible(a, user)}
+    with service.store().connect() as db:
+        existing = {r[0] for r in db.execute('SELECT run_id FROM fleet_chat WHERE run_id IS NOT NULL')}
+        observed = [json.loads(r[0]) for r in db.execute(
+            'SELECT payload FROM fleet_objects WHERE user=? ORDER BY rowid DESC LIMIT 100', (user,))]
+    seen, updates = set(), []
+    for run in terminals().list(limit=200):
+        source = run['source_key']
+        if source in seen:
+            continue
+        seen.add(source)
+        agent = agents.get(run['snapshot'].get('execution_settings', {}).get('fleet_agent', {}).get('id'))
+        if not agent or run['id'] in existing or run['state'] not in {'review', 'succeeded', 'failed', 'awaiting_input', 'interrupted'}:
+            continue
+        record = run['snapshot'].get('source', {})
+        updates.append({'id': 'agent-update:' + run['id'], 'date': run['updated_at'],
+                        'title': record.get('title', 'Agent result'), 'agent_name': agent['name'],
+                        'state': run['state'], 'answer': str((run.get('result') or {}).get('summary') or '')[:5000],
+                        'detail': 'Recorded execution update; action completion is reviewed separately.',
+                        'workspace_ids': record.get('workspace_ids', []),
+                        'url': '/hfl-corpus/actions?integration_agent=' + quote(source.partition(':')[2])})
+    for record in observed:
+        agent = agents.get(record.get('agent_id'))
+        if not agent or record.get('mock') or record.get('kind') not in {'task', 'action', 'feed'} or record.get('state') not in {'completed', 'failed', 'review', 'awaiting_input'}:
+            continue
+        from modules.agents.ecosystem import safe_url
+        updates.append({'id': 'agent-update:' + record['id'], 'date': record.get('created', ''),
+                        'title': record['label'], 'agent_name': agent['name'], 'state': record['state'],
+                        'answer': record.get('summary', '')[:5000], 'detail': 'Reported by ' + record.get('source', 'agent'),
+                        'workspace_ids': record.get('workspace_ids', []), 'url': safe_url(record.get('url', ''))})
+    return sorted(updates, key=lambda item: item['date'], reverse=True)[:30]
+
+
 def history(user):
     from modules.hfl_corpus.agent_bridge import bridge_store
     with service.store().connect() as db:
@@ -122,7 +165,16 @@ def history(user):
         from services.markdown import render_markdown
         item['answer_html'] = str(render_markdown(item['answer']))
         items.append(item)
-    return {'items': items, 'demo_available': demo_available()}
+    try:
+        updates = agent_updates(user)
+    except Exception:
+        updates = []
+        # Keep scheduled deliveries usable if a separate execution source fails.
+        return {'items': items, 'demo_available': demo_available(), 'updates_error': 'Agent updates could not refresh.'}
+    from services.markdown import render_markdown
+    for item in updates:
+        item['answer_html'] = str(render_markdown(item['answer']))
+    return {'items': sorted(items + updates, key=lambda item: item['date'], reverse=True), 'demo_available': demo_available()}
 
 
 def seed_demo(user):

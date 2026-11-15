@@ -6,7 +6,7 @@ from test_hfl_agent_bridge import bridge  # noqa: F401
 from test_agent_fleet import fleet  # noqa: F401
 
 @pytest.mark.parametrize('width,height', [(1440,1000),(390,844)])
-def test_fleet_hud_shortcuts(fleet, authenticated_client, tmp_path, width, height):
+def test_fleet_work_shortcuts(fleet, authenticated_client, tmp_path, width, height):
     pw=pytest.importorskip('playwright.sync_api')
     fleet.initialize()
     client=authenticated_client
@@ -19,6 +19,8 @@ def test_fleet_hud_shortcuts(fleet, authenticated_client, tmp_path, width, heigh
         page.on('pageerror',lambda error:errors.append(str(error)))
         def route(r):
             u=urlparse(r.request.url)
+            if u.path=='/second-brain/hud/data':
+                r.fulfill(json={'items':{},'context':[],'source_error':'','spaces':client.get('/hfl-corpus/workspace-views').json(),'layout':{'widgets':[],'version':0}});return
             response=client.request(r.request.method,u.path+('?' + u.query if u.query else ''),content=r.request.post_data_buffer,
                 headers={k:v for k,v in r.request.headers.items() if k.lower() in {'content-type','x-csrf-token'}})
             r.fulfill(status=response.status_code,content_type=response.headers.get('content-type','text/html'),body=response.content)
@@ -28,7 +30,7 @@ def test_fleet_hud_shortcuts(fleet, authenticated_client, tmp_path, width, heigh
             page.keyboard.press(value)
         try:
             page.goto('https://fleet.test/agents')
-            page.locator('.fleet-detail-empty').wait_for()
+            page.get_by_role('complementary',name='Agent work').wait_for()
             key('k')
             help=page.get_by_role('dialog',name='Keyboard shortcuts',exact=True)
             pw.expect(help).to_be_visible()
@@ -39,9 +41,8 @@ def test_fleet_hud_shortcuts(fleet, authenticated_client, tmp_path, width, heigh
             pw.expect(page.locator('#butler-panel')).to_be_visible()
             page.keyboard.press('Escape')
             key('a')
-            pw.expect(page.locator('.fleet-hud-panel')).to_have_attribute('data-motion','false')
-            key('a')
-            pw.expect(page.locator('.fleet-hud-panel')).to_have_attribute('data-motion','true')
+            pw.expect(page.get_by_role('dialog',name='New action',exact=True)).to_be_visible()
+            page.keyboard.press('Escape')
             search=page.get_by_role('searchbox',name='Search agents and outputs')
             search.fill('')
             search.press('b')
@@ -75,20 +76,21 @@ def test_fleet_hud_shortcuts(fleet, authenticated_client, tmp_path, width, heigh
             key('b')
             pw.expect(page.locator('#butler-panel')).to_be_visible()
             page.keyboard.press('Escape')
-            key('Space')
-            page.wait_for_url('**/second-brain?agent=butler')
+            key('Backslash')
+            key('Tab')
+            page.wait_for_url('**/second-brain')
             page.locator('#hud-surface:not([inert])').wait_for()
             motion=page.locator('#hud-motion')
             before=motion.get_attribute('aria-pressed')
-            key('a')
+            key('Space')
             pw.expect(motion).to_have_attribute('aria-pressed','false' if before=='true' else 'true')
             key('k')
             pw.expect(page.locator('#hud-hotkeys-dialog')).to_be_visible()
-            pw.expect(page.locator('#hud-hotkeys-dialog').get_by_text('Open agent fleet',exact=True)).to_be_visible()
+            pw.expect(page.locator('#hud-hotkeys-dialog').get_by_text('Back to agents fleet',exact=True)).to_be_visible()
             key('b')
             pw.expect(page.locator('#butler-panel')).to_be_visible()
             page.keyboard.press('Escape')
-            key('Space')
+            key('Tab')
             page.wait_for_url('**/agents*')
             assert not errors,errors
         finally:

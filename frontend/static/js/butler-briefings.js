@@ -6,7 +6,37 @@
   const error = $('butler-briefing-error'), refresh = $('butler-briefing-refresh');
   const demo = $('butler-briefing-demo-load');
   const csrf = JSON.parse($('butler-csrf').textContent);
-  let timer, revision = 0;
+  let timer, revision = 0, latest=null, request=null, disposed=false;
+  const owner=JSON.parse(document.getElementById('butler-owner')?.textContent||'"owner"');
+  const reviewKey='harqis:butler:reviewed:v1:'+owner;
+  let reviewed={};try{const saved=JSON.parse(localStorage.getItem(reviewKey)||'{}');if(saved&&typeof saved==='object'&&!Array.isArray(saved))reviewed=saved;}catch{}
+  const controls=text('div',undefined,'butler-update-controls'), agentFilter=document.createElement('select');
+  agentFilter.setAttribute('aria-label','Briefing agent');
+  const reviewedLabel=text('label'), showReviewed=document.createElement('input');showReviewed.type='checkbox';
+  reviewedLabel.append(showReviewed,document.createTextNode(' Show reviewed'));
+  controls.append(agentFilter,reviewedLabel);list.before(controls);
+  agentFilter.onchange=showReviewed.onchange=()=>{rendered='';if(latest)render(latest);};
+  const updateKey=item=>{let hash=2166136261;for(const character of (item.title+' '+item.answer)){hash=Math.imul(hash^character.charCodeAt(0),16777619);}return item.id+':'+item.date+':'+item.state+':'+(hash>>>0);};
+
+  const launch=$('butler-launch'), unreadStatus=text('span',undefined,'sr-only');
+  unreadStatus.id='butler-unread-status';unreadStatus.setAttribute('role','status');
+  launch.after(unreadStatus);
+  const reviewable=item=>!['pending','queued','running'].includes(item.state);
+  function updateIndicator(){
+    const count=(latest?.items||[]).filter(item=>reviewable(item)&&!reviewed[updateKey(item)]).length;
+    launch.dataset.unread=String(count>0);
+    const description=count?count+' unread '+(count===1?'briefing or agent update':'briefings or agent updates'):'';
+    if(unreadStatus.textContent!==description)unreadStatus.textContent=description;
+    launch.title=description||'Open HARQIS Butler';
+    if(count)launch.setAttribute('aria-describedby',unreadStatus.id);else launch.removeAttribute('aria-describedby');
+  }
+  function reviewChanged(event){
+    if(event.key!==reviewKey&&event.key!==null)return;
+    try{const value=JSON.parse(localStorage.getItem(reviewKey)||'{}');reviewed=value&&typeof value==='object'&&!Array.isArray(value)?value:{};}catch{return;}
+    updateIndicator();if(visible()&&latest){rendered='';render(latest);}
+  }
+  window.addEventListener('storage',reviewChanged);
+
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const playback = document.createElement('button');
   playback.type = 'button'; playback.id = 'butler-briefing-playback';
@@ -40,11 +70,18 @@
     return node;
   }
   function render(data) {
-    const signature=JSON.stringify(data.items);
+    latest=data;
+    updateIndicator();
+    const chosen=agentFilter.value;
+    agentFilter.replaceChildren(...['All agents',...new Set(data.items.map(item=>item.agent_name||'HARQIS Butler'))].map((name,index)=>{const option=text('option',name);option.value=index?name:'';return option;}));
+    agentFilter.value=[...agentFilter.options].some(o=>o.value===chosen)?chosen:'';
+    const visibleItems=data.items.filter(item=>(!agentFilter.value||(item.agent_name||'HARQIS Butler')===agentFilter.value)&&(showReviewed.checked||!reviewed[updateKey(item)]));
+    const signature=JSON.stringify(visibleItems);
+
     if(signature===rendered)return;
     rendered=signature;
     const fragment = document.createDocumentFragment();
-    for (const item of data.items) {
+    for (const item of visibleItems) {
       const card = document.createElement('article');
       card.className = 'butler-briefing-card';
       card.dataset.state = item.state;
@@ -58,7 +95,8 @@
       meta.className = 'butler-briefing-meta';
       const date = text('time', item.date + (item.timezone ? ' · ' + item.timezone : ''));
       date.dateTime = item.date;
-      meta.append(date);
+      meta.append(text('span',item.agent_name||'HARQIS Butler'),date);
+      if(item.workspace_ids)meta.append(text('span',item.workspace_ids.length?'Linked to '+item.workspace_ids.length+' Space(s)':'All activity'));
       if (item.mock) meta.append(text('span', 'Mock', 'butler-briefing-mock'));
       card.append(meta);
       if (item.answer) {
@@ -68,12 +106,17 @@
         card.append(answer);
       }
       if (item.detail) card.append(text('p', item.detail, 'butler-briefing-detail'));
+      if(item.url){const link=text('a','Open source');link.href=item.url;card.append(link);}
+      if(reviewable(item)){
+        const acknowledge=text('button',reviewed[updateKey(item)]?'Mark unread':'Reviewed');acknowledge.type='button';
+        acknowledge.onclick=()=>{const key=updateKey(item);if(reviewed[key])delete reviewed[key];else reviewed[key]=Date.now();try{localStorage.setItem(reviewKey,JSON.stringify(Object.fromEntries(Object.entries(reviewed).slice(-500))));}catch{}rendered='';render(latest);};card.append(acknowledge);
+      }
       fragment.append(card);
     }
-    if (!data.items.length) {
+    if (!visibleItems.length) {
       const empty = document.createElement('div');
       empty.className = 'butler-briefing-empty';
-      empty.append(text('h3', 'No briefings yet'), text('p', 'Use the calendar button above to set a schedule. Your worker’s updates will appear here.'));
+      empty.append(text('h3', 'No unread updates'), text('p', 'Use the calendar button above to set a schedule. Agent results also appear here. Change the agent filter or enable Show reviewed to see earlier updates.'));
       fragment.append(empty);
     }
     // Preserve reading position across worker-status refreshes.
@@ -83,26 +126,30 @@
     $('butler-briefing-demo').hidden = !data.demo_available;
   }
   async function load(samples = false) {
-    if (!visible()) return;
+    if (disposed||document.hidden) return;
     const token = ++revision;
+    request?.abort();request=new AbortController();
     clearTimeout(timer);
-    refresh.disabled = demo.disabled = true;
-    list.setAttribute('aria-busy', 'true');
-    error.textContent = '';
-    if (!list.childElementCount) list.append(text('p', 'Loading briefings…'));
+    if(visible()){
+      refresh.disabled = demo.disabled = true;
+      list.setAttribute('aria-busy', 'true');
+      error.textContent = '';
+      if (!list.childElementCount) list.append(text('p', 'Loading briefings…'));
+    }
     let repeat = false;
     try {
       const response = await fetch('/agents/api/butler/briefings' + (samples ? '/demo' : ''), {
-        method: samples ? 'POST' : 'GET', cache: 'no-store', headers: {'X-CSRF-Token': csrf}
+        method: samples ? 'POST' : 'GET', cache: 'no-store', signal:request.signal, headers: {'X-CSRF-Token': csrf}
       });
       if (!response.ok) throw Error('Briefings are unavailable. Try Refresh again.');
       const data = await response.json();
-      if (token !== revision || !visible()) return;
-      render(data);
+      if (token !== revision || document.hidden) return;
+      latest=data;updateIndicator();
+      if(visible()){render(data);error.textContent=data.updates_error||'';}
       repeat = data.items.some(item => !item.mock && ['pending', 'running'].includes(item.state));
     } catch (e) {
-      if (token === revision) {
-        error.textContent = e.message;
+      if (token === revision && e.name!=='AbortError') {
+        if(visible())error.textContent = e.message;
         if (list.textContent === 'Loading briefings…') list.replaceChildren();
         repeat = true;
       }
@@ -110,12 +157,13 @@
       if (token === revision) {
         refresh.disabled = demo.disabled = false;
         list.setAttribute('aria-busy', 'false');
-        if (visible() && repeat) timer = setTimeout(() => load(), 4000);
+        if (!document.hidden) timer = setTimeout(() => load(), visible()&&repeat?4000:30000);
       }
     }
   }
   function stop() {
     revision++;
+    request?.abort();request=null;
     clearTimeout(timer);
     refresh.disabled = demo.disabled = false;
     list.setAttribute('aria-busy', 'false');
@@ -127,7 +175,7 @@
     panel.dataset.tab = name;
     $('butler-connection').hidden = name !== 'conversation';
     $('butler-briefing-subtitle').hidden = name === 'conversation';
-    $('butler-briefing-subtitle').textContent = name === 'settings' ? 'Schedule your updates' : 'Scheduled worker updates';
+    $('butler-briefing-subtitle').textContent = name === 'settings' ? 'Schedule your updates' : 'All activity · recent briefings and updates';
     for (const tab of tabs) {
       const selected = tab === name, button = tabButton(tab);
       button.setAttribute('aria-selected', String(selected));
@@ -136,7 +184,7 @@
     }
     panel.dispatchEvent(new Event('butler-tab-change'));
     if (focus) tabButton(name).focus();
-    if (name === 'briefings') load();
+    load();
   }
   for (const [index, name] of tabs.entries()) {
     const button = tabButton(name);
@@ -150,8 +198,11 @@
   panel.addEventListener('butler-view-request', event => { if (tabs.includes(event.detail)) select(event.detail, true); });
   refresh.onclick = () => load();
   demo.onclick = () => load(true);
-  panel.addEventListener('butler-opened', () => { if (visible()) load(); });
-  panel.addEventListener('butler-closed', stop);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else if (visible()) load(); });
+  panel.addEventListener('butler-opened', () => load());
+  panel.addEventListener('butler-closed', () => {stop();if(!document.hidden)timer=setTimeout(()=>load(),30000);});
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); else load(); });
+  window.addEventListener('pagehide',stop);
+  window.addEventListener('pageshow',event=>{if(event.persisted)load();});
+  window.addEventListener('hfl:view-replacing',()=>{disposed=true;stop();window.removeEventListener('storage',reviewChanged);},{once:true});
   select('briefings');
 })();

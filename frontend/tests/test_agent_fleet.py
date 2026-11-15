@@ -142,7 +142,7 @@ def test_csrf_and_navigation(fleet, authenticated_client):
     page = client.get('/agents')
     assert page.status_code == 200, page.text
     assert 'agent-fleet.js?v=' in page.text
-    assert page.text.index('href="/agents"') < page.text.index('href="/applications"')
+    assert page.text.index('href="/hfl-corpus/actions"') < page.text.index('href="/applications"')
     assert 'Agent settings have moved' not in client.get('/settings').text
 
 
@@ -260,7 +260,7 @@ def test_fleet_browser(fleet, authenticated_client, tmp_path):
         page.route('https://fleet.test/**', route)
         page.goto('https://fleet.test/agents')
         page.locator('.fleet-detail-empty').wait_for()
-        assert page.locator('.fleet-hud-heading h2').inner_text()=='HARQIS Butler'
+        assert page.locator('.fleet-work-panel h2').inner_text()=='Agent work'
         assert page.locator('.fleet-workspace.fleet-has-selection').count()==0
         page.wait_for_function("[...document.querySelectorAll('.fleet-graph-avatars .agent-avatar')].length>1 && [...document.querySelectorAll('.fleet-graph-avatars .agent-avatar')].every(el=>Number(el.style.opacity)===1)")
         page.get_by_role('button',name='Add agent').click()
@@ -269,15 +269,16 @@ def test_fleet_browser(fleet, authenticated_client, tmp_path):
         page.get_by_role('button',name='Save agent',exact=True).click()
         page.get_by_role('button',name='Select Research assistant',exact=True).wait_for()
         page.get_by_role('button',name='Select Research assistant',exact=True).click()
-        assert page.locator('.fleet-hud-heading h2').inner_text()=='Research assistant'
+        assert page.locator('.fleet-work-panel header p').inner_text()=='Research assistant'
         page.locator('.fleet-map canvas').click(position={'x':35,'y':35})
         page.locator('.fleet-detail-empty').wait_for()
-        assert page.locator('.fleet-hud-heading h2').inner_text()=='HARQIS Butler'
+        assert page.locator('.fleet-work-panel h2').inner_text()=='Agent work'
         page.get_by_role('button',name='Select Research assistant',exact=True).click()
         page.get_by_role('button',name='Deactivate',exact=True).click()
         page.get_by_role('button',name='Filters',exact=True).click()
-        page.get_by_label('Show deactivated',exact=True).check()
+        page.get_by_label('Show deactivated agents',exact=True).check()
         page.get_by_role('dialog',name='Filters',exact=True).get_by_role('button',name='Close',exact=True).click()
+        page.get_by_role('button',name='Select Research assistant',exact=True).click()
         assert page.get_by_role('button',name='Open session',exact=True).is_disabled()
         page.get_by_role('button',name='Activate',exact=True).click()
         page.wait_for_timeout(1800)
@@ -294,9 +295,9 @@ def test_fleet_browser(fleet, authenticated_client, tmp_path):
         page.goto('https://fleet.test/agents?agent=butler')
         page.locator('.fleet-workspace.fleet-has-selection').wait_for()
         assert page.locator('.fleet-inspector h2').inner_text()=='HARQIS Butler'
-        assert page.locator('.fleet-hud-heading h2').inner_text()=='HARQIS Butler'
+        assert page.locator('.fleet-work-panel h2').inner_text()=='Agent work'
         page.locator('.fleet-output-list button').first.click()
-        assert page.locator('.fleet-hud-heading h2').inner_text()=='HARQIS Butler'
+        assert page.locator('.fleet-work-panel h2').inner_text()=='Agent work'
         assert not errors, errors
         browser.close()
 
@@ -305,12 +306,18 @@ def test_fleet_browser(fleet, authenticated_client, tmp_path):
 def test_fleet_activity_labels_and_solid_hud_links(fleet, authenticated_client, tmp_path, width, height):
     playwright=pytest.importorskip('playwright.sync_api')
     fleet.initialize()
+    from modules.agents import ecosystem
+    graph=ecosystem.graph('frontend-test-user')
+    graph['nodes']=[n for n in graph['nodes'] if n['id'] in {'agent:butler','hud:context','owner:corpus'}]
+    ids={n['id'] for n in graph['nodes']}
+    graph['edges']=[e for e in graph['edges'] if e['source'] in ids and e['target'] in ids]
     errors=[]
     with playwright.sync_playwright() as p:
         browser=p.chromium.launch(channel='chrome',headless=True)
         page=browser.new_page(viewport={'width':width,'height':height})
         page.on('pageerror',lambda e:errors.append(str(e)))
         page.add_init_script("""(() => {
+          localStorage.setItem('harqis:fleet:graph:v2:frontend-test-user',JSON.stringify({positions:{'agent:butler':{x:0,y:40},'owner:corpus':{x:-85,y:-45},'hud:context':{x:85,y:-45}},viewport:{x:0,y:0,zoom:1}}));
           window.labelPaints=[];window.dashedLinks=0;
           const text=CanvasRenderingContext2D.prototype.fillText,dash=CanvasRenderingContext2D.prototype.setLineDash;
           CanvasRenderingContext2D.prototype.fillText=function(label,x,y,...rest){
@@ -322,13 +329,14 @@ def test_fleet_activity_labels_and_solid_hud_links(fleet, authenticated_client, 
         })();""")
         def route(r):
             u=urlparse(r.request.url)
+            if u.path=='/agents/api/graph':r.fulfill(json=graph);return
             response=authenticated_client.request(r.request.method,u.path+('?' + u.query if u.query else ''),content=r.request.post_data_buffer,
                 headers={k:v for k,v in r.request.headers.items() if k.lower() in {'content-type','x-csrf-token'}})
             r.fulfill(status=response.status_code,content_type=response.headers.get('content-type','text/html'),body=response.content)
         page.route('https://fleet.test/**',route)
         page.goto('https://fleet.test/agents')
         page.locator('.fleet-map canvas').wait_for()
-        page.wait_for_function("window.labelPaints.some(p=>p.label.includes('Butler'))")
+        page.wait_for_function("window.labelPaints.some(p=>p.label==='Context feed')")
         page.wait_for_timeout(2200)
         assert page.evaluate('window.dashedLinks')==0
         assert page.evaluate("window.labelPaints.some(p=>p.font.startsWith('500 '))")
@@ -336,12 +344,16 @@ def test_fleet_activity_labels_and_solid_hud_links(fleet, authenticated_client, 
         assert '?v=' in page.locator('script[src*="agent-fleet.js"]').get_attribute('src')
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.screenshot(path=str(tmp_path/f'fleet-labels-{width}.png'),full_page=True)
-        # The default view is unselected; verify passive animation repaints labels.
-        page.locator('.fleet-detail-empty').wait_for()
-        assert page.locator('.fleet-list .agent-avatar').count()==page.locator('.fleet-list button').count()
-        assert page.locator('.fleet-list .agent-avatar[tabindex]').count()==0
-        assert page.locator('.fleet-detail-empty h2').evaluate("el=>getComputedStyle(el).fontSize")=='12px'
-        page.locator('.fleet-inspector').screenshot(path=str(tmp_path/f'fleet-sidebar-{width}.png'))
+        # The mobile drawer replaces the overview, keeping only one panel visible.
+        if width > 900:
+            page.locator('.fleet-detail-empty').wait_for()
+            assert page.locator('.fleet-list .agent-avatar').count()==page.locator('.fleet-list button').count()
+            assert page.locator('.fleet-list .agent-avatar[tabindex]').count()==0
+            assert page.locator('.fleet-detail-empty h2').evaluate("el=>getComputedStyle(el).fontSize")=='12px'
+            page.locator('.fleet-inspector').screenshot(path=str(tmp_path/f'fleet-sidebar-{width}.png'))
+        else:
+            playwright.expect(page.get_by_role('complementary',name='Agent work')).to_be_visible()
+            playwright.expect(page.locator('.fleet-inspector')).not_to_be_visible()
         page.get_by_role('button',name='Animation',exact=True).click()
         page.get_by_role('button',name='Drift',exact=True).click()
         page.get_by_role('button',name='Animation',exact=True).click()
@@ -349,7 +361,7 @@ def test_fleet_activity_labels_and_solid_hud_links(fleet, authenticated_client, 
         page.wait_for_timeout(600)
         page.evaluate('window.labelPaints=[]')
         page.wait_for_timeout(1100)
-        assert page.evaluate("new Set(window.labelPaints.filter(p=>p.label.includes('Butler')).map(p=>p.x.toFixed(2)+':'+p.y.toFixed(2))).size>5")
+        assert page.evaluate("new Set(window.labelPaints.filter(p=>p.label==='Context feed').map(p=>p.x.toFixed(2)+':'+p.y.toFixed(2))).size>5")
         # Switching off must ease back to rest, even after the force engine cooled.
         page.get_by_role('button',name='Animation',exact=True).click()
         page.get_by_role('button',name='Off',exact=True).click()
@@ -357,7 +369,7 @@ def test_fleet_activity_labels_and_solid_hud_links(fleet, authenticated_client, 
         page.wait_for_timeout(1800)
         page.evaluate('window.labelPaints=[]')
         page.wait_for_timeout(500)
-        assert page.evaluate("(() => {const points=window.labelPaints.filter(p=>p.label.includes('Butler'));return points.length<2||Math.max(...points.map(p=>p.x))-Math.min(...points.map(p=>p.x))<.2;})()")
+        assert page.evaluate("(() => {const points=window.labelPaints.filter(p=>p.label==='Context feed');return points.length<2||Math.max(...points.map(p=>p.x))-Math.min(...points.map(p=>p.x))<.2;})()")
         assert not errors,errors
         browser.close()
 
@@ -415,22 +427,14 @@ def test_fleet_inspector_controls_and_hud_navigation(fleet, authenticated_client
         tabs.get_by_role('tab',name='Outputs').click()
         page.locator('.fleet-output-list button').filter(has_text='Bottom HUD').click()
         assert page.get_by_label('Agent list',exact=True).count()==0
-        row=page.locator('.fleet-relationship-list').get_by_role('button',name='Select HARQIS Butler',exact=True)
-        assert row.locator('.agent-avatar').count()==1
-        page.get_by_role('button',name='View',exact=True).click()
-        card=page.locator('.fleet-hud-card[data-id="hud:bottom"]')
-        assert card.evaluate('el=>el===document.activeElement')
-        assert page.locator('.fleet-hud-panel').evaluate('el=>el.scrollTop>0')
-        panel_bounds=page.locator('.fleet-hud-panel').bounding_box()
-        heading_bounds=page.locator('.fleet-hud-heading').bounding_box()
-        assert panel_bounds['y']<=heading_bounds['y']<=panel_bounds['y']+12
-        page.locator('.fleet-hud-panel').screenshot(path=str(tmp_path/f'hud-scrolled-{width}.png'))
+        row=page.locator('.fleet-relationships').get_by_role('button').filter(has_text='HARQIS Butler')
+        assert row.locator('.fleet-relationship-type').inner_text()=='agent'
+        assert page.get_by_role('link',name='Open Dashboard',exact=True).get_attribute('href')=='/second-brain'
+        assert page.locator('.fleet-hud-panel').count()==0
         row.click()
         page.locator('.fleet-output-list button').filter(has_text='Hidden HUD').click()
-        page.get_by_role('button',name='View',exact=True).click()
-        page.get_by_text('Not available in the current HUD view',exact=True).wait_for()
-        assert page.locator('.fleet-hud-card[data-id="hud:hidden"]').count()==0
-        page.locator('.fleet-relationship-list button').click()
+        assert page.get_by_role('link',name='Open Dashboard',exact=True).get_attribute('href')=='/second-brain'
+        row.click()
         page.locator('.fleet-output-list button').filter(has_text='Recorded action').click()
         link=page.get_by_role('link',name='Open action',exact=True)
         assert 'edit=item-recorded' in link.get_attribute('href')

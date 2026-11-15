@@ -277,14 +277,17 @@ def test_workspace_dashboard_navigation_and_space_sync(authenticated_client, tmp
         for request in held_graph:
             request.fulfill(json=graph)
         playwright.expect(splash).to_be_hidden()
-        link = page.get_by_role('link', name='Show second brain dashboard')
-        assert page.locator('.fleet-toolbar > :first-child').get_attribute('aria-label') == 'Show second brain dashboard'
+        link = page.get_by_role('link', name='Dashboard')
+        navigation = page.locator('.fleet-toolbar').get_by_role('navigation', name='Second Brain views')
+        assert navigation.get_by_role('link').count() == 2
+        assert navigation.get_by_role('link', name='Dashboard').locator('svg').count() == 1
+        assert page.locator('.site-header .second-brain-navigation').count() == 0
         assert page.locator('.fleet-hud-heading a').count() == 0
         playwright.expect(link).to_be_visible()
         playwright.expect(page.locator('.fleet-spaces .activity-view-name')).to_have_text('All activity')
         other = context.new_page()
         other.goto('https://brain.test/second-brain')
-        with page.expect_response(lambda response: '/agents/hud/data' in response.url):
+        with page.expect_response(lambda response: '/agents/api/graph' in response.url):
             other.evaluate("""async ({id, csrf}) => {
                 const data = await fetch('/hfl-corpus/workspace-views').then(r=>r.json());
                 await fetch('/hfl-corpus/view-preferences', {method:'PUT', headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
@@ -292,7 +295,7 @@ def test_workspace_dashboard_navigation_and_space_sync(authenticated_client, tmp
                 localStorage.setItem('corpus:workspace-change',String(Date.now()));
             }""", dict(id=view['id'], csrf=headers()['X-CSRF-Token']))
         playwright.expect(page.locator('.fleet-spaces .activity-view-name')).to_have_text('Work')
-        assert len(hud_reads) >= 2
+        assert len(hud_reads) == 0
         other.close()
         failures[:] = [True]
         hold_dashboard.append(True)
@@ -308,11 +311,10 @@ def test_workspace_dashboard_navigation_and_space_sync(authenticated_client, tmp
         playwright.expect(page.locator('#hud-loading')).to_be_hidden()
         playwright.expect(splash).to_be_hidden()
         playwright.expect(page.locator('#hud-active-spaces')).to_have_text('Work')
-        workspace_return = page.get_by_role('link', name='Back to Second Brain workspace')
-        assert workspace_return.get_attribute('href') == '/agents?agent=butler'
-        assert workspace_return.get_attribute('title') == 'Back to Second Brain workspace'
+        workspace_return = page.get_by_role('link', name='Fleet')
+        assert workspace_return.get_attribute('href') == '/agents'
         assert page.get_by_role('navigation', name='Breadcrumb').count() == 0
-        assert page.locator('nav[aria-label="Distill views"] a[href="/agents"]').first.get_attribute('aria-current') == 'page'
+        assert page.locator('nav[aria-label="Express tools"] a[href="/hfl-corpus/actions"]').first.get_attribute('aria-current') == 'page'
         assert page.locator('nav[aria-label="Build tools"] a[href="/agents"]').count() == 0
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         page.screenshot(path=str(tmp_path / f'brain-dashboard-{width}.png'), full_page=True)

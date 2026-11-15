@@ -2,18 +2,46 @@
 
 ## Workspace navigation
 
-**Express → Second Brain** opens the agent fleet workspace at `/agents`.
-The highlighted brain icon at the start of the workspace toolbar opens the
-full dashboard at `/second-brain`. Its robot-icon shortcut
-returns to the workspace, preserving the originating agent when supplied.
-Build no longer contains an Agents entry. Existing routes and agent deep links
-remain supported.
+**Express → Second Brain** opens Kanban at `/hfl-corpus/actions`.
+Compact icon links in each view's existing toolbar connect **Kanban / Dashboard / Fleet**.
+Each toolbar shows only the other two destinations, with tooltips and accessible
+labels; there is no separate navigation row.
+Dashboard remains at `/second-brain`; Fleet and agent deep links remain at
+`/agents`. Activity Graph stays under Distill for memory retrieval.
 
-Activity Corpus, Activity Graph, Kanban, the workspace, and the dashboard use
-shared saved Space preferences, including multiple Spaces, All activity, and
-schedule-driven Dynamic mode. Fleet and dashboard retain separate controls,
-widget ordering, sizing, and appearance; widget Space membership remains shared.
-The advisory feed's categories and execution schedules are unchanged.
+Fleet's **Agent work** drawer replaces its embedded HUD. Its agent picker is
+available on desktop and mobile. It shows attention,
+running, queued, assigned and recent work from the filtered graph, narrowed to
+a selected agent. Execution state is separate from canonical action status;
+missing execution records never imply that an agent is idle. At mobile widths,
+selection replaces the drawer with the existing inspector; **All agent work**
+returns to the overview. HUD widgets, layouts and collectors remain in Dashboard.
+
+Butler owns scheduled briefings and attributed recorded agent updates. The
+existing schedule owner is unchanged, and its prompts receive a bounded set of
+attributed recorded agent results. Updates deduplicate attempts by source,
+exclude existing Butler delivery runs, and link back to their records. Agent
+filtering and per-owner browser-local Reviewed state reduce repeat noise. A steady
+cyan dot on the Butler launcher indicates unread completed results or attention
+updates. Pending, queued and running items do not light it. Opening the panel
+does not mark items reviewed; Reviewed and Mark unread update the dot across
+tabs. Visible pages check for updates every 30 seconds while the panel is closed. The
+feed shows at most 30 agent updates from bounded execution and observation
+snapshots; it is not a complete audit history. **Ask Butler** attaches visible
+agent/action and Space context and prepares text without sending a message.
+
+Activity Corpus, Activity Graph, Kanban, Fleet and Dashboard share saved Space
+preferences, including multiple Spaces, All activity and Dynamic mode. Individual
+view filters and graph layouts remain local to their view. Space transitions do
+not reset Fleet filters. Temporary Butler context is explicit and removable; it
+does not modify saved Space preferences. Related memory shows up to five currently visible linked entries, artifacts or
+evidence links, with their source and relationship. Activity Graph opens
+separately, preserving the work view. Run artifacts and evidence explicitly
+link back to their action rather than only to their producing agent.
+
+The product workspace and the advisory engine below share the Second Brain
+name but have different responsibilities. Work navigation does not change the
+advisory feed's categories, allowlist, clients or execution schedules.
 
 The Thinking Second Brain is an advisory, context-aware feed that activates
 allowlisted read-only operations for the user's current categories. Categories
