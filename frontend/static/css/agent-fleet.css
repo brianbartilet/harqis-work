@@ -277,6 +277,7 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 
 .fleet-toolbar :is(button,summary){align-items:center;justify-content:center;line-height:1.2;min-height:38px}
 .fleet-toolbar .fleet-primary,.fleet-toolbar .fleet-create>summary{display:inline-flex;gap:.6rem;background:#2563eb;border:1px solid #60a5fa;color:white;border-radius:.65rem;padding:.6rem 1rem}
+.fleet-shell .fleet-toolbar-actions>button.fleet-primary:hover{background:#2563eb;border-color:#60a5fa}
 .fleet-create{position:relative}.fleet-create>summary{list-style:none;cursor:pointer}.fleet-create>summary::-webkit-details-marker{display:none}
 .fleet-create[open]>summary svg{transform:rotate(180deg)}
 .fleet-create>div{position:absolute;z-index:60;top:calc(100% + 8px);left:0;min-width:170px;padding:.5rem;border:1px solid #334155;border-radius:.7rem;background:#0f172a;box-shadow:0 12px 32px #0008}
