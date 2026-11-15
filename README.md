@@ -247,9 +247,10 @@ python -m tools schema trello create_trello_card
 
 The CLI and both MCP surfaces share `tools/catalog.py`; existing MCP names remain compatible.
 
-The `hfl_corpus` adapter covers 157 canonical frontend API operations,
-including entities, timeline, ideas, maps, goals and facets. Internal sharing
-inputs remain protocol-only, not general MCP tools. The
+The `hfl_corpus` adapter exposes canonical frontend API operations,
+including entities, timeline, ideas, maps, goals and facets. Use the coverage
+checker below for current counts and unreviewed routes rather than a fixed snapshot.
+Internal sharing inputs remain protocol-only, not general MCP tools. The
 [endpoint manifest](frontend/mcp_coverage.json) records reviewed routes; the
 [frontend MCP coverage report](docs/info/FRONTEND_MCP_COVERAGE.md) explains
 coverage and remaining session/protocol work. CI checks the reviewed endpoint
