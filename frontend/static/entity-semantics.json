@@ -1,0 +1,24 @@
+{
+  "action": {
+    "color": "#facc15",
+    "labels": {
+      "open": "In Review",
+      "active": "Ready",
+      "in_progress": "In Progress",
+      "incomplete": "Incomplete",
+      "done": "Done",
+      "dismissed": "Dismissed"
+    }
+  },
+  "idea": {
+    "color": "#00d4ff",
+    "labels": {
+      "suggested": "Suggested",
+      "adopted": "Adopted",
+      "dismissed": "Dismissed"
+    }
+  },
+  "status": {
+    "color": "#94a3b8"
+  }
+}
