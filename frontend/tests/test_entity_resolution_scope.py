@@ -80,10 +80,36 @@ def test_relevant_concurrent_change_cannot_commit(corpus, monkeypatch, change):
                 matching.block_members(db, [mentions['source']['id'], 'brian'], 'unmerged')
         return evaluate(pairs, **kwargs)
     monkeypatch.setattr(matching, 'evaluate', concurrent)
-    with pytest.raises(ValueError, match='changed'):
+    with pytest.raises(ValueError, match='changed') as caught:
         resolver.process_batch(entry_id='source')
+    assert type(caught.value).__name__ == 'EntityResolutionConflict'
+    assert caught.value.diagnostics == dict(stage='commit', reason=(
+        'state-changed' if change in {'profile', 'competitor', 'block'} else 'evidence-changed'))
     with store.connection() as db:
+        assert not db.execute("SELECT 1 FROM entity_resolution_outcomes WHERE entry_id='source'").fetchone()
+        assert not db.execute("SELECT 1 FROM entity_audit WHERE action='mention-resolved'").fetchone()
         assert not db.execute("SELECT 1 FROM entity_resolutions WHERE entry_id='source'").fetchone()
+        assert db.execute("SELECT 1 FROM entity_resolution_jobs WHERE entry_id='source'").fetchone()
+
+
+def test_assembly_conflict_stops_before_paid_comparison(corpus, monkeypatch):
+    store, _, _, calls, _ = corpus
+    original = entities.entity_index
+
+    def concurrent(*args, **kwargs):
+        result = original(*args, **kwargs)
+        store.save_profile('brian', 'people', dict(name='Brian Bartilet', aliases=['Brian'], notes='Corrected'))
+        return result
+
+    monkeypatch.setattr(entities, 'entity_index', concurrent)
+    with pytest.raises(ValueError) as caught:
+        resolver.process_batch(entry_id='source')
+    assert type(caught.value).__name__ == 'EntityResolutionConflict'
+    assert caught.value.diagnostics == dict(stage='assembly', reason='state-changed')
+    assert calls == []
+    with store.connection() as db:
+        assert not db.execute('SELECT 1 FROM entity_resolutions').fetchone()
+        assert not db.execute('SELECT 1 FROM entity_resolution_outcomes').fetchone()
         assert db.execute("SELECT 1 FROM entity_resolution_jobs WHERE entry_id='source'").fetchone()
 
 

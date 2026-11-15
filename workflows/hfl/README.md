@@ -132,6 +132,35 @@ entries in that bulk request; independent per-entry notifications still proceed.
 No automatic deployment, replay, or historical corpus rewrite is part of this
 migration.
 
+## Entity resolution snapshot retries
+
+Resolution checks relevant identity state both before paid comparisons and inside
+its commit transaction, and rechecks source evidence before committing. A changed
+snapshot raises `EntityResolutionConflict` with constant `stage` (`assembly` or
+`commit`) and `reason` (`state-changed` or `evidence-changed`) diagnostics. These
+expected conflicts roll back resolution writes and leave the intent pending;
+they do not spend its five-hard-failure budget or cause Celery FAILURE.
+
+Conflicts use a separate durable, revision-scoped cooldown: 30 seconds, doubling
+to a one-hour cap. The worker attempts each selected entry once per invocation,
+while the existing coalesced dispatcher schedules continuation; identical model
+inputs still reuse cached comparisons. Sustained concurrent edits can keep work
+pending with hourly retries, rather than silently quarantining valid intent.
+A new revision starts a fresh cooldown. Replacement revisions cannot be delayed
+or annotated by the old revision's failure handler.
+
+`resolution-last-result` reports conflicts separately from `errors` and uses
+`state: deferred` when conflicts occurred without hard failures. The bounded
+`resolution-error-history` retains conflict classifications with
+`retryable_conflict: true` and an unchanged hard-failure attempt count. Conflicts
+do not overwrite `resolution-last-error`. Ordinary `ValueError` remains a hard
+failure (`stage: process-batch`, `reason: value-error`); other unexpected errors
+use `reason: unexpected-error`. Existing sanitized model-response diagnostics,
+five-failure quarantine, and task-level failure signaling remain intact. Raw
+exception messages, provider responses, and source text are never added to these
+diagnostics. This classification does not establish the cause of past untyped
+`ValueError` records.
+
 ## Tasks
 
 | Task | What it does | Express target | Schedule (when active) |
