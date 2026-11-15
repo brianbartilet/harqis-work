@@ -1,0 +1,28 @@
+/* One focus treatment for text fields and native dropdowns. Keep native
+   checkbox/radio/range affordances and custom composite widgets independent.
+   These overrides intentionally win over page CSS and Tailwind focus rings. */
+:root {
+  --harqis-focus-color: #38bdf8;
+  --harqis-focus-offset: 2px;
+}
+
+body :is(select, textarea, input:not([type=checkbox], [type=radio], [type=range], [type=color], [type=hidden], [type=button], [type=submit], [type=reset], [type=file])):focus-visible {
+  outline: 2px solid var(--harqis-focus-color) !important;
+  outline-offset: -1px !important;
+  box-shadow: none !important;
+}
+
+/* Clicking a dropdown need not leave a second outline around its border.
+   Browsers still decide when text entry needs a visible focus indicator. */
+body :is(select, textarea, input):focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* This number field renders focus on its enclosing composite control. */
+body .kg-capacity-settings .kg-number-control input:focus-visible {
+  outline: none !important;
+}
+
+@media (forced-colors: active) {
+  :root { --harqis-focus-color: Highlight; }
+}
