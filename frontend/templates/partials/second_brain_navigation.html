@@ -1,0 +1,6 @@
+<nav class="second-brain-navigation" aria-label="Second Brain views">
+  <span>Second Brain</span>
+  {% for label, href in [('Kanban', '/hfl-corpus/actions'), ('Dashboard', '/second-brain'), ('Fleet', '/agents')] %}
+  <a href="{{ href }}" {% if label == 'Fleet' %}class="board-fleet-return"{% if request.url.path in ['/second-brain', '/second-brain/hud'] %} id="hud-workspace-return"{% endif %}{% endif %} {% if request.url.path == href or (label == 'Dashboard' and request.url.path == '/second-brain/hud') %}aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>
