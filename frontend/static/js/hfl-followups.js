@@ -10,7 +10,7 @@ window.HflDrawerIndicator = (button, name) => {
     if (opened) ids.forEach(id => seen.add(id));
     const fresh = ids.filter(id => !seen.has(id)).length;
     button.dataset.items = total ? (fresh ? 'new' : 'existing') : 'empty';
-    const message = total ? `${total} items available${fresh ? ` · ${fresh} new since opening this panel` : ' · no new items'}` : 'No items yet';
+    const message = name === 'Ideas' ? (total ? `${total} undismissed suggestions from the past 7 days` : 'No undismissed suggestions from the past 7 days') : total ? `${total} items available${fresh ? ` · ${fresh} new since opening this panel` : ' · no new items'}` : 'No items yet';
     hint.textContent = name + ': ' + message;
     button.title = hint.textContent + (name === 'Focus' ? ' (O)' : '');
   };
@@ -81,7 +81,12 @@ window.HflDrawerIndicator = (button, name) => {
   function render(rows) {
     const actionQuery=query(actionSearch), ideaQuery=query(ideaSearch);
     const visibleIdeas=ideaRows.filter(item=>matches(item,ideaQuery));
-    ideaIndicator?.(ideaRows.map(item=>item.id),ideaRows.length,ideasOpen);
+    const now=Date.now(), weekAgo=now-7*24*60*60*1000;
+    const recentSuggestions=ideaRows.filter(item=>{
+      const created=Date.parse(item.generated_at||item.created_at);
+      return item.status==='suggested'&&!item.promoted_to&&!item.followup_id&&created>=weekAgo&&created<=now;
+    });
+    ideaIndicator?.(recentSuggestions.map(item=>item.id),recentSuggestions.length,ideasOpen);
     const signature=JSON.stringify([rows,ideasOpen,ideaRows,actionQuery,ideaQuery]);
     if(signature===rendered)return;
     const expanded=new Set([...lanes.querySelectorAll('details[open]')].map(el=>el.closest('[data-followup-id]').dataset.followupId+':'+el.querySelector('summary').textContent));

@@ -125,14 +125,29 @@ def test_focus_drawer_keyboard_and_width(editor_page, width, tmp_path):
     ideas_toggle.click()
     expect(page.get_by_text('No ideas yet. Use Create → Idea to capture something worth exploring.')).to_be_visible()
     page.keyboard.press('Escape')
-    idea={'id':'test-idea','title':'Explore a compact view','status':'new','origin':'manual','created_at':'2026-11-15'}
-    page.route('**/reuse/board-ideas?*',lambda r:r.fulfill(json={'items':[idea]}))
+    from datetime import datetime, timedelta, timezone
+    now=datetime.now(timezone.utc)
+    idea={'id':'test-idea','title':'Explore a compact view','status':'suggested','origin':'generated','created_at':(now-timedelta(days=1)).isoformat()}
+    idea_rows=[idea]
+    page.route('**/reuse/board-ideas?*',lambda r:r.fulfill(json={'items':idea_rows}))
     page.evaluate("window.dispatchEvent(new Event('hfl:ideas-updated'))")
     expect(ideas_toggle).to_have_attribute('data-items','new')
     ideas_toggle.click()
     expect(ideas_toggle).to_have_attribute('data-items','existing')
     expect(page.get_by_text('Explore a compact view',exact=True)).to_be_visible()
+    dot=ideas_toggle.locator('.drawer-item-indicator')
+    expect(dot).to_have_css('background-color','rgb(255, 255, 0)')
+    expect(dot).to_have_css('position','absolute')
     page.screenshot(path=str(tmp_path / f'ideas-compact-{width}.png'))
+    for change in ({'status':'dismissed'}, {'status':'adopted'}, {'created_at':(now-timedelta(days=8)).isoformat()}, {'created_at':'invalid'}, {'created_at':(now+timedelta(days=1)).isoformat()}):
+        idea_rows[:]=[{**idea,**change}]
+        page.evaluate("window.dispatchEvent(new Event('hfl:ideas-updated'))")
+        expect(ideas_toggle).to_have_attribute('data-items','empty')
+        expect(dot).not_to_be_visible()
+    idea_rows[:]=[idea]
+    page.evaluate("window.dispatchEvent(new Event('hfl:ideas-updated'))")
+    expect(dot).to_be_visible()
+    expect(dot).to_have_css('background-color','rgb(255, 255, 0)')
 
 from test_action_editing import editor_page
 from test_hfl_ideas import ideas

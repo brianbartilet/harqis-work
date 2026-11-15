@@ -214,9 +214,9 @@
 .focus-drawer .ideas-drawer-header .focus-icon-button{box-sizing:border-box;margin:0;align-self:center;line-height:1}
 .focus-drawer .focus-icon-button svg{display:block;width:18px;height:18px;flex:none}
 
-.followups-board .focus-toggle .drawer-item-indicator{position:absolute;top:5px;right:5px;width:5px;height:5px;margin:0;border-width:1px;box-shadow:0 0 0 1px #172b46;pointer-events:none}
+.followups-board .ideas-drawer-toggle .drawer-item-indicator{position:absolute;top:5px;right:5px;width:5px;height:5px;margin:0;border-width:1px;box-shadow:0 0 0 1px #172b46;pointer-events:none}
 
-.followups-board .focus-toggle{padding-right:16px}
+.followups-board .ideas-drawer-toggle{padding-right:16px}
 
-.followups-board .focus-toggle .drawer-item-indicator{background:#ffff00;border-color:#ffff00}
-.followups-board .focus-toggle[data-items=new] .drawer-item-indicator{background:#ffff00;border-color:#ffff00}
+.followups-board .ideas-drawer-toggle .drawer-item-indicator{background:#ffff00;border-color:#ffff00}
+.followups-board .ideas-drawer-toggle[data-items=new] .drawer-item-indicator{background:#ffff00;border-color:#ffff00}

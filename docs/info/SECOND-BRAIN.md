@@ -64,8 +64,9 @@ and restores focus to the action. Modified clicks retain normal link navigation.
 The header provides icon buttons for refresh, help, and close. Help explains Focus
 in a compact popover; Escape dismisses help before closing the drawer. Empty sections explain
 what to do next. Focus shows a filled bright-yellow corner dot whenever open items
-are available. Ideas shows a filled cyan dot for newly discovered items and an
-outlined dot for existing items. Both hide the dot when empty. Focus and Butler
+are available. Ideas shows the same filled yellow dot only for undismissed,
+unadopted suggestions from the past seven days in the current scope. Opening Ideas
+does not clear its dot. Both hide the dot when no qualifying items remain. Ideas, Focus and Butler
 indicators are 5px corner dots that do not move the button text.
 Tooltips and accessible descriptions provide counts. Opening the panel acknowledges
 its fetched items for the current page session only; it does not accept results or
