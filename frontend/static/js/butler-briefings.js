@@ -14,7 +14,9 @@
   agentFilter.setAttribute('aria-label','Briefing agent');
   const reviewedLabel=text('label'), showReviewed=document.createElement('input');showReviewed.type='checkbox';
   reviewedLabel.append(showReviewed,document.createTextNode(' Show reviewed'));
-  controls.append(agentFilter,reviewedLabel);list.before(controls);
+  const reviewAll=text('button','Mark all as reviewed');reviewAll.type='button';
+  const reviewActions=text('div',undefined,'butler-review-actions');reviewActions.append(reviewAll,reviewedLabel);
+  controls.append(agentFilter,reviewActions);list.before(controls);
   agentFilter.onchange=showReviewed.onchange=()=>{rendered='';if(latest)render(latest);};
   const updateKey=item=>{let hash=2166136261;for(const character of (item.title+' '+item.answer)){hash=Math.imul(hash^character.charCodeAt(0),16777619);}return item.id+':'+item.date+':'+item.state+':'+(hash>>>0);};
 
@@ -22,6 +24,8 @@
   unreadStatus.id='butler-unread-status';unreadStatus.setAttribute('role','status');
   launch.after(unreadStatus);
   const reviewable=item=>!['pending','queued','running'].includes(item.state);
+  const matchesAgent=item=>!agentFilter.value||(item.agent_name||'HARQIS Butler')===agentFilter.value;
+  reviewAll.onclick=()=>{for(const item of latest?.items||[]){if(matchesAgent(item)&&reviewable(item))reviewed[updateKey(item)]=Date.now();}try{localStorage.setItem(reviewKey,JSON.stringify(Object.fromEntries(Object.entries(reviewed).slice(-500))));}catch{}rendered='';render(latest);};
   function updateIndicator(){
     const count=(latest?.items||[]).filter(item=>reviewable(item)&&!reviewed[updateKey(item)]).length;
     launch.dataset.unread=String(count>0);
@@ -76,6 +80,7 @@
     agentFilter.replaceChildren(...['All agents',...new Set(data.items.map(item=>item.agent_name||'HARQIS Butler'))].map((name,index)=>{const option=text('option',name);option.value=index?name:'';return option;}));
     agentFilter.value=[...agentFilter.options].some(o=>o.value===chosen)?chosen:'';
     const visibleItems=data.items.filter(item=>(!agentFilter.value||(item.agent_name||'HARQIS Butler')===agentFilter.value)&&(showReviewed.checked||!reviewed[updateKey(item)]));
+    reviewAll.disabled=!data.items.some(item=>matchesAgent(item)&&reviewable(item)&&!reviewed[updateKey(item)]);
     const signature=JSON.stringify(visibleItems);
 
     if(signature===rendered)return;
@@ -108,7 +113,7 @@
       if (item.detail) card.append(text('p', item.detail, 'butler-briefing-detail'));
       if(item.url){const link=text('a','Open source');link.href=item.url;card.append(link);}
       if(reviewable(item)){
-        const acknowledge=text('button',reviewed[updateKey(item)]?'Mark unread':'Reviewed');acknowledge.type='button';
+        const acknowledge=text('button',reviewed[updateKey(item)]?'Mark unread':'Reviewed');acknowledge.type='button';acknowledge.className='butler-review-button';
         acknowledge.onclick=()=>{const key=updateKey(item);if(reviewed[key])delete reviewed[key];else reviewed[key]=Date.now();try{localStorage.setItem(reviewKey,JSON.stringify(Object.fromEntries(Object.entries(reviewed).slice(-500))));}catch{}rendered='';render(latest);};card.append(acknowledge);
       }
       fragment.append(card);

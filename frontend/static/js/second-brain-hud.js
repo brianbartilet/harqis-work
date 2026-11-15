@@ -240,7 +240,7 @@
   const hotkeysDialog=$('hud-hotkeys-dialog');
   $('hud-hotkeys').onclick=()=>hotkeysDialog.showModal();
   document.addEventListener('keydown',event=>{
-    if(event.defaultPrevented||event.repeat||event.isComposing||event.ctrlKey||event.metaKey||event.shiftKey)return;
+    if(event.defaultPrevented||event.repeat||event.isComposing||event.ctrlKey||event.metaKey||(event.shiftKey&&event.key!=='Tab'))return;
     if(event.target.closest('input,textarea,select,[contenteditable]:not([contenteditable="false"]),[role="textbox"],.xterm'))return;
     if(document.querySelector('#butler-panel:not([hidden])'))return;
     const key=event.key.toLowerCase(),dialog=document.querySelector('dialog[open]');
@@ -252,11 +252,12 @@
       }
       return;
     }
+    if(event.shiftKey&&key==='tab'){event.preventDefault();document.querySelector('.second-brain-navigation a[href="/hfl-corpus/actions"]')?.click();return;}
     if(key==='n'){event.preventDefault();window.HudSpaces.toggleDynamic();return;}
     // Preserve native Space activation on focused buttons, links and summaries.
     if(key===' '&&event.target.closest('button,a,summary,[role="button"]'))return;
     if(key==='tab'&&event.target.closest('button,a,summary,[role="button"]'))return;
-    const id={tab:'hud-workspace-return',' ':'hud-motion',g:'hud-add',k:'hud-hotkeys',f:'hud-fullscreen',r:'hud-refresh'}[key];
+    const id={tab:'hud-workspace-return',' ':'hud-motion',g:'hud-add',k:'hud-hotkeys','\\':'hud-fullscreen',r:'hud-refresh'}[key];
     if(id){event.preventDefault();$(id).click();}
   });
   $('hud-build').onclick=()=>$('hud-builder').showModal();

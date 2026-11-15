@@ -42,6 +42,7 @@
     const dialogs=[...document.querySelectorAll('dialog[open]')];
     if(dialogs.some(dialog=>!['activity-hotkey-help','hud-hotkeys-dialog'].includes(dialog.id)))return;
     event.preventDefault();event.stopImmediatePropagation();dialogs.forEach(dialog=>dialog.close());
+    if(!panel.hidden){closeButler();return;}
     if(document.fullscreenElement){try{await document.exitFullscreen();}catch{return;}}
     document.getElementById('fleet-exit-fullscreen')?.click();
     requestAnimationFrame(()=>{if(panel.hidden)launch.click();panel.querySelector('[role=tab][aria-selected=true]')?.focus();});
