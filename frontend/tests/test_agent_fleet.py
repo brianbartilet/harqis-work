@@ -184,7 +184,7 @@ def test_briefing_has_single_schedule_owner_and_daily_key(fleet, monkeypatch):
     from zoneinfo import ZoneInfo
     from modules.agents import briefings, butler
     calls = []
-    monkeypatch.setattr(butler, 'send', lambda user, raw: calls.append((user,raw)))
+    monkeypatch.setattr(briefings, 'dispatch', lambda user, key: calls.append((user,key)))
     assert briefings.read('owner')['cadence'] == 'off'
     briefings.save('owner', {**briefings.DEFAULT,'cadence':'daily','hour':9})
     briefings.sweep(datetime(2026,10,26,8,tzinfo=ZoneInfo('Asia/Singapore')))
@@ -192,8 +192,8 @@ def test_briefing_has_single_schedule_owner_and_daily_key(fleet, monkeypatch):
     moment = datetime(2026,10,26,9,tzinfo=ZoneInfo('Asia/Singapore'))
     briefings.sweep(moment)
     briefings.sweep(moment)
-    assert len(calls) == 2 and calls[0][1]['request_id'] == calls[1][1]['request_id']
-    assert 'read-only' in calls[0][1]['message']
+    assert len(calls) == 2 and calls[0][1] == calls[1][1]
+    assert 'read-only' in briefings.PROMPT
     with pytest.raises(ValueError):
         briefings.save('owner', {**briefings.DEFAULT,'cadence':'daily','hour':9})
 

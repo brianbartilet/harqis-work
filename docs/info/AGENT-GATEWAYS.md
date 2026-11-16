@@ -124,14 +124,20 @@ calendar button in the panel header to configure the briefing schedule.
 
 The existing Hermes sweep remains the schedule owner. Each occurrence is recorded
 once per user and local schedule date in `fleet_briefing_deliveries`, in the fleet
-database. The feed joins that occurrence to its legacy worker run and displays
+database. Each new occurrence owns an immutable briefing snapshot and a worker run,
+without creating a Kanban action. The feed joins that occurrence to its run and displays
 pending, running, completed or failed status. Pending and running results refresh
 automatically while the tab is open. A completed briefing means the worker has
-returned its answer; displaying it does not accept the underlying action.
+returned its answer. **Mark as read**, **Mark all as read**, and **Show read** manage
+read acknowledgments only; they never complete actions mentioned in a briefing or
+approve other agent results. Requested follow-up work remains separate actions.
 
 Existing scheduled results are recovered only when both the exact scheduler prompt
 and the deterministic user/date request ID match. Ordinary legacy messages are not
-included. The new table is created automatically; include the fleet and bridge
+included. On each sweep, successful legacy briefing actions with a complete result
+are closed through the normal audited completion path. Failed, incomplete, dismissed,
+and subsequently edited actions are left unchanged. Briefing and execution history
+remain available. The table is created automatically; include the fleet and bridge
 databases in existing backups.
 
 When `HFL_TIMELINE_LOCAL_PREVIEW=1`, the tab offers **Load sample briefings**.

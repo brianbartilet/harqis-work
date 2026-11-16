@@ -12,9 +12,9 @@
   let reviewed={};try{const saved=JSON.parse(localStorage.getItem(reviewKey)||'{}');if(saved&&typeof saved==='object'&&!Array.isArray(saved))reviewed=saved;}catch{}
   const controls=text('div',undefined,'butler-update-controls'), agentFilter=document.createElement('select');
   agentFilter.setAttribute('aria-label','Briefing agent');agentFilter.className='butler-agent-filter';
-  const showReviewed=text('button','Show reviewed');showReviewed.type='button';
+  const showReviewed=text('button','Show read');showReviewed.type='button';
   showReviewed.setAttribute('aria-pressed','false');
-  const reviewAll=text('button','Mark all as reviewed');reviewAll.type='button';
+  const reviewAll=text('button','Mark all as read');reviewAll.type='button';
   const reviewActions=text('div',undefined,'butler-review-actions');reviewActions.append(reviewAll,showReviewed);
   controls.append(reviewActions);list.before(controls);
   refresh.before(agentFilter);
@@ -30,7 +30,7 @@
   let receiptVersion=0,receiptBusy=false,receiptsReady=false;
   async function readReceipts(){if(receiptBusy)return;const response=await fetch('/agents/api/butler/read-receipts',{cache:'no-store'});if(!response.ok)throw Error('Read acknowledgments could not refresh.');const data=await response.json();if(receiptBusy||data.version<receiptVersion)return;receiptVersion=data.version;const legacy=Object.keys(reviewed).filter(k=>reviewed[k]&&!(k in data.items)).slice(0,500);reviewed=data.items;receiptsReady=true;if(legacy.length){await saveReceipts(legacy,true,false);}return data;}
   async function saveReceipts(keys,value,redraw=true){if(receiptBusy||!receiptsReady)return;receiptBusy=true;try{const response=await fetch('/agents/api/butler/read-receipts',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({keys,reviewed:value,version:receiptVersion})});const data=await response.json();if(!response.ok)throw Error(data.detail||'Read state could not save.');receiptVersion=data.version;reviewed=data.items;try{localStorage.setItem(reviewKey,JSON.stringify(reviewed));}catch{}updateIndicator();if(redraw&&latest){rendered='';render(latest);}}catch(e){error.textContent=e.message;}finally{receiptBusy=false;}}
-  reviewAll.title='Mark all loaded completed updates for the selected agent as read; this does not accept action results.';
+  reviewAll.title='Mark all loaded finished updates for the selected agent as read; action completion is separate.';
   reviewAll.onclick=()=>saveReceipts((latest?.items||[]).filter(item=>matchesAgent(item)&&reviewable(item)).map(updateKey),true);
   function updateIndicator(){
     const count=(latest?.items||[]).filter(item=>reviewable(item)&&!reviewed[updateKey(item)]).length;
@@ -119,7 +119,7 @@
       if (item.detail) card.append(text('p', item.detail, 'butler-briefing-detail'));
       if(item.url){const link=text('a','Open source');link.href=item.url;card.append(link);}
       if(reviewable(item)){
-        const acknowledge=text('button',reviewed[updateKey(item)]?'Mark unread':'Reviewed');acknowledge.type='button';acknowledge.className='butler-review-button';
+        const acknowledge=text('button',reviewed[updateKey(item)]?'Mark unread':'Mark as read');acknowledge.type='button';acknowledge.className='butler-review-button';
         acknowledge.onclick=()=>saveReceipts([updateKey(item)],!reviewed[updateKey(item)]);card.append(acknowledge);
       }
       fragment.append(card);
@@ -127,7 +127,7 @@
     if (!visibleItems.length) {
       const empty = document.createElement('div');
       empty.className = 'butler-briefing-empty';
-      empty.append(text('h3', 'No unread updates'), text('p', 'Use the calendar button above to set a schedule. Agent results also appear here. Change the agent filter or enable Show reviewed to see earlier updates.'));
+      empty.append(text('h3', 'No unread updates'), text('p', 'Use the calendar button above to set a schedule. Agent results also appear here. Change the agent filter or enable Show read to see earlier updates.'));
       fragment.append(empty);
     }
     // Preserve reading position across worker-status refreshes.

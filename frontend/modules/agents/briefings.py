@@ -44,8 +44,8 @@ def save(user, raw):
 
 
 def sweep(instant=None):
-    from modules.agents.butler import send
     from fastapi import HTTPException
+    reconcile_legacy_actions()
     with service.store().connect() as db:
         schedules = [(r['user'],json.loads(r['payload'])) for r in db.execute('SELECT * FROM fleet_briefings')]
     for user, config in schedules:
@@ -59,14 +59,89 @@ def sweep(instant=None):
             db.execute('INSERT OR IGNORE INTO fleet_briefing_deliveries VALUES (?,?,?,?)',
                        (user, key, day, json.dumps({'cadence': config['cadence'], 'timezone': config['timezone']})))
         try:
-            send(user, {'request_id':key, 'message':PROMPT,
-                        'context':{'path':'/agents','space':''}})
+            dispatch(user, key)
         except (HTTPException, ValueError, KeyError):
             continue  # Next sweep retries the same occurrence, never duplicates it.
 
 
 def occurrence_key(user, day):
     return str(uuid.uuid5(uuid.NAMESPACE_URL, 'fleet-briefing:' + user + ':' + day))
+
+
+def source_snapshot(source_id):
+    """The durable delivery owns immutable instructions, without a Kanban card."""
+    with service.store().connect() as db:
+        rows = list(db.execute('SELECT payload FROM fleet_briefing_deliveries WHERE request_id=?', (source_id,)))
+    for row in rows:
+        snapshot = json.loads(row['payload']).get('snapshot')
+        if snapshot:
+            return snapshot
+    raise KeyError(source_id)
+
+
+def dispatch(user, key):
+    from modules.hfl_corpus import agent_bridge as bridge
+    from workflows.hfl.agent_bridge_store import digest, now
+    settings = service.execution('butler')
+    with service.store().connect() as db:
+        db.execute('BEGIN IMMEDIATE')
+        row = db.execute('SELECT * FROM fleet_briefing_deliveries WHERE user=? AND request_id=?', (user, key)).fetchone()
+        if not row or occurrence_key(user, row['scheduled_date']) != key:
+            raise ValueError('A scheduled briefing delivery is required.')
+        previous = db.execute('SELECT run_id FROM fleet_chat WHERE user=? AND request_id=?', (user, key)).fetchone()
+        if previous and previous['run_id']:
+            return bridge.bridge_store().get(previous['run_id'])
+        meta = json.loads(row['payload'])
+        if 'snapshot' not in meta:
+            runtime = bridge.PROMPT_PATH.read_text(encoding='utf-8')
+            source = {'id': key, 'title': 'Scheduled briefing — ' + row['scheduled_date'],
+                      'prompt': PROMPT, 'expected_outcome': 'Deliver an evidence-backed briefing.', 'attachments': []}
+            meta['snapshot'] = {'kind': 'briefing', 'source_key': 'briefing:' + key, 'source_id': key,
+                                'source': source, 'category_guidance': '', 'policy': bridge.POLICY,
+                                'execution_settings': settings, 'runtime_prompt': runtime,
+                                'prompt_hash': digest(runtime), 'instruction_hash': digest({'source': source, 'runtime': runtime}),
+                                'auto_complete': True, 'occurrence_date': row['scheduled_date'],
+                                'context': {'timezone': meta.get('timezone', ''), 'coverage': {'reason': 'Retrieve current evidence through canonical tools.'}}}
+            db.execute('UPDATE fleet_briefing_deliveries SET payload=? WHERE user=? AND request_id=?', (json.dumps(meta), user, key))
+    run = bridge.bridge_store().enqueue(meta['snapshot'], 'briefing:' + key, user)
+    with service.store().connect() as db:
+        db.execute('INSERT INTO fleet_chat(user,request_id,message,created,run_id) VALUES (?,?,?,?,?) '
+                   'ON CONFLICT(user,request_id) DO UPDATE SET run_id=excluded.run_id', (user, key, PROMPT, now(), run['id']))
+    return run
+
+
+def reconcile_legacy_actions():
+    """Close only proven, unchanged, successfully delivered scheduler actions."""
+    import httpx
+    from modules.hfl_corpus import agent_bridge as bridge
+    with service.store().connect() as db:
+        users = [row[0] for row in db.execute('SELECT DISTINCT user FROM fleet_chat')]
+        for user in users:
+            _recover_legacy(db, user)
+        rows = list(db.execute('SELECT c.*,d.scheduled_date FROM fleet_chat c JOIN fleet_briefing_deliveries d '
+                               "ON c.user=d.user AND c.request_id=d.request_id WHERE c.action_id != '' AND c.run_id != ''"))
+    results = []
+    for row in rows:
+        if row['message'] not in {PROMPT, LEGACY_PROMPT} or occurrence_key(row['user'], row['scheduled_date']) != row['request_id']:
+            continue
+        try:
+            run = bridge.bridge_store().get(row['run_id'])
+            if run['state'] == 'succeeded' and run['applied']:
+                continue
+            if run['source_key'] != 'actionable:' + row['action_id'] or run['state'] not in {'review', 'accepting', 'succeeded'}:
+                continue
+            if not run['result'].get('complete') or not run['result'].get('summary', '').strip():
+                continue
+            item = bridge.action_call('GET', '/' + row['action_id'])['item']
+            if item['status'] in {'done', 'dismissed'}:
+                continue
+            if item['version'] != (run['expected_version'] or run['snapshot']['source']['version']):
+                continue
+            bridge.accept(run['id'], 'briefing-delivery')
+            results.append(row['action_id'])
+        except (ValueError, KeyError, httpx.HTTPError):
+            continue  # Retry transport failures; never overwrite edited/reopened work.
+    return results
 
 
 def demo_available():

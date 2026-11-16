@@ -66,6 +66,9 @@ def action_call(method, suffix, payload=None):
 
 
 def source_snapshot(kind, source_id):
+    if kind == 'briefing':
+        from modules.agents.briefings import source_snapshot as briefing_snapshot
+        return briefing_snapshot(source_id)
     if kind == 'mindmap':
         from modules.hfl_corpus.ideas_brainstorm import snapshot
         return snapshot(source_id)

@@ -48,14 +48,14 @@ def test_unread_launcher_detects_closed_panel_updates(fleet, authenticated_clien
             pane=page.get_by_role('tabpanel',name='Briefings',exact=True)
             pw.expect(pane.get_by_text('Your report is ready.',exact=True)).to_be_visible()
             pw.expect(launch).to_have_attribute('data-unread','true')
-            pane.get_by_role('button',name='Reviewed',exact=True).click()
+            pane.get_by_role('button',name='Mark as read',exact=True).click()
             pw.expect(launch).to_have_attribute('data-unread','false')
             review_key='harqis:butler:reviewed:v1:'+USER
             saved=page.evaluate('(key)=>localStorage.getItem(key)',review_key)
             page.reload()
             pw.expect(launch).to_have_attribute('data-unread','false')
             launch.click()
-            pane.get_by_role('button', name='Show reviewed', exact=True).click()
+            pane.get_by_role('button', name='Show read', exact=True).click()
             pane.get_by_role('button',name='Mark unread',exact=True).click()
             pw.expect(launch).to_have_attribute('data-unread','true')
             # A review in another tab updates the launcher without a new fetch.
@@ -75,6 +75,7 @@ def test_scheduled_worker_result_is_visible_once_and_owner_scoped(fleet, bridge,
     briefings.save(USER, {**briefings.DEFAULT, 'cadence': 'daily', 'hour': 0, 'timezone': 'UTC'})
     instant = datetime(2026, 11, 13, 10, tzinfo=timezone.utc)
     briefings.sweep(instant)
+    assert bridge[2].list() == []
     first = client.get(URL).json()['items']
     assert len(first) == 1 and first[0]['state'] == 'pending'
     assert first[0]['date'] == '2026-11-13'
@@ -83,6 +84,8 @@ def test_scheduled_worker_result_is_visible_once_and_owner_scoped(fleet, bridge,
     assert event(client, run, 'plan', {'summary': 'Review recent activity without writes.'}).status_code == 200
     result = event(client, run, 'succeeded', {**RESULT, 'summary': 'Your scheduled briefing is ready.'})
     assert result.status_code == 200, result.text
+    assert result.json()['state'] == 'succeeded'
+    assert run['snapshot']['kind'] == 'briefing'
     briefings.sweep(instant)
     items = client.get(URL).json()['items']
     assert len(items) == 1 and items[0]['state'] == 'completed'
@@ -91,6 +94,43 @@ def test_scheduled_worker_result_is_visible_once_and_owner_scoped(fleet, bridge,
     with fleet.store().connect() as db:
         assert db.execute('SELECT count(*) FROM fleet_assistant').fetchone()[0] == 0
     assert client.get(URL).json()['items'] == items
+    assert bridge[2].list() == []
+
+
+@pytest.mark.parametrize('outcome,edited,expected', [('succeeded', False, 'done'), ('failed', False, 'incomplete'), ('succeeded', True, 'in_progress')])
+def test_legacy_cleanup_only_closes_successful_unchanged_briefings(fleet, bridge, authenticated_client, outcome, edited, expected):
+    from modules.agents import briefings, butler
+    client = authenticated_client
+    key = briefings.occurrence_key(USER, '2026-11-13')
+    result = butler.send(USER, {'request_id': key, 'message': briefings.LEGACY_PROMPT})
+    # Recovery must identify the exact scheduler occurrence, not just its title.
+    with fleet.store().connect() as db:
+        db.execute('UPDATE fleet_chat SET created=? WHERE request_id=?', ('2026-11-13T09:00:00+00:00', key))
+    run = client.post('/api/hfl-agent/runs/' + result['run_id'] + '/claim', headers=WORKER, json={}).json()
+    assert event(client, run, 'plan', {'summary': 'Read current activity and deliver the briefing.'}).status_code == 200
+    reported = event(client, run, outcome, RESULT if outcome == 'succeeded' else {'summary': 'Source unavailable.'})
+    assert reported.status_code == 200, reported.text
+    if edited:
+        item = bridge[2].get(result['action_id'])
+        bridge[2].update(item['id'], {'version': item['version'], 'notes': 'Owner changed this task.'}, actor=USER)
+    briefings.reconcile_legacy_actions()
+    briefings.reconcile_legacy_actions()
+    assert bridge[2].get(result['action_id'])['status'] == expected
+    assert briefings.history(USER)['items'][0]['answer']
+
+
+def test_briefing_dispatch_recovers_after_enqueue_before_chat_link(fleet, bridge, authenticated_client):
+    from modules.agents import briefings
+    briefings.save(USER, {**briefings.DEFAULT, 'cadence': 'daily', 'hour': 0})
+    instant = datetime(2026, 11, 13, 10, tzinfo=timezone.utc)
+    briefings.sweep(instant)
+    first = briefings.history(USER)['items'][0]
+    with fleet.store().connect() as db:
+        db.execute('DELETE FROM fleet_chat WHERE request_id=?', (first['id'],))
+    briefings.sweep(instant)
+    assert briefings.history(USER)['items'][0]['run_id'] == first['run_id']
+    assert len(bridge[1].list()) == 1
+    assert bridge[2].list() == []
 
 
 def test_legacy_recovery_requires_exact_scheduler_identity(fleet):
@@ -109,7 +149,7 @@ def test_legacy_recovery_requires_exact_scheduler_identity(fleet):
 
 def test_samples_are_preview_only_csrf_protected_and_never_dispatch(fleet, authenticated_client, monkeypatch):
     from modules.agents import briefings, butler
-    monkeypatch.setattr(butler, 'send', lambda *args: pytest.fail('Samples must not dispatch'))
+    monkeypatch.setattr(briefings, 'dispatch', lambda *args: pytest.fail('Samples must not dispatch'))
     client = authenticated_client
     assert client.post(URL + '/demo').status_code == 403
     assert client.post(URL + '/demo', headers=owner_headers()).status_code == 200
@@ -164,12 +204,12 @@ def test_briefings_browser_without_gateway(fleet, authenticated_client, tmp_path
             assert pane.get_by_text('Mock', exact=True).count() == 5
             assert pane.get_by_text('Completed', exact=True).count() == 2
             assert pane.get_by_text('Failed', exact=True).is_visible()
-            pane.get_by_role('button', name='Reviewed', exact=True).first.click()
+            pane.get_by_role('button', name='Mark as read', exact=True).first.click()
             pw.expect(pane.locator('.butler-briefing-card')).to_have_count(4)
-            pane.get_by_role('button', name='Show reviewed', exact=True).click()
+            pane.get_by_role('button', name='Show read', exact=True).click()
             pw.expect(pane.locator('.butler-briefing-card')).to_have_count(5)
             pane.get_by_role('button', name='Mark unread', exact=True).click()
-            pane.get_by_role('button', name='Show reviewed', exact=True).click()
+            pane.get_by_role('button', name='Show read', exact=True).click()
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             page.screenshot(path=str(tmp_path / f'briefings-{width}.png'))
             # Briefings opens by default after reload, with no gateway submission.
@@ -225,7 +265,7 @@ def test_briefing_timezone_follows_profile(fleet, authenticated_client, monkeypa
     store.save(replace(store.get(), timezone='Europe/London'))
     assert briefings.read(USER)['timezone'] == 'Europe/London'
     calls = []
-    monkeypatch.setattr(butler, 'send', lambda *args: calls.append(args))
+    monkeypatch.setattr(briefings, 'dispatch', lambda *args: calls.append(args))
     briefings.sweep(datetime(2026, 11, 15, 8, tzinfo=timezone.utc))
     assert not calls
     briefings.sweep(datetime(2026, 11, 15, 9, tzinfo=timezone.utc))
