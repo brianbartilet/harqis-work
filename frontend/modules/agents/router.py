@@ -124,8 +124,12 @@ def ecosystem_graph(request: Request, node_limit: int = 1000, user=Depends(owner
     def bounded():
         data = graph(user)
         total = len(data['nodes'])
-        # Keep the small HUD catalogue navigable even when activity fills the graph budget.
-        ranked = sorted(data['nodes'], key=lambda n: (n['kind'] not in {'owner','agent'}, n['kind'] != 'hud', n['kind'] not in {'action','idea','status'}, n['id']))
+        # Preserve the fleet inventory before filling the remaining budget with activity.
+        # A large corpus must not crowd workflow definitions out of the API response.
+        priority = {'owner': 0, 'agent': 0, 'hud': 1, 'workflow': 1,
+                    'application': 2, 'configuration': 2, 'trigger': 2, 'subagent': 2,
+                    'action': 3, 'idea': 3, 'status': 3}
+        ranked = sorted(data['nodes'], key=lambda n: (priority.get(n['kind'], 4), n['id']))
         data['nodes'] = ranked[:node_limit]
         ids = {n['id'] for n in data['nodes']}
         data['edges'] = [e for e in data['edges'] if e['source'] in ids and e['target'] in ids]
