@@ -5,6 +5,13 @@ workflows and execution metadata; the separate instance-level MCP token discover
 first-class agents and reads their draft configuration. Enable MCP access for each
 agent in n8n. No Assistant sandbox is needed for this connection.
 
+Enabling the connector synchronizes its inventory. **Sync inventory** repeats discovery
+and refreshes details for the first 25 agents. The **n8n workflow library** Fleet
+profile contains all accessible workflows, including ones not attached to an agent;
+it is an inventory, not an executable remote agent. **View in Fleet** opens n8n
+with text, date and type filters cleared and a local all-Spaces view until you
+choose a Space. Existing connections can use **Sync inventory** without reconnecting.
+
 In **Add agent**, choose **n8n**, then select an existing remote agent in the
 searchable connection field. Save creates a stable, owner-scoped Fleet link;
 repeating this operation returns the same profile. Leaving the field empty keeps
@@ -26,7 +33,7 @@ the previous profile-only behavior. Existing discovered agents can use the new
 
 The adapter was checked against the installed n8n 2.47.7 MCP tool implementation.
 Missing MCP capabilities fail explicitly. An API-only connection still supports
-the existing workflow browser. Old manual and discovered Fleet records are kept.
+the workflow browser and Fleet workflow library. Old manual and discovered Fleet records are kept.
 
 ## Dependency and execution coverage
 

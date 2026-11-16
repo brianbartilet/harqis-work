@@ -135,8 +135,21 @@ def sync(user, query=''):
     from modules.integrations.service import connected
     from modules.agents.service import defaults, initialize
     connection, client = connected(user, 'n8n')
-    result = client.agents(query)
-    db, imported = initialize(), []
+    from modules.integrations.n8n_fleet import refresh, key
+    from workflows.hfl.agent_fleet_store import FleetConflict
+    db, imported, warnings = initialize(), [], []
+    library_id = 'n8n-library-' + key(user, connection['site'])
+    db.save({**defaults('n8n workflow library'), 'runtime': 'n8n', 'classification': 'workflows',
+             'description': 'All accessible n8n workflows and their dependencies. Inventory only; not a remote agent.',
+             'n8n_library': True, 'remote_id': '', 'remote_name': 'n8n workflow library',
+             'connector_user': user, 'connector_site': connection['site'],
+             **({'mock': True, 'demo_user': user} if connection.get('mock') else {})}, identity=library_id, seed=True)
+    library = refresh(user, library_id)['item']
+    try:
+        result = client.agents(query)
+    except HTTPException as exc:
+        result = {'data': []}
+        warnings.append('Workflow library synchronized. Agent discovery: ' + str(exc.detail))
     for remote in result.get('data', []):
         if not isinstance(remote.get('id'), str) or not isinstance(remote.get('name'), str):
             continue
@@ -152,5 +165,13 @@ def sync(user, query=''):
         if not old or any(old.get(k) != v for k, v in item.items()):
             item = db.save(item, identity=identity, version=old['version'] if old else None)
         imported.append(item['id'])
-    return {'imported': len(imported), 'bounded': len(result.get('data', [])) == 100,
+        if len(imported) <= 25:
+            try:
+                refresh(user, item['id'])
+            except (HTTPException, FleetConflict):
+                warnings.append('Agent imported, but its details need refreshing: ' + item['name'])
+    if len(imported) > 25:
+        warnings.append('Details refreshed for the first 25 agents. Refresh other agents individually.')
+    return {'imported': len(imported), 'workflows': len(library['n8n_snapshot']['workflows']),
+            'library_id': library_id, 'agent_ids': imported, 'warnings': warnings, 'bounded': len(result.get('data', [])) == 100,
             'message': 'Up to 100 agents per search. Refine the search to discover more.'}

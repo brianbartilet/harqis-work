@@ -116,3 +116,33 @@ def test_real_capture_delivery_uses_source_time_and_dedup(linked, monkeypatch):
     assert calls[0][0].when.day == 15
     assert calls[0][0].references == (payload['url'],)
     assert calls[0][1]['dedup_key'] == 'fleet:n8n-execution:42'
+
+
+def test_sync_imports_standalone_workflows_and_refreshes_existing_profile(linked, monkeypatch):
+    from modules.integrations.n8n import sync
+    monkeypatch.setattr(n8n_demo, 'WORKFLOWS', [*n8n_demo.WORKFLOWS, {'id': 'standalone', 'name': 'Standalone', 'nodes': []}])
+    result = sync('alice')
+    assert result['imported'] >= 1
+    library = service.store().get(result['library_id'])
+    assert library['n8n_library'] and not library['n8n_snapshot']['can_edit']
+    assert any(w['id'] == 'standalone' for w in library['n8n_snapshot']['workflows'])
+    assert service.store().get(linked['id'])['name'] == 'My local Atlas'
+    assert service.store().get(linked['id'])['n8n_snapshot']['workflows']
+    again = sync('alice')
+    assert again['library_id'] == result['library_id']
+    with pytest.raises(HTTPException) as exc:
+        fleet.edit('alice', result['library_id'], {})
+    assert exc.value.status_code == 422
+
+
+def test_rest_only_sync_still_imports_workflows(linked, monkeypatch):
+    from modules.integrations.n8n import sync
+    from modules.integrations.service import connected
+    _, client = connected('alice', 'n8n')
+    def unavailable(*args, **kwargs):
+        raise HTTPException(409, 'MCP disabled')
+    monkeypatch.setattr(type(client), 'agents', unavailable)
+    result = sync('alice')
+    assert result['imported'] == 0
+    assert result['workflows'] >= 3
+    assert result['warnings']

@@ -111,11 +111,12 @@ def link(user, raw):
 
 def refresh(user, identity):
     connection, client, old = context(user, identity)
-    remote = client.agent(old['remote_id'])
+    library = bool(old.get('n8n_library'))
+    remote = {'agent': {'name': 'n8n workflow library'}, 'config': {}} if library else client.agent(old['remote_id'])
     config, info = remote.get('config', {}), remote.get('agent', {})
     inventory, bounded = workflows(client)
     refs = [t.get('workflow') for t in config.get('tools', []) if t.get('type') == 'workflow']
-    selected = [w for w in inventory if w.get('name') in refs or w.get('id') in refs]
+    selected = inventory if library else [w for w in inventory if w.get('name') in refs or w.get('id') in refs]
     warnings = []
     if bounded:
         warnings.append('Workflow catalogue limited to 1,000 results; dependencies may be incomplete.')
@@ -154,7 +155,7 @@ def refresh(user, identity):
                 'runnable': bool(remote.get('isRunnable')), 'updated_at': info.get('updatedAt', ''),
                 'synced_at': now(), 'workflows': views, 'executions': executions,
                 'schedules': [{k: t.get(k) for k in ('id', 'name', 'cronExpression', 'timezone', 'enabled')} for t in remote.get('tasks', [])[:50]],
-                'warnings': list(dict.fromkeys(warnings)), 'can_edit': 'mutate_agent' in client._mcp()}
+                'warnings': list(dict.fromkeys(warnings)), 'can_edit': not library and 'mutate_agent' in client._mcp()}
     # Remote source fields are separate from legacy Fleet presentation fields.
     item = service.store().save({**old, 'remote_name': snapshot['name'], 'n8n_snapshot': snapshot}, identity=identity, version=old['version'])
     return {'item': item}
@@ -162,6 +163,8 @@ def refresh(user, identity):
 
 def edit(user, identity, raw):
     _, client, old = context(user, identity)
+    if old.get('n8n_library'):
+        raise HTTPException(422, 'The workflow library is an inventory, not an n8n agent.')
     if type(raw.get('version')) is not int or raw['version'] != old['version']:
         raise HTTPException(409, 'Fleet changed. Refresh before saving.')
     if set(raw) - {'version', 'config_hash', 'name', 'instructions'}:

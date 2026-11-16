@@ -209,7 +209,14 @@ def toggle(provider: str, raw: dict, user=Depends(owner_auth)):
             raise
     data.update(enabled=raw['enabled'], status='Connected' if data['credentials'] else 'Not connected')
     data.pop('error', None)
-    return store.save(user, provider, data)
+    saved = store.save(user, provider, data)
+    if provider == 'n8n' and raw['enabled']:
+        from modules.integrations.n8n import sync
+        try:
+            saved['discovery'] = sync(user)
+        except HTTPException as exc:
+            saved['discovery_warning'] = 'Connected, but inventory could not synchronize: ' + str(exc.detail)
+    return saved
 
 
 @api.post('/connectors/{provider}/disconnect')

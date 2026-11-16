@@ -33,7 +33,7 @@
       disconnect.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m19 5 3-3M2 22l3-3M6.3 20.3a2.4 2.4 0 0 0 3.4 0L12 18l-6-6-2.3 2.3a2.4 2.4 0 0 0 0 3.4ZM7.5 13.5 10 11m.5 5.5L13 14M18 12l2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0L12 6Z"/></svg>';
       const toggle=el('button',undefined,'connector-switch');toggle.type='button';toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked',String(item.enabled));toggle.setAttribute('aria-label','Enable '+item.name);
       const track=el('span',undefined,'connector-switch-track');track.setAttribute('aria-hidden','true');toggle.append(track);headerControls.append(toggle);card.append(header);
-      toggle.onclick=async()=>{toggle.disabled=true;try{if(!item.enabled&&item.status!=='Connected'){setup(item);}else{await api('/connectors/'+item.provider+'/toggle',{enabled:!item.enabled});await load();}}catch(e){document.querySelector('[data-integration-error]').textContent=e.message;}finally{toggle.disabled=false;}};
+      toggle.onclick=async()=>{toggle.disabled=true;try{if(!item.enabled&&item.status!=='Connected'){setup(item);}else{const result=await api('/connectors/'+item.provider+'/toggle',{enabled:!item.enabled});await load();document.querySelector('[data-integration-error]').textContent=result.discovery_warning||(result.discovery?.warnings||[]).join(' ');}}catch(e){document.querySelector('[data-integration-error]').textContent=e.message;}finally{toggle.disabled=false;}};
       const status=el('span',item.status,'connector-status');status.dataset.connected=String(item.status==='Connected');status.dataset.error=String(Boolean(item.error));status.setAttribute('role','status');card.append(status);
       if(item.account)card.append(el('p',item.account+' · '+item.auth_method),el('p','Connected since '+new Date(item.connected_since).toLocaleDateString()+' · Expiry: '+item.expiry));
       if(item.error)card.append(el('p',item.error));
@@ -45,11 +45,12 @@
         if(item.enabled){button(row,'Refresh Bots',async()=>{await api('/grokbot/sync',{});await load();});link(row,'View fleet','/agents');}
         if(item.last_sync)footer.append(el('p','Last discovery: '+new Date(item.last_sync).toLocaleString()+' · '+item.bot_count+' Bots'));
       }
-      if(item.enabled&&item.provider==='nod'){const footer=el('footer',undefined,'connector-footer');card.append(footer);button(controls(footer),'Open in Fleet',async()=>{const result=await api('/nod/link',{});location.href='/agents?agent='+encodeURIComponent(result.item.id);});link(footer,'Open Nod',item.site);}
+      if(item.enabled&&item.provider==='nod'){const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);button(row,'Open in Fleet',async()=>{const result=await api('/nod/link',{});location.href='/agents?agent='+encodeURIComponent(result.item.id);});link(row,'Open Nod',item.site);}
       if(item.enabled&&item.provider==='n8n'){
-        const footer=el('footer',undefined,'connector-footer');card.append(footer);
-        button(controls(footer),'Discover agents',async()=>{const view=dialog('Discover n8n agents'),query=field(view.body,'Agent search');button(controls(view.body),'Search and synchronize',async()=>{const result=await api('/n8n/sync',{query:query.value});view.body.append(el('p',result.imported+' agents synchronized. '+result.message));link(view.body,'Open agent fleet','/agents');});});
-        button(controls(footer),'Browse workflows',async()=>{const view=dialog('n8n workflows');let cursor='';const next=button(controls(view.body),'Load workflows',async()=>{const data=await api('/n8n/workflows?cursor='+encodeURIComponent(cursor));for(const workflow of data.items)link(view.body,workflow.name+(workflow.active?' · Active':''),item.site+'/workflow/'+encodeURIComponent(workflow.id));cursor=data.cursor;next.hidden=!cursor;});next.click();});
+        const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);
+        link(row,'View in Fleet','/agents?integration=n8n');
+        button(row,'Sync inventory',async()=>{const view=dialog('Synchronize n8n inventory'),query=field(view.body,'Agent search');button(controls(view.body),'Search and synchronize',async()=>{const result=await api('/n8n/sync',{query:query.value});view.body.append(el('p',result.imported+' agents and '+result.workflows+' workflows synchronized. '+(result.warnings||[]).join(' ')));link(view.body,'Open agent fleet','/agents?integration=n8n');});});
+        button(row,'Browse workflows',async()=>{const view=dialog('n8n workflows');let cursor='';const next=button(controls(view.body),'Load workflows',async()=>{const data=await api('/n8n/workflows?cursor='+encodeURIComponent(cursor));for(const workflow of data.items)link(view.body,workflow.name+(workflow.active?' · Active':''),item.site+'/workflow/'+encodeURIComponent(workflow.id));cursor=data.cursor;next.hidden=!cursor;});next.click();});
       }
       root.append(card);
     }}
@@ -135,7 +136,7 @@
       try{
         await api('/connectors/'+item.provider+'/save',payload());token.value='';if(mcp)mcp.value='';tested=false;status('Saved · Connected','success');
         lock(true);
-        button(row,'Enable connector',async()=>{await api('/connectors/'+item.provider+'/toggle',{enabled:true});d.close();await load();});
+        button(row,'Enable connector',async()=>{const result=await api('/connectors/'+item.provider+'/toggle',{enabled:true});d.close();await load();document.querySelector('[data-integration-error]').textContent=result.discovery_warning||(result.discovery?.warnings||[]).join(' ');});
         await load();
       }catch(e){tested=false;status('Save failed · Test again','error');lock(false);throw e;}
     });
