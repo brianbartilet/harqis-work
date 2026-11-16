@@ -65,7 +65,7 @@ services:
   # ── n8n ─────────────────────────────────────────────────────────────────────
 
   n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
+    image: docker.n8n.io/n8nio/n8n:2.47.7
     restart: unless-stopped
     ports:
       - "${HOST_PORT_N8N:-5678}:5678"
@@ -75,7 +75,7 @@ services:
       - ./scripts.mapping:/data/scripts.mapping:ro
     environment:
       TZ: Asia/Singapore
-      N8N_TIMEZONE: Asia/Singapore
+      GENERIC_TIMEZONE: Asia/Singapore
       # Tailscale: traffic is already encrypted at VPN layer, cookie security is redundant
       N8N_SECURE_COOKIE: "false"
       # Set these in .env/apps.env to match your Tailscale MagicDNS hostname
