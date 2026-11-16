@@ -43,6 +43,30 @@ def catalogue():
     return service.catalogue()
 
 
+@api.get('/entities')
+def connected_entities(user=Depends(owner_auth)):
+    from modules.agents.entities import snapshot
+    return snapshot(user)
+
+
+@api.post('/entities/associate')
+def associate_entity(raw: dict, user=Depends(owner_auth)):
+    from modules.agents.entities import associate
+    return checked(associate, user, raw.get('agent_id'), raw.get('entity_id'), raw.get('linked'))
+
+
+@api.post('/entities/merge')
+def merge_entities(raw: dict, user=Depends(owner_auth)):
+    from modules.agents.entities import merge
+    return checked(merge, user, raw.get('source'), raw.get('target'), raw.get('confirmed', False))
+
+
+@api.post('/entities/unmerge')
+def unmerge_entities(raw: dict, user=Depends(owner_auth)):
+    from modules.agents.entities import unmerge
+    return checked(unmerge, user, raw.get('merge_id'))
+
+
 @api.post('/connections/test')
 def test_connection(raw: dict, user=Depends(owner_auth)):
     from modules.agents import connections

@@ -65,6 +65,15 @@ class MockNod:
                 result = {'ok': True}
             elif method == 'GET' and path == '/api/state':
                 result = data
+            elif method == 'GET' and path == '/api/apps':
+                result = [
+                    {'slug': 'googlecalendar', 'name': 'Google Calendar', 'connectionId': 'demo-personal', 'accountName': 'Personal calendar', 'status': 'connected'},
+                    {'slug': 'googlecalendar', 'name': 'Google Calendar', 'connectionId': 'demo-work', 'accountName': 'Work calendar', 'status': 'connected'},
+                    {'slug': 'googlephotos', 'name': 'Google Photos', 'connectionId': 'demo-photos', 'accountName': 'Personal photos', 'status': 'connected'},
+                ]
+            elif method == 'GET' and path == '/api/schedules':
+                result = [{'id': 'demo-morning', 'title': 'Morning briefing', 'kind': 'recurring',
+                           'cron': '0 9 * * *', 'timeZone': 'Asia/Singapore', 'enabled': True, 'watch': ['demo-work']}]
             else:
                 raise HTTPException(404, 'Unsupported mock operation.')
             db.execute('INSERT INTO nod_demo VALUES (?,?) ON CONFLICT(owner) DO UPDATE SET payload=excluded.payload', (self.user, jsonlib.dumps(data)))

@@ -10,7 +10,7 @@ from modules.agents import service, projection
 from modules.agents.semantics import ENTITY_SEMANTICS
 from workflows.hfl.agent_fleet_store import now
 
-KINDS = {'connector': '#22d3ee', 'configuration': '#94a3b8', 'workflow': '#60a5fa', 'trigger': '#c4b5fd', 'application': '#fbbf24',
+KINDS = {'connector': '#22d3ee', 'account': '#fbbf24', 'schedule': '#c4b5fd', 'configuration': '#94a3b8', 'workflow': '#60a5fa', 'trigger': '#c4b5fd', 'application': '#fbbf24',
          'action': ENTITY_SEMANTICS['action']['color'], 'idea': ENTITY_SEMANTICS['idea']['color'], 'entry': '#77dcf5', 'file': '#70edbd',
          'link': '#93c5fd', 'feed': '#5eead4', 'hud': '#e9c96c', 'task': '#a7f3d0', 'subagent': '#deafff'}
 
@@ -114,6 +114,8 @@ def graph(user):
 
     from modules.integrations.n8n_fleet import extend_graph
     extend_graph(agents, nodes, edge, add)
+    from modules.agents.entities import extend_graph as entity_graph
+    entity_graph(user, agents, nodes, edge, add)
     for agent in agents:
         if agent.get('connector_provider') != 'nod':
             continue

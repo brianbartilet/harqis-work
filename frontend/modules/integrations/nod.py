@@ -87,7 +87,8 @@ def link(user, raw):
     item = fleet.initialize().save({**profile, 'connector_provider': 'nod', 'connector_user': user,
                                    'connector_site': data['site'], 'remote_id': 'owner',
                                    **({'mock': True, 'demo_user': user} if data.get('mock') else {})}, identity=identity, seed=True)
-    return {'item': item}
+    from modules.integrations.nod_entities import refresh
+    return {'item': item, 'discovery': refresh(user, identity)}
 
 
 def binding(data):

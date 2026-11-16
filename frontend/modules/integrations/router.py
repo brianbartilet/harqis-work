@@ -133,6 +133,9 @@ def nod_state(identity: str, user=Depends(owner_auth)):
 @api.post('/nod/agents/{identity}/{operation}')
 def nod_operation(identity: str, operation: str, raw: dict, user=Depends(owner_auth)):
     from modules.integrations import nod
+    if operation == 'refresh':
+        from modules.integrations.nod_entities import refresh
+        return refresh(user, identity)
     if operation == 'capture':
         return nod.capture(user, identity)
     if operation not in {'send', 'stop'}:
@@ -211,6 +214,12 @@ def toggle(provider: str, raw: dict, user=Depends(owner_auth)):
     data.update(enabled=raw['enabled'], status='Connected' if data['credentials'] else 'Not connected')
     data.pop('error', None)
     saved = store.save(user, provider, data)
+    if provider == 'nod' and raw['enabled']:
+        from modules.integrations.nod import link
+        try:
+            saved['discovery'] = link(user, {})['discovery']
+        except HTTPException:
+            saved['discovery_warning'] = 'Connected, but Nod inventory could not synchronize. Retry Open in Fleet.'
     if provider == 'n8n' and raw['enabled']:
         from modules.integrations.n8n import sync
         try:

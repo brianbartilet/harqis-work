@@ -8,6 +8,12 @@ const data={agents:[{id:'a',active:true,runtime:'hermes'},{id:'b',active:true,ru
     {id:'old',kind:'task',agent_ids:['b'],label:'Old result',created:'2025-01-01'},
     {id:'config',kind:'configuration',agent_ids:['a'],label:'Model'}],
   edges:[{source:'agent:a',target:'report'},{source:'agent:b',target:'old'},{source:'agent:a',target:'config'}]};
+test('discovered schedules survive date filters and retain both linked agents',()=>{
+  const schedule={id:'schedule',kind:'schedule',entity:true,agent_ids:['a','b'],label:'Morning briefing',workspace_ids:[]};
+  const result=filterFleet({...data,nodes:[...data.nodes,schedule],edges:[...data.edges,{source:'agent:a',target:'schedule'},{source:'agent:b',target:'schedule'}]}, {types:['schedule'],since:'2030-01-01'});
+  assert.deepEqual(result.nodes.map(n=>n.id),['agent:a','agent:b','schedule']);
+  assert.equal(result.links.length,2);
+});
 test('output search retains its parent and removes dangling edges',()=>{
   const result=filterFleet(data,{query:'release',types:['file','task']});
   assert.deepEqual(result.nodes.map(n=>n.id),['agent:a','report']);

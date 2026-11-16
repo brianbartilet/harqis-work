@@ -483,3 +483,5 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 .fleet-n8n-sync{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0 12px}
 .fleet-n8n .fleet-n8n-sync .fleet-status{margin:0;min-width:0}
 .fleet-n8n-sync .fleet-inspector-icon{flex:0 0 34px}
+
+.fleet-entity-controls{display:grid;gap:10px;padding:10px 0;overflow-wrap:anywhere}.fleet-entity-controls label{display:grid;gap:6px}.fleet-entity-controls input,.fleet-entity-controls select{width:100%;box-sizing:border-box;min-width:0}.fleet-entity-controls .fleet-check{display:flex;align-items:center}.fleet-entity-controls .fleet-check input{width:auto}.fleet-entity-option{display:grid;gap:6px;border:1px solid #334155;border-radius:8px;padding:10px}.fleet-entity-option small{color:#94a3b8}
