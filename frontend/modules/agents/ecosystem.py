@@ -10,7 +10,7 @@ from modules.agents import service, projection
 from modules.agents.semantics import ENTITY_SEMANTICS
 from workflows.hfl.agent_fleet_store import now
 
-KINDS = {'configuration': '#94a3b8', 'workflow': '#60a5fa', 'trigger': '#c4b5fd',
+KINDS = {'configuration': '#94a3b8', 'workflow': '#60a5fa', 'trigger': '#c4b5fd', 'application': '#fbbf24',
          'action': ENTITY_SEMANTICS['action']['color'], 'idea': ENTITY_SEMANTICS['idea']['color'], 'entry': '#77dcf5', 'file': '#70edbd',
          'link': '#93c5fd', 'feed': '#5eead4', 'hud': '#e9c96c', 'task': '#a7f3d0', 'subagent': '#deafff'}
 
@@ -112,6 +112,23 @@ def graph(user):
             if child in by_id:
                 edge('agent:' + aid, 'agent:' + child, 'delegates to')
 
+    from modules.integrations.n8n_fleet import extend_graph
+    extend_graph(agents, nodes, edge, add)
+    for agent in agents:
+        if agent.get('connector_provider') != 'nod':
+            continue
+        for event in service.store().events(agent['id']):
+            payload = event['payload']
+            if payload.get('kind') != 'nod-turn':
+                continue
+            task_id = event['id'] + ':task'
+            add(agent['id'], task_id, 'task', 'Nod · ' + payload['status'],
+                'Nod conversation turn · ' + str(payload.get('source', '')), payload['url'],
+                payload.get('started_at') or event['created'], relation='observes', state=payload['status'], mock=payload.get('mock', False))
+            add(agent['id'], event['id'], 'entry', 'Nod activity receipt',
+                'Preview receipt' if payload.get('mock') else 'Recorded in Activity Corpus' if event['delivered'] else 'Queued for Activity Corpus',
+                payload['url'], event['created'], state='preview' if payload.get('mock') else 'recorded' if event['delivered'] else 'pending', mock=payload.get('mock', False))
+            edge(task_id, event['id'], 'captured as')
     db = terminals()
     runs = db.list(limit=201)
     for run in runs[:200]:

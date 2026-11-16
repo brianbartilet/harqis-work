@@ -451,3 +451,15 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
  .fleet-has-drawers.fleet-has-selection .fleet-inspector{grid-column:2;grid-row:2;min-height:0}
  .fleet-has-drawers .fleet-hud-panel{padding-top:10px}
 }
+.fleet-n8n { min-width: 0; }
+.fleet-n8n p { overflow-wrap: anywhere; }
+.fleet-n8n label { display: grid; gap: .4rem; margin: .8rem 0; }
+.fleet-n8n input,.fleet-n8n textarea,.fleet-n8n select { width: 100%; box-sizing: border-box; }
+.fleet-n8n textarea { min-height: 10rem; }
+.fleet-n8n-card { border: 1px solid #334155; border-left: 3px solid #60a5fa; border-radius: .6rem; padding: .8rem; margin: .65rem 0; overflow-wrap: anywhere; }
+.fleet-n8n-card strong { display: block; margin-bottom: .45rem; }
+.fleet-n8n-instructions { white-space: pre-wrap; max-height: 14rem; overflow: auto; }
+
+.fleet-nod{min-width:0}.fleet-nod label{display:block}.fleet-nod textarea{box-sizing:border-box;width:100%;min-height:100px}.fleet-nod-text{white-space:pre-wrap;overflow-wrap:anywhere}.fleet-nod-messages{max-height:520px;overflow:auto}.fleet-nod-approval{border:1px solid #687fa5;padding:12px;border-radius:8px;margin:8px 0}.fleet-nod .fleet-actions{flex-wrap:wrap}.fleet-nod .fleet-n8n-card{overflow-wrap:anywhere}
+
+@media(max-width:900px){.fleet-has-selection .fleet-left-drawers[data-open=""] .fleet-drawer-nav{bottom:calc(40% + 8px)}}

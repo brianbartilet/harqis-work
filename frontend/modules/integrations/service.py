@@ -14,10 +14,17 @@ PROVIDERS = {'github': {'name': 'GitHub', 'capabilities': ['Create and link bran
 
 
 PROVIDERS['n8n'] = {'name': 'n8n', 'capabilities': ['Browse workflows', 'Discover first-class agents through MCP', 'Link agents to the fleet workspace']}
+PROVIDERS['nod'] = {'name': 'Nod', 'capabilities': ['Talk to your self-hosted Nod assistant', 'Review approvals and task status in Fleet', 'Capture completed activity in the corpus']}
 PROVIDERS['grokbot'] = {'name': 'Grok Bot', 'capabilities': ['Experimental account connection', 'Automatically discover Bots in the fleet', 'Browser sign-in or Cursor API key']}
 
 
 def connected(user, provider):
+    if provider == 'nod' and os.getenv('HARQIS_NOD_MOCK') == '1' and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1':
+        from modules.integrations.nod_demo import connection
+        return connection(user)
+    if provider == 'n8n' and os.getenv('HARQIS_N8N_MOCK') == '1' and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1':
+        from modules.integrations.n8n_demo import connection
+        return connection(user)
     data = store.get(user, provider, private=True)
     if not data.get('enabled') or data.get('status') != 'Connected':
         raise HTTPException(409, 'Enable a connected '+provider+' connector first.')

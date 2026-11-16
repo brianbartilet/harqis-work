@@ -147,7 +147,8 @@ def sync(user, query=''):
             old = None
         item = {**(old or defaults(remote['name'][:120])), 'runtime': 'n8n', 'classification': (old or {}).get('classification', 'workflows'), 'remote_id': remote['id'],
                 'connector_user': user, 'connector_site': connection['site'], 'remote_name': remote['name'][:120],
-                'published': bool(remote.get('published')), 'available_in_mcp': bool(remote.get('availableInMCP'))}
+                'published': bool(remote.get('published')), 'available_in_mcp': bool(remote.get('availableInMCP')),
+                **({'mock': True, 'demo_user': user} if connection.get('mock') else {})}
         if not old or any(old.get(k) != v for k, v in item.items()):
             item = db.save(item, identity=identity, version=old['version'] if old else None)
         imported.append(item['id'])

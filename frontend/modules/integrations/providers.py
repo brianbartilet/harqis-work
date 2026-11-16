@@ -28,6 +28,11 @@ def credentials(provider, raw):
     if not isinstance(token, str) or not 1 <= len(token.strip()) <= 4096 or any(ord(c) < 32 for c in token):
         raise HTTPException(422, 'Enter an API token.')
     result = {'token': token.strip()}
+    if provider == 'nod':
+        from modules.agents.nod_gateway import NodGateway
+        if not isinstance(raw.get('site'), str):
+            raise HTTPException(422, 'Enter a Nod server URL.')
+        result['site'] = NodGateway(url=raw['site'], key=result['token']).url
     if provider == 'n8n':
         from modules.integrations.n8n import site
         result['site'] = site(raw.get('site'))
@@ -53,6 +58,9 @@ def credentials(provider, raw):
 
 class Provider:
     def __new__(cls, provider, credentials):
+        if provider == 'nod':
+            from modules.integrations.nod import Nod
+            return Nod(credentials)
         if provider == 'n8n':
             from modules.integrations.n8n import N8n
             return N8n(credentials)

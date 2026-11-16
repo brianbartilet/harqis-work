@@ -4,6 +4,9 @@ Build → Integrations contains two groups: **Connectors** (user accounts used b
 frontend features) and **Workflows** (the existing host-configured `apps/` inventory).
 Existing `/applications`, documentation, and test-run URLs remain valid.
 
+For n8n agent linking, dependency graphs, draft synchronization and execution
+capture, see [n8n Fleet](N8N-FLEET.md).
+
 ## GitHub and Jira Cloud
 
 Each signed-in username has one connection per provider. Connect and test first,
@@ -124,3 +127,5 @@ cards retain their existing name and show the generic application icon.
 Settings writes require authentication and CSRF protection. Uploaded icons are
 served through authenticated routes; no additional packages or configuration are
 required. Tests are in `frontend/tests/test_application_display_settings.py`.
+
+See [Nod Fleet integration](NOD-FLEET.md) for connector setup, shared conversations, activity capture, preview, and deployment prerequisites.

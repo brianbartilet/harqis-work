@@ -67,7 +67,7 @@ def n8n_workflows(cursor: str = '', user=Depends(owner_auth)):
 
 @api.post('/n8n/agents/{identity}/refresh')
 def refresh_n8n_agent(identity: str, user=Depends(owner_auth)):
-    from modules.integrations.n8n import refresh_agent
+    from modules.integrations.n8n_fleet import refresh as refresh_agent
     from workflows.hfl.agent_fleet_store import FleetConflict
     try:
         return refresh_agent(user, identity)
@@ -75,14 +75,83 @@ def refresh_n8n_agent(identity: str, user=Depends(owner_auth)):
         raise HTTPException(409, str(exc)) from None
 
 
+@api.get('/n8n/agents')
+def n8n_agents(query: str = '', user=Depends(owner_auth)):
+    from modules.integrations.n8n_fleet import discover
+    if len(query) > 200:
+        raise HTTPException(422, 'Keep searches within 200 characters.')
+    return discover(user, query)
+
+
+@api.post('/n8n/link')
+def n8n_link(raw: dict, user=Depends(owner_auth)):
+    from modules.integrations.n8n_fleet import link
+    return link(user, raw)
+
+
+@api.post('/n8n/agents/{identity}/draft')
+def n8n_draft(identity: str, raw: dict, user=Depends(owner_auth)):
+    from modules.integrations.n8n_fleet import edit
+    from workflows.hfl.agent_fleet_store import FleetConflict
+    try:
+        return edit(user, identity, raw)
+    except FleetConflict as exc:
+        raise HTTPException(409, str(exc)) from None
+
+
+@api.post('/n8n/agents/{identity}/capture')
+def n8n_capture(identity: str, user=Depends(owner_auth)):
+    from modules.integrations.n8n_fleet import capture
+    return capture(user, identity)
+
+
+@api.post('/n8n/demo-change')
+def n8n_demo_change(user=Depends(owner_auth)):
+    from modules.integrations.n8n_demo import change
+    return change(user)
+
+
 @router.get('')
 def page(request: Request):
     return RedirectResponse('/applications', status_code=307)
 
 
+@api.post('/nod/link')
+def link_nod(raw: dict, user=Depends(owner_auth)):
+    from modules.integrations.nod import link
+    from modules.agents.router import checked
+    return checked(link, user, raw)
+
+
+@api.get('/nod/agents/{identity}/state')
+def nod_state(identity: str, user=Depends(owner_auth)):
+    from modules.integrations.nod import state
+    from fastapi.responses import JSONResponse
+    return JSONResponse(state(user, identity), headers={'Cache-Control': 'no-store'})
+
+
+@api.post('/nod/agents/{identity}/{operation}')
+def nod_operation(identity: str, operation: str, raw: dict, user=Depends(owner_auth)):
+    from modules.integrations import nod
+    if operation == 'capture':
+        return nod.capture(user, identity)
+    if operation not in {'send', 'stop'}:
+        raise HTTPException(404, 'Nod operation unavailable.')
+    return getattr(nod, operation)(user, identity, raw)
+
+
 @api.get('/connectors')
 def connectors(user=Depends(owner_auth)):
     items = [{**info, **store.get(user, key)} for key,info in service.PROVIDERS.items()]
+    import os
+    if os.getenv('HARQIS_NOD_MOCK') == '1' and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1':
+        items = [{**item, 'status': 'Connected', 'enabled': True, 'site': 'https://nod.example.test',
+                  'account': 'Mock Nod assistant', 'auth_method': 'Preview', 'mock': True}
+                 if item['provider'] == 'nod' else item for item in items]
+    if os.getenv('HARQIS_N8N_MOCK') == '1' and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1':
+        items = [{**item, 'status': 'Connected', 'enabled': True, 'site': 'https://n8n.example.test',
+                  'account': 'Mock n8n instance', 'auth_method': 'Preview · no credentials', 'mock': True}
+                 if item['provider'] == 'n8n' else item for item in items]
     links = []
     for item in items:
         if item.get('enabled') and item.get('status') == 'Connected':
@@ -114,6 +183,8 @@ def connect(provider: str, raw: dict, user=Depends(owner_auth)):
                 'expiry':'Unknown', 'site':clean.get('site', '')}
     if provider == 'n8n':
         metadata['auth_method'] = 'API key' + (' + MCP token' if clean.get('mcp_token') else '')
+    if provider == 'nod':
+        metadata['auth_method'] = 'Nod server token'
     if previous.get('account_id') == identity['account_id'] and previous.get('site','') == metadata['site']:
         metadata['connected_since'] = previous.get('connected_since', metadata['connected_since'])
     return store.save(user, provider, metadata, clean)

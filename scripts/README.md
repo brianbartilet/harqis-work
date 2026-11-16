@@ -14,6 +14,7 @@ Operational scripts for **harqis-work**, organised by purpose:
 
 | Path | Purpose |
 |---|---|
+| `n8n_preview.py` | Run an isolated mock n8n/Nod Fleet demo: `python scripts/n8n_preview.py --port 8094`, then open `/preview-login` or `/preview-nod`. No live agent calls or corpus delivery. |
 | `knowledge_preview.py` | Launch the corpus entities localhost preview, isolated enrichment worker, or manual backfill. |
 | [`launch.py`](#launchpy) | Single-process launcher — runs one daemon in the foreground (`worker`, `scheduler`, `flower`, `frontend`, `mcp`, `kanban`, `trigger-hud-tasks`, `push-config`, `serve-config`). |
 | [`deploy.py`](#deploypy) | Multi-daemon orchestrator — reads `machines.toml` from the repo root, brings the whole stack up/down, optionally registers OS auto-start units. |

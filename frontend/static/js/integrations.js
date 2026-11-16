@@ -45,6 +45,7 @@
         if(item.enabled){button(row,'Refresh Bots',async()=>{await api('/grokbot/sync',{});await load();});link(row,'View fleet','/agents');}
         if(item.last_sync)footer.append(el('p','Last discovery: '+new Date(item.last_sync).toLocaleString()+' · '+item.bot_count+' Bots'));
       }
+      if(item.enabled&&item.provider==='nod'){const footer=el('footer',undefined,'connector-footer');card.append(footer);button(controls(footer),'Open in Fleet',async()=>{const result=await api('/nod/link',{});location.href='/agents?agent='+encodeURIComponent(result.item.id);});link(footer,'Open Nod',item.site);}
       if(item.enabled&&item.provider==='n8n'){
         const footer=el('footer',undefined,'connector-footer');card.append(footer);
         button(controls(footer),'Discover agents',async()=>{const view=dialog('Discover n8n agents'),query=field(view.body,'Agent search');button(controls(view.body),'Search and synchronize',async()=>{const result=await api('/n8n/sync',{query:query.value});view.body.append(el('p',result.imported+' agents synchronized. '+result.message));link(view.body,'Open agent fleet','/agents');});});
@@ -103,7 +104,7 @@
       body.append(el('p','Create a fine-grained personal access token for the selected repositories. Grant Contents: read/write and Pull requests: read/write for branch and PR operations. Organization approval may be required. Account MFA stays on GitHub.'));
       link(body,'GitHub token setup instructions','https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens');
       body.append(el('p','Alternative for a later release: a GitHub App installation with short-lived tokens.'));
-    }else if(item.provider==='n8n'){
+    }else if(item.provider==='nod'){body.append(el('p','Connect your self-hosted Nod server using its NOD_AUTH_TOKEN. Your desktop app’s private local runtime is separate. Messages in Fleet can start work using Nod’s connected apps.'));link(body,'Nod server setup','https://nod.n8n.io/docs/deploy/self-host/');}else if(item.provider==='n8n'){
       body.append(el('p','Use an n8n API key for workflows. Add a separate instance-level MCP token to discover first-class agents. Enable Agents and MCP access in n8n.'));
       link(body,'n8n connection documentation','https://docs.n8n.io/connect/connect-to-n8n-mcp-server/');
     }else{
@@ -111,10 +112,10 @@
       link(body,'Atlassian token setup instructions','https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/');
       body.append(el('p','Alternative for a later release: OAuth 2.0 authorization with refresh tokens.'));
     }
-    const site=['jira','n8n'].includes(item.provider)?field(body,item.provider==='n8n'?'n8n instance URL':'Jira Cloud site','url',item.site||''):null;
+    const site=['jira','n8n','nod'].includes(item.provider)?field(body,item.provider==='nod'?'Nod server URL':item.provider==='n8n'?'n8n instance URL':'Jira Cloud site','url',item.site||''):null;
     const email=item.provider==='jira'?field(body,'Atlassian email','email'):null;
     const cloud=item.provider==='jira'?field(body,'Cloud ID (scoped tokens only)'):null;
-    const token=field(body,'API token','password');token.autocomplete='new-password';token.maxLength=4096;
+    const token=field(body,item.provider==='nod'?'Nod server token':'API token','password');token.autocomplete='new-password';token.maxLength=4096;
     const mcp=item.provider==='n8n'?field(body,'MCP token (optional)','password'):null;
     const state=el('span','Not tested','connector-status');state.setAttribute('role','status');state.setAttribute('aria-live','polite');body.append(state);
     const row=controls(body),inputs=[token,site,email,cloud,mcp].filter(Boolean);

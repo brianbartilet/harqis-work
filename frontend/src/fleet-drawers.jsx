@@ -15,7 +15,7 @@ export function FleetDrawers({work,hud,open:controlledOpen,onOpenChange}){
    </button>)}
   </nav>
   {[['work','Agent work',work],['hud','HUD',hud]].map(([id,label,content])=><section key={id} id={'fleet-'+id+'-drawer'} className="fleet-left-drawer" aria-label={label+' drawer'} hidden={open!==id}>
-
+   <div className="fleet-drawer-heading"><h2>{label}</h2><button type="button" aria-label={'Close '+label+' drawer'} onClick={close}>×</button></div>
    <div className="fleet-drawer-content">{content}</div>
   </section>)}
  </div>;
