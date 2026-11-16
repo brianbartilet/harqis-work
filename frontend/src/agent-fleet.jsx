@@ -209,7 +209,7 @@ function FleetGraph({data,loaded,selected,select,agents,animation,animationMenuO
     const layer=avatarLayer.current;layer.replaceChildren();avatarNodes.current.clear();
     for(const node of model.nodes.filter(n=>['agent','owner','connector'].includes(n.kind))){
       const agent=node.kind==='connector'?connectorIdentity(node):node.kind==='owner'?{name:node.label,color:node.color}:agentMap.get(node.agent_id);if(!agent)continue;
-      const avatar=globalThis.AgentAvatars.create(agent,{interactive:false});
+      const avatar=createFleetAvatar(agent);
       if(node.kind==='owner'&&node.avatar_url){const img=document.createElement('img');img.src=node.avatar_url;img.alt='';img.addEventListener('error',()=>img.remove(),{once:true});avatar.append(img);}
       avatar.style.width=avatar.style.height=Math.max(12,node.radius*2-4)+'px';
       avatar.style.fontSize=Math.max(8,node.radius*.8)+'px';
