@@ -123,3 +123,16 @@ test('childless agent and owner are larger than entities in dense graphs',()=>{
  assert.equal(result.nodes.find(n=>n.kind==='owner').radius,16);
  assert.equal(result.nodes.find(n=>n.kind==='entry').radius,4.5);
 });
+
+
+test('connector hubs have their own type filter without hiding their workflows or real agents',()=>{
+ const input={agents:[{id:'library',active:true,n8n_library:true,runtime:'n8n'},{id:'butler',active:true,runtime:'n8n'}],nodes:[{id:'agent:library',agent_id:'library',agent_ids:['library'],kind:'connector',source:'n8n',label:'n8n',workspace_ids:[]},{id:'agent:butler',agent_id:'butler',kind:'agent',label:'Butler'},{id:'workflow',kind:'workflow',source:'n8n',agent_ids:['library'],workspace_ids:[]}],edges:[{source:'agent:library',target:'workflow'},{source:'agent:library',target:'agent:butler'}]};
+ const options={types:['connector','workflow'],since:'2099-01-01',spaces:['work'],service:'n8n'};
+ const visible=filterFleet(input,options);
+ assert.equal(visible.nodes.filter(n=>n.kind==='agent').length,1);
+ assert.equal(visible.nodes.filter(n=>n.kind==='connector').length,1);
+ assert.equal(visible.links.length,2);
+ const hidden=filterFleet(input,{...options,types:['workflow']});
+ assert.deepEqual(hidden.nodes.map(n=>n.id),['agent:butler','workflow']);
+ assert.equal(hidden.links.length,0);
+});

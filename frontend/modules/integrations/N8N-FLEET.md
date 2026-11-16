@@ -88,3 +88,10 @@ Unassigned definitions remain visible across Spaces. The n8n tab can hide inacti
 and archived workflows; both are shown initially. These switches are saved per user in the current browser
 and restored on reload. These filters also apply to the
 compact workflow list. Dependency details expand on demand.
+
+
+The instance workflow library is displayed as an **n8n connector** hub, with its own
+Connector entity filter and connector list. Real remote agents remain agent hubs.
+The connector links to its workflows and the agents exposed by the same account.
+Its inspector retains n8n inventory and visibility controls, without agent profile,
+activation or execution controls. Existing inventory storage and links are retained.

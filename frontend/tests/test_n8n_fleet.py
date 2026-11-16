@@ -172,3 +172,16 @@ def test_archived_workflow_and_navigation_validation():
     for value in ['javascript:alert(1)', 'http://user:password@host', 'http://host/path', 'http://host:bad']:
         with pytest.raises(HTTPException):
             browser_origin(value)
+
+
+def test_library_projects_as_connector_with_real_agent_relationship(linked):
+    from modules.integrations.n8n import sync
+    from modules.agents.ecosystem import graph
+    result = sync('alice')
+    data = graph('alice')
+    hub = next(n for n in data['nodes'] if n['id'] == 'agent:' + result['library_id'])
+    assert hub['kind'] == 'connector' and hub['label'] == 'n8n'
+    assert any(t['id'] == 'connector' for t in data['types'])
+    assert any(n['kind'] == 'agent' and n['agent_id'] == linked['id'] for n in data['nodes'])
+    assert any(e['source'] == hub['id'] and e['target'] == 'agent:' + linked['id'] and e['relation'] == 'provides' for e in data['edges'])
+    assert any(e['source'] == hub['id'] and ':workflow:' in e['target'] for e in data['edges'])

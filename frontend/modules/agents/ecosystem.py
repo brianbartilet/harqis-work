@@ -10,7 +10,7 @@ from modules.agents import service, projection
 from modules.agents.semantics import ENTITY_SEMANTICS
 from workflows.hfl.agent_fleet_store import now
 
-KINDS = {'configuration': '#94a3b8', 'workflow': '#60a5fa', 'trigger': '#c4b5fd', 'application': '#fbbf24',
+KINDS = {'connector': '#22d3ee', 'configuration': '#94a3b8', 'workflow': '#60a5fa', 'trigger': '#c4b5fd', 'application': '#fbbf24',
          'action': ENTITY_SEMANTICS['action']['color'], 'idea': ENTITY_SEMANTICS['idea']['color'], 'entry': '#77dcf5', 'file': '#70edbd',
          'link': '#93c5fd', 'feed': '#5eead4', 'hud': '#e9c96c', 'task': '#a7f3d0', 'subagent': '#deafff'}
 
@@ -205,10 +205,20 @@ def graph(user):
         configured = len(set(agent['workflows'] + agent['triggers']))
         cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
         recent = sum(n['kind'] not in {'configuration', 'hud'} and (n.get('created', '') >= cutoff or n['kind'] in {'workflow', 'trigger'}) for n in related)
-        nodes['agent:' + agent['id']] = {'id': 'agent:' + agent['id'], 'kind': 'agent', 'label': agent['name'],
+        nodes['agent:' + agent['id']] = {'id': 'agent:' + agent['id'], 'kind': 'connector' if agent.get('n8n_library') else 'agent',
+            'label': 'n8n' if agent.get('n8n_library') else agent['name'], 'source': agent['runtime'],
             'agent_id': agent['id'], 'agent_ids': [agent['id']], 'summary': agent['description'], 'color': agent['color'] if agent['active'] else '#94a3b8',
             'workspace_ids': agent['workspace_ids'], 'created': agent['created_at'],
             'activity_count': recent, 'configured_count': configured, 'state': agent['state'], 'mock': agent.get('mock', False)}
+    for connector in (a for a in agents if a.get('n8n_library')):
+        hub = nodes['agent:' + connector['id']]
+        hub.update(state='Connected', color=KINDS['connector'], url='/applications',
+                   summary='Connected n8n instance: workflows, dependencies and execution history.')
+        for remote in agents:
+            if (not remote.get('n8n_library') and remote.get('runtime') == 'n8n'
+                    and remote.get('connector_user') == connector.get('connector_user')
+                    and remote.get('connector_site') == connector.get('connector_site')):
+                edge(hub['id'], 'agent:' + remote['id'], 'provides')
     from modules.agents.corpus_projection import add_owner
     add_owner(nodes, edges)
     return {'agents': agents, 'nodes': list(nodes.values()), 'edges': [e for e in edges.values() if e['source'] in nodes and e['target'] in nodes],

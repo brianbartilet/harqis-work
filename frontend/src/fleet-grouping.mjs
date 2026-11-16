@@ -2,7 +2,7 @@ import {actionStatusNames} from './action-status.mjs';
 // Presentation only: canonical provenance edges remain unchanged.
 export function groupFleet(data,{showStatus=true}={}){
  const nodes=data.nodes.map(n=>({...n})),links=data.links.map(e=>({...e}));
- const hubs=nodes.filter(n=>['agent','owner'].includes(n.kind)).sort((a,b)=>a.id.localeCompare(b.id));
+ const hubs=nodes.filter(n=>['agent','owner','connector'].includes(n.kind)).sort((a,b)=>a.id.localeCompare(b.id));
  const ids=new Set(hubs.map(n=>n.id)),owner=hubs.find(n=>n.kind==='owner')?.id;
  const parent=n=>ids.has('agent:'+n.assigned_agent_id)?'agent:'+n.assigned_agent_id:(n.agent_ids||[]).map(id=>'agent:'+id).filter(id=>ids.has(id)).sort()[0]||owner;
  const groups=new Map();
