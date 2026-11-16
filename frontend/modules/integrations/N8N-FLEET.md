@@ -84,6 +84,6 @@ for example `http://harqis-ones-mac-mini:5678`, while the instance API address r
 after changing the browser URL to update existing links.
 
 Workflow definitions and their dependency nodes are independent of activity dates.
-Unassigned definitions remain visible across Spaces. Fleet Filters can hide inactive
+Unassigned definitions remain visible across Spaces. The n8n tab can hide inactive
 and archived workflows; both are shown initially. These filters also apply to the
 compact workflow list. Dependency details expand on demand.
