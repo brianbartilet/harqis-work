@@ -22,6 +22,24 @@ def site(value):
     return value
 
 
+def browser_origin(value):
+    """Navigation only: this address is never used for authenticated API calls."""
+    if not isinstance(value, str):
+        raise HTTPException(422, 'Enter a browser URL.')
+    value = value.strip().rstrip('/')
+    if not value:
+        return ''
+    try:
+        parsed = urlsplit(value)
+        parsed.port
+        if (parsed.scheme not in {'http', 'https'} or not parsed.hostname or parsed.username or parsed.password
+                or parsed.path or parsed.query or parsed.fragment or '\\' in value or any(c.isspace() for c in value)):
+            raise ValueError()
+    except ValueError:
+        raise HTTPException(422, 'Use an HTTP or HTTPS browser origin without a path or credentials.') from None
+    return value
+
+
 class N8n:
     def __init__(self, credentials):
         self.credentials, self.base = credentials, site(credentials['site'])

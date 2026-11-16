@@ -146,3 +146,29 @@ def test_rest_only_sync_still_imports_workflows(linked, monkeypatch):
     assert result['imported'] == 0
     assert result['workflows'] >= 3
     assert result['warnings']
+
+
+def test_browser_origin_does_not_change_api_address(linked, monkeypatch):
+    original = fleet.connected
+    def connected(user, provider):
+        connection, client = original(user, provider)
+        return {**connection, 'public_url': 'http://harqis-ones-mac-mini:5678'}, client
+    monkeypatch.setattr(fleet, 'connected', connected)
+    fresh = fleet.refresh('alice', linked['id'])['item']
+    assert fresh['connector_site'] == 'https://n8n.example.test'
+    snapshot = fresh['n8n_snapshot']
+    assert snapshot['url'].startswith('http://harqis-ones-mac-mini:5678/')
+    assert all(w['url'].startswith('http://harqis-ones-mac-mini:5678/workflow/') for w in snapshot['workflows'])
+    assert all(r['url'].startswith('http://harqis-ones-mac-mini:5678/workflow/') for r in snapshot['executions'])
+
+
+def test_archived_workflow_and_navigation_validation():
+    from modules.integrations.n8n import browser_origin
+    from modules.agents.ecosystem import safe_url
+    view = fleet.workflow_view({'id': 'one', 'isArchived': True, 'active': False}, 'http://host:5678')
+    assert view['archived'] and not view['active']
+    assert safe_url(view['url'], allow_http=True) == view['url']
+    assert safe_url(view['url']) == ''
+    for value in ['javascript:alert(1)', 'http://user:password@host', 'http://host/path', 'http://host:bad']:
+        with pytest.raises(HTTPException):
+            browser_origin(value)

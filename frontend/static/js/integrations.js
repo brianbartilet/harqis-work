@@ -50,7 +50,7 @@
         const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);
         link(row,'View in Fleet','/agents?integration=n8n');
         button(row,'Sync inventory',async()=>{const view=dialog('Synchronize n8n inventory'),query=field(view.body,'Agent search');button(controls(view.body),'Search and synchronize',async()=>{const result=await api('/n8n/sync',{query:query.value});view.body.append(el('p',result.imported+' agents and '+result.workflows+' workflows synchronized. '+(result.warnings||[]).join(' ')));link(view.body,'Open agent fleet','/agents?integration=n8n');});});
-        button(row,'Browse workflows',async()=>{const view=dialog('n8n workflows');let cursor='';const next=button(controls(view.body),'Load workflows',async()=>{const data=await api('/n8n/workflows?cursor='+encodeURIComponent(cursor));for(const workflow of data.items)link(view.body,workflow.name+(workflow.active?' · Active':''),item.site+'/workflow/'+encodeURIComponent(workflow.id));cursor=data.cursor;next.hidden=!cursor;});next.click();});
+        button(row,'Browse workflows',async()=>{const view=dialog('n8n workflows');let cursor='';const next=button(controls(view.body),'Load workflows',async()=>{const data=await api('/n8n/workflows?cursor='+encodeURIComponent(cursor));for(const workflow of data.items)link(view.body,workflow.name+(workflow.active?' · Active':''),(item.public_url||item.site)+'/workflow/'+encodeURIComponent(workflow.id));cursor=data.cursor;next.hidden=!cursor;});next.click();});
       }
       root.append(card);
     }}
@@ -114,16 +114,17 @@
       body.append(el('p','Alternative for a later release: OAuth 2.0 authorization with refresh tokens.'));
     }
     const site=['jira','n8n','nod'].includes(item.provider)?field(body,item.provider==='nod'?'Nod server URL':item.provider==='n8n'?'n8n instance URL':'Jira Cloud site','url',item.site||''):null;
+    const publicUrl=item.provider==='n8n'?field(body,'Browser URL (optional; used for opening n8n)','url',item.public_url||''):null;
     const email=item.provider==='jira'?field(body,'Atlassian email','email'):null;
     const cloud=item.provider==='jira'?field(body,'Cloud ID (scoped tokens only)'):null;
     const token=field(body,item.provider==='nod'?'Nod server token':'API token','password');token.autocomplete='new-password';token.maxLength=4096;
     const mcp=item.provider==='n8n'?field(body,'MCP token (optional)','password'):null;
     const state=el('span','Not tested','connector-status');state.setAttribute('role','status');state.setAttribute('aria-live','polite');body.append(state);
-    const row=controls(body),inputs=[token,site,email,cloud,mcp].filter(Boolean);
+    const row=controls(body),inputs=[token,site,email,cloud,mcp,publicUrl].filter(Boolean);
     let tested=false,busy=false;
     function status(text,tone){state.textContent=text;state.dataset.tone=tone;}
     function lock(value){busy=value;inputs.forEach(input=>input.disabled=value);test.disabled=value;save.disabled=value||!tested;}
-    const payload=()=>({token:token.value,...(site?{site:site.value}:{}),...(email?{email:email.value,cloud_id:cloud.value}:{}),...(mcp?{mcp_token:mcp.value}:{})});
+    const payload=()=>({token:token.value,...(site?{site:site.value}:{}),...(email?{email:email.value,cloud_id:cloud.value}:{}),...(mcp?{mcp_token:mcp.value}:{}),...(publicUrl?{public_url:publicUrl.value}:{})});
     const test=button(row,'Test',async()=>{
       error.textContent='';tested=false;lock(true);status('Testing…','pending');
       try{await api('/connectors/'+item.provider+'/test',payload());tested=true;status('Test passed · Not saved','success');}

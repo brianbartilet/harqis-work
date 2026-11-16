@@ -26,11 +26,11 @@ test('orb radii mirror Activity Graph and shrink when connections are filtered',
   const all=filterFleet(data,{types:['file','task','configuration']});
   const agent=all.nodes.find(n=>n.id==='agent:a');
   assert.equal(agent.visibleDegree,2);
-  assert.equal(agent.radius,10+4*Math.log2(3));
+  assert.equal(agent.radius,16+4*Math.log2(3));
   const narrowed=filterFleet(data,{types:['file']});
-  assert.equal(narrowed.nodes.find(n=>n.id==='agent:a').radius,14);
+  assert.equal(narrowed.nodes.find(n=>n.id==='agent:a').radius,20);
   assert.ok(agent.radius>narrowed.nodes.find(n=>n.id==='agent:a').radius);
-  assert.equal(narrowed.nodes.find(n=>n.id==='agent:b').radius,10);
+  assert.equal(narrowed.nodes.find(n=>n.id==='agent:b').radius,16);
   assert.equal(data.nodes[0].radius,undefined,'source records stay unchanged');
 });
 
@@ -40,8 +40,8 @@ test('fleet outputs use compact activity radii at both density thresholds',()=>{
   const dense={agents:data.agents,nodes:[data.nodes[0],...Array.from({length:35},(_,i)=>({id:'hud:'+i,kind:'hud',agent_ids:['a'],label:'HUD '+i}))],edges:Array.from({length:35},(_,i)=>({source:'agent:a',target:'hud:'+i,relation:'monitors'}))};
   const result=filterFleet(dense,{types:['hud']});
   assert.equal(result.nodes.find(n=>n.kind==='hud').radius,4.5);
-  assert.equal(result.nodes.find(n=>n.kind==='agent').radius,4+4*Math.log2(36));
-  assert.equal(filterFleet(dense,{types:[]}).nodes[0].radius,10);
+  assert.equal(result.nodes.find(n=>n.kind==='agent').radius,16+4*Math.log2(36));
+  assert.equal(filterFleet(dense,{types:[]}).nodes[0].radius,16);
 });
 
 test('unassigned intent survives without inventing an agent edge',()=>{
@@ -107,4 +107,19 @@ test('connected n8n agent with no outputs remains in the main fleet',()=>{
  assert.deepEqual(filterFleet(input,options).nodes.map(n=>n.id),['agent:a','agent:b','agent:n8n']);
  assert.deepEqual(filterFleet(input,{...options,query:'n8n'}).nodes.map(n=>n.id),['agent:n8n']);
  assert.deepEqual(filterFleet(input,{...options,service:'n8n'}).nodes.map(n=>n.id),['agent:n8n']);
+});
+
+
+test('n8n definitions survive dates and hide archived or inactive workflows on demand',()=>{
+ const input={agents:[{id:'a',active:true}],nodes:[{id:'agent:a',agent_id:'a',kind:'agent'},...['active','inactive','archived'].map(state=>({id:state,kind:'workflow',source:'n8n',state,agent_ids:['a'],workspace_ids:[],created:'2020-01-01'}))],edges:[]};
+ const filters={types:['workflow'],since:'2099-01-01',spaces:['other']};
+ assert.equal(filterFleet(input,filters).nodes.length,4);
+ assert.deepEqual(filterFleet(input,{...filters,hideInactiveWorkflows:true,hideArchivedWorkflows:true}).nodes.map(n=>n.id),['agent:a','active']);
+});
+test('childless agent and owner are larger than entities in dense graphs',()=>{
+ const input={agents:[{id:'a',active:true}],nodes:[{id:'agent:a',agent_id:'a',kind:'agent'},{id:'owner',kind:'owner'},...Array.from({length:40},(_,i)=>({id:'entry'+i,kind:'entry'}))],edges:[]};
+ const result=filterFleet(input,{types:['entry']});
+ assert.equal(result.nodes.find(n=>n.kind==='agent').radius,16);
+ assert.equal(result.nodes.find(n=>n.kind==='owner').radius,16);
+ assert.equal(result.nodes.find(n=>n.kind==='entry').radius,4.5);
 });

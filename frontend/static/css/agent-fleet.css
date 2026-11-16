@@ -463,3 +463,15 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 .fleet-nod{min-width:0}.fleet-nod label{display:block}.fleet-nod textarea{box-sizing:border-box;width:100%;min-height:100px}.fleet-nod-text{white-space:pre-wrap;overflow-wrap:anywhere}.fleet-nod-messages{max-height:520px;overflow:auto}.fleet-nod-approval{border:1px solid #687fa5;padding:12px;border-radius:8px;margin:8px 0}.fleet-nod .fleet-actions{flex-wrap:wrap}.fleet-nod .fleet-n8n-card{overflow-wrap:anywhere}
 
 @media(max-width:900px){.fleet-has-drawers .fleet-left-drawers[data-open=""] .fleet-drawer-nav{bottom:calc(40% + 8px)}}
+
+.fleet-n8n-toolbar{gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.fleet-n8n-toolbar>:is(button,a){display:inline-flex;align-items:center;justify-content:center;padding:6px 8px;border:1px solid #334155;border-radius:7px;background:#0f1c2e;color:#dbe7f5;font-size:11px;line-height:16px;text-decoration:none;white-space:nowrap}
+.fleet-n8n .fleet-status{font-size:11px;color:#94a3b8;margin:6px 0 12px}
+.fleet-n8n-workflow{padding:9px 0;border-bottom:1px solid #293c53}
+.fleet-n8n-workflow>div{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.fleet-n8n-workflow a{font-size:13px;font-weight:500;overflow-wrap:anywhere}
+.fleet-n8n-workflow .fleet-badge{font-size:10px;flex-shrink:0;margin:0}
+.fleet-n8n-workflow small,.fleet-n8n-workflow summary{display:block;font-size:11px;color:#94a3b8;line-height:1.6}
+.fleet-n8n-workflow summary{display:list-item;cursor:pointer}
+.fleet-n8n-workflow details{margin-top:3px}
+.fleet-n8n-workflow details p{font-size:11px;margin:4px 0}

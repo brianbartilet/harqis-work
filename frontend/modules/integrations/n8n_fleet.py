@@ -65,7 +65,7 @@ def workflow_view(raw, origin):
             if isinstance(ref, str) and ref and not ref.startswith('='):
                 children.append(ref)
     identity = str(raw['id'])
-    return {'id': identity, 'name': str(raw.get('name', identity))[:200], 'active': bool(raw.get('active')),
+    return {'id': identity, 'name': str(raw.get('name', identity))[:200], 'active': bool(raw.get('active')), 'archived': bool(raw.get('isArchived')),
             'updated_at': raw.get('updatedAt', ''), 'url': origin + '/workflow/' + quote(identity, safe=''),
             'applications': list(apps.values()), 'schedules': schedules, 'subworkflows': children,
             'node_count': len(raw.get('nodes', []))}
@@ -112,6 +112,8 @@ def link(user, raw):
 def refresh(user, identity):
     connection, client, old = context(user, identity)
     library = bool(old.get('n8n_library'))
+    from modules.integrations.n8n import browser_origin
+    origin = browser_origin(connection.get('public_url', '')) or connection['site']
     remote = {'agent': {'name': 'n8n workflow library'}, 'config': {}} if library else client.agent(old['remote_id'])
     config, info = remote.get('config', {}), remote.get('agent', {})
     inventory, bounded = workflows(client)
@@ -123,14 +125,14 @@ def refresh(user, identity):
     for ref in refs:
         if not any(w.get('name') == ref or w.get('id') == ref for w in selected):
             warnings.append('A workflow tool could not be resolved from the accessible catalogue.')
-    views = [workflow_view(w, connection['site']) for w in selected]
+    views = [workflow_view(w, origin) for w in selected]
     # Include referenced sub-workflows, with a finite depth/cycle bound.
     visited = {w['id'] for w in views}
     for view in views:
         for child in view['subworkflows']:
             found = next((w for w in inventory if w['id'] == child), None)
             if found and child not in visited and len(views) < 100:
-                views.append(workflow_view(found, connection['site'])); visited.add(child)
+                views.append(workflow_view(found, origin)); visited.add(child)
             elif not found:
                 warnings.append('A sub-workflow is unavailable or dynamically resolved.')
     executions = []
@@ -143,13 +145,13 @@ def refresh(user, identity):
                 executions.append({'id': str(execution['id']), 'workflow_id': view['id'], 'workflow_name': view['name'],
                                    'status': str(execution.get('status', 'unknown'))[:50],
                                    'started_at': execution.get('startedAt'), 'stopped_at': execution.get('stoppedAt'),
-                                   'url': connection['site'] + '/workflow/' + quote(view['id'], safe='') + '/executions/' + quote(str(execution['id']), safe='')})
+                                   'url': origin + '/workflow/' + quote(view['id'], safe='') + '/executions/' + quote(str(execution['id']), safe='')})
             if page.get('nextCursor'):
                 warnings.append('Showing the latest 20 executions per workflow; older history is not imported.')
         except HTTPException:
             warnings.append('Execution history unavailable. Check executions:read permission.')
     snapshot = {'name': str(info.get('name', config.get('name', old['remote_name'])))[:120],
-                'url': (connection['site'].rstrip('/') + '/projects/' + quote(str(info['projectId']), safe='') + '/agents/' + quote(old['remote_id'], safe='')) if info.get('projectId') else '',
+                'url': (origin + '/projects/' + quote(str(info['projectId']), safe='') + '/agents/' + quote(old['remote_id'], safe='')) if info.get('projectId') else '',
                 'instructions': str(config.get('instructions', ''))[:20000],
                 'config_hash': remote.get('configHash', ''), 'published': bool(info.get('published')),
                 'runnable': bool(remote.get('isRunnable')), 'updated_at': info.get('updatedAt', ''),
@@ -216,7 +218,7 @@ def extend_graph(agents, nodes, edge, add):
                 relation='observes' if kind == 'task' else 'linked', source='n8n', mock=agent.get('mock', False), **extra)
             return identity
         for workflow in snapshot['workflows']:
-            wid = put('workflow', workflow['id'], workflow['name'], str(workflow['node_count']) + ' nodes · dependency types inferred from workflow definitions', workflow['url'], state='active' if workflow['active'] else 'draft')
+            wid = put('workflow', workflow['id'], workflow['name'], str(workflow['node_count']) + ' nodes · dependency types inferred from workflow definitions', workflow['url'], state='archived' if workflow.get('archived') else 'active' if workflow['active'] else 'inactive')
             for app in workflow['applications']:
                 appid = put(app.get('kind', 'application'), app['id'], app['name'], 'Workflow node type · connection health not tested')
                 edge(wid, appid, 'uses')

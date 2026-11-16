@@ -15,8 +15,9 @@ choose a Space. Existing connections can use **Sync inventory** without reconnec
 Open **Agents Fleet** directly to see all available connected agents. Agent hubs
 remain visible across activity date, Space and node-type filters, even with no
 executions or linked workflows. Search and Service narrow agents for the current
-visit; reopening Fleet starts with all services and no search. The work drawer
-starts closed so the graph and agent list are visible.
+visit; reopening Fleet starts with all services and no search. The Agent work drawer
+opens on every reload. Agents and the corpus owner have a 16px minimum orb radius,
+plus growth for visible connections.
 
 In **Add agent**, choose **n8n**, then select an existing remote agent in the
 searchable connection field. Save creates a stable, owner-scoped Fleet link;
@@ -75,3 +76,14 @@ to inspect inbound synchronization. Save a draft to inspect outbound synchroniza
 Execution capture creates labeled preview receipts and graph entries only; it never
 writes mock data to the production Activity Corpus. Real integration testing and
 live provider execution are separate from this mock review.
+
+
+Browser navigation can use a separate **Browser URL** in the n8n connector form,
+for example `http://harqis-ones-mac-mini:5678`, while the instance API address remains
+`http://127.0.0.1:5678`. Only the API origin receives credentials. Refresh inventory
+after changing the browser URL to update existing links.
+
+Workflow definitions and their dependency nodes are independent of activity dates.
+Unassigned definitions remain visible across Spaces. Fleet Filters can hide inactive
+and archived workflows; both are shown initially. These filters also apply to the
+compact workflow list. Dependency details expand on demand.

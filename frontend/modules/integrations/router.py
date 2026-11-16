@@ -182,6 +182,7 @@ def connect(provider: str, raw: dict, user=Depends(owner_auth)):
                 'auth_method':('Fine-grained personal access token' if clean['token'].startswith('github_pat_') else 'Personal access token') if provider == 'github' else 'Email and API token',
                 'expiry':'Unknown', 'site':clean.get('site', '')}
     if provider == 'n8n':
+        metadata['public_url'] = clean.get('public_url', '')
         metadata['auth_method'] = 'API key' + (' + MCP token' if clean.get('mcp_token') else '')
     if provider == 'nod':
         metadata['auth_method'] = 'Nod server token'

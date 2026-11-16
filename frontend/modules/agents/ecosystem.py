@@ -15,13 +15,13 @@ KINDS = {'configuration': '#94a3b8', 'workflow': '#60a5fa', 'trigger': '#c4b5fd'
          'link': '#93c5fd', 'feed': '#5eead4', 'hud': '#e9c96c', 'task': '#a7f3d0', 'subagent': '#deafff'}
 
 
-def safe_url(value):
+def safe_url(value, *, allow_http=False):
     if not isinstance(value, str) or len(value) > 2000 or any(c in value for c in ('\\', '\n', '\r', '\x00')):
         return ''
     parsed = urlsplit(value)
     if value.startswith('/') and not value.startswith('//'):
         return value
-    if parsed.scheme == 'https' and parsed.hostname and not parsed.username and not parsed.password:
+    if (parsed.scheme == 'https' or (allow_http and parsed.scheme == 'http')) and parsed.hostname and not parsed.username and not parsed.password:
         return value
     return ''
 
@@ -92,7 +92,7 @@ def graph(user):
         if agent_id not in by_id:
             return
         nodes.setdefault(identity, dict(id=identity, kind=kind, label=str(label)[:300], summary=str(summary)[:5000],
-                         url=safe_url(url), created=created, color=KINDS.get(kind, '#94a3b8'),
+                         url=safe_url(url, allow_http=extra.get('source') == 'n8n'), created=created, color=KINDS.get(kind, '#94a3b8'),
                          workspace_ids=by_id[agent_id]['workspace_ids'], agent_ids=[], **extra))
         if agent_id not in nodes[identity]['agent_ids']:
             nodes[identity]['agent_ids'].append(agent_id)

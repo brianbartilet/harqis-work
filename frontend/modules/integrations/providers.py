@@ -34,8 +34,9 @@ def credentials(provider, raw):
             raise HTTPException(422, 'Enter a Nod server URL.')
         result['site'] = NodGateway(url=raw['site'], key=result['token']).url
     if provider == 'n8n':
-        from modules.integrations.n8n import site
+        from modules.integrations.n8n import site, browser_origin
         result['site'] = site(raw.get('site'))
+        result['public_url'] = browser_origin(raw.get('public_url', ''))
         mcp = raw.get('mcp_token', '')
         if not isinstance(mcp, str) or len(mcp) > 4096 or any(ord(c) < 32 for c in mcp):
             raise HTTPException(422, 'Invalid MCP token.')
