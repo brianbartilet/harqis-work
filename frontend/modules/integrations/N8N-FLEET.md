@@ -85,5 +85,6 @@ after changing the browser URL to update existing links.
 
 Workflow definitions and their dependency nodes are independent of activity dates.
 Unassigned definitions remain visible across Spaces. The n8n tab can hide inactive
-and archived workflows; both are shown initially. These filters also apply to the
+and archived workflows; both are shown initially. These switches are saved per user in the current browser
+and restored on reload. These filters also apply to the
 compact workflow list. Dependency details expand on demand.
