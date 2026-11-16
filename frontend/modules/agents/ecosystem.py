@@ -165,12 +165,15 @@ def graph(user):
         for item in feed_items[:80]:
             add('butler', 'brain:' + item.get('logical_key', item.get('id', '')), 'feed', item.get('title', 'Second Brain update'),
                 item.get('summary', ''), '/second-brain/feed', item.get('generated_at', ''), relation='monitors', source='Second Brain')
+    except Exception:
+        errors.append('Second Brain feed unavailable. Other recorded outputs remain visible.')
+    try:
         from modules.second_brain.hud import inventory
         for item in inventory():
             add('butler', 'hud:' + item['operation_id'], 'hud', item['label'], item.get('source_task', ''),
                 '/second-brain/hud', relation='monitors', source='HUD catalogue')
     except Exception:
-        errors.append('Second Brain catalogue or feed unavailable. Other recorded outputs remain visible.')
+        errors.append('Second Brain catalogue unavailable. Other recorded outputs remain visible.')
     corpus_available = True
     try:
         from modules.agents import corpus_projection

@@ -150,3 +150,37 @@ def test_ecosystem_browser(fleet, authenticated_client, tmp_path, width, height)
             assert not errors,errors
         finally:
             browser.close()
+
+
+def test_hud_catalogue_survives_feed_failure(fleet, monkeypatch):
+    from modules.agents import ecosystem
+    from modules.second_brain import service, hud
+
+    def unavailable():
+        raise RuntimeError('Feed temporarily unavailable')
+
+    monkeypatch.setattr(service, 'get_second_brain_store', unavailable)
+    monkeypatch.setattr(hud, 'inventory', lambda: [
+        {'operation_id': 'calendar', 'label': 'Calendar', 'source_task': 'hud.calendar'},
+    ])
+    graph = ecosystem.graph('frontend-test-user')
+    assert any(n['id'] == 'hud:calendar' and n['kind'] == 'hud' for n in graph['nodes'])
+    assert any(e['target'] == 'hud:calendar' and e['relation'] == 'monitors' for e in graph['edges'])
+    assert any('feed unavailable' in warning for warning in graph['warnings'])
+
+
+def test_bounded_graph_keeps_hud_navigation(fleet, authenticated_client, monkeypatch):
+    from modules.agents import ecosystem
+    nodes = [{'id': 'agent:butler', 'kind': 'agent'}, {'id': 'hud:calendar', 'kind': 'hud'}]
+    nodes += [{'id': 'action:'+str(i), 'kind': 'action'} for i in range(120)]
+    edge = {'source': 'agent:butler', 'target': 'hud:calendar', 'relation': 'monitors'}
+    monkeypatch.setattr(ecosystem, 'graph', lambda user: {
+        'nodes': nodes, 'edges': [edge], 'coverage': {}, 'warnings': [],
+    })
+    response = authenticated_client.get('/agents/api/graph?node_limit=100')
+    assert response.status_code == 200
+    result = response.json()
+    assert len(result['nodes']) == 100
+    assert any(n['id'] == 'hud:calendar' for n in result['nodes'])
+    assert edge in result['edges']
+    assert result['coverage']['graph']['has_more']

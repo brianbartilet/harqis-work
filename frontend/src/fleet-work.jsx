@@ -10,7 +10,7 @@ export function AgentWork({nodes,agents,agentId,setAgentId,Avatar,loaded,error,g
  const sections=[['attention','Needs attention'],['running','Running'],['queued','Queued'],['assigned','Assigned'],['recent','Recent results']];
  const count=Object.values(groups).reduce((n,rows)=>n+rows.length,0);
  return <aside className="fleet-work-panel" aria-label="Agent work">
-  <header><h2>Agent work</h2><button type="button" title="Ask Butler about this work" onClick={()=>ask(agent)}>Ask Butler</button></header>
+  <header><h2>Agent work</h2><button type="button" className="fleet-work-ask" aria-label="Ask Butler" title="Ask Butler about this work" onClick={()=>ask(agent)}><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/></svg></button></header>
   <div className="fleet-work-agent"><div className="fleet-work-agent-heading"><label htmlFor="fleet-work-agent-select">Agent</label><span className="activity-view-context fleet-work-scope"><span className="activity-view-name" title={scope} style={{borderLeft:scopeColor?'3px solid '+scopeColor:undefined}}>{scope}</span></span></div><select id="fleet-work-agent-select" aria-label="Work agent" value={agentId} onChange={event=>setAgentId(event.target.value)}><option value="">All matching agents</option>{agents.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}</select></div>
   <p className="fleet-work-freshness">{generated?'Updated '+new Date(generated).toLocaleTimeString():'Waiting for recorded work'}</p>
   {error&&<p role="status">Some work could not refresh. Displayed records may be stale.</p>}
