@@ -13,13 +13,13 @@ test('output search retains its parent and removes dangling edges',()=>{
   assert.deepEqual(result.nodes.map(n=>n.id),['agent:a','report']);
   assert.deepEqual(result.links,[data.edges[0]]);
 });
-test('date range applies to work, not the parent agent creation date',()=>{
+test('date range applies to work and preserves agents without matching activity',()=>{
   const result=filterFleet(data,{since:'2026-10-01',until:'2026-10-27',types:['file','task','configuration']});
-  assert.deepEqual(result.nodes.map(n=>n.id),['agent:a','report']);
+  assert.deepEqual(result.nodes.map(n=>n.id),['agent:a','agent:b','report']);
 });
 test('Space and service filters compose without leaking other outputs',()=>{
-  assert.equal(filterFleet(data,{spaces:['work'],service:'codex',types:['file','task']}).nodes.length,0);
-  assert.deepEqual(filterFleet(data,{spaces:['work'],types:['file']}).nodes.map(n=>n.id),['agent:a','report']);
+  assert.deepEqual(filterFleet(data,{spaces:['work'],service:'codex',types:['file','task']}).nodes.map(n=>n.id),['agent:b']);
+  assert.deepEqual(filterFleet(data,{spaces:['work'],types:['file']}).nodes.map(n=>n.id),['agent:a','agent:b','report']);
 });
 
 test('orb radii mirror Activity Graph and shrink when connections are filtered',()=>{
@@ -98,4 +98,13 @@ test('Today starts at local midnight rather than 24 hours ago',()=>{
  const data={agents:[],edges:[],nodes:[['yesterday',midnight-1],['midnight',midnight],['now',now],['future',now+1]].map(([id,time])=>({id,created:new Date(time).toISOString(),kind:'entry'}))};
  assert.deepEqual(filterFleet(data,{types:['entry'],range:'today',now}).nodes.map(n=>n.id),['midnight','now']);
  assert.deepEqual(filterFleet(data,{types:['entry'],range:'24h',now}).nodes.map(n=>n.id),['yesterday','midnight','now']);
+});
+
+
+test('connected n8n agent with no outputs remains in the main fleet',()=>{
+ const input={agents:[...data.agents,{id:'n8n',active:true,runtime:'n8n'},{id:'disabled',active:false,runtime:'n8n'}],nodes:[...data.nodes,{id:'agent:n8n',agent_id:'n8n',kind:'agent',label:'Butler n8n',workspace_ids:[]},{id:'agent:disabled',agent_id:'disabled',kind:'agent',label:'Disabled'}],edges:data.edges};
+ const options={spaces:['other'],since:'2099-01-01',types:[]};
+ assert.deepEqual(filterFleet(input,options).nodes.map(n=>n.id),['agent:a','agent:b','agent:n8n']);
+ assert.deepEqual(filterFleet(input,{...options,query:'n8n'}).nodes.map(n=>n.id),['agent:n8n']);
+ assert.deepEqual(filterFleet(input,{...options,service:'n8n'}).nodes.map(n=>n.id),['agent:n8n']);
 });

@@ -15,7 +15,8 @@
 .connector-footer{margin-top:auto;padding-top:.5rem}
 .connector-footer .integration-controls{align-items:center;justify-content:flex-end;gap:.5rem;margin:0}
 .connector-footer .integration-controls>*{flex:0 1 auto}
-.connector-footer button{font-size:.75rem;padding:.375rem .625rem;flex:0 1 auto}
+.connector-footer .integration-controls>:is(button,a){display:inline-flex;align-items:center;justify-content:center;border:1px solid #475569;border-radius:.5rem;background:#17263e;color:#dbeafe;font-size:.75rem;line-height:1.25rem;padding:.375rem .625rem;text-decoration:none;white-space:nowrap;flex:0 1 auto}
+.connector-footer .integration-controls>:is(button,a):hover{border-color:#60a5fa}
 
 
 .connector-card button.connector-switch{display:inline-flex;align-items:center;gap:.5rem;border:0;background:transparent;padding:0;color:#94a3b8;font-size:.75rem}
@@ -151,3 +152,5 @@ html:has(.integration-tabs){scrollbar-gutter:stable}
 .workflow-integration-card > .drag-handle{top:.75rem;right:.75rem;left:auto}
 
 .grokbot-key-choice{margin-top:1rem;border-top:1px solid #334155;padding-top:1rem}.grokbot-key-choice>summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:1rem}.grokbot-key-choice>summary::-webkit-details-marker{display:none}.grokbot-key-choice>summary svg{width:20px;height:20px;color:#93c5fd;pointer-events:none;flex-shrink:0}.grokbot-key-choice[open]>summary svg{transform:rotate(180deg)}
+
+@media(max-width:640px){.connector-footer .integration-controls{gap:.375rem}.connector-footer .integration-controls>:is(button,a){padding-inline:.375rem;font-size:.6875rem}}

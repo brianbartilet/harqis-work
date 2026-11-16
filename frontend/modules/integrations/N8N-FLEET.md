@@ -12,6 +12,12 @@ it is an inventory, not an executable remote agent. **View in Fleet** opens n8n
 with text, date and type filters cleared and a local all-Spaces view until you
 choose a Space. Existing connections can use **Sync inventory** without reconnecting.
 
+Open **Agents Fleet** directly to see all available connected agents. Agent hubs
+remain visible across activity date, Space and node-type filters, even with no
+executions or linked workflows. Search and Service narrow agents for the current
+visit; reopening Fleet starts with all services and no search. The work drawer
+starts closed so the graph and agent list are visible.
+
 In **Add agent**, choose **n8n**, then select an existing remote agent in the
 searchable connection field. Save creates a stable, owner-scoped Fleet link;
 repeating this operation returns the same profile. Leaving the field empty keeps
