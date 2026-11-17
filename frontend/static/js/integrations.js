@@ -49,7 +49,7 @@
       if(item.enabled&&item.provider==='nod'){const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);button(row,'Open in Fleet',async()=>{const result=await api('/nod/link',{});location.href='/agents?agent='+encodeURIComponent(result.item.id);});link(row,'Open Nod',item.site);}
       if(item.enabled&&item.provider==='n8n'){
         const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);
-        link(row,'View in Fleet','/agents?integration=n8n');
+        link(row,'Open in Fleet','/agents?integration=n8n');
         button(row,'Sync inventory',async()=>{const view=dialog('Synchronize n8n inventory'),query=field(view.body,'Agent search');button(controls(view.body),'Search and synchronize',async()=>{const result=await api('/n8n/sync',{query:query.value});view.body.append(el('p',result.imported+' agents and '+result.workflows+' workflows synchronized. '+(result.warnings||[]).join(' ')));link(view.body,'Open agent fleet','/agents?integration=n8n');});});
         button(row,'Browse workflows',async()=>{const view=dialog('n8n workflows');let cursor='';const next=button(controls(view.body),'Load workflows',async()=>{const data=await api('/n8n/workflows?cursor='+encodeURIComponent(cursor));for(const workflow of data.items)link(view.body,workflow.name+(workflow.active?' · Active':''),(item.public_url||item.site)+'/workflow/'+encodeURIComponent(workflow.id));cursor=data.cursor;next.hidden=!cursor;});next.click();});
       }
