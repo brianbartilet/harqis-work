@@ -7,7 +7,8 @@ an existing description requires checking the explicit replacement option.
 Additional instructions, persona, tools and skills remain under your control.
 
 The initial curated profiles are Code Reviewer, Backend Architect and Technical
-Writer. Classification filters browsing; changing it does not remove a saved
+Writer. Search covers all three profiles and shows visible result cards;
+classification ranks matching profiles first without hiding others. Changing it does not remove a saved
 specialist. Custom mode hides catalog browsing without clearing a saved selection;
 use **Remove profile** to detach it. Suggested skills are optional, explicit choices.
 The use cases, output helpers, examples and skill mappings in `manifest.json` are
