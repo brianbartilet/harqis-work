@@ -335,6 +335,16 @@ class FollowUpStore:
         result["result"] = json.loads(result.pop("payload"))
         if result["state"] in {"queued","running"} and result["lease_until"] < isoformat():
             result["state"] = "interrupted"
+        # Historical results stay untouched. Eligibility describes current owner
+        # decisions, not the stale lifecycle status embedded in saved payloads.
+        items = self.suggestions(start, end, include_dismissed=True)
+        counts = {status: sum(item['status'] == status for item in items)
+                  for status in ('suggested', 'dismissed', 'adopted')}
+        eligible = sum(item['status'] == 'suggested' and item.get('confidence') == 'high' for item in items)
+        result['current_automatic_actions'] = {
+            'state': 'eligible' if eligible else 'no_eligible_candidates',
+            'eligible': eligible, 'total': len(items), **counts,
+        }
         return result
 
     @staticmethod
@@ -440,6 +450,16 @@ class FollowUpStore:
             snapshot=self._automation_snapshot(db)
             if snapshot['digest'] != expected_digest:
                 raise FollowUpConflict('Actions or ideas changed during review; automatic creation deferred.')
+            from workflows.hfl.automatic_action_review import merge_decisions, validate_decisions
+            decisions = validate_decisions(candidates, decisions, snapshot['actions'], snapshot['dismissed_ideas'])
+            decisions = merge_decisions(candidates, [decisions])
+            # Eligibility is part of the atomic batch precondition, including
+            # direct callers holding an old candidate list but a fresh digest.
+            for candidate in candidates:
+                row = db.execute('SELECT status,payload FROM timeline_suggestions WHERE id=?', (candidate['id'],)).fetchone()
+                if (not row or row['status'] != 'suggested'
+                        or json.loads(row['payload']).get('confidence') != 'high'):
+                    raise FollowUpConflict('Candidate eligibility changed; automatic creation deferred.')
             existing={item['id']:item for item in snapshot['actions']}
             suppressed={item['id'] for item in snapshot['dismissed_ideas']}
             available={item['id']:item for item in candidates}

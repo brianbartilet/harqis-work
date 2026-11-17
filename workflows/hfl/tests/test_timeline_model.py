@@ -13,6 +13,7 @@ def response(text, stop_reason='end_turn'):
 @pytest.fixture
 def model(monkeypatch):
     from apps.hfl_corpus.references.web.api.ideas import ApiServiceHflCorpusIdeas
+    monkeypatch.setattr(ApiServiceHflCorpusIdeas, '__init__', lambda self, config: None)
     monkeypatch.setattr(ApiServiceHflCorpusIdeas, 'get_board_context', lambda self: {'boards': []})
     from apps.antropic import config
     from apps.antropic.references.web import base_api_service
@@ -72,8 +73,9 @@ def test_transport_errors_are_not_retried_as_json_errors(model):
 
 def test_duplicate_review_uses_same_truncation_recovery(model):
     calls, replies = model
-    replies.extend([response('{"decisions":[', 'max_tokens'), response('{"decisions":[]}')])
-    assert timeline.review_actions([], {'actions': [], 'dismissed_ideas': []}, []) == []
+    replies.extend([response('{"decisions":[', 'max_tokens'), response('{"decisions":[{"suggestion_id":"candidate-1","decision":"defer"}]}')])
+    result = timeline.review_actions([{'id': 'candidate-1'}], {'actions': [], 'dismissed_ideas': []}, [])
+    assert result[0]['decision'] == 'defer'
     assert len(calls) == 2
 
 

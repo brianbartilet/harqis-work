@@ -678,6 +678,7 @@ def test_semantic_duplicate_preserves_existing_action(agenda,status):
     from workflows.hfl.timeline import create_automatic_actions
     action,_=agenda.create(payload(title='Test exporting phone notes'),actor='owner')
     if status!='open':action=agenda.update(action['id'],{'version':1,'status':status},actor='owner')
+    action=agenda.get(action['id'])  # Compare read projections, not create-response shape.
     item=high_idea(agenda,title='Validate Essential Space data extraction')
     def review(candidates,snapshot,evidence):
         assert snapshot['actions'][0]['title'] != candidates[0]['title']
@@ -707,7 +708,8 @@ def test_auto_creation_rechecks_snapshot_after_concurrent_manual_change(agenda):
         agenda.create(payload(),actor='owner')
         return [create_decision(item)]
     result=create_automatic_actions('2026-09-09','2026-09-09',agenda,[],review=review)
-    assert result['state']=='failed'
+    assert result['state']=='deferred'
+    assert result['diagnostic']=={'reason':'snapshot_conflict','stage':'commit'}
     assert result['error']=='FollowUpConflict'
     assert len(agenda.list())==1
     assert agenda.suggestion(item['id'])['status']=='suggested'
