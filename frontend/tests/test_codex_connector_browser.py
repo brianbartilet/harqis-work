@@ -11,6 +11,41 @@ from test_hfl_agent_bridge import bridge
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.parametrize('width', [390, 1440])
+def test_codex_setup_instructions(browser, tmp_path, width):
+    from playwright.sync_api import expect
+    page = browser.new_page(viewport={'width': width, 'height': 900})
+    try:
+        page.route('**/integrations/api/connectors', lambda route: route.fulfill(
+            json={'items': [{'provider': 'codex', 'name': 'Codex', 'status': 'Not connected', 'enabled': False, 'capabilities': ['Tasks', 'Plugins']}], 'links': []}))
+        page.route('https://harqis.test/', lambda route: route.fulfill(
+            content_type='text/html', body='<div data-connector-cards></div><p data-integration-error></p>'))
+        page.goto('https://harqis.test/')
+        page.add_style_tag(content=(ROOT/'frontend/static/css/integrations.css').read_text('utf-8'))
+        page.add_script_tag(content=(ROOT/'frontend/static/js/integrations.js').read_text('utf-8'))
+        page.get_by_role('button', name='Connect', exact=True).click()
+        dialog = page.get_by_role('dialog', name='Connect Codex')
+        help_button = dialog.get_by_role('button', name='Host setup instructions')
+        expect(help_button).to_have_attribute('aria-expanded', 'false')
+        help_button.click()
+        expect(help_button).to_have_attribute('aria-expanded', 'true')
+        expect(dialog.get_by_text('python scripts/setup_codex.py --remote <machine-key>', exact=True)).to_be_visible()
+        expect(dialog.locator('pre')).to_contain_text('HARQIS_CODEX_BINARY')
+        expect(dialog.get_by_text('python scripts/deploy.py --restart frontend', exact=True)).to_be_visible()
+        expect(dialog.get_by_role('button', name='Save and enable')).to_be_disabled()
+        assert not page.evaluate('document.documentElement.scrollWidth > innerWidth')
+        page.screenshot(path=str(tmp_path/f'codex-setup-{width}.png'))
+        help_button.click()
+        expect(help_button).to_have_attribute('aria-expanded', 'false')
+        page.route('**/integrations/api/connectors/codex/test', lambda route: route.fulfill(
+            status=503, json={'detail': 'Codex executable unavailable'}))
+        dialog.get_by_role('button', name='Test local host').click()
+        expect(help_button).to_have_attribute('aria-expanded', 'true')
+        expect(dialog.get_by_role('alert')).to_have_text('Codex executable unavailable')
+    finally:
+        page.close()
+
+
 @pytest.fixture(scope='module')
 def codex_bundle(tmp_path_factory):
     output = tmp_path_factory.mktemp('codex-ui')/'test.js'

@@ -14,6 +14,7 @@ Operational scripts for **harqis-work**, organised by purpose:
 
 | Path | Purpose |
 |---|---|
+| `setup_codex.py` | Inspect Codex on the local or configured remote host; `--install` installs only if missing, using the official standalone installer on macOS/Linux. |
 | `n8n_preview.py` | Run an isolated mock n8n/Nod Fleet demo: `python scripts/n8n_preview.py --port 8094`, then open `/preview-login` or `/preview-nod`. No live agent calls or corpus delivery. |
 | `knowledge_preview.py` | Launch the corpus entities localhost preview, isolated enrichment worker, or manual backfill. |
 | [`launch.py`](#launchpy) | Single-process launcher — runs one daemon in the foreground (`worker`, `scheduler`, `flower`, `frontend`, `mcp`, `kanban`, `trigger-hud-tasks`, `push-config`, `serve-config`). |
@@ -24,6 +25,22 @@ Operational scripts for **harqis-work**, organised by purpose:
 | [`sync-to-host.ps1`](#sync-to-hostps1) | Push gitignored config (`.env/`, `frontend/.env`, `machines.local.toml`) to a remote checkout via `tar \| ssh`. Driven by the `[sync]` / `[ssh.*]` blocks in `machines.local.toml`. |
 | [`../machines.toml`](#machinestoml) | Per-machine topology (role, queue list, disabled services). Lives at the repo root so per-machine `machines.local.toml` overrides sit next to it. Auto-detected from hostname. |
 | [`tailscale/`](#tailscale) | Tailscale ACL policy. Unchanged. |
+
+## Codex host setup
+
+Run `python scripts/setup_codex.py --remote <machine-key>` to inspect a configured
+SSH host. Add `--install` to install only when missing. Omit `--remote` when running
+on the frontend host itself. Existing installations are never upgraded by this
+command. Remote execution uses the configured checkout's `.venv/bin/python` and
+service user's machine environment; it sends only the setup script over SSH.
+
+The command verifies the CLI and reports login status without printing credentials.
+If needed, sign in on the host as the HARQIS service user using the printed command.
+Then use **Integrations → Codex → Test local host → Save and enable**.
+Exit codes: `0` installed and signed in, `2` installed but login needs attention,
+`1` setup/check failure. It does not restart the stack or create a connector.
+Automatic installation supports macOS/Linux; Windows supports inspection and
+provides official installation guidance when missing.
 
 ## `scripts/agents/`
 

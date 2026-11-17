@@ -6,11 +6,10 @@ The executable is host configuration, never a browser-supplied command.
 import json
 import os
 import queue
-import shutil
 import subprocess
 import threading
 import time
-from pathlib import Path
+from scripts.setup_codex import find_executable
 
 from fastapi import HTTPException
 
@@ -19,11 +18,12 @@ MAX_MESSAGE = 8 * 1024 * 1024
 
 
 def executable():
-    configured = os.environ.get('HARQIS_CODEX_BINARY')
-    managed = Path.home() / '.codex/packages/app-server-daemon/current/bin/codex.exe'
-    candidate = configured or (str(managed) if managed.is_file() else shutil.which('codex.exe' if os.name == 'nt' else 'codex'))
-    if not candidate or not Path(candidate).is_file() or Path(candidate).suffix.lower() in {'.cmd', '.bat', '.ps1'}:
-        raise HTTPException(503, 'Codex native executable unavailable on the HARQIS host. Configure HARQIS_CODEX_BINARY and sign in locally.')
+    try:
+        candidate = find_executable()
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc)) from None
+    if not candidate:
+        raise HTTPException(503, 'Codex executable unavailable on the HARQIS host. Ask the administrator to run python scripts/setup_codex.py --install on that host, then sign in locally.')
     return candidate
 
 

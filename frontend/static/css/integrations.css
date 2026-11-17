@@ -90,6 +90,8 @@
 .integration-dialog-close svg{width:20px;height:20px}
 .integration-dialog button.integration-dialog-close:focus-visible{outline:2px solid var(--harqis-focus-color, #38bdf8);outline-offset:var(--harqis-focus-offset, 2px)}
 .integration-dialog h2[tabindex="-1"]:focus{outline:none}
+.codex-setup-help code{white-space:normal;overflow-wrap:anywhere}
+.codex-setup-help pre{white-space:pre-wrap;overflow-wrap:anywhere}
 
 .integration-workflow-toolbar{display:flex;align-items:flex-end;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap}
 .integration-workflow-toolbar .integration-search{flex:1 1 18rem;max-width:32rem;margin:0}

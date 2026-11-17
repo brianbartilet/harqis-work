@@ -8,8 +8,13 @@ is installed on the browser user's computer.
 
 ## Connect
 
-1. Install and sign in to Codex on the frontend host. The adapter uses a native
-   `codex` executable (the managed Windows daemon package when available).
+1. Inspect the host with `python scripts/setup_codex.py --remote <machine-key>`.
+   Add `--install` to install Codex only if missing (macOS/Linux); existing
+   installations are reused without upgrades. Omit `--remote` on the host itself.
+   The installer is the [official OpenAI standalone installer](https://learn.chatgpt.com/docs/cli).
+   Sign in on the frontend host as the HARQIS service user when prompted by setup.
+   The adapter discovers managed daemon/standalone packages on Windows, macOS,
+   and Linux, then the local executable on PATH.
    `HARQIS_CODEX_BINARY` can select a native executable; shell scripts and browser
    supplied commands are not accepted.
 2. Open **Applications → Integrations → Codex → Test local host**.
@@ -21,11 +26,50 @@ is installed on the browser user's computer.
    Uncheck linking to retain a manual presentation-only profile.
 
 No task is started, steered, interrupted, approved, or authenticated by discovery.
+The web connector never installs software: setup is an administrator CLI operation.
+An invalid `HARQIS_CODEX_BINARY` fails explicitly instead of installing another copy.
 The adapter launches a bounded `codex app-server --listen stdio://` reader and
 closes only that reader. It does not stop the desktop app or managed daemon.
 Installed schema verification used CLI 0.167.2 and managed app-server 0.169.0.
 The daemon proxy timed out on the development host; no live subscription is
 claimed. Version-dependent unavailable methods are reported as stale/unsupported.
+
+## Host executable configuration
+
+The **Host setup instructions** button in the Connect Codex dialog explains
+installation, sign-in, executable configuration, and restart steps. It opens
+automatically when a connection test fails.
+
+If discovery cannot find an existing installation, add a documented override to
+the gitignored `machines.local.toml`, under the frontend host's machine profile
+(the profile mapped by `[hostnames]`, not the `[ssh.*]` target key):
+
+```toml
+[harqis-server.env_vars]
+# Codex fleet reader: native executable owned by the HARQIS service user.
+# Use the managed current symlink so the path survives Codex upgrades.
+HARQIS_CODEX_BINARY = "/Users/<service-user>/.codex/packages/app-server-daemon/current/bin/codex"
+```
+
+Merge the setting into an existing section rather than repeating its header.
+Replace `<service-user>` with the real macOS account. For standalone installs,
+use `.codex/packages/standalone/current/bin/codex`; on Linux the home directory
+is typically `/home/<service-user>`. On Windows use an absolute native executable
+path such as `C:/Users/<service-user>/.codex/packages/app-server-daemon/current/bin/codex.exe`.
+Do not put credentials in this setting. An explicit override takes priority over
+automatic discovery, so a stale override must be corrected or removed.
+
+If editing from another machine, run the config sync for the intended SSH target.
+Then, using the host checkout's virtual environment, restart the frontend:
+
+```bash
+.venv/bin/python scripts/deploy.py --restart frontend
+```
+
+On Windows use `.venv/Scripts/python.exe`. A full verified remote deployment is
+also sufficient: `python scripts/deploy.py --remote <machine-key>`.
+Sign in as that same host user if needed, then **Test local host → Save and enable**.
+Changing the browser computer's environment does not change the server process.
 
 ## Objects and identity
 

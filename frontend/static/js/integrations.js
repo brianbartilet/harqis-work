@@ -101,9 +101,21 @@
   function codexSetup(item){
     const {d,body,error}=dialog('Connect Codex');
     body.append(el('p','Observe Codex installed on the HARQIS server host. This reads saved tasks and installed local plugins using the host’s existing sign-in. It does not start tasks or control a desktop session.'));
+    const setupHelp=el('div',undefined,'codex-setup-help');setupHelp.hidden=true;
+    const helpButton=button(controls(body),'Host setup instructions',()=>{setupHelp.hidden=!setupHelp.hidden;helpButton.setAttribute('aria-expanded',String(!setupHelp.hidden));});helpButton.setAttribute('aria-expanded','false');
+    setupHelp.append(el('p','An administrator can inspect a configured remote host with:'));
+    setupHelp.append(el('code','python scripts/setup_codex.py --remote <machine-key>'));
+    setupHelp.append(el('p','To install only if missing, add --install. On the HARQIS host itself, omit --remote <machine-key>. Existing installations are reused. Automatic installation supports macOS/Linux.'));
+    setupHelp.append(el('p','If Codex is installed but cannot be found, set HARQIS_CODEX_BINARY in machines.local.toml under the frontend host’s [<machine-profile>.env_vars] section. Use an absolute path on that host, not the computer running this browser. For example:'));
+    setupHelp.append(el('pre','[<machine-profile>.env_vars]\nHARQIS_CODEX_BINARY = "/absolute/path/to/codex"'));
+    setupHelp.append(el('p','Managed macOS/Linux installs commonly use ~/.codex/packages/app-server-daemon/current/bin/codex or ~/.codex/packages/standalone/current/bin/codex. Expand ~ to the service user’s home directory. On Windows, use the native codex.exe; forward slashes work in TOML paths.'));
+    setupHelp.append(el('p','Sync machines.local.toml to the host if edited elsewhere, then restart the frontend from its checkout:'));
+    setupHelp.append(el('code','python scripts/deploy.py --restart frontend'));
+    setupHelp.append(el('p','If setup reports that sign-in is required, run its login command on the host as the HARQIS service user. Return here, select Test local host, then Save and enable.'));
+    body.append(setupHelp);
     const state=el('p','Not tested','connector-status');state.setAttribute('role','status');body.append(state);
     const row=controls(body);let tested=false;
-    const test=button(row,'Test local host',async()=>{tested=false;save.disabled=true;state.textContent='Testing…';try{const value=await api('/connectors/codex/test',{transport:'local'});tested=true;state.textContent='Test passed · '+value.account;}catch(e){state.textContent='Connection unavailable';throw e;}finally{save.disabled=!tested;}});
+    const test=button(row,'Test local host',async()=>{tested=false;save.disabled=true;state.textContent='Testing…';try{const value=await api('/connectors/codex/test',{transport:'local'});tested=true;state.textContent='Test passed · '+value.account;}catch(e){state.textContent='Connection unavailable';setupHelp.hidden=false;helpButton.setAttribute('aria-expanded','true');throw e;}finally{save.disabled=!tested;}});
     const save=button(row,'Save and enable',async()=>{if(!tested)return;test.disabled=true;save.disabled=true;try{await api('/connectors/codex/save',{transport:'local'});const result=await api('/connectors/codex/toggle',{enabled:true});d.close();await load();document.querySelector('[data-integration-error]').textContent=(result.discovery?.warnings||[]).join(' ');}catch(e){state.textContent='Save or discovery failed. Test the host again.';tested=false;throw e;}finally{test.disabled=false;save.disabled=!tested;}});
     save.setAttribute('data-managed-disabled','');save.disabled=true;
   }
