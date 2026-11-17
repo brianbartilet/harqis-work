@@ -222,6 +222,8 @@ def graph(user):
                     and remote.get('connector_site') == connector.get('connector_site')):
                 edge(hub['id'], 'agent:' + remote['id'], 'provides')
     from modules.agents.corpus_projection import add_owner
+    from modules.agents.oversight import extend_graph as oversight_graph
+    oversight_graph(user, nodes, edge, add)
     add_owner(nodes, edges)
     return {'agents': agents, 'nodes': list(nodes.values()), 'edges': [e for e in edges.values() if e['source'] in nodes and e['target'] in nodes],
             'types': [{'id': k, 'name': k.replace('_', ' ').title(), 'color': v} for k, v in KINDS.items()],

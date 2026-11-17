@@ -24,6 +24,9 @@ def branch(value):
 
 
 def credentials(provider, raw):
+    if provider == 'codex':
+        from modules.integrations.codex import credentials as local_credentials
+        return local_credentials(raw)
     token = raw.get('token', '')
     if not isinstance(token, str) or not 1 <= len(token.strip()) <= 4096 or any(ord(c) < 32 for c in token):
         raise HTTPException(422, 'Enter an API token.')
@@ -59,6 +62,9 @@ def credentials(provider, raw):
 
 class Provider:
     def __new__(cls, provider, credentials):
+        if provider == 'codex':
+            from modules.integrations.codex import Codex
+            return Codex(credentials)
         if provider == 'nod':
             from modules.integrations.nod import Nod
             return Nod(credentials)

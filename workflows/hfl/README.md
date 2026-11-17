@@ -1,5 +1,11 @@
 # `workflows/hfl/` — Homework for Life
 
+Fleet observation uses a five-minute, Beat-owned `reconcile_fleet_observations`
+task on the `host` queue. It calls the authenticated owner frontend to collect
+Codex, Nod and linked n8n results and retry HFL receipts. Butler retains its
+existing briefing schedule. See [Codex fleet setup and runtime ownership](../../docs/info/CODEX-FLEET.md)
+for configuration, object mappings, bounded history discovery and failure behavior.
+
 The [Activity Corpus agent bridge](../../docs/info/HFL-AGENT-BRIDGE.md) connects
 saved actionable/pin prompts to local Hermes and returns attributed execution
 receipts and artifact links through this workflow's existing persistence/outbox. Its minute dispatcher

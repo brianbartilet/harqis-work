@@ -1217,3 +1217,9 @@ hasMedia = true AND tags NOT IN ("hfl") ORDER BY source ASC, entryDate DESC
 Supported sort fields are `source`, `entryDate`, `created`, and `updated`. Directions default to `ASC`; fields are evaluated left to right. Source names ignore case, missing values sort last in either direction, and document paths/entry anchors break remaining ties. `ORDER BY` can appear on its own. Duplicate/unknown fields and conflicting legacy `sort` clauses are rejected. Sorting is independent of the date filter. The existing direction control reverses the first field and retains secondary fields.
 
 Corpus results stay grouped by document: matching entries are sorted within each document, and each document is positioned by its first ordered entry. Feeds and recipe snapshots use the full entry-level order. The sort list is preserved in URLs, saved Spaces, feed cursors, and recipe scope. Queries without `ORDER BY` keep the existing default behavior.
+
+## Codex fleet and Butler oversight
+
+Integrations and Add/Edit Agent support observation-only Codex connections on
+the frontend host. Plugins are applications; threads are tasks; completed/failed
+executions feed Butler and HFL receipts. See [setup and runtime ownership](../docs/info/CODEX-FLEET.md).

@@ -35,10 +35,10 @@ def deliver_pending(event_ids=None):
         if payload.get('mock'):
             continue
         try:
-            execution = payload.get('kind') in {'n8n-execution', 'nod-turn'}
+            execution = payload.get('kind') in {'n8n-execution', 'nod-turn', 'codex-turn'}
             stamp = (payload.get('stopped_at') or payload.get('started_at')) if execution else event['created']
             entry = HflEntry(when=datetime.fromisoformat(stamp or event['created']),
-                             moment=(('Nod activity · ' + payload['status']) if payload.get('kind') == 'nod-turn' else ('n8n: ' + payload['workflow_name'] + ' · ' + payload['status']) if execution else
+                             moment=(('Codex activity · ' + payload['status']) if payload.get('kind') == 'codex-turn' else ('Nod activity · ' + payload['status']) if payload.get('kind') == 'nod-turn' else ('n8n: ' + payload['workflow_name'] + ' · ' + payload['status']) if execution else
                                      'Agent activity: ' + payload.get('agent_name', payload.get('name', event['agent_id']))),
                              what_happened=json.dumps({**payload, 'agent_id': event['agent_id']}, ensure_ascii=False, indent=2),
                              why_it_stayed='Links fleet configuration, execution and artifacts to their source.',

@@ -426,6 +426,35 @@ checkout path) so orphans from prior
 runs — the kind that pile up extra console windows on Windows — are
 killed before fresh daemons start.
 
+### Optional managed Nod installation
+
+Nod is part of host deployment when `[<machine>.nod]` is enabled in
+`machines.local.toml`. It retains its upstream Compose project and persistent
+data, separate from `docker-compose.yml`. Configure `enabled`, `mount_path`,
+`compose_dir`, and `health_url` as documented in `machines.toml`. No installation
+or data directories are created: mount, installation markers, and credentials
+must already exist. Mount the existing data volume before deployment; maintenance
+mode (`.maintenance`) blocks Nod management.
+
+Normal host deployment (including `--docker-only`) starts missing Nod services
+with no build, pull, or container recreation, then verifies every Compose service
+and the authenticated `/api/health` response. Already running containers are
+left running. Errors fail deployment; the SSH workflow also verifies Nod before
+reporting success. `--no-nod` skips this component for a local deploy.
+
+```sh
+python scripts/deploy.py --status        # includes Nod container/API health
+python scripts/deploy.py --verify-nod    # read-only verification
+python scripts/deploy.py --restart nod   # explicitly interrupt/restart Nod
+```
+
+`--down` preserves Nod and its data. Upgrades and full shutdown remain explicit
+installation maintenance operations; this integration never runs Nod `down`,
+deletes volumes, or pulls images. The existing Nod boot supervisor is retained;
+HARQIS does not register a competing daemon in `launch.py` or OS startup units.
+The health token is read from Nod's installation `.env`, never from HARQIS's
+connector store, and is not printed. HTTPS is required except on loopback.
+
 Before any Python-service deploy, targeted restart, or auto-start registration,
 `deploy.py` synchronizes the existing `.venv` with `requirements.txt` and runs
 `pip check`. Installation output goes to `logs/requirements-sync.log`; a failed

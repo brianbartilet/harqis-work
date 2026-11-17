@@ -16,6 +16,14 @@
 #   python scripts/deploy.py --role node --queues agent,worker
 #
 # Per-machine fields:
+#   [<name>.nod]    optional existing Nod Compose installation (host only).
+#                   Put real paths/URLs in machines.local.toml:
+#                   enabled = true
+#                   mount_path = "/Volumes/NodData"  # must be an actual mount
+#                   compose_dir = "/Volumes/NodData/installation"
+#                   health_url = "http://127.0.0.1:4310/api/health"
+#                   Requires compose.yaml, .env with NOD_AUTH_TOKEN, and
+#                   .installation-ready. Refuses .maintenance. No auto-upgrades.
 #   role            "host" (runs scheduler + docker) or "node" (worker-only)
 #   queues          list of Celery queues this machine consumes
 #   disable         list of services NOT to run here

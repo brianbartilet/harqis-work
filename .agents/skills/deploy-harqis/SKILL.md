@@ -203,6 +203,17 @@ celery -A core.apps.sprout.app.celery:SPROUT inspect active_queues --timeout=10
 
 ## Step 7 — Start host-only services (frontend, MCP, Kanban)
 
+**Optional Nod component:** when `[<machine>.nod].enabled` is true, the host
+deployment manages the existing Nod Compose installation and checks container
+and authenticated API health. See `scripts/README.md` for configuration. Missing
+mounts, installation files, maintenance mode, or failed health checks fail the
+deployment. Verify with `python scripts/deploy.py --verify-nod`; require success
+before declaring the stack healthy. `--no-nod` skips it locally. `--down` preserves
+Nod; only `--restart nod` explicitly restarts it. Never pull images or remove its
+volumes as part of routine HARQIS deployment. Nod keeps its existing boot
+supervisor and Compose project, so it has no `launch.py` handler or generated
+LaunchAgent/Scheduled Task in Appendices A/C.
+
 **Skip the entire step if `role=node`.**
 
 For each component below, the launch is cross-platform via `python scripts/launch.py <service>` (auto-start across boots via `python scripts/deploy.py --register`).

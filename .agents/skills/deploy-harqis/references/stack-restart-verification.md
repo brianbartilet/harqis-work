@@ -14,6 +14,12 @@ for the canonical Mac host this resolves to
 
 ## Full-stack workflow
 
+When the host enables `[<machine>.nod]`, startup also starts missing Nod
+containers and verifies authenticated health. The final `--verify-nod` check
+must pass before `REMOTE HOST RESTART VERIFIED`. Nod stays running across the
+HARQIS stop/start; its upstream Compose project, volume, and boot supervisor are
+preserved. Use `--restart nod` on the host only for an explicit Nod restart.
+
 The remote option runs one fail-fast Bash script over SSH:
 
 1. Resolve and enter the configured runtime clone. Require both `.git` and

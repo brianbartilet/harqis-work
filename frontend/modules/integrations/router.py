@@ -162,6 +162,20 @@ def connectors(user=Depends(owner_auth)):
     return {'items':items, 'links':links}
 
 
+@api.post('/codex/link')
+def link_codex(raw: dict, user=Depends(owner_auth)):
+    from modules.integrations.codex import link
+    from modules.agents.router import checked
+    return checked(link, user, raw)
+
+
+@api.post('/codex/agents/{identity}/refresh')
+def refresh_codex(identity: str, user=Depends(owner_auth)):
+    from modules.integrations.codex import refresh
+    from modules.agents.router import checked
+    return checked(refresh, user, identity)
+
+
 @api.post('/connectors/{provider}/test')
 def test_connection(provider: str, raw: dict, user=Depends(owner_auth)):
     provider_name(provider)
@@ -184,6 +198,8 @@ def connect(provider: str, raw: dict, user=Depends(owner_auth)):
     metadata = {**identity, 'status':'Connected', 'enabled':False, 'connected_since':store.now(),
                 'auth_method':('Fine-grained personal access token' if clean['token'].startswith('github_pat_') else 'Personal access token') if provider == 'github' else 'Email and API token',
                 'expiry':'Unknown', 'site':clean.get('site', '')}
+    if provider == 'codex':
+        metadata.update(site=identity['site'], auth_method='Local host identity · observation only')
     if provider == 'n8n':
         metadata['public_url'] = clean.get('public_url', '')
         metadata['auth_method'] = 'API key' + (' + MCP token' if clean.get('mcp_token') else '')
@@ -214,6 +230,9 @@ def toggle(provider: str, raw: dict, user=Depends(owner_auth)):
     data.update(enabled=raw['enabled'], status='Connected' if data['credentials'] else 'Not connected')
     data.pop('error', None)
     saved = store.save(user, provider, data)
+    if provider == 'codex' and raw['enabled']:
+        from modules.integrations.codex import link
+        saved['discovery'] = link(user, {})['discovery']
     if provider == 'nod' and raw['enabled']:
         from modules.integrations.nod import link
         try:

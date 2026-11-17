@@ -669,3 +669,5 @@ router.include_router(roles_api)
 
 from modules.integrations.github_updates_api import router as github_updates_api
 router.include_router(github_updates_api)
+from modules.agents.oversight_api import router as fleet_oversight_api
+router.include_router(fleet_oversight_api)

@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from modules.agents import service, projection
 from workflows.hfl.agent_fleet_store import now
 
-KINDS = {'connector', 'application', 'account', 'schedule'}
+KINDS = {'connector', 'application', 'account', 'schedule', 'task'}
 
 
 @contextmanager

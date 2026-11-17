@@ -209,3 +209,7 @@ See [Roles and Spaces](../docs/info/ROLES-AND-SPACES.md) for ownership and contr
 GitHub PR review intake is part of [HFL](hfl/README.md#sync_github_pull_requests):
 Beat polls every 15 minutes and the owner-connected GitHub account supplies
 repository scope. PRs become `github-updates` entries and linked peon review actions.
+
+HFL reconciles fleet observations every five minutes on the `host` queue.
+See [Codex fleet documentation](../docs/info/CODEX-FLEET.md) for provider coverage
+and the independent Butler briefing schedule.
