@@ -14,11 +14,13 @@
     <h1 class="page-header-title">API reference</h1>
     <p class="page-header-description">Explore HARQIS endpoints and test requests on this host.</p>
   </header>
+  <details class="api-help"><summary>Authentication &amp; testing guide</summary>
   <section class="api-start" aria-label="Testing guide">
     <div><h2>Start with a read</h2><p>Try <code>GET /health</code>, then <code>GET /agents/api/catalogue</code>. Expand a group or filter by its name below.</p></div>
     <div><h2>Choose authentication</h2><p>Your dashboard login works for owner routes. Use <strong>Authorize</strong> for a Corpus or worker bearer token. Owner CSRF tokens are included automatically.</p></div>
     <div><h2>Test deliberately</h2><p><strong>Execute sends a real request.</strong> Writes and workflow triggers affect this host. Tokens you enter are kept only until reload.</p></div>
   </section>
+  </details>
   <nav class="api-links" aria-label="API resources"><a href="/openapi.json" download="harqis-openapi.json">Download OpenAPI</a><a href="/workflows">Workflow inventory</a><a href="/agents">Agent fleet</a></nav>
   <p id="api-docs-status" role="status">Loading endpoint reference…</p>
   <div id="swagger-ui"></div>

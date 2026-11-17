@@ -91,6 +91,11 @@ def test_swagger_browser_reads_and_creates_profile(fleet, authenticated_client, 
         page.goto('https://docs.test/docs')
         page.locator('.swagger-ui .filter-container input').wait_for()
         assert 'operations across' in page.locator('#api-docs-status').inner_text()
+        page.screenshot(path=str(tmp_path / 'api-docs-compact.png'))
+        page.locator('.scheme-container .authorize').click()
+        page.locator('.modal-ux').wait_for()
+        page.screenshot(path=str(tmp_path / 'api-docs-authorization.png'))
+        page.locator('.modal-ux .close-modal').click()
         page.locator('.swagger-ui .filter-container input').fill('Getting started')
         page.locator('.opblock-tag').filter(has_text='Getting started').click()
         health = page.locator('.opblock').filter(has=page.locator('[data-path="/health"]'))
@@ -107,6 +112,8 @@ def test_swagger_browser_reads_and_creates_profile(fleet, authenticated_client, 
         create.locator('textarea').fill(json.dumps({'name': 'Swagger test operator', 'classification': 'workflows'}))
         create.get_by_role('button', name='Execute', exact=True).click()
         playwright.expect(create.locator('.live-responses-table')).to_contain_text('200')
+        create.locator('.live-responses-table').scroll_into_view_if_needed()
+        page.screenshot(path=str(tmp_path / 'api-docs-response.png'))
         assert any(agent['name'] == 'Swagger test operator' for agent in fleet.store().list())
         result = page.evaluate("""() => {
           const request = window.harqisDocsRequest({url: '/settings', method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'value=hello'});

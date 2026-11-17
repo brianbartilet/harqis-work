@@ -1,5 +1,6 @@
 /* Swagger stays on the authenticated dashboard origin. Never persist tokens. */
 (() => {
+  document.documentElement.classList.add('dark-mode');
   const config = JSON.parse(document.getElementById('api-docs-config').textContent);
   const status = document.getElementById('api-docs-status');
   window.harqisDocsRequest = request => {
