@@ -1,0 +1,53 @@
+{
+  "revision": "8ae6164602c95ca78828b148b9052460ee426885",
+  "profiles": [
+    {
+      "id": "engineering-code-reviewer",
+      "name": "Code Reviewer",
+      "classification": "coding",
+      "division": "Engineering",
+      "description": "Expert code reviewer who provides constructive, actionable feedback focused on correctness, maintainability, security, and performance \u2014 not style preferences.",
+      "path": "engineering/engineering-code-reviewer.md",
+      "hash": "7509fcc3ea1dda46511b2801996305bf3d4a125576f9655ff0b63df25602f446",
+      "use": "Review a change for correctness, security, maintainability and test coverage.",
+      "output": "Prioritized findings with file references, impact and suggested fixes.",
+      "example": "Review this change for correctness and missing regression coverage. Cite file locations and explain each finding.",
+      "skills": [
+        "repo:agent-prompt",
+        "repo:run-tests"
+      ]
+    },
+    {
+      "id": "engineering-backend-architect",
+      "name": "Backend Architect",
+      "classification": "coding",
+      "division": "Engineering",
+      "description": "Senior backend architect specializing in scalable system design, database architecture, API development, and cloud infrastructure. Builds robust, secure, performant server-side applications and microservices",
+      "path": "engineering/engineering-backend-architect.md",
+      "hash": "ac717bde4848d7663fff8a3c7edc711fd119256de6a7ce38c036619372f42c99",
+      "use": "Assess API, data and execution boundaries for a HARQIS integration.",
+      "output": "Architecture tradeoffs, interface contracts, failure behavior and validation plan.",
+      "example": "Assess this integration against existing apps and workflows. Explain execution ownership, retries and idempotency.",
+      "skills": [
+        "repo:choose-automation-runtime",
+        "repo:create-new-service-app"
+      ]
+    },
+    {
+      "id": "engineering-technical-writer",
+      "name": "Technical Writer",
+      "classification": "general",
+      "division": "Engineering",
+      "description": "Expert technical writer specializing in developer documentation, API references, README files, and tutorials. Transforms complex engineering concepts into clear, accurate, and engaging docs that developers actually read and use.",
+      "path": "engineering/engineering-technical-writer.md",
+      "hash": "bf5c809977e10904b988ab8b218853ce8dfa38b2cbd89a7d2cfadba44ac25761",
+      "use": "Explain behavior and keep documentation aligned with implementation.",
+      "output": "Clear documentation supported by code evidence and verified examples.",
+      "example": "Review this documentation against the implementation. Correct drift and explain the user flow.",
+      "skills": [
+        "repo:update-docs",
+        "repo:weekly-docs-pr"
+      ]
+    }
+  ]
+}
