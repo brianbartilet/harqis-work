@@ -263,6 +263,8 @@ app = FastAPI(
 )
 from api_docs import router as api_docs_router
 app.include_router(api_docs_router)
+from developer_tools import router as developer_tools_router
+app.include_router(developer_tools_router)
 app.add_middleware(PublicShareBodyLimitMiddleware)
 app.add_middleware(
     GZipMiddleware,

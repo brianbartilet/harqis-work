@@ -35,7 +35,8 @@ def inventory(root: Path = ROOT) -> dict[tuple[str, str], dict]:
         for node in tree.body:
             if isinstance(node, ast.ImportFrom) and node.module:
                 source = node.module
-                if source.startswith('modules.'):
+                local_source = root.joinpath('frontend', *source.split('.')).with_suffix('.py')
+                if source.startswith('modules.') or (local_source.is_file() and not root.joinpath(*source.split('.')).with_suffix('.py').is_file()):
                     source = 'frontend.' + source
                 for alias in node.names:
                     imports[alias.asname or alias.name] = (source, alias.name)

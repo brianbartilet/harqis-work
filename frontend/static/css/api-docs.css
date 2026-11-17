@@ -1,4 +1,5 @@
 .api-reference{max-width:1440px;width:100%;margin:0 auto;padding:28px 24px 60px}
+.api-hub-back{display:inline-block;margin-bottom:16px;color:#7dd3fc;font-size:13px;text-decoration:underline;text-underline-offset:4px}
 .api-start{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin:24px 0;padding:22px;border:1px solid #334155;border-radius:12px;background:#0f172a}
 .api-start h2{font-size:15px;font-weight:650;margin:0 0 8px;color:#e2e8f0}
 .api-start p{font-size:14px;line-height:1.65;color:#94a3b8;margin:0}

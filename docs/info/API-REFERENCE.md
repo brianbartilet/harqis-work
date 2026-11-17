@@ -1,6 +1,7 @@
 # Unified HARQIS API reference
 
-Open **Build → API reference**, or `/docs` on the dashboard host. Sign in with
+Open **Build → API & MCP** (`/developer-tools`) for the documentation hub, then
+choose **Open Swagger**, or visit `/docs` directly. Sign in with
 the existing owner account. `/openapi.json` downloads the same authenticated
 OpenAPI document for API clients. The page generates its inventory from the
 running dashboard's registered routes, including all mounted HFL Corpus routes.
@@ -41,3 +42,19 @@ untyped bodies may require consulting their implementation for all fields.
 
 The standalone Corpus service's `/docs` and `/openapi.json` remain compatible
 with existing clients; the dashboard `/docs` is the complete reference.
+
+## MCP documentation hub
+
+The hub also describes the `harqis-work` stdio MCP server, provides editable-path
+client configuration examples for Windows and macOS/Linux, and lists discovery
+commands for the shared CLI. App and tool documentation comes from
+`tools/catalog.py` and the registered source files. Reading the page does not
+import app integrations, start an MCP process, call tools, or check credentials.
+Search by app, tool name, or description; expand tools for their declared Python
+signature and docstring. Use `python -m tools schema <app> <tool>` for the runtime
+JSON input schema. Dynamic registrations and the connected client's actual
+availability must be checked through that client's tool discovery.
+
+`MCP_ENABLED_APPS` can filter the stdio server's app registrations; unset/empty
+attempts all apps. The server is launched on demand by its client and has no
+HTTP/SSE listener. Do not use the Swagger URL as an MCP connection endpoint.

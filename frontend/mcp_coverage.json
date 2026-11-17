@@ -4,6 +4,27 @@
   "endpoints": [
     {
       "method": "GET",
+      "path": "/developer-tools",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner documentation hub for API references and source-only MCP discovery; no tool execution."
+    },
+    {
+      "method": "GET",
+      "path": "/docs",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner-authenticated Swagger interface; tools use their existing API contracts."
+    },
+    {
+      "method": "GET",
+      "path": "/openapi.json",
+      "status": "ui",
+      "tools": [],
+      "reason": "Owner-authenticated schema download for the Swagger documentation interface."
+    },
+    {
+      "method": "GET",
       "path": "/",
       "status": "ui",
       "tools": [],

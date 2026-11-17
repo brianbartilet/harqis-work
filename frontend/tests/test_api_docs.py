@@ -17,7 +17,7 @@ def test_docs_require_owner_login(authenticated_client):
     assert page.status_code == 200
     assert page.headers['cache-control'] == 'no-store'
     # Desktop and mobile navigation each render the shared Build menu.
-    assert page.text.count('>API reference</a>') == 2
+    assert page.text.count('>API &amp; MCP</a>') == 2
     assert '/static/vendor/swagger-ui-bundle-5.35.0.js?v=' in page.text
     assert '/static/js/api-docs.js?v=' in page.text
     assert 'cdn.jsdelivr.net' not in page.text
