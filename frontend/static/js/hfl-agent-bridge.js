@@ -169,7 +169,7 @@
     const promptEmpty=element('p','The initial prompt field is empty. Use Edit to add instructions before running it.');promptEmpty.className='agent-initial-prompt-empty';promptEmpty.hidden=true;
     if (workspaceLayout) {
       const initialRuns=element('section');initialRuns.className='agent-initial-prompt-runs';initialRuns.setAttribute('aria-label','Initial prompt runs');
-      initialRuns.append(element('h3','Initial prompt runs'),promptEmpty,controls,error,runs);
+      initialRuns.append(element('h3','Action runs and outputs'),promptEmpty,controls,error,runs);
       information.append(initialRuns);
     } else information.append(controls,error,runs);
     const footer = element('footer'); footer.className = 'agent-results-footer';
@@ -184,8 +184,10 @@
       ]);
       if (ticket !== generation) return;
       cadence.value = data.subscription.cadence;
-      promptEmpty.hidden = data.has_initial_prompt !== false;
-      runButton.disabled = (kind==='actionable' && data.has_initial_prompt!==true) || ['done','dismissed'].includes(data.action_status) || data.runs.some(run => ['queued','running','review','accepting'].includes(run.state));
+      promptEmpty.hidden = data.has_initial_prompt !== false && data.assignment?.executable !== false;
+      promptEmpty.textContent = data.assignment?.reason || 'The initial prompt field is empty. Use Edit to add instructions before running it.';
+      if(workspaceLayout)runButton.textContent=data.assignment?.mode==='butler'?'Run with butler':'Run action';
+      runButton.disabled = data.assignment?.executable === false || (kind==='actionable' && data.has_initial_prompt!==true) || ['done','dismissed'].includes(data.action_status) || data.runs.some(run => ['queued','running','review','accepting'].includes(run.state));
       runs.replaceChildren();
       attachmentArea.replaceChildren();
       if (attachments.attachments.length) {

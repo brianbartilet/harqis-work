@@ -171,7 +171,7 @@ window.HflObjectDescription = (item = {}) => {
       }
       if(!current && editingBoard && maps.current?.active!==false)item={...item,board_ids:[...new Set([...(item.board_ids||[]),editingBoard])]};
       window.HflIntentFields(d.form, item, kind);
-      const formState = () => JSON.stringify({fields: window.HflIntentValues(d.form), checklists: checklists?.value});
+      const formState = () => JSON.stringify({fields: window.HflIntentValues(d.form), assignment:d.form.actionAssignment?.snapshot(), checklists: checklists?.value});
       const canConvert = () => !!current && !state?.dirty && !state?.pending;
       checklists = new HflChecklists(checklistRoot, kind === 'idea' ? {
         links: item.item_actions || [], openAction, addButtonRoot: checklistToolbar,
@@ -207,6 +207,7 @@ window.HflObjectDescription = (item = {}) => {
           const prompt = values.prompt, filesChanged = files.changed;
           if (kind === 'actionable' && filesChanged) values.prompt = '';
           if (current) values.version = current.version;
+          if(kind === 'actionable')d.form.actionAssignment?.prepare(values);
           if (clone && !current) {
             current = (await api('/reuse/clone/'+kind+'/'+clone.id, 'POST', {request_id:requestId, source_version:clone.source_version, item:values, attachments:copiedFiles.filter(f=>f.check.checked).map(f=>f.id)})).item;
           } else if (kind === 'idea') {
@@ -227,6 +228,7 @@ window.HflObjectDescription = (item = {}) => {
           if (kind === 'actionable' && filesChanged && prompt) {
             current = (await request('/hfl-corpus/timeline/items/' + current.id, {method: 'PATCH', body: JSON.stringify({version: current.version, prompt})})).item;
           }
+          if(kind === 'actionable' && d.form.actionAssignment)current=await d.form.actionAssignment.save(current);
           const nodeId = (kind === 'idea' ? 'idea:' : 'action:') + current.id;
           maps.cacheNode({...current,id:nodeId,object_id:current.id,label:current.title,kind:kind === 'idea' ? 'ideas' : 'actions'});
           if (!linked) {

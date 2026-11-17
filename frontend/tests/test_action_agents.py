@@ -318,7 +318,7 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         assert authenticated_client.patch('/hfl-corpus/timeline/items/'+item['id'],json={'version':current['version'],'prompt':''},headers=owner_headers()).status_code==200
         page.get_by_role('button',name='Refresh',exact=True).click()
         playwright.expect(page.locator('.agent-initial-prompt-empty')).to_contain_text('The initial prompt field is empty.')
-        playwright.expect(page.get_by_role('button',name='Run initial prompt',exact=True)).to_be_disabled()
+        playwright.expect(page.get_by_role('button',name='Run action',exact=True)).to_be_disabled()
         playwright.expect(page.get_by_text('No results yet',exact=True)).to_be_visible()
         page.locator('.agent-initial-prompt-runs').scroll_into_view_if_needed()
         page.screenshot(path=str(tmp_path/'actions-initial-prompt-empty.png'))

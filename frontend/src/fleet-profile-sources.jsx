@@ -1,14 +1,14 @@
 import React,{useState} from 'react';
 
 const fresh=()=>({name:'',type:'github',location:'',ref:'main',paths:'*.md',enabled:true});
-export function ProfileSources({items,api,changed}){
+export function ProfileSources({items,api,changed,contextLabel="Add agent",initialOpen=false}){
  const [editing,setEditing]=useState(null),[draft,setDraft]=useState(fresh),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const set=(key,value)=>setDraft(old=>({...old,[key]:value}));
  function edit(source){setEditing(source?.id||'new');setDraft(source?{...source,paths:source.paths.join('\n')}:fresh());setError('');setNotice('');}
  async function run(action){setBusy(true);setError('');setNotice('');try{await action();await changed();}catch(e){setError(e.message);}finally{setBusy(false);}}
  function save(){return run(async()=>{const payload=Object.fromEntries(['name','type','location','ref','enabled'].map(key=>[key,draft[key]]));payload.paths=draft.paths.split('\n').map(v=>v.trim()).filter(Boolean);if(editing!=='new')payload.version=draft.version;await api('/profile-sources'+(editing==='new'?'':'/'+editing),payload);setEditing(null);setNotice('Source saved. Refresh metadata to discover profiles.');});}
- return <details className="fleet-profile-sources"><summary>Profile sources</summary>
-  <p>Manage sources here without leaving Add agent. Browsing uses metadata; opening a profile downloads its exact indexed version. Source changes are saved separately from this agent.</p>
+ return <details className="fleet-profile-sources" open={initialOpen}><summary>Profile sources</summary>
+  <p>Manage sources here without leaving {contextLabel}. Browsing uses metadata; opening a profile downloads its exact indexed version. Source changes are saved separately.</p>
   {items.map(item=><div key={item.id} className="fleet-specialist-selected"><strong>{item.name}</strong><p>{item.type==='github'?'GitHub repository':item.type==='manifest'?'HTTPS catalog':'Local directory'} · {item.enabled?'Enabled':'Disabled'} · {item.count||0} profiles</p>
    <p>{item.last_sync?'Last refreshed '+new Date(item.last_sync*1000).toLocaleString():item.count?'Bundled metadata · not yet refreshed':'Not refreshed yet'}</p>
    {item.changes&&<p>{item.changes.added} added · {item.changes.changed} changed · {item.changes.removed} removed. Saved agents retain their instructions.</p>}

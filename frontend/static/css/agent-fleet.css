@@ -235,7 +235,7 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 .fleet-shell .fleet-connect-icon{display:inline-flex;align-items:center;justify-content:center;flex:none;width:34px;height:34px;padding:7px;border:1px solid #334155;border-radius:8px;background:#0f1c2e;color:#dbe7f5;text-decoration:none}
 .fleet-shell .fleet-connect-icon:hover{background:#20334a;border-color:#64748b}
 
-.fleet-shell dialog.fleet-agent-editor{position:fixed;inset:0;margin:auto;max-height:90dvh;overflow:auto}
+.fleet-shell dialog.fleet-agent-editor{position:fixed;inset:0;margin:auto;width:min(640px,calc(100vw - 24px));max-height:90dvh;overflow:auto}
 
 /* Give output summaries and cards room in the agent inspector. */
 .fleet-agent-panel>.fleet-output-list{margin-top:16px;gap:10px;padding-bottom:8px}
@@ -493,3 +493,26 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 .fleet-specialists a{color:#7dd3fc}.fleet-specialists details{min-width:0}.fleet-specialists summary{cursor:pointer;padding:8px 32px 8px 0;list-style:none;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%2367e8f9' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 8px center;background-size:18px}.fleet-specialists summary::-webkit-details-marker{display:none}
 .fleet-specialists details[open]>summary{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 12.5 5-5 5 5' stroke='%2367e8f9' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
 .fleet-specialist-markdown,.fleet-specialist-preview{max-height:360px;overflow:auto;overflow-wrap:anywhere;white-space:pre-wrap;font-size:12px;line-height:1.6}.fleet-specialist-markdown pre{white-space:pre-wrap}.fleet-specialist-markdown img{max-width:100%}.fleet-specialists button:focus-visible,.fleet-specialists summary:focus-visible{outline:2px solid #67e8f9;outline-offset:3px}
+
+/* Agent specialization: compact assignment, separate catalog with one scroll surface. */
+.fleet-specialization-summary{border-top:1px solid #334155;padding-top:16px;display:grid;gap:12px;min-width:0}
+.fleet-specialization-summary h3{font-size:13px;font-weight:650;margin:0 0 8px;color:#e2e8f0}
+.fleet-specialization-summary p{margin:4px 0}.fleet-specialization-summary small{color:#94a3b8;line-height:1.6}
+.fleet-shell dialog.fleet-specialization-dialog{position:fixed;inset:0;margin:auto;padding:0;width:min(860px,calc(100vw - 24px));max-height:90dvh;overflow:hidden}
+.fleet-specialization-dialog[open]{display:flex;flex-direction:column}
+.fleet-specialization-dialog .fleet-dialog-head{flex:none;position:static}
+.fleet-specialization-dialog .fleet-dialog-head button{width:36px;height:36px;padding:0;flex:none}
+.fleet-specialization-dialog .fleet-specialization-body{overflow-y:auto;min-height:0;padding:20px}
+.fleet-specialization-dialog .fleet-specialists{border:0;padding:0;margin:0;min-width:0}
+.fleet-specialization-dialog .fleet-specialists>legend{display:none}
+.fleet-specialization-dialog .fleet-specialist-results{max-height:none;overflow:visible;grid-template-columns:repeat(2,minmax(0,1fr))}
+.fleet-specialization-dialog .fleet-specialist-detail{grid-row:auto}
+@media(max-width:600px){.fleet-specialization-dialog .fleet-specialist-results{grid-template-columns:minmax(0,1fr)}.fleet-specialization-dialog .fleet-specialization-body{padding:14px}}
+
+.fleet-specialization-dialog .fleet-specialists.is-previewing>.fleet-specialist-results,.fleet-specialization-dialog .fleet-specialists.is-previewing>label,.fleet-specialization-dialog .fleet-specialists.is-previewing>p[role=status]{display:none}
+
+.fleet-selected-specialization-card{display:grid;gap:10px;border:1px solid #365269;border-radius:12px;padding:16px;background:#102034;min-width:0;overflow-wrap:anywhere}
+.fleet-selected-specialization-card .fleet-specialization-name{font-size:15px;color:#f1f5f9;line-height:1.4}
+.fleet-selected-specialization-card .fleet-specialization-description{font-size:13px;line-height:1.6;color:#cbd5e1;margin:0}
+.fleet-selected-specialization-card .fleet-actions{margin-top:4px;flex-wrap:wrap}
+.fleet-specialization-empty{display:grid;gap:10px}

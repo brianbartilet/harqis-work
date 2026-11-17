@@ -30,20 +30,22 @@ def overrides(value):
     return {key: clean[key] for key in value}
 
 
-def effective(source_id, require_active=True):
+def effective(source_id, require_active=True, execute=True):
     configs = store().configs()
     card = configs.get('card:' + source_id, {})
     preset = configs.get('preset:' + card.get('preset', ''), {})
-    if card.get('agent_id'):
-        from modules.agents.service import execution
-        return {**execution(card['agent_id'], require_active=require_active), **card.get('overrides', {})}
-    return {**read_settings(), **preset.get('overrides', {}), **card.get('overrides', {})}
+    from modules.hfl_corpus.action_assignment import resolve
+    defaults = {**read_settings(), **preset.get('overrides', {})}
+    return resolve(card, defaults, execute=execute, require_active=require_active)
+
 
 
 @owner.get('/configuration/defaults')
-def default_configuration():
+def default_configuration(user=Depends(bridge.owner_auth)):
     settings = read_settings()
-    return {'effective': settings, 'card': {'preset': '', 'overrides': {}}}
+    from modules.hfl_corpus.action_assignment import agents, resolve
+    card = {'preset': '', 'overrides': {}, 'assignment_mode': 'manual', 'specialist_mode': 'inherit'}
+    return {'effective': resolve(card, settings, execute=False), 'card': card, 'agents': agents(user), 'defaults': settings, 'presets': {}}
 
 
 @owner.get('/assignments')
@@ -56,33 +58,54 @@ def assignments(user=Depends(bridge.owner_auth)):
                       if key.startswith('card:') and value.get('agent_id') in visible}}
 
 
+@owner.post('/configuration/preview')
+def preview_configuration(raw: dict, user=Depends(bridge.owner_auth)):
+    from modules.hfl_corpus.action_assignment import validate, resolve
+    # Draft previews accept profile references, never arbitrary trusted snapshots.
+    identity = raw.pop('source_id', '')
+    if not isinstance(identity, str) or len(identity)>100:
+        raise HTTPException(400, 'Choose an existing Action.')
+    old = {}
+    if identity:
+        bridge.checked(bridge.action_call, 'GET', '/' + identity)
+        old = store().configs().get('card:' + identity, {})
+    card = {**bridge.checked(validate, raw, old, user), 'overrides': {}}
+    settings = bridge.checked(resolve, card, read_settings(), execute=False)
+    preview = dict(settings['action_assignment'])
+    task, outcome = raw.get('task_prompt', ''), raw.get('expected_outcome', '')
+    if not isinstance(task, str) or len(task)>20000 or not isinstance(outcome, str) or len(outcome)>3000:
+        raise HTTPException(400, 'Use bounded Action instructions and outcome.')
+    preview['instructions'] = '\n\n'.join(filter(None, [preview['instructions'], '# Task\n'+task if task else '', '# Expected outcome\n'+outcome if outcome else '']))
+    return preview
+
+
 @owner.get('/actions/{source_id}/configuration')
-def configuration(source_id: str):
-    from modules.agents.service import initialize
+def configuration(source_id: str, user=Depends(bridge.owner_auth)):
+    from modules.hfl_corpus.action_assignment import agents
     action = bridge.checked(bridge.action_call, 'GET', '/' + source_id)['item']
     configs = store().configs()
     return {'action': {key: action.get(key, '') for key in ('title','status','prompt','expected_outcome','description','notes','completion_note','due_date','version','checklists')},
             'action_html': {key: str(bridge.render_markdown(action.get(key) or '')) for key in ('prompt','expected_outcome','description','notes','completion_note')},
-            'effective': effective(source_id, require_active=False), 'defaults': read_settings(),
+            'effective': effective(source_id, require_active=False, execute=False), 'defaults': read_settings(),
             'card': configs.get('card:' + source_id, {'preset': '', 'overrides': {}}),
-            'agents': [a for a in initialize().list() if a['runtime'] == 'hermes'],
+            'agents': agents(user),
             'presets': {key[7:]: value for key, value in configs.items() if key.startswith('preset:')}}
 
 
 @owner.post('/actions/{source_id}/configuration')
-def set_configuration(source_id: str, payload: dict):
-    configuration(source_id)
+def set_configuration(source_id: str, payload: dict, user=Depends(bridge.owner_auth)):
+    configuration(source_id, user)
     selected = payload.get('preset', '')
     if not isinstance(selected, str) or (selected and 'preset:' + selected not in store().configs()):
         raise HTTPException(400, 'Choose an existing preset.')
-    agent_id = payload.get('agent_id', '')
-    if not isinstance(agent_id, str) or len(agent_id) > 100:
-        raise HTTPException(400, 'Choose an existing fleet agent.')
-    if agent_id:
-        from modules.agents.service import execution
-        bridge.checked(execution, agent_id)
-    store().configure('card:' + source_id, {'preset': selected, 'agent_id': agent_id, 'overrides': bridge.checked(overrides, payload.get('overrides', {}))})
-    return configuration(source_id)
+    from modules.hfl_corpus.action_assignment import validate, resolve
+    old = store().configs().get('card:' + source_id, {})
+    assignment = bridge.checked(validate, payload, old, user)
+    card = {**assignment, 'preset': selected, 'overrides': bridge.checked(overrides, payload.get('overrides', {}))}
+    bridge.checked(resolve, card, read_settings(), execute=False)
+    store().configure('card:' + source_id, card)
+    return configuration(source_id, user)
+
 
 
 @owner.post('/presets')

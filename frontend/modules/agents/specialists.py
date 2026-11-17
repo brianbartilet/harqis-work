@@ -38,7 +38,7 @@ def snapshot(selection, existing=None):
         raise ValueError('This is a skill package. Install the complete package through the native skill workflow; a profile cannot replace its supporting files.')
     if any(selection[key] != row[key] for key in ('revision','hash')):
         raise ValueError('Specialist version changed. Refresh and review the profile.')
-    return {key: row.get(key,'') for key in ('id', 'name', 'source', 'source_name', 'revision', 'hash', 'source_url', 'content')}
+    return {key: row.get(key,'') for key in ('id', 'name', 'description', 'source', 'source_name', 'revision', 'hash', 'source_url', 'content')}
 
 
 def compose(agent):

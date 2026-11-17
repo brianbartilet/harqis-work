@@ -84,7 +84,7 @@
     if(item)window.HarqisIntegrations?.actionButton(editor.querySelector('.agenda-dialog-header'),item);
     editorState = window.HflBindEditor(editor, form, {
       creationLabel: 'Action',
-      snapshot: () => JSON.stringify({fields:window.HflIntentValues(form),checklists:window.hflActionChecklists.value,files:attachments.pending.map(f=>[f.name,f.size,f.lastModified]),removed:[...attachments.removed]}),
+      snapshot: () => JSON.stringify({fields:window.HflIntentValues(form),assignment:form.actionAssignment?.snapshot(),checklists:window.hflActionChecklists.value,files:attachments.pending.map(f=>[f.name,f.size,f.lastModified]),removed:[...attachments.removed]}),
       exists: () => !!editing, valid: () => form.checkValidity(),
       lock: value => { busy=value; attachments.root.inert=value; form.querySelector('[type=submit]').disabled=value; },
       save: saveEditor,
@@ -366,6 +366,7 @@
 
       const prompt = payload.prompt, changed = attachments.changed;
       if (changed) payload.prompt = '';
+      form.actionAssignment?.prepare(payload);
       const saved = await api(editing?'/'+editing.id:'',{method:editing?'PATCH':'POST',body:JSON.stringify(payload)});
       editing = saved.item;
       window.HflBoardSaved(form);
@@ -373,6 +374,7 @@
         await attachments.save(editing.id, editorState.report);
         editing = (await api('/'+editing.id,{method:'PATCH',body:JSON.stringify({version:editing.version,prompt})})).item;
       }
+      if(form.actionAssignment)editing=await form.actionAssignment.save(editing);
       window.HflEditorLocation('actionable',editing.id);
       document.getElementById('followup-state-label').hidden=false;
       document.getElementById('followup-editor-title').textContent='Edit action';

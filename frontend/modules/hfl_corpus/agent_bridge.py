@@ -673,7 +673,14 @@ def source_view(kind: str, source_id: str):
                                  'version': row['item']['version']})
         except (KeyError, httpx.HTTPError):
             outcomes_error = 'Saved action outcomes could not be loaded. Retry shortly.'
-    return {'runs': runs, 'events': events,
+    assignment = None
+    if kind == 'actionable':
+        from modules.hfl_corpus.action_agents import effective
+        try:
+            assignment = effective(source_id, execute=False)['action_assignment']
+        except (KeyError, ValueError):
+            assignment = {'executable': False, 'reason': 'Assignment unavailable. Edit this Action to choose an agent.'}
+    return {'runs': runs, 'events': events, 'assignment': assignment,
             'outcomes': outcomes, 'outcomes_error': outcomes_error, 'action_status': action_status, 'has_initial_prompt': has_initial_prompt,
             'subscription': next((sub for sub in store.subscriptions() if sub['source_key'] == key), {'cadence': 'daily' if kind == 'actionable' or any(str(p['id']) == source_id and p.get('agent_enabled') for p in get_memory_pin_store().snapshot()['ranges']) else 'off', 'auto_complete': True})}
 
