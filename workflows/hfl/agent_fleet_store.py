@@ -22,6 +22,9 @@ class AgentFleetStore:
         with self.connect() as db:
             db.executescript('''
                 CREATE TABLE IF NOT EXISTS fleet_work_state (user TEXT PRIMARY KEY, version INTEGER NOT NULL, payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS fleet_profile_sources (id TEXT PRIMARY KEY, version INTEGER NOT NULL, payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS fleet_profile_index (source TEXT NOT NULL, id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(source,id));
+                CREATE TABLE IF NOT EXISTS fleet_profile_cache (hash TEXT PRIMARY KEY, content BLOB NOT NULL, accessed REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS fleet_receipt_versions (user TEXT PRIMARY KEY, version INTEGER NOT NULL);
                 CREATE TABLE IF NOT EXISTS fleet_read_receipts (user TEXT NOT NULL, item_key TEXT NOT NULL, reviewed INTEGER NOT NULL, PRIMARY KEY(user,item_key));
                 CREATE TABLE IF NOT EXISTS fleet_agents (

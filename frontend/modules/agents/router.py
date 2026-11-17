@@ -49,6 +49,51 @@ def specialist_catalogue():
     return {'items': checked(specialists.catalog)}
 
 
+@api.get('/profile-sources')
+def profile_sources():
+    from modules.agents import profile_sources as sources
+    return {'items':checked(sources.sources)}
+
+
+@api.post('/profile-sources')
+def add_profile_source(raw: dict):
+    from modules.agents import profile_sources as sources
+    return {'item':checked(sources.save,raw)}
+
+
+@api.post('/profile-sources/{identity}')
+def edit_profile_source(identity: str,raw: dict):
+    from modules.agents import profile_sources as sources
+    return {'item':checked(sources.save,raw,identity)}
+
+
+@api.post('/profile-sources/{identity}/refresh')
+def refresh_profile_source(identity: str,raw: dict):
+    from modules.agents import profile_sources as sources
+    return {'item':checked(sources.refresh,identity,raw.get('version'))}
+
+
+@api.post('/profile-sources/{identity}/remove')
+def remove_profile_source(identity: str,raw: dict):
+    from modules.agents import profile_sources as sources
+    return checked(sources.remove,identity,raw.get('version'))
+
+
+@api.post('/specialist-update-preview')
+def specialist_update_preview(raw: dict,user=Depends(owner_auth)):
+    import difflib
+    from modules.agents import specialists
+    from modules.agents.projection import visible
+    agent=checked(service.store().get,raw.get('agent_id'))
+    if not visible(agent,user):
+        raise HTTPException(404,'Agent unavailable.')
+    saved=agent.get('specialist_profile')
+    if not saved:
+        raise HTTPException(422,'This agent has no specialist profile.')
+    current=checked(specialists.detail,saved['id'])
+    return {'profile':current,'diff':'\n'.join(difflib.unified_diff(saved['content'].splitlines(),current['content'].splitlines(),fromfile='Saved instructions',tofile='Available instructions',lineterm='')) or 'Instructions are unchanged.'}
+
+
 @api.get('/specialists/{identity}')
 def specialist_detail(identity: str):
     from modules.agents import specialists

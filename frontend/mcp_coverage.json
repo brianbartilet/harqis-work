@@ -4268,6 +4268,48 @@
       "status": "deferred",
       "tools": [],
       "reason": "Owner-authenticated Fleet specialist configuration and preview; machine-facing contract deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/profile-sources",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated Fleet profile source configuration or update preview; machine-facing contract deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/profile-sources",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated Fleet profile source configuration or update preview; machine-facing contract deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/profile-sources/{identity}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated Fleet profile source configuration or update preview; machine-facing contract deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/profile-sources/{identity}/refresh",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated Fleet profile source configuration or update preview; machine-facing contract deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/profile-sources/{identity}/remove",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated Fleet profile source configuration or update preview; machine-facing contract deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/specialist-update-preview",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated Fleet profile source configuration or update preview; machine-facing contract deferred."
     }
   ]
 }

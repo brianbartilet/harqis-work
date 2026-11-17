@@ -1,4 +1,4 @@
-"""Import a pinned Agency Agents source archive without executing upstream code.
+"""Build bootstrap metadata from a pinned archive; never vendor profile bodies.
 
 Usage: python -m tools.agency_catalog archive.zip --revision <40-character SHA>
 """
@@ -18,7 +18,7 @@ def import_catalog(archive, revision, destination=ROOT):
     if not re.fullmatch(r'[0-9a-f]{40}', revision):
         raise ValueError('Supply a full upstream commit SHA.')
     helpers = json.loads((destination / 'helpers.json').read_text(encoding='utf-8'))
-    profiles, files, identities = [], {}, set()
+    profiles, identities = [], set()
     with zipfile.ZipFile(archive) as source:
         prefix = f'agency-agents-{revision}/'
         divisions = json.loads(source.read(prefix + 'divisions.json'))['divisions']
@@ -46,14 +46,10 @@ def import_catalog(archive, revision, destination=ROOT):
                        path=str(relative), hash=hashlib.sha256(content).hexdigest(), skills=[])
             row.update(helpers.get(identity, {}))
             profiles.append(row)
-            files[identity + '.md'] = content
         license_bytes = source.read(prefix + 'LICENSE')
         divisions_bytes = source.read(prefix + 'divisions.json')
     # Preserve the pilot ordering; all other profiles are sorted by source path.
     profiles.sort(key=lambda row: (list(helpers).index(row['id']) if row['id'] in helpers else len(helpers), row['path']))
-    (destination / 'upstream').mkdir(parents=True, exist_ok=True)
-    for filename, content in files.items():
-        (destination / 'upstream' / filename).write_bytes(content)
     (destination / 'LICENSE').write_bytes(license_bytes)
     (destination / 'divisions.json').write_bytes(divisions_bytes)
     (destination / 'manifest.json').write_text(json.dumps({'revision':revision,'profiles':profiles},indent=2)+'\n',encoding='utf-8')

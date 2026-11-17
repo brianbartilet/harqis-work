@@ -5,6 +5,34 @@ from frontend.tests.test_hfl_agent_bridge import bridge
 from frontend.tests.test_primary_assistant import gateway, USER
 
 
+@pytest.fixture(autouse=True)
+def catalog_data(fleet, monkeypatch):
+    """Keep catalog/API tests offline; bytes and hashes agree in the isolated index."""
+    import json
+    from modules.agents import profile_sources as sources
+    sources.seed()
+    downloads={}
+    with fleet.store().connect() as db:
+        for record in db.execute('SELECT * FROM fleet_profile_index').fetchall():
+            row=json.loads(record['payload'])
+            content=('# '+row['name']+'\nCheck evidence.\n'+('Long guidance. '*2300 if row['slug']=='healthcare-marketing-compliance' else '')).encode()
+            row['hash']=sources.sha(content)
+            downloads[row['download_url']]=content
+            db.execute('UPDATE fleet_profile_index SET payload=? WHERE id=?',(json.dumps(row),row['id']))
+    calls=[]
+    def fetch(url, maximum=sources.MAX_FILE):
+        calls.append(url)
+        if url not in downloads:
+            raise ValueError('Test download unavailable.')
+        value=downloads[url]
+        if isinstance(value,Exception):
+            raise value
+        assert len(value)<=maximum
+        return value
+    monkeypatch.setattr(sources,'download',fetch)
+    return downloads,calls
+
+
 def selection(client):
     row = client.get('/agents/api/specialists').json()['items'][0]
     return {key: row[key] for key in ('id', 'revision', 'hash')}
@@ -61,13 +89,10 @@ def test_preview_and_external_provider_metadata(fleet, authenticated_client):
     assert len(fleet.store().list()) == 4  # preview creates no agent
 
 
-def test_source_hash_mismatch_fails_closed(fleet, tmp_path, monkeypatch):
+def test_source_hash_mismatch_fails_closed(fleet, catalog_data):
     from modules.agents import specialists
-    import shutil
-    shutil.copytree(specialists.ROOT, tmp_path/'catalog')
-    monkeypatch.setattr(specialists,'ROOT',tmp_path/'catalog')
     row = specialists.catalog()[0]
-    (specialists.ROOT/'upstream'/row['path'].split('/')[-1]).write_text('changed')
+    catalog_data[0][row['download_url']]=b'changed'
     with pytest.raises(ValueError,match='integrity'):
         specialists.detail(row['id'])
 
@@ -78,7 +103,7 @@ def test_gateway_and_primary_conversations_freeze_specialist(gateway, fleet, aut
     from modules.agents import assistant
     client = authenticated_client
     item, _, _ = configured(client)
-    row = next(row for row in client.get('/agents/api/specialists').json()['items'] if row['id']=='healthcare-marketing-compliance')
+    row = next(row for row in client.get('/agents/api/specialists').json()['items'] if row['id']=='agency-agents:healthcare-marketing-compliance')
     selected = {key:row[key] for key in ('id','revision','hash')}
     body = client.get('/agents/api/specialists/'+row['id']).json()['content']
     assert len(body) > 28000
@@ -166,7 +191,7 @@ def test_archive_import_is_bounded_and_reproducible(tmp_path):
     assert import_catalog(archive,revision,target)==1
     assert first==(target/'manifest.json').read_bytes()
     assert json.loads(first)['profiles'][0]['hash']==hashlib.sha256(body).hexdigest()
-    assert (target/'upstream/example.md').read_bytes()==body
+    assert not (target/'upstream').exists()
     with zipfile.ZipFile(archive,'a') as source:
         source.writestr(prefix+'testing/nested/example.md',body)
     with pytest.raises(ValueError,match='duplicate'):
@@ -204,6 +229,17 @@ def test_picker_apply_preserve_preview_and_save(fleet, authenticated_client, tmp
         page.goto('https://fleet.test/agents')
         page.get_by_role('button',name='Add agent',exact=True).click()
         page.get_by_role('button',name='Retry loading profiles').click()
+        page.get_by_text('Profile sources',exact=True).click()
+        page.get_by_role('button',name='Add profile source',exact=True).click()
+        page.get_by_label('Source name',exact=True).fill('Test team')
+        page.get_by_label('Source location',exact=True).fill('example/team-profiles')
+        page.get_by_role('button',name='Save profile source',exact=True).click()
+        playwright.expect(page.get_by_role('button',name='Settings for Test team',exact=True)).to_be_visible()
+        page.get_by_role('button',name='Disable Test team',exact=True).click()
+        playwright.expect(page.get_by_role('button',name='Enable Test team',exact=True)).to_be_visible()
+        page.get_by_role('button',name='Remove Test team',exact=True).click()
+        playwright.expect(page.get_by_role('button',name='Settings for Test team',exact=True)).to_have_count(0)
+        page.get_by_text('Profile sources',exact=True).click()
         playwright.expect(page.get_by_text('283 profiles available',exact=False)).to_be_visible()
         playwright.expect(page.locator('.fleet-specialist-results button')).to_have_count(30)
         page.get_by_role('button',name='Show more profiles').click()
@@ -223,7 +259,7 @@ def test_picker_apply_preserve_preview_and_save(fleet, authenticated_client, tmp
         playwright.expect(page.get_by_label('Description',exact=True)).to_have_value('My description')
         page.get_by_label('Search specialist profiles').fill('no such profile')
         playwright.expect(page.get_by_text('No matching profiles.',exact=False)).to_be_visible()
-        playwright.expect(page.locator('.fleet-specialist-selected')).to_contain_text('Code Reviewer')
+        playwright.expect(page.locator('.fleet-specialists > .fleet-specialist-selected')).to_contain_text('Code Reviewer')
         page.get_by_role('button',name='Preview effective instructions').click()
         playwright.expect(page.locator('.fleet-specialist-preview')).to_contain_text('Code Reviewer')
         page.locator('.fleet-specialists').scroll_into_view_if_needed()
@@ -233,20 +269,20 @@ def test_picker_apply_preserve_preview_and_save(fleet, authenticated_client, tmp
         playwright.expect(page.get_by_role('heading',name='Create agent',exact=True)).to_be_hidden()
         item=next(a for a in fleet.store().list() if a['name']=='Ada test')
         assert item['description']=='My description'
-        assert item['specialist_profile']['id']=='engineering-code-reviewer'
+        assert item['specialist_profile']['id']=='agency-agents:engineering-code-reviewer'
         page.goto('https://fleet.test/agents?agent='+item['id'])
         page.get_by_role('button',name='Close Agent work drawer',exact=True).click()
         page.get_by_role('button',name='Edit',exact=True).click()
-        playwright.expect(page.locator('.fleet-specialist-selected')).to_contain_text('Code Reviewer')
+        playwright.expect(page.locator('.fleet-specialists > .fleet-specialist-selected')).to_contain_text('Code Reviewer')
         playwright.expect(page.get_by_label('Description',exact=True)).to_have_value('My description')
         page.get_by_label('Classification',exact=True).select_option('general')
-        playwright.expect(page.locator('.fleet-specialist-selected')).to_contain_text('Code Reviewer')
+        playwright.expect(page.locator('.fleet-specialists > .fleet-specialist-selected')).to_contain_text('Code Reviewer')
         page.get_by_label('Search specialist profiles').fill('Technical Writer')
         page.get_by_role('button',name='Preview Technical Writer',exact=True).click()
         page.get_by_role('button',name='Use this profile').click()
         playwright.expect(page.get_by_label('Description',exact=True)).to_have_value('My description')
         page.get_by_role('button',name='Remove profile',exact=True).click()
-        playwright.expect(page.locator('.fleet-specialist-selected')).to_have_count(0)
+        playwright.expect(page.locator('.fleet-specialists > .fleet-specialist-selected')).to_have_count(0)
         playwright.expect(page.get_by_label('Description',exact=True)).to_have_value('My description')
         assert not errors
         browser.close()
