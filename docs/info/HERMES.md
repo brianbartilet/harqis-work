@@ -1,5 +1,8 @@
 # Hermes — Agent Runtime & Orchestrator
 
+For the fleet agent that uses Jev for action-triage decisions, see
+[Jev Decision Assistant: architecture, setup and operations](JEV-HERMES.md).
+
 > The agent runtime for harqis-work. Hermes hosts Claude-powered agents, registers
 > the harqis-work MCP server, schedules cron jobs (with or without an agent reasoning
 > loop), and keeps agent memory, plans, and logs under `~/.hermes/`.

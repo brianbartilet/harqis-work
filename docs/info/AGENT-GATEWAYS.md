@@ -1,5 +1,8 @@
 # Agent gateway connections
 
+For a dedicated Hermes profile using TypeSafe decision tools, see
+[Jev Decision Assistant setup and flow](JEV-HERMES.md).
+
 The Agents fleet can connect each Hermes profile to its own Hermes Runs API.
 Connections belong to the signed-in owner; the same fleet profile does not expose
 another owner's gateway credentials or conversations. Nod supports connection

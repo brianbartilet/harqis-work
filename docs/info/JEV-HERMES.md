@@ -4,6 +4,53 @@ This integration adds a versioned decision tool to an existing Hermes runtime.
 Hermes retains its reasoning model; Jev evaluates typed questions. Release one
 is manual, recommendation-only action triage, with local decision receipts.
 
+## Architecture and ownership
+
+```mermaid
+flowchart LR
+    Owner[Owner] --> Fleet[HARQIS Fleet conversation]
+    Fleet --> Gateway[Dedicated Hermes Runs gateway]
+    Gateway --> Agent[Hermes reasoning model]
+    Agent --> Tool[TypeSafe CLI/MCP adapter]
+    Tool --> Service[Validation and decision policy]
+    Service --> Jev[TypeSafe System One API]
+    Jev --> Service
+    Service --> Receipts[Profile-local SQLite receipts]
+    Service --> Agent
+    Agent --> Fleet
+```
+
+| Component | Responsibility |
+|---|---|
+| Fleet | Owner-facing identity, connection credentials, conversation and run status |
+| Hermes | Context preparation, tool invocation and explanation using its configured LLM |
+| TypeSafe service | Input validation, API transport, answer validation and local receipts |
+| Jev | Choice, urgency and yes/no judgments about the supplied context |
+| Decision policy | Decide whether to return a recommendation or require review |
+
+The Hermes gateway key and `TYPESAFE_API_KEY` serve different connections. Fleet
+stores the gateway key; the execution host resolves the TypeSafe key. Neither
+belongs in agent instructions. Jev is invoked as a tool, not selected as the
+Hermes reasoning model. The local skill supplies usage instructions, not API access.
+
+## Implementation map
+
+| Source | Purpose |
+|---|---|
+| [`apps/typesafe/config.py`](../../apps/typesafe/config.py) | Load the `TYPESAFE` app configuration |
+| [`base_api_service.py`](../../apps/typesafe/references/web/base_api_service.py) | HTTPS transport, timeouts, bounded retries and sanitized errors |
+| [`system_one.py`](../../apps/typesafe/references/web/api/system_one.py) | Model discovery and decision orchestration |
+| [`DTO validation`](../../apps/typesafe/references/dto/system_one.py) | Validate answer types, probability distributions and usage |
+| [`templates.py`](../../apps/typesafe/templates.py) | `action_triage_v1` questions, thresholds and review reasons |
+| [`receipts.py`](../../apps/typesafe/receipts.py) | Persist bounded decision records in SQLite |
+| [`mcp.py`](../../apps/typesafe/mcp.py) | Shared CLI/MCP tool registration |
+| [`tools/catalog.py`](../../tools/catalog.py) | Lazy registration consumed by CLI, MCP server and agent bridge |
+| [`setup_jev_hermes.py`](../../scripts/setup_jev_hermes.py) | Dry-run/apply profile setup |
+| [`jev-action-triage`](../../.agents/skills/jev-action-triage/SKILL.md) | Operational instructions installed on the execution profile |
+
+The [app reference](../../apps/typesafe/README.md) contains the full configuration,
+input limits, CLI commands, transport behavior and test entry points.
+
 ## Flow
 
 1. The owner submits action context and candidate capabilities through Fleet's
@@ -91,6 +138,60 @@ Suggested Fleet instructions:
 
 ## Verification and evaluation
 
+Start with supplied context so the first check does not depend on corpus access:
+
+> Use jev-action-triage to evaluate this action: "Fix a failing Python unit test."
+> The description is "Investigate the supplied assertion failure and propose a
+> fix." The candidates are `coder` (Coding agent: debug Python tests) and `writer`
+> (Writing agent: edit documentation). These are synthetic test candidates, not
+> verified fleet identities. Return the recommendation, review reasons, urgency,
+> actual model and receipt ID. Leave assignments unchanged.
+
+For real work, replace synthetic IDs and capability descriptions with actual
+owner-visible fleet candidates. The tool validates the supplied candidate set,
+but it does not verify fleet membership, availability, or permission to execute.
+
+### Interpreting the result
+
+| Result | Meaning | Next step |
+|---|---|---|
+| `recommendation` | A candidate passes the provisional review policy | Review the suggested agent; no assignment has occurred |
+| `needs_review` | Suitability, missing context or choice ambiguity prevents a recommendation | Inspect `reason_codes` and clarify the input |
+| `error` | Provider, transport or response validation failed | Diagnose the error; do not interpret it as a negative answer |
+| Tool exception | Input/configuration is invalid, or receipt persistence failed | Correct the issue before proceeding; persistence failure may follow billed inference |
+
+The current policy requires suitability probability at least `0.8`, selected
+candidate probability at least `0.8`, a lead over the next candidate of at least
+`0.2`, and missing-information probability no greater than `0.2`. These values are
+provisional, not measured accuracy guarantees. Questions and thresholds are
+versioned together in `templates.py`. Urgency is a score on the three-level rubric
+"Can wait", "Needs attention this week", "Needs attention today" (range 0–2);
+inspect its probability distribution as well as its average score.
+
+All returned outcomes carry `execution_authorized: false`. A successful result
+includes typed answers, model, usage, template, policy, latency and receipt ID.
+CLI users must inspect the decision's nested `status`, even when the outer CLI
+envelope says the tool call completed successfully.
+
+### Receipt inspection
+
+The setup helper assigns `<profile-home>/typesafe-decisions.sqlite3` explicitly.
+For other callers, `TYPESAFE_RECEIPTS_DB` overrides the default under `HERMES_HOME`
+or `~/.hermes`. Open the database locally with a SQLite viewer and inspect:
+
+```sql
+SELECT id, payload FROM decisions ORDER BY rowid DESC LIMIT 10;
+```
+
+The `id` matches the tool's `receipt_id`; `payload` contains the timestamp, model,
+policy, typed answers, usage and outcome. Candidate choices are stored as IDs.
+Raw action text, candidate names and capability descriptions are excluded.
+This does not remove context from normal Hermes conversations or the separate CLI
+input audit log. A receipt proves an evaluation was recorded, not that an action
+was assigned, executed, or uploaded to HFL.
+
+### Acceptance checks
+
 - Submit a clear match, ambiguous match, missing-context case and unsuitable set.
 - Confirm real returned answers and receipt IDs, not just tool discovery.
 - Check receipt SQLite storage on the profile host and the Fleet conversation.
@@ -100,6 +201,22 @@ Suggested Fleet instructions:
 - Compare decisions with a labeled sample before calibrating thresholds. Include
   Hermes reasoning cost as well as Jev tokens and latency. No cost/accuracy claim
   is established by offline tests.
+
+## Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| `Configure TYPESAFE_API_KEY` | Set the key in the execution checkout's `.env/apps.env`; restart the tool process so configuration reloads |
+| TypeSafe tools missing | Run the helper against the actual profile; reload MCP and inspect its `harqis_typesafe` entry and API-platform tool policy |
+| Fleet connection test fails | Check backend reachability, gateway key and advertised Runs capabilities; a chat-completions endpoint alone is insufficient |
+| Chat works but no decision tool runs | Confirm Fleet uses **Chat and task execution** and the gateway enables the profile's MCP tools |
+| Setup reports conflicting files | Review the existing `harqis_typesafe` entry or modified skill; the helper does not overwrite them |
+| `needs_review` repeatedly | Inspect the supplied capabilities and missing-information answer; evaluate labeled cases before changing policy |
+| HTTP 401/403 | Check TypeSafe account credentials and access on the tool host |
+| HTTP 429/502/503/504 | The tool already retries twice; check provider availability before repeating the task |
+| Transport timeout | Admission may be ambiguous and billed; the tool does not blindly retry |
+| Receipt persistence failure | Check the configured path, disk space and OS permissions; inference may already have completed |
+| Decision absent from HFL | Receipts are local in this release; automatic HFL ingestion is not implemented |
 
 ## Boundaries and rollback
 
