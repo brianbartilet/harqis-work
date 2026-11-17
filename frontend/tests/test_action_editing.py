@@ -352,15 +352,145 @@ def test_action_agent_settings(editor_page, monkeypatch, tmp_path, editor, exist
         form = page.locator('.idea-dialog:visible form')
     section = form.locator('[data-action-agent-settings]')
     assert not section.evaluate('(e) => e.open')
-    assert section.evaluate('(e) => e.previousElementSibling.querySelector("[name=prompt]") !== null')
+    assert section.evaluate('(e) => !!e.closest(".item-connections-sidebar")') == existing
     section.get_by_text('Agent settings', exact=True).click()
+    if not existing:
+        expect(section.get_by_label('Work assignment')).to_have_value('manual')
+        expect(section.get_by_label('Specialist for this Action')).to_have_count(0)
+        section.get_by_label('Work assignment').select_option('legacy')
+    section.get_by_text('Execution settings', exact=True).click()
     expect(section.locator('dl')).to_contain_text('Custom profile' if existing else 'Worker profile')
     expect(section.get_by_role('link', name='Agent default settings')).to_have_attribute('href', '/settings')
     expect(section.get_by_role('link', name='Agent default settings')).to_have_attribute('target', '_blank')
+    if not existing:
+        return
     section.get_by_text('Agent settings', exact=True).click()
     settings['agent_session_expiry_minutes'] = 75
     section.get_by_text('Agent settings', exact=True).click()
     expect(section.locator('dl')).to_contain_text('75 minutes')
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_action_assignment_save_reopen_and_manual(editor_page, monkeypatch, tmp_path, width):
+    from pathlib import Path
+    from playwright.sync_api import expect
+    from modules.hfl_corpus import action_agents as agents
+    from workflows.hfl.action_agent_store import ActionAgentStore
+    page, client = editor_page
+    db = ActionAgentStore(tmp_path / 'assignments.sqlite3')
+    monkeypatch.setattr(agents, 'store', lambda: db)
+    monkeypatch.setattr(agents.bridge, 'action_call', lambda method, path: client.get('/hfl-corpus/timeline/items' + path).json())
+    item = create_action(client)
+    page.set_viewport_size({'width':width, 'height':1000})
+    page.goto('https://editing.test/hfl-corpus/actions')
+    page.wait_for_function('window.hflActions && window.HflIdeas')
+    page.evaluate('(item)=>window.hflActions.openEditor(item)', item)
+    form = page.locator('#followup-form')
+    section = form.locator('[data-action-agent-settings]')
+    section.locator(':scope > summary').click()
+    section.get_by_label('Work assignment').select_option('butler')
+    expect(section.get_by_label('Specialist for this Action')).to_have_count(0)
+    section.get_by_text('Additional guidance',exact=True).click()
+    section.get_by_label('Additional Action guidance').fill('Record progress and output links here.')
+    expect(form.locator('.editor-save-status')).to_have_text('Saved')
+    assert db.configs()['card:'+item['id']]['assignment_mode']=='butler'
+    assert db.configs()['card:'+item['id']]['additional_instructions']=='Record progress and output links here.'
+    section.get_by_role('button',name='Preview instructions').click()
+    preview=page.get_by_role('dialog',name='Instructions for this Action',exact=True)
+    expect(preview.locator('.markdown-body')).to_contain_text('Record progress and output links here.')
+    expect(preview.get_by_role('heading',name='Action coordination',exact=True)).to_be_visible()
+    preview.get_by_role('button',name='Close',exact=True).click()
+    assert section.evaluate('(e)=>e.scrollWidth <= e.clientWidth + 1')
+    section.scroll_into_view_if_needed()
+    page.screenshot(path=str(Path('results')/f'action-assignment-{width}.png'))
+    form.get_by_role('button',name='Close',exact=True).click()
+    current=client.get('/hfl-corpus/timeline/items/'+item['id']).json()['item']
+    page.evaluate('(item)=>window.hflActions.openEditor(item)', current)
+    section.locator(':scope > summary').click()
+    expect(section.get_by_label('Work assignment')).to_have_value('butler')
+    assert section.get_by_label('Work assignment').locator('option').all_text_contents()==['No agent','Butler coordination','Fleet agent','Default worker']
+    section.get_by_label('Work assignment').select_option('agent')
+    picker=section.locator('.action-agent-picker')
+    picker.locator('summary').click()
+    expect(picker.locator('.action-agent-options .action-agent-type').first).to_have_text('hermes')
+    assert picker.locator('.action-agent-options button').first.inner_text().find(' · ')==-1
+    picker.scroll_into_view_if_needed()
+    page.screenshot(path=str(Path('results')/f'action-agent-picker-{width}.png'))
+    picker.locator('summary').press('ArrowDown')
+    page.keyboard.press('Enter')
+    expect(section.locator('.action-agent-picker')).not_to_have_attribute('open','')
+    expect(form.locator('.editor-save-status')).to_have_text('Saved')
+    assert db.configs()['card:'+item['id']]['assignment_mode']=='agent'
+    section.get_by_label('Work assignment').select_option('manual')
+    expect(form.locator('.editor-save-status')).to_have_text('Saved')
+    assert client.get('/hfl-corpus/timeline/items/'+item['id']).json()['item']['agent_enabled'] is False
+    assert db.configs()['card:'+item['id']]['assignment_mode']=='manual'
+
+
+@pytest.mark.parametrize('editor', ['timeline', 'idea'])
+@pytest.mark.parametrize('mode', ['manual', 'butler'])
+def test_new_action_assignment(editor_page, monkeypatch, tmp_path, editor, mode):
+    from playwright.sync_api import expect
+    from modules.hfl_corpus import action_agents as agents
+    from workflows.hfl.action_agent_store import ActionAgentStore
+    page, client = editor_page
+    db = ActionAgentStore(tmp_path / 'new-assignment.sqlite3')
+    monkeypatch.setattr(agents, 'store', lambda: db)
+    monkeypatch.setattr(agents.bridge, 'action_call', lambda method, path: client.get('/hfl-corpus/timeline/items' + path).json())
+    page.goto('https://editing.test/hfl-corpus/actions')
+    page.wait_for_function('window.hflActions && window.HflIdeas')
+    if editor=='timeline':
+        page.evaluate('window.hflActions.openEditor()')
+        form=page.locator('#followup-form')
+    else:
+        page.evaluate('window.HflIdeas.openEditor("actionable", {})')
+        form=page.locator('.idea-dialog:visible form')
+    form.locator('[name=title]').fill('Optional assignment '+mode)
+    form.locator('[name=prompt]').fill('Return a report. Do not start work during this test.')
+    if mode=='butler':
+        section=form.locator('[data-action-agent-settings]')
+        section.locator(':scope > summary').click()
+        section.get_by_label('Work assignment').select_option('butler')
+    form.get_by_role('button',name='Create',exact=True).click()
+    expect(form).not_to_be_visible()
+    cards=[(key,value) for key,value in db.configs().items() if key.startswith('card:')]
+    assert len(cards)==1
+    key,card=cards[0]
+    assert card['assignment_mode']==mode
+    assert client.get('/hfl-corpus/timeline/items/'+key[5:]).json()['item']['agent_enabled']==(mode=='butler')
+
+
+@pytest.mark.parametrize('width,existing', [(1440, True), (390, False)])
+def test_action_specialization_configured_in_fleet(editor_page, monkeypatch, tmp_path, width, existing):
+    from pathlib import Path
+    from playwright.sync_api import expect
+    from modules.hfl_corpus import action_agents as agents
+    from modules.agents import specialists
+    from workflows.hfl.action_agent_store import ActionAgentStore
+    page, client=editor_page
+    db=ActionAgentStore(tmp_path/'specialization.sqlite3')
+    monkeypatch.setattr(agents,'store',lambda:db)
+    monkeypatch.setattr(agents.bridge,'action_call',lambda method,path:client.get('/hfl-corpus/timeline/items'+path).json())
+    profile=dict(id='test:writer',name='Technical Writer',description='Write clear documentation.',revision='test-revision',hash='test-hash',source='test',source_name='Test profiles',division='Writing',classification='general',content='Write clear documentation.',html='<p>Write clear documentation.</p>',skills=[])
+    monkeypatch.setattr(specialists,'catalog',lambda:[profile])
+    monkeypatch.setattr(specialists,'detail',lambda identity:dict(profile))
+    item=create_action(client) if existing else None
+    page.set_viewport_size({'width':width,'height':1000})
+    page.goto('https://editing.test/hfl-corpus/actions')
+    page.wait_for_function('window.hflActions')
+    page.evaluate('(item)=>window.hflActions.openEditor(item)',item)
+    form=page.locator('#followup-form');section=form.locator('[data-action-agent-settings]')
+    section.locator(':scope > summary').click()
+    section.get_by_label('Work assignment').select_option('butler')
+    expect(section.get_by_label('Specialist for this Action')).to_have_count(0)
+    expect(section.locator('.fleet-specialists')).to_have_count(0)
+    expect(section.get_by_role('button',name='Preview instructions')).to_be_visible()
+    assert section.evaluate('(e)=>e.scrollWidth <= e.clientWidth+1')
+    section.scroll_into_view_if_needed()
+    page.screenshot(path=str(Path('results')/f'action-fleet-assignment-{width}.png'))
+    if existing:
+        expect(form.locator('.editor-save-status')).to_have_text('Saved')
+        assert db.configs()['card:'+item['id']]['specialist_mode']=='inherit'
 
 
 def test_actions_page_autosave_refresh_sort_and_move(editor_page):

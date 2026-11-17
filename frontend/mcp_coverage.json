@@ -4310,6 +4310,13 @@
       "status": "deferred",
       "tools": [],
       "reason": "Owner-authenticated Fleet profile source configuration or update preview; machine-facing contract deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/hfl-corpus/agent-bridge/configuration/preview",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-only draft Action instruction preview; uses existing assignment and execution interfaces."
     }
   ]
 }

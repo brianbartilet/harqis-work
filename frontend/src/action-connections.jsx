@@ -238,15 +238,15 @@ window.HflActionConnections = {attach(dialog,getItem) {
   const form=dialog.querySelector('form'), body=form.querySelector('.agenda-form-body');
   if(!body)return;
   const aside=document.createElement('aside');aside.className='item-connections-sidebar';aside.setAttribute('aria-label','Item integrations');body.after(aside);
-  const updateLayout=()=>{const saved=!!getItem()?.id;aside.hidden=!saved;dialog.classList.toggle('has-connections-sidebar',saved);};
+  const agentSettings=form.querySelector('[data-action-agent-settings]');
+  const agentSettingsHome=agentSettings?document.createComment('Agent settings home'):null;
+  if(agentSettings)agentSettings.before(agentSettingsHome);
+  const updateLayout=()=>{const saved=!!getItem()?.id;aside.hidden=!saved;dialog.classList.toggle('has-connections-sidebar',saved);if(agentSettings){if(saved){if(agentSettings.parentElement!==aside){if(aside.firstElementChild)aside.firstElementChild.after(agentSettings);else aside.append(agentSettings);}}else agentSettingsHome.after(agentSettings);}};
   updateLayout();
   window.addEventListener('hfl:ideas-updated',updateLayout);
   window.addEventListener('hfl:actions-updated',updateLayout);
-  const connections=document.createElement('div');aside.append(connections);
+  const connections=document.createElement('div');aside.prepend(connections);
   const root=createRoot(connections);root.render(<Sidebar getItem={getItem}/>);
-  const agentSettings=form.querySelector('[data-action-agent-settings]');
-  const agentSettingsHome=agentSettings?document.createComment('Agent settings home'):null;
-  if(agentSettings){agentSettings.before(agentSettingsHome);aside.append(agentSettings);}
   const cleanupGithub=window.HarqisIntegrations?.attachGithub(aside,getItem);
   const cleanup=()=>{cleanupGithub?.();root.unmount();if(agentSettingsHome)agentSettingsHome.replaceWith(agentSettings);aside.remove();dialog.classList.remove('has-connections-sidebar');window.removeEventListener('hfl:ideas-updated',updateLayout);window.removeEventListener('hfl:actions-updated',updateLayout);dialog.removeEventListener('close',cleanup);delete dialog._connectionsCleanup;};
   dialog._connectionsCleanup=cleanup;dialog.addEventListener('close',cleanup,{once:true});
