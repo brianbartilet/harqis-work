@@ -8,3 +8,5 @@ Connector brand assets
 - Grok Bot: monochrome logomark from https://asvg.app/icons/grok-bot (https://asvg.app/assets/svg/grok-bot/grok-bot-logomark-mono.svg). Foreground set to slate-200 for the dark connector card; eye mask preserved.
 
 Brand marks remain the property of their respective owners and identify these integrations.
+
+- Codex: color logomark from https://asvg.app/assets/svg/codex/codex-symbol-color.svg (https://asvg.app/icons/codex), distributed from the community-maintained @lobehub/icons-static-svg package. Original paths and colors preserved.
