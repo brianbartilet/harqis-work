@@ -1,2 +1,2 @@
-upstream/*.md -text
+upstream/*.md -text -whitespace
 LICENSE -text

@@ -6,13 +6,16 @@ select **Use this profile**. An empty description is filled automatically; repla
 an existing description requires checking the explicit replacement option.
 Additional instructions, persona, tools and skills remain under your control.
 
-The initial curated profiles are Code Reviewer, Backend Architect and Technical
-Writer. Search covers all three profiles and shows visible result cards;
+The full pinned catalog contains 283 profiles across 18 divisions.
+Search covers every profile and shows visible result cards;
 classification ranks matching profiles first without hiding others. Changing it does not remove a saved
 specialist. Custom mode hides catalog browsing without clearing a saved selection;
-use **Remove profile** to detach it. Suggested skills are optional, explicit choices.
-The use cases, output helpers, examples and skill mappings in `manifest.json` are
-HARQIS-authored. Source descriptions and Markdown come from Agency Agents.
+use **Remove profile** to detach it. Filter by division or use **Show more profiles**
+to browse beyond the first 30 results. Suggested skills are optional choices.
+The use cases, output helpers, examples and skill mappings in `helpers.json` are
+HARQIS-authored for Code Reviewer, Backend Architect and Technical Writer. Other
+profiles expose their original descriptions and instructions without invented helpers.
+Broad HARQIS classifications are mapped locally; upstream divisions are preserved.
 
 ## Example
 
@@ -37,9 +40,19 @@ original instructions; changes affect new sessions only.
 are made. Bodies are loaded on demand and checked against the manifest; the UI
 renders them using the existing sanitized Markdown renderer.
 
-To update, fetch the selected source files from one explicit upstream commit,
-review their diffs and the license, update the revision and byte hashes in the
-manifest, review helper mappings, and run `frontend/tests/test_fleet_specialists.py`.
+To update, download the source ZIP for an explicit upstream commit, then run:
+
+```powershell
+.venv/Scripts/python.exe -m tools.agency_catalog archive.zip --revision <full-commit-SHA>
+```
+
+The importer reads frontmatter profiles from the directories in upstream
+`divisions.json`, rejects duplicate/invalid IDs, preserves source bytes and the
+license, and merges the separate helpers. It does not execute upstream scripts or
+extract arbitrary archive paths. Review the source and manifest diff, then run
+`frontend/tests/test_fleet_specialists.py`. Update pinned count assertions when
+intentionally adopting another revision. Stale files may remain on disk but are
+never exposed unless included in the manifest.
 Do not normalize the source file bytes without updating their hashes. The adjacent
 `.gitattributes` preserves those bytes across platforms.
 
@@ -53,7 +66,9 @@ No automatic upstream updates or delegation are introduced.
 ## Validation and limits
 
 The backend validates profile IDs/revisions/hashes and limits composed Hermes
-instructions to 23,000 characters, leaving room for persona and gateway rules.
+instructions to 56,000 characters, leaving room for persona and gateway rules
+within a 60,000-character specialist conversation limit. Full bodies are preserved,
+including profiles longer than the earlier 28,000-character chat cap.
 One specialist is supported per agent. The effective preview shows the same
 specialist/local composition used at execution; the runtime adds its own operating
 rules and configured skill/tool context.

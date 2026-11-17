@@ -54,6 +54,15 @@ def compose(agent):
     if not profile or agent.get('runtime', 'hermes') != 'hermes':
         return local
     result = GUIDANCE + profile['content'] + '\n\n## Owner additional guidance\n' + local
-    if len(result) > 23000:
-        raise ValueError('Combined specialist and additional guidance exceed 23,000 characters. Shorten additional guidance.')
+    if len(result) > 56000:
+        raise ValueError('Combined specialist and additional guidance exceed 56,000 characters. Shorten additional guidance.')
+    return result
+
+
+def conversation_instructions(prefix, agent):
+    result = prefix + '\n' + agent['persona'] + '\n' + compose(agent)
+    if not agent.get('specialist_profile'):
+        return result[:28000]  # Preserve the existing non-specialist conversation contract.
+    if len(result) > 60000:
+        raise ValueError('Conversation instructions exceed 60,000 characters.')
     return result

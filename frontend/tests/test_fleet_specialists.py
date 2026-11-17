@@ -40,7 +40,7 @@ def test_tampered_stale_and_oversized_profiles_rejected(fleet, authenticated_cli
     for bad in [dict(selected,hash='wrong'),dict(selected,content='injected'),dict(selected,id='../escape'), 'bad']:
         assert post(client, '/items', {'name':'Bad','specialist_profile':bad}).status_code == 422
     selected = {key:value for key,value in client.get('/agents/api/specialists').json()['items'][1].items() if key in ('id','revision','hash')}
-    assert post(client, '/items', {'name':'Too long','specialist_profile':selected,'instructions':'x'*20000}).status_code == 422
+    assert post(client, '/items', {'name':'Too long','specialist_profile':selected,'instructions':'x'*20001}).status_code == 422
 
 
 def test_preview_and_external_provider_metadata(fleet, authenticated_client):
@@ -78,12 +78,15 @@ def test_gateway_and_primary_conversations_freeze_specialist(gateway, fleet, aut
     from modules.agents import assistant
     client = authenticated_client
     item, _, _ = configured(client)
-    selected = selection(client)
+    row = next(row for row in client.get('/agents/api/specialists').json()['items'] if row['id']=='healthcare-marketing-compliance')
+    selected = {key:row[key] for key in ('id','revision','hash')}
+    body = client.get('/agents/api/specialists/'+row['id']).json()['content']
+    assert len(body) > 28000
     updated = post(client, '/items/'+item['id'], {'version':1,'specialist_profile':selected}).json()['item']
     identity = conversation(client, updated)
     with fleet.store().connect() as db:
         frozen = assistant.read(db, USER, identity)
-    assert 'Code Reviewer' in frozen['instructions']
+    assert body in frozen['instructions']
     assert 'You have no tools' in frozen['instructions']
     assert frozen['specialist_profile']['hash'] == selected['hash']
     # The primary assistant uses the same composition and its own chat restrictions.
@@ -92,7 +95,7 @@ def test_gateway_and_primary_conversations_freeze_specialist(gateway, fleet, aut
     primary = new(client)
     with fleet.store().connect() as db:
         frozen_primary = assistant.read(db,USER,primary)
-    assert 'Code Reviewer' in frozen_primary['instructions']
+    assert body in frozen_primary['instructions']
     assert frozen_primary['specialist_profile']['revision'] == selected['revision']
     assert post(client, '/items/'+item['id'], {'version':2,'specialist_profile':None}).status_code == 200
     with fleet.store().connect() as db:
@@ -104,6 +107,71 @@ def test_specialist_routes_require_owner_and_csrf(fleet, authenticated_client):
     assert client.post('/agents/api/specialist-preview',json={'profile':{'name':'A'}}).status_code == 403
     client.cookies.clear()
     assert client.get('/agents/api/specialists').status_code == 401
+
+
+def test_full_catalog_integrity_and_complete_instructions(fleet, authenticated_client):
+    from modules.agents import specialists
+    rows = authenticated_client.get('/agents/api/specialists').json()['items']
+    assert len(rows) == 283
+    assert len({row['division'] for row in rows}) == 18
+    assert len({row['id'] for row in rows}) == len(rows)
+    assert all('content' not in row and 'html' not in row for row in rows)
+    longest = None
+    for row in rows:
+        profile = specialists.snapshot({k:row[k] for k in ('id','revision','hash')})
+        if longest is None or len(profile['content']) > len(longest['content']):
+            longest = profile
+        agent = {**fleet.defaults('Catalog test'),'specialist_profile':profile,'instructions':'Owner-specific guidance.'}
+        composed = specialists.compose(agent)
+        assert profile['content'] in composed
+        assert composed.endswith('Owner-specific guidance.')
+    assert len(longest['content']) > 28000
+    message = specialists.conversation_instructions('You have no tools.',
+        {**fleet.defaults('Long profile'),'specialist_profile':longest,'instructions':'Final owner instruction.'})
+    assert longest['content'] in message
+    assert message.endswith('Final owner instruction.')
+    with pytest.raises(ValueError,match='56,000'):
+        specialists.compose({**fleet.defaults('Too long'),'specialist_profile':longest,'instructions':'x'*56000})
+
+
+def test_save_profile_from_every_division(fleet, authenticated_client):
+    client = authenticated_client
+    divisions = {}
+    for row in client.get('/agents/api/specialists').json()['items']:
+        divisions.setdefault(row['division'],row)
+    for division,row in divisions.items():
+        response = post(client,'/items',{'name':division+' specialist','specialist_profile':{k:row[k] for k in ('id','revision','hash')}})
+        assert response.status_code == 200, response.text
+        item = response.json()['item']
+        assert fleet.execution(item['id'])['fleet_agent']['specialist_profile']['id'] == row['id']
+
+
+def test_archive_import_is_bounded_and_reproducible(tmp_path):
+    import hashlib, json, zipfile
+    from tools.agency_catalog import import_catalog
+    revision='a'*40
+    prefix='agency-agents-'+revision+'/'
+    archive=tmp_path/'source.zip'
+    target=tmp_path/'catalog'
+    target.mkdir()
+    (target/'helpers.json').write_text('{}')
+    body=b'---\nname: Example\ndescription: Test specialist\n---\n# Instructions\nRead evidence.\n'
+    with zipfile.ZipFile(archive,'w') as source:
+        source.writestr(prefix+'divisions.json',json.dumps({'divisions':{'testing':{'label':'Testing'}}}))
+        source.writestr(prefix+'testing/example.md',body)
+        source.writestr(prefix+'strategy/not-an-agent.md',body)
+        source.writestr(prefix+'LICENSE','MIT test notice')
+    assert import_catalog(archive,revision,target)==1
+    first=(target/'manifest.json').read_bytes()
+    assert import_catalog(archive,revision,target)==1
+    assert first==(target/'manifest.json').read_bytes()
+    assert json.loads(first)['profiles'][0]['hash']==hashlib.sha256(body).hexdigest()
+    assert (target/'upstream/example.md').read_bytes()==body
+    with zipfile.ZipFile(archive,'a') as source:
+        source.writestr(prefix+'testing/nested/example.md',body)
+    with pytest.raises(ValueError,match='duplicate'):
+        import_catalog(archive,revision,target)
+    assert first==(target/'manifest.json').read_bytes()
 
 
 @pytest.mark.parametrize('width', [1440, 390])
@@ -136,6 +204,15 @@ def test_picker_apply_preserve_preview_and_save(fleet, authenticated_client, tmp
         page.goto('https://fleet.test/agents')
         page.get_by_role('button',name='Add agent',exact=True).click()
         page.get_by_role('button',name='Retry loading profiles').click()
+        playwright.expect(page.get_by_text('283 profiles available',exact=False)).to_be_visible()
+        playwright.expect(page.locator('.fleet-specialist-results button')).to_have_count(30)
+        page.get_by_role('button',name='Show more profiles').click()
+        playwright.expect(page.locator('.fleet-specialist-results button')).to_have_count(60)
+        page.get_by_label('Specialist division').select_option('Marketing')
+        playwright.expect(page.locator('.fleet-specialist-results button').first).to_contain_text('Marketing')
+        page.locator('.fleet-specialist-results button').first.click()
+        playwright.expect(page.locator('.fleet-specialist-detail')).to_contain_text('No HARQIS-specific helper')
+        page.get_by_label('Specialist division').select_option('')
         page.get_by_label('Name',exact=True).fill('Ada test')
         page.get_by_label('Description',exact=True).fill('My description')
         # Default General purpose must not hide coding specialists from search.
@@ -164,6 +241,7 @@ def test_picker_apply_preserve_preview_and_save(fleet, authenticated_client, tmp
         playwright.expect(page.get_by_label('Description',exact=True)).to_have_value('My description')
         page.get_by_label('Classification',exact=True).select_option('general')
         playwright.expect(page.locator('.fleet-specialist-selected')).to_contain_text('Code Reviewer')
+        page.get_by_label('Search specialist profiles').fill('Technical Writer')
         page.get_by_role('button',name='Preview Technical Writer',exact=True).click()
         page.get_by_role('button',name='Use this profile').click()
         playwright.expect(page.get_by_label('Description',exact=True)).to_have_value('My description')
