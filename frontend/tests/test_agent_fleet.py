@@ -78,6 +78,30 @@ def test_validation(fleet, authenticated_client, bad):
     assert post(authenticated_client, '/items', {'name':'Agent', **bad}).status_code in {404,422}
 
 
+def test_full_workflow_catalogue_can_be_saved(fleet, authenticated_client, monkeypatch):
+    links = ['celery:workflows.example.task_' + str(i) for i in range(80)]
+    monkeypatch.setattr(fleet, 'catalogue', lambda: {'workflows': [{'id': link} for link in links]})
+    response = post(authenticated_client, '/items', {
+        'name': 'Gina', 'workflows': links + links[:1], 'triggers': links,
+    })
+    assert response.status_code == 200, response.text
+    agent = response.json()['item']
+    saved = fleet.store().get(agent['id'])
+    assert saved['workflows'] == saved['triggers'] == links
+    assert fleet.execution(agent['id'])['fleet_agent']['workflows'] == links
+    for field in ('workflows', 'triggers'):
+        rejected = post(authenticated_client, '/items/' + agent['id'], {
+            'version': agent['version'], field: links + ['celery:unknown.task'],
+        })
+        assert rejected.status_code == 422
+        assert 'Choose workflows and triggers from the catalogue.' in rejected.text
+
+
+def test_other_agent_relationships_retain_limit(fleet):
+    with pytest.raises(ValueError, match='Invalid tools'):
+        fleet.validate({'name': 'Agent', 'tools': ['tool' + str(i) for i in range(51)]})
+
+
 def test_subagent_cycle_and_skill_snapshot(fleet, authenticated_client):
     client = authenticated_client
     a = post(client, '/items', {'name':'A'}).json()['item']

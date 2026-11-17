@@ -116,7 +116,10 @@ def validate(raw, existing=None):
     if not isinstance(item['color'], str) or not re.fullmatch(r'#[0-9a-fA-F]{6}', item['color']):
         raise ValueError('Choose an orb color.')
     for key in ('workspace_ids', 'skills', 'tools', 'workflows', 'triggers', 'subagents'):
-        if not isinstance(item[key], list) or len(item[key]) > 50 or any(not isinstance(v, str) or not 1 <= len(v) <= 300 for v in item[key]):
+        catalogue_links = item['runtime'] == 'hermes' and key in {'workflows', 'triggers'}
+        # Workflow links are bounded by catalogue membership below, not the
+        # generic relationship limit: the catalogue can contain over 50 tasks.
+        if not isinstance(item[key], list) or (not catalogue_links and len(item[key]) > 50) or any(not isinstance(v, str) or not 1 <= len(v) <= 300 for v in item[key]):
             raise ValueError('Invalid ' + key + '.')
         item[key] = list(dict.fromkeys(item[key]))
     item['overrides'] = overrides(item['overrides'])
