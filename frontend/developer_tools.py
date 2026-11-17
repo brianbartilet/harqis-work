@@ -1,6 +1,7 @@
 """Owner documentation hub; discover MCP source without importing app services."""
 import ast
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -10,6 +11,25 @@ from web import page_context, require_user, templates
 
 router = APIRouter()
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _app_description(directory, tools):
+    try:
+        text = (directory / 'README.md').read_text(encoding='utf-8-sig')
+        text = re.sub(r'```.*?```', '', text, flags=re.S)
+        for paragraph in re.split(r'\n\s*\n', text):
+            paragraph = paragraph.strip()
+            if not paragraph or paragraph.startswith(('#', '|', '>', '![', '- [x]', '- [X]', '- [ ]')):
+                continue
+            if paragraph.startswith('- '):
+                paragraph = paragraph.splitlines()[0][2:]
+            paragraph = re.sub(r'\[([^\]]+)\]\([^\s]+\)', r'\1', paragraph)
+            paragraph = re.sub(r'[*`]', '', paragraph)
+            return ' '.join(paragraph.split())[:300]
+    except (OSError, UnicodeError):
+        pass
+    return (' '.join(tool['description'].splitlines()[0] for tool in tools[:2])[:240]
+            or 'Explore the documented tools and connection requirements for this integration.')
 
 
 @lru_cache(maxsize=128)
@@ -45,7 +65,9 @@ def mcp_catalogue():
             note = '' if tools else 'No decorated tools found in this registrar. Check the runtime tool list for dynamic registrations.'
         except (OSError, SyntaxError, ValueError):
             tools, note = [], 'Source documentation is unavailable for this app.'
-        apps.append({'key': spec.key, 'label': spec.label, 'source': relative, 'tools': tools, 'note': note})
+        description = _app_description(path.parent, tools)
+        apps.append({'key': spec.key, 'label': spec.label, 'description': description,
+                     'source': relative, 'tools': tools, 'note': note})
     return apps
 
 

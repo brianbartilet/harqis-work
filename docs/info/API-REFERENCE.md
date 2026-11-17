@@ -1,6 +1,6 @@
 # Unified HARQIS API reference
 
-Open **Build → API & MCP** (`/developer-tools`) for the documentation hub, then
+Open **Build → Developer Resources** (`/developer-tools`) for the documentation hub, then
 choose **Open Swagger**, or visit `/docs` directly. Sign in with
 the existing owner account. `/openapi.json` downloads the same authenticated
 OpenAPI document for API clients. The page generates its inventory from the
@@ -44,6 +44,11 @@ The standalone Corpus service's `/docs` and `/openapi.json` remain compatible
 with existing clients; the dashboard `/docs` is the complete reference.
 
 ## MCP documentation hub
+
+Developer Resources uses the shared Integrations tab styling: HTTP API, MCP
+server setup, and Tool catalogue are separate panels. Arrow keys, Home, and End
+switch tabs; URL fragments preserve the selected panel. Tool apps appear in a
+responsive card grid with descriptions, counts, and expandable tool details.
 
 The hub also describes the `harqis-work` stdio MCP server, provides editable-path
 client configuration examples for Windows and macOS/Linux, and lists discovery
