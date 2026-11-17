@@ -14,6 +14,7 @@ Operational scripts for **harqis-work**, organised by purpose:
 
 | Path | Purpose |
 |---|---|
+| `setup_jev_hermes.py` | Preview/apply TypeSafe MCP and triage skill setup on an existing Hermes profile. |
 | `setup_codex.py` | Inspect Codex on the local or configured remote host; `--install` installs only if missing, using the official standalone installer on macOS/Linux. |
 | `n8n_preview.py` | Run an isolated mock n8n/Nod Fleet demo: `python scripts/n8n_preview.py --port 8094`, then open `/preview-login` or `/preview-nod`. No live agent calls or corpus delivery. |
 | `knowledge_preview.py` | Launch the corpus entities localhost preview, isolated enrichment worker, or manual backfill. |
@@ -918,3 +919,7 @@ Run `python scripts/persona_preview.py frontend` and, separately,
 `python scripts/persona_preview.py worker`. The default port is 8093 (`--port` can
 override it on both processes). No Beat instance starts. See
 [Roles and Spaces](../docs/info/ROLES-AND-SPACES.md) for storage and HFL behavior.
+
+## Jev Hermes setup
+
+Run `python scripts/setup_jev_hermes.py --profile-home /absolute/profile/path`; add `--apply` after reviewing the dry run. See [deployment guide](../docs/info/JEV-HERMES.md).

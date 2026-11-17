@@ -100,6 +100,7 @@ class DependencyDetector:
         # GitHub / source control
         (r"\bGITHUB\b|gh\s+pr\b|gh\s+repo\b",     "GITHUB_API_TOKEN"),
         # AI / LLM
+        (r"\bTYPE\s*SAFE\b|\bJEV\b",             "TYPESAFE_API_KEY"),
         (r"\bANTHROPIC\b|\bCLAUDE\b",             "ANTHROPIC_API_KEY"),
         (r"\bOPENAI\b|\bGPT-?\d*\b",              "OPENAI_API_KEY"),
         (r"\bGROK\b|\bxAI\b",                     "GROK_API_KEY"),

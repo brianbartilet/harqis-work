@@ -218,6 +218,21 @@ Wraps `apps/oanda/references/web/api/` services. Requires valid `OANDA` section 
 
 ---
 
+### TypeSafe (`apps/typesafe/mcp.py`)
+
+| Tool | Description |
+| --- | --- |
+| `list_typesafe_models` | List account-visible Jev models. |
+| `analyze_typesafe_decision` | Evaluate `action_triage_v1` with supplied `state`; billed inference and local receipt, no assignment or execution. |
+
+*List the available Jev models.*
+
+*Use Jev to recommend an agent for this action and flag missing information.*
+
+See [app configuration and input schema](../apps/typesafe/README.md) and [Hermes setup](../docs/info/JEV-HERMES.md).
+
+---
+
 ### YNAB (`apps/ynab/mcp.py`)
 
 Wraps `apps/ynab/references/web/api/` services. Requires valid `YNAB` section in `apps_config.yaml`.

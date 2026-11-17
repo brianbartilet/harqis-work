@@ -416,11 +416,11 @@ def cmd_hfl_api(args: argparse.Namespace) -> None:
 
 
 def setup_mcp_env() -> None:
-    """Load the machine API credentials/topology, retaining an explicit client filter."""
-    enabled_apps = os.environ.get("MCP_ENABLED_APPS")
+    """Load host credentials while retaining explicit client surface/receipt scope."""
+    client_env = {key: os.environ[key] for key in ('MCP_ENABLED_APPS', 'TYPESAFE_RECEIPTS_DB')
+                  if key in os.environ}
     setup_env()
-    if enabled_apps is not None:
-        os.environ["MCP_ENABLED_APPS"] = enabled_apps
+    os.environ.update(client_env)
 
 
 def cmd_mcp(args: argparse.Namespace) -> None:

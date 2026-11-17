@@ -38,6 +38,7 @@ of truth.
 | `/generate-gherkin-scenarios` | Generate repository-standard Gherkin scenarios from requirements or tickets. |
 | `/generate-registry` | Regenerate the frontend workflow catalogue from workflow task configurations. |
 | `/ingest-meta-archive` | Prepare, preview, dispatch, replay, and verify private Facebook or Instagram archive imports into HFL. |
+| `/jev-action-triage` | Recommend action routing and urgency using the versioned TypeSafe tool, without assigning or executing work. |
 | `/manage-queues` | Maintain Celery task-to-queue assignments and report live machine coverage. |
 | `/manage-second-brain` | Inspect, configure, validate, reconcile, and diagnose advisory Second Brain categories, operations, clients, and runtime health. |
 | `/manage-fork-fleet` | Discover, compare, test, deploy, and safely synchronize harqis-work forks through isolated worktrees and PRs. |
@@ -59,7 +60,7 @@ of truth.
 | `/write-notes` | Save OCR-enriched HFL notes, list recent notes with document links, and safely update one note by GUID. |
 | `/zapier-mcp` | Search, enable, and wire Zapier MCP actions into workflows or direct agent use. |
 
-**Current canonical count: 45 skills.** The count is derived from directories
+**Current canonical count: 47 skills.** The count is derived from directories
 containing `.agents/skills/*/SKILL.md`; cache or generated directories do not
 count.
 

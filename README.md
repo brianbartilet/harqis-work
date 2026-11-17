@@ -70,6 +70,7 @@ At its core the platform has four layers:
 | `tcg_mp` | TCG Marketplace | REST API | Yes | [Site](https://thetcgmarketplace.com/) |
 | `telegram` | Telegram Bot messaging | REST API | Yes | [API Docs](https://core.telegram.org/bots/api) · [Site](https://telegram.org/) |
 | `trello` | Kanban board management | REST API | Yes | [API Docs](https://developer.atlassian.com/cloud/trello/rest/) · [Site](https://trello.com/) |
+| `typesafe` | Jev typed decisions for Hermes | REST API | Yes | [API Docs](https://docs.typesafe.ai/) · [Site](https://typesafe.ai/) |
 | `ynab` | Personal budgeting | REST API | Yes | [API Docs](https://api.ynab.com/) · [Site](https://www.ynab.com/) |
 | `youtube` | YouTube channels, videos, playlists, search, and targeted Studio analytics | REST API (OAuth2) | Yes | [Data API](https://developers.google.com/youtube/v3/docs) · [Analytics API](https://developers.google.com/youtube/analytics) |
 
@@ -516,6 +517,7 @@ harqis-work/
 │   ├── tcg_mp/                     # TCG Marketplace
 │   ├── telegram/                   # Telegram Bot
 │   ├── trello/                     # Trello Kanban
+│   ├── typesafe/                   # Jev typed decision tools
 │   ├── ynab/                       # Personal budgeting
 │   └── youtube/                    # YouTube data and channel analytics
 │
@@ -787,6 +789,7 @@ ENV_ROOT=                         # absolute path to repo root on this host
 # ── AI / LLM ──────────────────────────────────────────────────────────────────
 ANTHROPIC_API_KEY=
 ANTHROPIC_ADMIN_KEY=
+TYPESAFE_API_KEY=                 # Jev decisions (execution host)
 OPENAI_API_KEY=
 OPENAI_ASSISTANT_ID=
 OPENAI_ASSISTANT_DESKTOP=

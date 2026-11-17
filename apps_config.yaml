@@ -789,6 +789,21 @@ YOUTUBE:
   return_data_only: True
 
 
+TYPESAFE:
+  app_id: 'typesafe'
+  client: 'rest'
+  parameters:
+    base_url: 'https://api.typesafe.ai/'
+    response_encoding: 'utf-8'
+    verify: True
+    timeout: 30
+    stream: False
+  app_data:
+    api_key: ${TYPESAFE_API_KEY}
+    model: 'jev-latest'
+  return_data_only: True
+
+
 HFL_CORPUS:
   app_id: 'hfl_corpus'
   client: 'rest'
