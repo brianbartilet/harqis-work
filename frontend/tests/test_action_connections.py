@@ -38,6 +38,33 @@ def test_connections_include_board_thoughts_and_preserve_shared_identity(ideas, 
     assert ideas.snapshot() == before
 
 
+def test_connections_include_current_assignment(ideas, authenticated_client, monkeypatch, tmp_path):
+    from modules.hfl_corpus import action_agents
+    from workflows.hfl.action_agent_store import ActionAgentStore
+    db = ActionAgentStore(tmp_path / 'assignments.sqlite3')
+    monkeypatch.setattr(action_agents, 'store', lambda: db)
+    action, _, _ = seed(ideas)
+    db.configure('card:' + action['id'], {'assignment_mode': 'agent', 'agent_id': 'default'})
+    from modules.agents import entities
+    app = entities.entity('application', 'test', 'photos', 'Photos')
+    account = entities.entity('account', 'test', 'library', 'Photo library')
+    private = entities.entity('application', 'other', 'private', 'Other owner secret')
+    entities.observe('frontend-test-user', [app, account], [('agent:default', app['id'], 'linked'), (app['id'], account['id'], 'uses')])
+    entities.observe('other-owner', [private], [('agent:default', private['id'], 'linked')])
+    url = BASE + '/actions/' + action['id'] + '/connections'
+    data = authenticated_client.get(url).json()
+    assert any(n['id'] == 'agent:default' and n['kind'] == 'agents' for n in data['nodes'])
+    assert any(e['target'] == 'agent:default' and e['relation'] == 'assigned-to' for e in data['edges'])
+    assert {app['id'], account['id']} <= {n['id'] for n in data['nodes']}
+    assert private['id'] not in {n['id'] for n in data['nodes']}
+    assert any(e['scope'] == 'fleet' and e['target'] == account['id'] for e in data['edges'])
+    from modules.hfl_corpus.action_connections import fleet_context
+    bounded = fleet_context('frontend-test-user', 'default', limit=1)
+    assert len(bounded['items']) == 1 and bounded['truncated']
+    db.configure('card:' + action['id'], {'assignment_mode': 'manual', 'agent_id': ''})
+    assert not any(n['kind'] == 'agents' for n in authenticated_client.get(url).json()['nodes'])
+
+
 def test_idea_connections_include_shared_and_board_links(ideas, authenticated_client):
     action, idea, boards = seed(ideas)
     before = ideas.snapshot()

@@ -7,7 +7,7 @@
   const data=await response.json();if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Could not save Action assignment.');return data;
  }
  const base='/hfl-corpus/agent-bridge';
- window.HflActionAgentSettings=(form,sourceId)=>{
+ window.HflActionAgentSettings=(form,sourceId,initialAssignment)=>{
   form.actionAssignment?.dispose();
   const section=form.querySelector('[data-action-agent-settings]');if(!section)return;
   section.open=false;
@@ -34,8 +34,8 @@
     function agentLabel(host,agent){host.append(el('span',agent.name));const pill=el('span',agent.runtime);pill.className='action-agent-type';host.append(pill);if(!agent.active)host.append(el('span','Inactive'));}
     if(current)agentLabel(trigger,current);else trigger.append(el('span',draft.agent_id?'Unavailable assigned agent':'Select an agent'));
     const options=el('div');options.className='action-agent-options';options.setAttribute('role','group');options.setAttribute('aria-label','Available agents');
-    for(const a of config.agents){const option=el('button');option.type='button';option.setAttribute('aria-pressed',String(a.id===draft.agent_id));agentLabel(option,a);option.onclick=()=>{draft.agent_id=a.id;render();changed();controls.querySelector('.action-agent-picker summary')?.focus();};options.append(option);}
-    if(!config.agents.length)options.append(el('p','No Fleet agents available.'));
+    for(const a of config.agents.filter(a=>a.active)){const option=el('button');option.type='button';option.setAttribute('aria-pressed',String(a.id===draft.agent_id));agentLabel(option,a);option.onclick=()=>{draft.agent_id=a.id;render();changed();controls.querySelector('.action-agent-picker summary')?.focus();};options.append(option);}
+    if(!config.agents.some(a=>a.active))options.append(el('p','No active Fleet agents available.'));
     const dismiss=event=>{if(!menu.contains(event.target))menu.open=false;};document.addEventListener('pointerdown',dismiss);closePicker=()=>document.removeEventListener('pointerdown',dismiss);
     menu.append(trigger,options);wrap.append(heading,menu);controls.append(wrap);
     menu.onkeydown=event=>{const buttons=[...options.querySelectorAll('button')];if(event.key==='Escape'){menu.open=false;trigger.focus();event.preventDefault();}else if(['ArrowDown','ArrowUp'].includes(event.key)&&buttons.length){menu.open=true;const i=buttons.indexOf(document.activeElement);buttons[(i+(event.key==='ArrowDown'?1:buttons.length-1)+buttons.length)%buttons.length].focus();event.preventDefault();}};
@@ -63,7 +63,7 @@
    }catch(e){if(popup.open){const error=el('p',e.message);error.setAttribute('role','alert');content.replaceChildren(error);}}};
    controls.append(preview,el('p','Applies to this Action. Existing runs keep their saved instructions.'));
    const runtime=el('details');runtime.className='action-runtime-settings';runtime.append(el('summary','Execution settings'),summary);
-   const defaults=el('a','Agent default settings');defaults.href='/settings';defaults.target='_blank';defaults.rel='noopener noreferrer';runtime.append(defaults);controls.append(runtime);
+   const defaults=el('a','Agent default settings');defaults.href='/agents';defaults.target='_blank';defaults.rel='noopener noreferrer';runtime.append(defaults);controls.append(runtime);
    paintSummary();
   }
   async function refresh(){
@@ -72,7 +72,7 @@
    load=(async()=>{try{
     const data=await api(base+(sourceId?'/actions/'+encodeURIComponent(sourceId)+'/configuration':'/configuration/defaults'));
     if(!alive)return;config=data;config.agents||=[];
-    if(!dirty)draft={...draft,...config.card,assignment_mode:config.card.assignment_mode||(config.card.agent_id?'agent':'legacy')};
+    if(!dirty)draft={...draft,...config.card,assignment_mode:config.card.assignment_mode||(config.card.agent_id?'agent':'legacy'),...(!sourceId?initialAssignment:{})};
     render();status.hidden=true;
    }catch(e){if(alive){status.hidden=false;status.textContent=e.message;}}finally{load=null;}})();return load;
   }

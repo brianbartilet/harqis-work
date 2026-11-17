@@ -41,6 +41,24 @@ def test_configuration_inherits_live_defaults_and_preserves_overrides(workspace,
     assert post(authenticated_client, root+'/presets', {'name':'Bad','overrides':{'agent_concurrency':20}}).status_code == 400
 
 
+def test_session_snapshots_owner_scoped_fleet_context(workspace, authenticated_client):
+    from modules.agents import entities, service
+    api, _, actions, _ = workspace
+    service.initialize()
+    item = create_action(actions)
+    api.store().configure('card:' + item['id'], {'assignment_mode':'agent', 'agent_id':'default', 'overrides':{}})
+    app = entities.entity('application', 'session-test', 'photos', 'Photos')
+    entities.observe('frontend-test-user', [app], [('agent:default', app['id'], 'linked')])
+    response = post(authenticated_client, '/hfl-corpus/agent-bridge/actions/' + item['id'] + '/sessions', {})
+    assert response.status_code == 200, response.text
+    context = response.json()['settings']['initial_context']['fleet_connections']
+    assert context['items'][0]['label'] == 'Photos'
+    assert 'do not grant' in context['guidance']
+    entities.associate('frontend-test-user', 'default', app['id'], False)
+    saved = api.store().session(response.json()['id'])
+    assert saved['settings']['initial_context']['fleet_connections'] == context
+
+
 def test_terminal_io_restore_and_download_on_completed_card(workspace, authenticated_client):
     api, _, actions, _ = workspace
     item = create_action(actions)
@@ -233,7 +251,16 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         playwright.expect(page.locator('.agent-header-status')).to_have_text('No session · Start to begin')
         page.get_by_label('Actions agent help',exact=True).click()
         playwright.expect(page.locator('.agent-header-help-body')).to_contain_text('click inside the terminal to type')
-        page.get_by_label('Actions agent help',exact=True).click()
+        playwright.expect(page.locator('.agent-header-help-body')).to_contain_text('does not switch the CLI')
+        for width in (1440, 390):
+            page.set_viewport_size({'width':width,'height':1000})
+            bounds=page.locator('.agent-header-help-body').bounding_box()
+            assert bounds['x']>=0 and bounds['x']+bounds['width']<=width
+            page.screenshot(path=str(Path('results')/f'agent-session-help-{width}.png'))
+        page.get_by_label('Actions agent help',exact=True).press('Escape')
+        playwright.expect(page.locator('.agent-header-help-body')).not_to_be_visible()
+        playwright.expect(page.locator('.action-agent-dialog')).to_be_visible()
+        page.set_viewport_size({'width':1440,'height':1000})
         playwright.expect(page.get_by_role('button',name='Start session',exact=True)).to_be_visible()
         page.screenshot(path=str(tmp_path/'actions-agent-empty.png'))
         sidebar = page.get_by_role('complementary', name='Action information and controls')
@@ -251,7 +278,7 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         playwright.expect(sidebar.get_by_role('heading',name='Tasks · 0/1')).to_be_visible()
         assert not page.locator('.agent-details').evaluate('(e)=>e.open')
         page.get_by_text('Agent details',exact=True).click()
-        page.get_by_role('button',name='Configure agent',exact=True).click()
+        page.get_by_role('button',name='Execution settings',exact=True).click()
         page.get_by_role('heading',name='Configure action agent').wait_for()
         page.get_by_role('button',name='Close',exact=True).click()
         page.get_by_role('button',name='Start session',exact=True).click()

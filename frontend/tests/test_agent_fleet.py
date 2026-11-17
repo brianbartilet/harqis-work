@@ -302,6 +302,30 @@ def test_fleet_browser(fleet, authenticated_client, tmp_path):
         browser.close()
 
 
+def test_fleet_add_action_shortcut(fleet, authenticated_client):
+    playwright = pytest.importorskip('playwright.sync_api')
+    fleet.initialize()
+    with playwright.sync_playwright() as p:
+        browser = p.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page(viewport={'width': 1440, 'height': 1000})
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        def route(r):
+            u = urlparse(r.request.url)
+            response = authenticated_client.request(r.request.method, u.path + ('?' + u.query if u.query else ''),
+                content=r.request.post_data_buffer,
+                headers={k:v for k,v in r.request.headers.items() if k.lower() in {'content-type','x-csrf-token'}})
+            r.fulfill(status=response.status_code, content_type=response.headers.get('content-type','text/html'), body=response.content)
+        page.route('https://fleet.test/**', route)
+        page.goto('https://fleet.test/agents?agent=butler')
+        page.get_by_role('button', name='Add action', exact=True).click()
+        draft = page.locator('.idea-dialog:visible')
+        playwright.expect(draft.get_by_label('Work assignment')).to_have_value('butler')
+        playwright.expect(draft.get_by_text('The butler plans the work and reports progress and results here.')).to_be_visible()
+        assert not errors, errors
+        browser.close()
+
+
 @pytest.mark.parametrize('width,height', [(1440,1000),(390,844)])
 def test_fleet_activity_labels_and_solid_hud_links(fleet, authenticated_client, tmp_path, width, height):
     playwright=pytest.importorskip('playwright.sync_api')

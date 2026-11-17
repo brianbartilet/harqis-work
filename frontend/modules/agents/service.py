@@ -195,5 +195,5 @@ def prepare(identity, user):
     request_id = str(uuid.uuid5(uuid.NAMESPACE_URL, 'fleet-session:' + str(store().path) + ':' + identity))
     item = canonical('POST', '/actions', {'request_id': request_id, 'title': agent['name'] + ' · Sessions',
                      'expected_outcome': 'Interactive work with ' + agent['name'], 'workspace_ids': agent['workspace_ids']})['item']
-    terminals().configure('card:' + item['id'], {'preset': '', 'agent_id': identity, 'overrides': {}})
+    terminals().configure('card:' + item['id'], {'preset': '', 'assignment_mode': 'butler' if identity == 'butler' else 'agent', 'agent_id': identity, 'overrides': {}})
     return {'action_id': item['id'], 'url': '/hfl-corpus/actions?integration_agent=' + item['id']}

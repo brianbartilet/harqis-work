@@ -360,7 +360,7 @@ def test_action_agent_settings(editor_page, monkeypatch, tmp_path, editor, exist
         section.get_by_label('Work assignment').select_option('legacy')
     section.get_by_text('Execution settings', exact=True).click()
     expect(section.locator('dl')).to_contain_text('Custom profile' if existing else 'Worker profile')
-    expect(section.get_by_role('link', name='Agent default settings')).to_have_attribute('href', '/settings')
+    expect(section.get_by_role('link', name='Agent default settings')).to_have_attribute('href', '/agents')
     expect(section.get_by_role('link', name='Agent default settings')).to_have_attribute('target', '_blank')
     if not existing:
         return
@@ -458,6 +458,39 @@ def test_new_action_assignment(editor_page, monkeypatch, tmp_path, editor, mode)
     key,card=cards[0]
     assert card['assignment_mode']==mode
     assert client.get('/hfl-corpus/timeline/items/'+key[5:]).json()['item']['agent_enabled']==(mode=='butler')
+
+
+@pytest.mark.parametrize('width', [1440, 390])
+def test_fleet_action_draft_keeps_assignment(editor_page, monkeypatch, tmp_path, width):
+    from pathlib import Path
+    from playwright.sync_api import expect
+    from modules.hfl_corpus import action_agents as agents
+    from modules.agents import service
+    from workflows.hfl.action_agent_store import ActionAgentStore
+    page, client = editor_page
+    db = ActionAgentStore(tmp_path / 'fleet-assignment.sqlite3')
+    monkeypatch.setattr(agents, 'store', lambda: db)
+    monkeypatch.setattr(agents.bridge, 'action_call', lambda method, path: client.get('/hfl-corpus/timeline/items' + path).json())
+    inactive = service.initialize().get('default')
+    service.store().save({**inactive, 'active': False}, identity=inactive['id'], version=inactive['version'])
+    page.set_viewport_size({'width': width, 'height': 1000})
+    page.goto('https://editing.test/hfl-corpus/actions')
+    page.wait_for_function('window.HflIdeas')
+    page.evaluate('window.HflIdeas.openEditor("actionable", {agent_assignment:{assignment_mode:"agent",agent_id:"butler"}})')
+    form = page.locator('.idea-dialog:visible form')
+    section = form.locator('[data-action-agent-settings]')
+    expect(section.get_by_label('Work assignment')).to_have_value('agent')
+    expect(section.locator('.action-agent-picker summary')).to_contain_text('HARQIS Butler')
+    section.locator('.action-agent-picker summary').click()
+    expect(section.locator('.action-agent-options')).not_to_contain_text('Default agent')
+    section.locator('.action-agent-picker summary').press('Escape')
+    assert section.evaluate('(e)=>e.scrollWidth <= e.clientWidth + 1')
+    page.screenshot(path=str(Path('results') / f'fleet-action-draft-{width}.png'))
+    form.locator('[name=title]').fill('Fleet assigned action')
+    form.get_by_role('button', name='Create', exact=True).click()
+    expect(form).not_to_be_visible()
+    cards = [v for k, v in db.configs().items() if k.startswith('card:')]
+    assert len(cards) == 1 and cards[0]['agent_id'] == 'butler'
 
 
 @pytest.mark.parametrize('width,existing', [(1440, True), (390, False)])

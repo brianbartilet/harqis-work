@@ -7,7 +7,7 @@ import {placeLabels} from './graph-labels.mjs';
 
 const colors = {actions:entitySemantics.action.color, ideas:entitySemantics.idea.color, drafts:'#c4b5fd', boards:'#93c5fd',
   goals:'#a7f3d0', entries:'#77dcf5', daily:'#95a7c3', people:'#ffbd91', tools:'#70edbd'};
-const kindName = kind => ({actions:'Action', ideas:'Idea', drafts:'Thought', boards:'Board',
+const kindName = kind => ({agents:'Agent', application:'Application', account:'Account', connector:'Connector', schedule:'Schedule', task:'Task', actions:'Action', ideas:'Idea', drafts:'Thought', boards:'Board',
   goals:'Goal', entries:'Entry', daily:'Date', companies:'Organization'}[kind] || kind);
 const identity = node => typeof node === 'object' ? node.id : node;
 const statusLabel = status => ({...entitySemantics.action.labels,...entitySemantics.idea.labels}[status] || status.replace(/[_-]+/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase()));
@@ -129,7 +129,9 @@ function Preview({item, editable=false}) {
   useEffect(() => {
     const refresh = () => setAttempt(a => a + 1);
     window.addEventListener('hfl:ideas-updated', refresh);
-    return () => window.removeEventListener('hfl:ideas-updated', refresh);
+    window.addEventListener('hfl:agent-updated', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {window.removeEventListener('hfl:ideas-updated', refresh);window.removeEventListener('hfl:agent-updated', refresh);window.removeEventListener('focus', refresh);};
   }, []);
   const fit = () => graph.current?.zoomToFit(250, 65, () => true);
   if (error) return <div className="connections-state" role="alert"><p>{error}</p><button type="button" onClick={() => setAttempt(a => a + 1)}>Retry</button></div>;
@@ -210,13 +212,16 @@ function Preview({item, editable=false}) {
       </div>
       <aside className="connections-details" aria-label="Read-only orb details">
         {selected ? <><p className="connections-kind">{kindName(selected.kind)}</p><h3>{selected.label}</h3>
+          {selected.fleet_url && <><p><a href={selected.fleet_url} target="_blank" rel="noopener noreferrer">Refine connections in Fleet</a></p><p>{[selected.fleet_source,selected.fleet_state].filter(Boolean).join(' · ')}</p><p>Fleet context only. A connection does not grant tools or account access.</p></>}
+          {selected.id===data.root && data.assigned_agents?.length===0 && <p>No agent assigned. <button type="button" onClick={()=>window.HflIdeas.openAction(item.id)}>Assign an agent</button> to include its Fleet connections.</p>}
+          {selected.id===data.root && data.fleet_truncated && <p>Showing up to 40 connected Fleet entities. Open the agent in Fleet to explore more.</p>}
           {selected.status && <div className="agenda-card-meta"><span className="action-status connections-status" data-status={selected.status} aria-label={'Status: ' + statusLabel(selected.status)}>{statusLabel(selected.status)}</span></div>}{selected.date && <p>{selected.date}</p>}
           {selected.boards.length > 0 && <div><h4>{selected.kind === 'drafts' ? 'Originating board' : 'Appears on boards'}</h4><ul>{selected.boards.map(b => <li key={b.id}><a href={'/hfl-corpus/graph?' + new URLSearchParams({board:b.id})}>{b.name}</a></li>)}</ul></div>}
           {(selected.body || selected.description) && <div className="connections-body markdown-body" dangerouslySetInnerHTML={{__html:selected.body_html}}/>}
           {selected.checklists?.map((list, index) => <div key={list.id || index}><h4>{list.title || 'Checklist'}</h4><ul>{list.items.map((entry, i) => <li key={entry.id || i}>{entry.done ? '☑' : '☐'} {entry.text}</li>)}</ul></div>)}
           <h4>Connections</h4><ul className="connections-relations">{relations.map((edge, index) => <li key={index}>
             <span>{editableRelations.has(edge.relation) ? `${label(selected.id)} ${connectionLabel(edge,selected.id)} ${label(edge.source === selected.id ? edge.target : edge.source)}` : <>{label(edge.source)} {edge.direction === 'none' ? '—' : edge.direction === 'both' ? '↔' : '→'} {label(edge.target)}</>}</span>
-            <small>{connectionLabel(edge,selected.id)} · {edge.board ? 'Board: ' + edge.board.name : 'Activity Graph'}</small>
+            <small>{connectionLabel(edge,selected.id)} · {edge.scope==='fleet' ? 'Fleet' : edge.scope==='assignment' ? 'Work assignment' : edge.board ? 'Board: ' + edge.board.name : 'Activity Graph'}</small>
             {editable && edge.manual && edge.scope==='shared' && editableRelations.has(edge.relation) && [edge.source,edge.target].includes(data.root) && <button type="button" onClick={event=>openConnectionPicker(item,edge,event.currentTarget,label(edge.source===data.root?edge.target:edge.source))}>Edit connection</button>}
           </li>)}</ul></> : <p>Select an orb to read its details.</p>}
       </aside>

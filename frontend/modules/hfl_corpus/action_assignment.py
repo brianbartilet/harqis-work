@@ -35,6 +35,8 @@ def validate(raw, old, user):
         agent = service.initialize().get(identity)
         if not visible(agent, user) or agent.get('mock') or agent.get('managed_sharing'):
             raise ValueError('Choose an available Fleet agent.')
+        if not agent['active'] and identity != old.get('agent_id'):
+            raise ValueError('Choose an active Fleet agent.')
     elif mode == 'agent':
         raise ValueError('Choose a Fleet agent for this assignment.')
     # Specialization belongs to Fleet; normalize legacy Action overrides on save.

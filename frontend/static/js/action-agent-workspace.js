@@ -66,7 +66,7 @@
     }
     const configureRow=el('div',undefined,'agent-configure-row');details.append(configureRow);
     button('Edit assignment',async()=>{if(!window.HflIdeas?.openAction)throw Error('Reload to edit the Action.');await window.HflIdeas.openAction(sourceId);},configureRow);
-    button('Configure agent', configure, configureRow);
+    button('Execution settings', configure, configureRow);
     const defaults=el('a','Agent default settings');defaults.href='/agents';defaults.target='_blank';defaults.rel='noopener noreferrer';
     defaults.title='Open Agents to change shared execution defaults';configureRow.append(defaults);
     const newSessionButton=button('New session', async()=>attach(await api(source+'/sessions',{})));
@@ -131,15 +131,22 @@
     const empty = el('section',undefined,'agent-session-empty'); empty.hidden=true;
     const emptyContent=el('div');
     const icon=el('span','>_','agent-session-empty-icon'); icon.setAttribute('aria-hidden','true');
-    emptyContent.append(icon,el('h3','Ready to work on this action?'),el('p','Start a session to ask questions, refine your instructions, or work through the next step with Hermes.'));
+    const emptyHeading=el('h3','Ready to work on this action?');
+    const emptyDescription=el('p','Start a session to ask questions, refine your instructions, or work through the next step with Hermes.');
+    emptyContent.append(icon,emptyHeading,emptyDescription);
     const emptyFeedback=el('p',''); emptyFeedback.setAttribute('role','status');
     const startButton=button('Start session',async()=>{
+      if(config?.effective.action_assignment?.executable===false){
+        if(!window.HflIdeas?.openAction)throw Error('Reload to edit the Action assignment.');
+        await window.HflIdeas.openAction(sourceId);return;
+      }
       emptyFeedback.textContent='Connecting to '+(config?.effective.action_assignment?.name||'Hermes')+'…';
       try {attach(await api(source+'/sessions',{}));terminal?.focus();}
       catch(e){emptyFeedback.textContent=e.message;throw e;}
     },emptyContent);
     startButton.classList.add('agenda-primary');
-    emptyContent.append(el('small','Your action details are included. You choose what happens next.'),emptyFeedback);
+    const emptyNote=el('small','Your action details are included. You choose what happens next.');
+    emptyContent.append(emptyNote,emptyFeedback);
     empty.append(emptyContent);
     if (sidebar) {
       const section = el('section', undefined, 'agent-session-section');
@@ -160,7 +167,15 @@
     }
     function showConfig() {
       const s=config.effective, assignment=s.action_assignment;
-      newSessionButton.disabled=startButton.disabled=assignment?.executable===false;
+      const unavailable=assignment?.executable===false, manual=assignment?.mode==='manual';
+      newSessionButton.disabled=unavailable;
+      startButton.disabled=false;
+      startButton.textContent=unavailable?(manual?'Assign an agent':'Change assignment'):'Start session';
+      emptyHeading.textContent=unavailable?(manual?'Choose an agent to start a session':'Session unavailable for this agent'):'Ready to work on this action?';
+      emptyDescription.textContent=unavailable?(manual?'This action is manual. Assign an active Hermes agent or Butler to work on it here.':'This terminal supports active Hermes agents and Butler. Change the assignment to continue here, or use the assigned provider’s app.'):'Start a session to ask questions, refine your instructions, or work through the next step with Hermes.';
+      emptyNote.hidden=unavailable;
+      emptyFeedback.hidden=unavailable;
+      hint.hidden=unavailable&&!session;
       if(!session)emptyFeedback.textContent=assignment?.reason||'';
       description.replaceChildren();
       for(const [label,value] of [['Agent',assignment?.name||'Hermes'],['Specialist',assignment?.specialist_profile?.name||'None · optional'],['Assignment',assignment?.mode||'Shared defaults'],['Configuration',config.effective.fleet_agent?.name||config.card.preset||'Shared defaults'],['Profile',s.hermes_profile||'Worker profile'],['Permissions',s.agent_mode],['Repository',s.agent_repository||'Isolated worktree'],['Idle expiry',s.agent_session_expiry_minutes+' minutes']])description.append(el('dt',label),el('dd',value));
@@ -168,10 +183,15 @@
       if (summary && config.action) {
         const action=config.action;
         summary.replaceChildren(el('span','ACTION'),el('h3',action.title));
-        const edit=button('Edit',async()=>{
+        const actionControls=el('div',undefined,'agent-action-controls');summary.append(actionControls);
+        const edit=button('Edit action',async()=>{
           if(!window.HflIdeas?.openAction)throw Error('The action editor is unavailable. Reload the page and try again.');
           await window.HflIdeas.openAction(sourceId);
-        },summary);edit.className='agent-action-edit';edit.setAttribute('aria-label','Edit action');
+        },actionControls);edit.setAttribute('aria-label','Edit action');
+        const connections=button('Connections',async()=>{
+          if(!window.HflActionConnections?.open)throw Error('Reload to view Action connections.');
+          window.HflActionConnections.open({...action,id:sourceId,kind:'action'},connections);
+        },actionControls);connections.setAttribute('aria-label','View action connections');
         const values=el('dl',undefined,'agent-action-summary');
         for(const [key,label] of [['status','Status'],['due_date','Due'],['description','Description'],['prompt','Initial prompt'],['expected_outcome','Expected outcome'],['notes','Notes'],['completion_note','Outcome']]) {
           const value=action[key];

@@ -2,6 +2,30 @@
 from fastapi import HTTPException
 
 
+def fleet_context(user, agent_id, limit=40):
+    """Bounded owner-scoped entity context; associations do not grant tool access."""
+    from modules.agents.entities import snapshot
+    data = snapshot(user)
+    available = {item['id']: item for item in data['items']}
+    reached = {'agent:' + agent_id}
+    selected = []
+    changed = True
+    while changed and len(selected) < limit:
+        changed = False
+        for edge in data['edges']:
+            target = edge['target']
+            if edge['source'] in reached and target in available and target not in reached:
+                reached.add(target)
+                selected.append({key: available[target].get(key, '') for key in
+                    ('id', 'kind', 'label', 'summary', 'source', 'state', 'observed_at')})
+                changed = True
+                if len(selected) == limit:
+                    break
+    return {'items': selected,
+            'edges': [e for e in data['edges'] if e['source'] in reached and e['target'] in reached],
+            'truncated': any(e['source'] in reached and e['target'] in available and e['target'] not in reached for e in data['edges'])}
+
+
 def project(action_id, shared, boards, *, kind='action'):
     root = kind + ':' + action_id
     nodes = {n['id']: {**n, 'boards': []} for n in shared['nodes']}

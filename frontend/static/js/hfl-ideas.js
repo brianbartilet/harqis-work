@@ -155,7 +155,8 @@ window.HflObjectDescription = (item = {}) => {
         template.querySelector('[name=matrix]').onchange = event => { if (!event.target.value) for (const name of ['matrix_confidence','matrix_reason']) template.querySelector(`[name=${name}]`).value = ''; };
         template.querySelector('.agenda-evidence')?.remove(); template.querySelector('.agenda-error')?.remove();
         d.body.append(...template.children); checklistRoot = d.body.querySelector('[data-action-checklists]');
-        window.HflActionAgentSettings?.(d.form, item.id);
+        window.HflActionAgentSettings?.(d.form, item.id, item.id ? undefined : item.agent_assignment);
+        if(!item.id && item.agent_assignment)d.form.querySelector('[data-action-agent-settings]').open=true;
         checklistToolbar = d.body.querySelector('[data-checklist-toolbar]');
       } else {
         const details = section('Details');

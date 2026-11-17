@@ -159,11 +159,31 @@ def idea_connections(request: Request, identity: str):
 
 
 def object_connections(request: Request, identity: str, *, kind: str):
-    timeline.owner(request)
+    user = timeline.owner(request)
     from modules.hfl_corpus.entities import graph
     from modules.hfl_corpus.action_connections import project
     from services.markdown import render_markdown
     data = project(identity, graph(limit=0), store().maps(), kind=kind)
+    if kind == 'action':
+        from modules.hfl_corpus.action_agents import assignments
+        from modules.hfl_corpus.action_connections import fleet_context
+        from urllib.parse import urlencode
+        data['assigned_agents'] = assignments(user)['items'].get(identity, [])
+        for agent in data['assigned_agents']:
+            agent_node = 'agent:' + agent['id']
+            fleet_url = '/agents?' + urlencode({'agent': agent['id']})
+            data['nodes'].append({'id': agent_node, 'object_id': agent['id'],
+                                  'kind': 'agents', 'label': agent['name'], 'boards': [],
+                                  'description': agent['runtime'], 'fleet_url': fleet_url})
+            data['edges'].append({'source': data['root'], 'target': agent_node,
+                                  'relation': 'assigned-to', 'scope': 'assignment', 'direction': 'forward'})
+            context = fleet_context(user, agent['id'])
+            data['fleet_truncated'] = context['truncated']
+            for item in context['items']:
+                data['nodes'].append({'id': item['id'], 'kind': item['kind'], 'label': item['label'],
+                    'boards': [], 'description': item.get('summary', ''), 'fleet_state': item.get('state', ''),
+                    'fleet_source': item.get('source', ''), 'fleet_url': fleet_url})
+            data['edges'].extend({**edge, 'scope': 'fleet', 'direction': 'forward'} for edge in context['edges'])
     for node in data['nodes']:
         node['body_html'] = str(render_markdown(node.get('body') or node.get('description') or ''))
     return data

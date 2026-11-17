@@ -21,7 +21,11 @@
     const bounds = dialog.getBoundingClientRect();
     return event.target === dialog && (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom);
   };
-  dialog.addEventListener('pointerdown', event => { backdropPress = event.button === 0 && onBackdrop(event); });
+  dialog.addEventListener('pointerdown', event => {
+    backdropPress = event.button === 0 && onBackdrop(event);
+    const help = dialog.querySelector('.agent-header-help');
+    if (help && !help.contains(event.target)) help.open = false;
+  });
   dialog.addEventListener('pointercancel', () => { backdropPress = false; });
   dialog.addEventListener('click', event => {
     const dismiss = backdropPress && onBackdrop(event);
@@ -114,13 +118,14 @@
       const utilities=element('div');utilities.className='agent-header-utilities';
       headerStatus=element('span','Loading session…');headerStatus.className='agent-header-status';headerStatus.setAttribute('role','status');
       const help=element('details');help.className='agent-header-help';
-      const helpToggle=element('summary','?');helpToggle.setAttribute('aria-label','Actions agent help');helpToggle.title='Session help';
+      const helpToggle=element('summary','i');helpToggle.setAttribute('aria-label','Actions agent help');helpToggle.title='How agent sessions work';
       const helpBody=element('div');helpBody.className='agent-header-help-body';
-      helpBody.append(element('strong','Working with this action'));
-      for(const text of ['Start a session, then click inside the terminal to type. Press Enter to send; use /help for Hermes commands.',
-        'If the session disconnects or expires, restore it to continue. Its old transcript is read-only.',
-        'Session controls are above the terminal. Run initial prompt executes the card’s saved instructions. Generated files are in the left panel (Action details on mobile).',
-        'Closing this dialog leaves the session running. End session stops it.'])helpBody.append(element('p',text));
+      helpBody.append(element('strong','How agent sessions work'));
+      for(const text of ['This terminal uses Hermes CLI. Default worker uses shared settings; an assigned Hermes agent or Butler supplies its own instructions, skills and runtime settings.',
+        'Assigning Codex, Claude, Nod or another external provider does not switch the CLI. Action sessions are unavailable for those providers; continue in their own app. Manual actions and inactive agents cannot start a session.',
+        'Start a session, then click inside the terminal to type. Press Enter to send; use /help for commands. Opening a session does not run the saved prompt. Use Run initial prompt for that.',
+        'An existing live session is reused. Closing this dialog leaves it running; End session stops it. Ending a session does not mark the Action done.'])helpBody.append(element('p',text));
+      help.addEventListener('keydown',event=>{if(event.key==='Escape'&&help.open){event.preventDefault();event.stopPropagation();help.open=false;helpToggle.focus();}});
       help.append(helpToggle,helpBody);utilities.append(headerStatus,help);header.insertBefore(utilities,close);
       information = element('aside'); information.className = 'agent-sidebar'; information.id = 'action-agent-sidebar';
       information.setAttribute('aria-label', 'Action information and controls');
