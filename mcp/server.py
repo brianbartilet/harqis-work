@@ -1,4 +1,5 @@
 import ctypes
+import fnmatch
 import logging
 import os
 import subprocess
@@ -142,6 +143,18 @@ with _stdout_to_stderr():
             register_app_tools(mcp, spec)
         except Exception as e:
             logger.warning("Skipping %s tools — %s: %s", spec.label, type(e).__name__, e)
+
+    # Per-tool filter: MCP_DISABLED_TOOLS is a comma-separated list of tool names or
+    # fnmatch patterns (case-insensitive) to drop after registration, e.g.
+    #   MCP_DISABLED_TOOLS="google_drive_delete_file,*keep*"
+    _disabled = [p.strip().lower() for p in os.environ.get("MCP_DISABLED_TOOLS", "").split(",") if p.strip()]
+    if _disabled:
+        _dropped = [name for name in list(mcp._tool_manager._tools)
+                    if any(fnmatch.fnmatch(name.lower(), pattern) for pattern in _disabled)]
+        for name in _dropped:
+            mcp.remove_tool(name)
+        logger.info("MCP_DISABLED_TOOLS filter active: removed %d tool(s) (%s)",
+                    len(_dropped), ", ".join(_dropped) or "<none>")
 
     logger.info(
         "MCP server: registered %d tool(s) from %d app(s) (filtered from %d total)",

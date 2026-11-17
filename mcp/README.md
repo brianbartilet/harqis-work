@@ -820,6 +820,15 @@ Values may use the catalog key or label (`trello`, `Discord`, `Knowledge / RAG`,
 Whitespace is trimmed; matching is case-insensitive. An explicitly empty value registers
 everything; an unset value uses the machine default, or everything if no default exists.
 
+To drop individual tools from the registered apps (e.g. destructive or unauthorised ones), set
+`MCP_DISABLED_TOOLS` to comma-separated tool names or `fnmatch` patterns (case-insensitive):
+
+```sh
+export MCP_DISABLED_TOOLS="google_drive_delete_file,send_gmail_email,*keep*"
+```
+
+Both variables can be set per client, e.g. in the `env` block of `claude_desktop_config.json`.
+
 ---
 
 ## Connecting to Claude Desktop

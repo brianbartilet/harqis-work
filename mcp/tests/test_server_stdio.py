@@ -50,3 +50,26 @@ def test_stdio_server_keeps_non_json_output_off_stdout(caplog, entrypoint):
         and "Failed to parse JSONRPC message from server" in record.getMessage()
     ]
     assert parse_errors == []
+
+
+def test_stdio_server_drops_disabled_tools():
+    async def list_tool_names() -> set[str]:
+        with anyio.fail_after(30):
+            params = StdioServerParameters(
+                command=sys.executable,
+                args=[str(SERVER_PATH)],
+                env={
+                    **os.environ,
+                    "MCP_ENABLED_APPS": "trello",
+                    "MCP_DISABLED_TOOLS": " GET_TRELLO_MY_* , no_such_tool ",
+                    "PYTHONPATH": str(REPO_ROOT),
+                },
+            )
+            async with stdio_client(params) as (read_stream, write_stream):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    return {tool.name for tool in (await session.list_tools()).tools}
+
+    names = anyio.run(list_tool_names)
+    assert names, "the remaining trello tools should still be registered"
+    assert not any(name.startswith("get_trello_my_") for name in names)
