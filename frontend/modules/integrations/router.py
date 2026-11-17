@@ -145,7 +145,9 @@ def nod_operation(identity: str, operation: str, raw: dict, user=Depends(owner_a
 
 @api.get('/connectors')
 def connectors(user=Depends(owner_auth)):
-    items = [{**info, **store.get(user, key)} for key,info in service.PROVIDERS.items()]
+    # Saved provider capability flags must not replace the card's display list.
+    items = [{**info, **store.get(user, key), 'capabilities': info['capabilities']}
+             for key,info in service.PROVIDERS.items()]
     import os
     if os.getenv('HARQIS_NOD_MOCK') == '1' and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1':
         items = [{**item, 'status': 'Connected', 'enabled': True, 'site': 'https://nod.example.test',

@@ -133,6 +133,12 @@ def test_connector_routes_and_worker_auth(host, authenticated_client, monkeypatc
     enabled = client.post('/integrations/api/connectors/codex/toggle', json={'enabled': True}, headers=headers)
     assert enabled.status_code == 200, enabled.text
     assert enabled.json()['discovery']['counts']['applications'] == 1
+    cards = client.get('/integrations/api/connectors').json()['items']
+    from modules.integrations.service import PROVIDERS
+    assert all(isinstance(card['capabilities'], list) for card in cards)
+    assert next(card for card in cards if card['provider'] == 'codex')['capabilities'] == PROVIDERS['codex']['capabilities']
+    fleet_page = client.get('/agents').text
+    assert 'img/connectors/codex.svg' in fleet_page
     assert client.post('/api/hfl/fleet/reconcile').status_code == 401
     from modules.agents import oversight_api
     monkeypatch.setattr(oversight_api, 'reconcile', lambda user: {'owner': user})
