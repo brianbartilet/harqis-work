@@ -45,6 +45,7 @@
         if(item.enabled){button(row,'Refresh Bots',async()=>{await api('/grokbot/sync',{});await load();});link(row,'View fleet','/agents');}
         if(item.last_sync)footer.append(el('p','Last discovery: '+new Date(item.last_sync).toLocaleString()+' · '+item.bot_count+' Bots'));
       }
+      if(item.enabled&&item.provider==='codex'){const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);button(row,'Open in Fleet',async()=>{const result=await api('/codex/link',{});location.href='/agents?agent='+encodeURIComponent(result.item.id);});}
       if(item.enabled&&item.provider==='nod'){const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);button(row,'Open in Fleet',async()=>{const result=await api('/nod/link',{});location.href='/agents?agent='+encodeURIComponent(result.item.id);});link(row,'Open Nod',item.site);}
       if(item.enabled&&item.provider==='n8n'){
         const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);
@@ -97,8 +98,18 @@
     });
     d.addEventListener('close',()=>{closed=true;key.value='';cancel();},{once:true});
   }
+  function codexSetup(item){
+    const {d,body,error}=dialog('Connect Codex');
+    body.append(el('p','Observe Codex installed on the HARQIS server host. This reads saved tasks and installed local plugins using the host’s existing sign-in. It does not start tasks or control a desktop session.'));
+    const state=el('p','Not tested','connector-status');state.setAttribute('role','status');body.append(state);
+    const row=controls(body);let tested=false;
+    const test=button(row,'Test local host',async()=>{tested=false;save.disabled=true;state.textContent='Testing…';try{const value=await api('/connectors/codex/test',{transport:'local'});tested=true;state.textContent='Test passed · '+value.account;}catch(e){state.textContent='Connection unavailable';throw e;}finally{save.disabled=!tested;}});
+    const save=button(row,'Save and enable',async()=>{if(!tested)return;test.disabled=true;save.disabled=true;try{await api('/connectors/codex/save',{transport:'local'});const result=await api('/connectors/codex/toggle',{enabled:true});d.close();await load();document.querySelector('[data-integration-error]').textContent=(result.discovery?.warnings||[]).join(' ');}catch(e){state.textContent='Save or discovery failed. Test the host again.';tested=false;throw e;}finally{test.disabled=false;save.disabled=!tested;}});
+    save.setAttribute('data-managed-disabled','');save.disabled=true;
+  }
   function setup(item){
     if(item.provider==='grokbot'){grokbotSetup();return;}
+    if(item.provider==='codex'){codexSetup(item);return;}
     const {d,body,error}=dialog('Connect '+item.name);
     body.append(el('p','Test your credentials, then save the connection. Testing does not save credentials. Saved credentials are encrypted and separate from workflow accounts.'));
     if(item.provider==='github'){

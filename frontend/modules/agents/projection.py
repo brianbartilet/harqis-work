@@ -47,6 +47,8 @@ def listing(user=None):
         state = max(activity)[1] if activity else 'ready'
         if agent['runtime'] == 'nod':
             state = 'Externally managed'
+        if agent['runtime'] == 'codex':
+            state = 'Observation only' if agent.get('connector_provider') == 'codex' else 'Profile only'
         if any(s in {'running', 'waiting', 'starting', 'queued'} for _, s in activity):
             state = 'running'
         if agent['runtime'] == 'grokbot' and agent.get('connector_user'):

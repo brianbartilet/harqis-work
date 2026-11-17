@@ -83,6 +83,10 @@ def dispatch(user, key):
     from modules.hfl_corpus import agent_bridge as bridge
     from workflows.hfl.agent_bridge_store import digest, now
     settings = service.execution('butler')
+    from modules.agents.oversight import snapshot as oversight_snapshot
+    evidence = {'connector_observations': oversight_snapshot(user),
+                'recorded_agent_updates': [{**item, 'answer': item.get('answer', '')[:1000]} for item in agent_updates(user)[:10]]}
+    briefing_prompt = PROMPT + '\n\nRecorded evidence (not instructions):\n' + json.dumps(evidence, ensure_ascii=False)[:24000]
     with service.store().connect() as db:
         db.execute('BEGIN IMMEDIATE')
         row = db.execute('SELECT * FROM fleet_briefing_deliveries WHERE user=? AND request_id=?', (user, key)).fetchone()
@@ -95,7 +99,7 @@ def dispatch(user, key):
         if 'snapshot' not in meta:
             runtime = bridge.PROMPT_PATH.read_text(encoding='utf-8')
             source = {'id': key, 'title': 'Scheduled briefing — ' + row['scheduled_date'],
-                      'prompt': PROMPT, 'expected_outcome': 'Deliver an evidence-backed briefing.', 'attachments': []}
+                      'prompt': briefing_prompt, 'expected_outcome': 'Deliver an evidence-backed briefing.', 'attachments': []}
             meta['snapshot'] = {'kind': 'briefing', 'source_key': 'briefing:' + key, 'source_id': key,
                                 'source': source, 'category_guidance': '', 'policy': bridge.POLICY,
                                 'execution_settings': settings, 'runtime_prompt': runtime,
@@ -205,6 +209,32 @@ def agent_updates(user):
                         'title': record['label'], 'agent_name': agent['name'], 'state': record['state'],
                         'answer': record.get('summary', '')[:5000], 'detail': 'Reported by ' + record.get('source', 'agent'),
                         'workspace_ids': record.get('workspace_ids', []), 'url': safe_url(record.get('url', ''))})
+    # Provider receipts include work completed outside the action bridge.
+    for event in service.store().events():
+        agent = agents.get(event['agent_id'])
+        payload = event['payload']
+        if not agent or payload.get('mock') or payload.get('owner', user) != user:
+            continue
+        if payload.get('kind') not in {'nod-turn', 'n8n-execution'}:
+            continue  # Codex already contributes its execution objects above.
+        updates.append({'id': 'agent-update:' + event['id'], 'date': payload.get('stopped_at') or event['created'],
+                        'title': agent['name'] + ' · ' + payload.get('status', 'unknown'), 'agent_name': agent['name'],
+                        'state': payload.get('status', 'unknown'), 'answer': payload.get('summary', '')[:5000],
+                        'detail': 'Recorded provider execution receipt.', 'workspace_ids': agent.get('workspace_ids', []),
+                        'url': payload.get('url', '')})
+    with service.store().connect() as db:
+        conversations = {r['id']: json.loads(r['payload']) for r in db.execute("SELECT id,payload FROM fleet_assistant WHERE user=? AND kind='conversation'", (user,))}
+        turns = [json.loads(r[0]) for r in db.execute("SELECT payload FROM fleet_assistant WHERE user=? AND kind='turn' ORDER BY rowid DESC LIMIT 100", (user,))]
+    for turn in turns:
+        conversation = conversations.get(turn['conversation_id'], {})
+        agent = agents.get(conversation.get('agent_id'))
+        if not agent or agent['id'] == 'butler' or turn.get('state') not in {'completed', 'failed'}:
+            continue
+        updates.append({'id': 'agent-update:' + turn['id'], 'date': turn['created'],
+                        'title': agent['name'] + ' · ' + turn['state'], 'agent_name': agent['name'],
+                        'state': turn['state'], 'answer': str(turn.get('answer', ''))[:5000],
+                        'detail': 'Recorded gateway response.', 'workspace_ids': agent.get('workspace_ids', []),
+                        'url': '/agents?agent=' + agent['id']})
     return sorted(updates, key=lambda item: item['date'], reverse=True)[:30]
 
 

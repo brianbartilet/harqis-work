@@ -1,5 +1,9 @@
 name: ${COMPOSE_PROJECT_NAME:-harqis-work}
 
+# Optional Nod is managed by scripts/deploy.py via [<machine>.nod], using its
+# existing upstream Compose project and persistent volume. See scripts/README.md.
+# It intentionally survives this project's down/restart lifecycle.
+
 services:
 
   # ── Message Broker ─────────────────────────────────────────────────────────

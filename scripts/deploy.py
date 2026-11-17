@@ -73,10 +73,13 @@ import json
 import shlex
 import shutil
 import socket
+import ssl
 import subprocess
 import sys
 import time
 import tomllib
+import urllib.request
+from urllib.parse import urlsplit
 from datetime import datetime
 from pathlib import Path
 
@@ -439,6 +442,9 @@ PY
 
 echo '==> Verify service PIDs'
 "$python_bin" scripts/deploy.py --role host --status
+
+echo '==> Verify optional managed Nod component'
+"$python_bin" scripts/deploy.py --role host --verify-nod
 
 echo '==> Verify final Git state'
 branch_after="$(git branch --show-current)"
@@ -2095,7 +2101,111 @@ def select_services(machine: dict, args: argparse.Namespace) -> list[str]:
     ]
 
 
+# ── Optional managed Nod installation ─────────────────────────────────────────
+
+def nod_component(machine: dict, action: str = "ensure") -> None:
+    """Manage the existing Nod Compose project without upgrading or recreating it.
+
+    Credentials remain in the installation's .env; captured Docker output must
+    never be included in errors because Compose diagnostics can contain secrets.
+    """
+    config = machine.get("nod", {})
+    if not config.get("enabled", False) or machine.get("role") != "host":
+        if action == "restart":
+            raise SystemExit("ERROR: Nod is not enabled on this host.")
+        return
+    try:
+        from dotenv import dotenv_values
+        import certifi
+
+        mount = Path(config["mount_path"]).expanduser().resolve()
+        installation = Path(config["compose_dir"]).expanduser().resolve()
+        if not mount.is_mount() or not installation.is_relative_to(mount):
+            raise ValueError("Nod data volume is not mounted or installation is outside it")
+        for filename in ("compose.yaml", ".env", ".installation-ready"):
+            if not (installation / filename).is_file():
+                raise ValueError(f"Nod installation is missing {filename}")
+        if (installation / ".maintenance").exists():
+            raise ValueError("Nod installation is in maintenance mode")
+        token = dotenv_values(installation / ".env", interpolate=False).get("NOD_AUTH_TOKEN")
+        if not token:
+            raise ValueError("Nod installation has no NOD_AUTH_TOKEN")
+        url = config["health_url"]
+        endpoint = urlsplit(url)
+        if endpoint.scheme != "https" and not (
+            endpoint.scheme == "http" and endpoint.hostname in ("localhost", "127.0.0.1", "::1")
+        ):
+            raise ValueError("Nod health URL must use HTTPS or loopback HTTP")
+        docker = shutil.which("docker")
+        if not docker:
+            raise ValueError("Docker executable is unavailable")
+        # Do not inherit HARQIS's Compose project/env overrides into Nod.
+        env = {key: value for key, value in os.environ.items()
+               if not key.startswith("COMPOSE_") and not key.startswith("NOD_")}
+        command = [docker, "compose", "--project-directory", str(installation),
+                   "--file", str(installation / "compose.yaml"),
+                   "--env-file", str(installation / ".env")]
+
+        def compose(*arguments: str) -> str:
+            try:
+                result = subprocess.run(command + list(arguments), cwd=installation,
+                                        env=env, capture_output=True, text=True, timeout=240)
+            except (OSError, subprocess.TimeoutExpired):
+                raise ValueError("Nod Compose command failed or timed out") from None
+            if result.returncode:
+                raise ValueError("Nod Compose command failed; inspect the installation locally")
+            return result.stdout
+
+        expected = set(compose("config", "--services").split())
+        if not expected:
+            raise ValueError("Nod Compose project has no services")
+
+        def ready() -> bool:
+            output = compose("ps", "--format", "json").strip()
+            rows = json.loads(output) if output.startswith("[") else [
+                json.loads(line) for line in output.splitlines() if line.strip()]
+            healthy = {row["Service"] for row in rows
+                       if row.get("State") == "running" and row.get("Health", "") in ("", "healthy")}
+            return expected <= healthy
+
+        if action == "restart":
+            compose("restart")
+        if action in ("ensure", "restart"):
+            running = set(compose("ps", "--status", "running", "--services").split())
+            if not expected <= running:
+                print("[nod] Starting missing services in existing installation")
+                compose("up", "-d", "--no-recreate", "--no-build", "--pull", "never",
+                        "--wait", "--wait-timeout", "180")
+        # Disable redirects: never forward the installation bearer token elsewhere.
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return None
+
+        opener = urllib.request.build_opener(
+            NoRedirect, urllib.request.HTTPSHandler(
+                context=ssl.create_default_context(cafile=certifi.where())))
+        attempts = 1 if action == "status" else 30
+        for attempt in range(attempts):
+            if ready():
+                try:
+                    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+                    with opener.open(request, timeout=5) as response:
+                        if json.load(response).get("ok") is True:
+                            print("[nod] VERIFIED: containers healthy; authenticated API healthy")
+                            return
+                except Exception:
+                    pass  # Never expose URL, response body, or credentials.
+            if attempt + 1 < attempts:
+                time.sleep(2)
+        raise ValueError("Nod container or authenticated API health check failed")
+    except (KeyError, OSError, ValueError) as exc:
+        # Only our fixed diagnostics are safe; config/JSON errors may contain data.
+        message = str(exc) if type(exc) is ValueError and str(exc).startswith(("Nod ", "Docker ")) else "Nod configuration or state is invalid"
+        raise SystemExit(f"ERROR: {message}") from None
+
+
 # ── Argparse ──────────────────────────────────────────────────────────────────
+
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -2113,6 +2223,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-p", "--profile", help="Override Kanban profile filter")
     p.add_argument("--num-agents", type=int, help="Override Kanban concurrent agents")
     p.add_argument("--docker-only", action="store_true", help="Manage Docker only — skip Python services")
+    p.add_argument("--no-nod", action="store_true", help="Skip the optional managed Nod component")
     p.add_argument("--no-scheduler", action="store_true",
                    help="Skip the Celery Beat scheduler. Use on every host EXCEPT the "
                         "one canonical Beat runner — duplicate Beat instances fire every "
@@ -2136,6 +2247,7 @@ def build_parser() -> argparse.ArgumentParser:
                          "Sets WORKFLOW_CONCURRENCY=N before spawning. Mutually exclusive with --scheduler.")
 
     g = p.add_mutually_exclusive_group()
+    g.add_argument("--verify-nod", action="store_true", help="Verify configured Nod without changing containers")
     g.add_argument("--down",       action="store_true", help="Stop services")
     g.add_argument("--status",     action="store_true", help="Show running services")
     g.add_argument("--stop",       metavar="SERVICE",   help="Stop one service by name")
@@ -2158,6 +2270,9 @@ def build_parser() -> argparse.ArgumentParser:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def _main(args: argparse.Namespace, runtime_machine: dict) -> None:
+    if getattr(args, "verify_nod", False):
+        nod_component(runtime_machine, "verify")
+        return
     if args.rebuild_venv:
         _reexec_rebuild_with_base_python()
         os.environ.pop(_REBUILD_REEXEC_MARKER, None)
@@ -2172,6 +2287,7 @@ def _main(args: argparse.Namespace, runtime_machine: dict) -> None:
         or args.down
         or args.unregister
         or args.docker_only
+        or args.restart == "nod"
     )
     if manages_python_runtime:
         sync_runtime_requirements()
@@ -2181,9 +2297,12 @@ def _main(args: argparse.Namespace, runtime_machine: dict) -> None:
         show_status()
         emulator_status(_m)
         device_status(_m)
+        nod_component(runtime_machine, "status")
         return
 
     if args.stop:
+        if args.stop == "nod":
+            raise SystemExit("ERROR: Nod persists across HARQIS teardown; use its installation maintenance procedure to stop it.")
         if args.stop == "emulator":
             emulator_down(runtime_machine)
         elif args.stop == "device":
@@ -2194,6 +2313,9 @@ def _main(args: argparse.Namespace, runtime_machine: dict) -> None:
 
     if args.restart:
         machine = runtime_machine
+        if args.restart == "nod":
+            nod_component(machine, "restart")
+            return
         if args.restart == "emulator":
             print("==> Restart: emulator")
             emulator_down(machine)
@@ -2240,7 +2362,7 @@ def _main(args: argparse.Namespace, runtime_machine: dict) -> None:
         device_down(machine)
         if role == "host" and not args.docker_only and not single_instance:
             docker_down()
-        print(f"All services stopped for machine={name}.")
+        print(f"HARQIS services stopped for machine={name}; managed Nod is preserved.")
         return
 
     if single_instance:
@@ -2284,6 +2406,8 @@ def _main(args: argparse.Namespace, runtime_machine: dict) -> None:
     if role == "host" and not single_instance:
         docker_up()
         _bootstrap_elasticsearch()
+        if not getattr(args, "no_nod", False):
+            nod_component(machine)
     elif role == "node" and not single_instance:
         print("[node] Skipping Docker — broker is on the host.")
 
@@ -2371,6 +2495,8 @@ def main() -> None:
             "--profile": args.profile,
             "--num-agents": args.num_agents,
             "--docker-only": args.docker_only,
+            "--no-nod": args.no_nod,
+            "--verify-nod": args.verify_nod,
             "--no-scheduler": args.no_scheduler,
             "--no-frontend": args.no_frontend,
             "--no-hfl-api": args.no_hfl_api,
