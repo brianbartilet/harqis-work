@@ -1,4 +1,4 @@
-<div class="activity-navigation{% if active_module in ['applications', 'workflows', 'git_forks'] %} is-active{% endif %}">
+<div class="activity-navigation{% if active_module in ['applications', 'workflows', 'git_forks', 'api_docs'] %} is-active{% endif %}">
   <button type="button" aria-haspopup="true" aria-expanded="false">Build</button>
   <details class="activity-navigation-menu">
     <summary hidden>Build navigation</summary>
@@ -8,6 +8,7 @@
       <a href="{{ child.route }}" {% if active_module == child.key %}aria-current="page"{% endif %}>{{ child.label }}</a>
       {% endfor %}
       {% endfor %}
+      <a href="/docs" {% if active_module == 'api_docs' %}aria-current="page"{% endif %}>API reference</a>
     </nav>
   </details>
 </div>

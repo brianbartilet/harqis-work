@@ -261,6 +261,8 @@ app = FastAPI(
     openapi_url=None,
     lifespan=lifespan,
 )
+from api_docs import router as api_docs_router
+app.include_router(api_docs_router)
 app.add_middleware(PublicShareBodyLimitMiddleware)
 app.add_middleware(
     GZipMiddleware,

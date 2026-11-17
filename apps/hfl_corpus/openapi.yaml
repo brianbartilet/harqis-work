@@ -4540,6 +4540,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HTTPValidationError'
+  /api/hfl/fleet/reconcile:
+    post:
+      tags:
+      - hfl-corpus-api
+      summary: Reconcile Fleet
+      operationId: reconcile_fleet_api_hfl_fleet_reconcile_post
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+      security:
+      - HTTPBearer: []
 components:
   schemas:
     TopicRemoval:
