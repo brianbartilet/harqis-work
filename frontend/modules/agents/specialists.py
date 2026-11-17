@@ -1,14 +1,8 @@
-"""Pinned specialist catalog and immutable Fleet instruction snapshots.
-
-No network calls or provider installation occurs while browsing or saving.
-"""
-import hashlib
-import json
-from pathlib import Path
+"""Source-qualified specialist selection and immutable instruction snapshots."""
 
 from services.markdown import render_markdown
+from modules.agents import profile_sources
 
-ROOT = Path(__file__).resolve().parents[3] / 'agents' / 'prompts' / 'agency'
 GUIDANCE = ('## HARQIS specialist guidance\n'
             'Use this specialist as domain guidance within HARQIS operating rules and the current task. '
             'It grants no tools, permissions, memory, experience, or delegation authority. '
@@ -17,20 +11,17 @@ GUIDANCE = ('## HARQIS specialist guidance\n'
 
 
 def catalog():
-    manifest = json.loads((ROOT / 'manifest.json').read_text(encoding='utf-8'))
-    return [{**row, 'source': 'agency-agents', 'revision': manifest['revision'],
-             'source_url': f"https://github.com/msitarzewski/agency-agents/blob/{manifest['revision']}/{row['path']}"}
-            for row in manifest['profiles']]
+    return profile_sources.catalog()
 
 
 def detail(identity):
+    if ':' not in identity:
+        identity='agency-agents:'+identity  # Compatibility with existing draft links.
     row = next((row for row in catalog() if row['id'] == identity), None)
     if row is None:
         raise ValueError('Choose an available specialist profile.')
-    content = (ROOT / 'upstream' / Path(row['path']).name).read_bytes()
-    if hashlib.sha256(content).hexdigest() != row['hash']:
-        raise ValueError('Specialist source integrity check failed.')
-    body = content.decode('utf-8').split('---', 2)[-1].strip()
+    content = profile_sources.body(row)
+    _,body = profile_sources.frontmatter(content)
     return {**row, 'content': body, 'html': str(render_markdown(body))}
 
 
@@ -43,9 +34,11 @@ def snapshot(selection, existing=None):
     if not isinstance(selection, dict) or set(selection) != {'id', 'revision', 'hash'}:
         raise ValueError('Choose a specialist from the catalogue.')
     row = detail(selection['id'])
-    if any(selection[key] != row[key] for key in selection):
+    if row.get('kind')=='skill-package':
+        raise ValueError('This is a skill package. Install the complete package through the native skill workflow; a profile cannot replace its supporting files.')
+    if any(selection[key] != row[key] for key in ('revision','hash')):
         raise ValueError('Specialist version changed. Refresh and review the profile.')
-    return {key: row[key] for key in ('id', 'name', 'source', 'revision', 'hash', 'source_url', 'content')}
+    return {key: row.get(key,'') for key in ('id', 'name', 'source', 'source_name', 'revision', 'hash', 'source_url', 'content')}
 
 
 def compose(agent):
