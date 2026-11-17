@@ -1,5 +1,30 @@
 # `workflows/hfl/` — Homework for Life
 
+## Bounded automatic-action review
+
+Saved high-confidence ideas are reviewed in batches of at most eight (40 candidates
+per invocation). Each batch repeats all its candidates across a preflighted plan
+of at most 32 payloads of 250,000 characters. All supplied evidence and comparison
+records are covered without record truncation; an indivisible oversized record or
+exhausted plan budget defers the whole batch before any model request. Each request
+retains the existing model helper's at-most-two response attempts. This is a character
+budget, not an exact provider token budget.
+
+Creation requires every partition to pass. A duplicate suppresses creation; any
+completion doubt/manual-review decision vetoes approval. Missing, extra, duplicate,
+or malformed decisions fail the batch. The store validates the entire decision set
+and current eligibility under its existing immediate transaction and snapshot digest
+before changing anything. Earlier completed batches remain committed if a later one
+fails; the result then says `partial`, not `complete`. No automatic retry is added.
+
+`automatic_actions.diagnostic` records content-free reason/stage/count fields for
+planning, response validation/provider failures, and snapshot conflicts. Saved run
+results remain historical; `run.current_automatic_actions` reports current SQL-backed
+eligibility and dismissed/adopted counts separately. The UI labels unfinished action
+review honestly and does not invite replay when every idea has been dismissed.
+This change does not regenerate historical runs or resurrect dismissed ideas.
+
+
 Fleet observation uses a five-minute, Beat-owned `reconcile_fleet_observations`
 task on the `host` queue. It calls the authenticated owner frontend to collect
 Codex, Nod and linked n8n results and retry HFL receipts. Butler retains its

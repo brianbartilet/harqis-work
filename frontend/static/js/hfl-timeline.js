@@ -302,7 +302,14 @@
       const checked=result.selected_entries;
       const date=new Date(data.run.updated_at);
       const reviewed=Number.isNaN(date.getTime())?'':new Intl.DateTimeFormat('en-SG',{day:'numeric',month:'short',year:'numeric',timeZone:'Asia/Singapore'}).format(date);
-      analysisStatus('complete','Review complete',[checked!=null?`${checked} ${checked===1?'entry':'entries'} reviewed`:'',reviewed,result.bounded?'Partial coverage':'',result.automatic_actions?.state==='complete'?`${result.automatic_actions.created} actions created · ${result.automatic_actions.duplicates} duplicates skipped · ${result.automatic_actions.deferred} left as ideas`:result.automatic_actions?.message||''].filter(Boolean).join(' · '));
+      const automatic=result.automatic_actions, current=data.run?.current_automatic_actions;
+      const unfinished=automatic&&automatic.state!=='complete';
+      const noEligible=current?.eligible===0;
+      const title=unfinished?(noEligible?'Ideas saved':`Ideas saved · automatic actions ${automatic.state}`):'Review complete';
+      const counts=automatic?`${automatic.created||0} actions created · ${automatic.duplicates||0} duplicates skipped · ${automatic.deferred||0} left as ideas`:'';
+      const eligibility=current?(noEligible?(current.total>0&&current.dismissed===current.total?`All ${current.total} ideas are dismissed; no eligible candidates`:'No currently eligible candidates'):`${current.eligible} currently eligible candidates`):'';
+      const diagnostic=automatic?.diagnostic?`${automatic.diagnostic.stage}: ${automatic.diagnostic.reason}`:'';
+      analysisStatus(unfinished&&!noEligible?automatic.state:'complete',title,[checked!=null?`${checked} ${checked===1?'entry':'entries'} reviewed`:'',reviewed,result.bounded?'Partial coverage':'',counts,unfinished?`Historical automatic action result: ${automatic.state}`:'',diagnostic,eligibility,unfinished&&!noEligible?automatic.message||'Automatic action review did not finish.':''].filter(Boolean).join(' · '));
     } else if(['failed','interrupted'].includes(state))analysisStatus(state,'Review unfinished',result.message||'Try Explore again. Previous suggestions are kept.');
     else analysisStatus('idle','Ready to explore','Find ideas and follow-ups in this period’s activity.');
     clearTimeout(pollTimer);if(['queued','running'].includes(state))pollTimer=setTimeout(load,4000);

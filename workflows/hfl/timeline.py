@@ -233,36 +233,77 @@ def _validate_idea_review(candidates, existing, compact, decisions):
 def review_actions(candidates, snapshot, evidence):
     from workflows.hfl.prompts import load_prompt
     from workflows.hfl.tasks.activity_radar import redact_secrets
-    actions=[{key:item.get(key) for key in ('id','title','expected_outcome','status','source')} for item in snapshot['actions']]
-    dismissed=[{key:item.get(key) for key in ('id','title','expected_outcome','source')} for item in snapshot['dismissed_ideas']]
-    payload=redact_secrets(json.dumps({'candidates':candidates,'existing_actions':actions,'dismissed_ideas':dismissed,'evidence':evidence},ensure_ascii=False))
-    if len(payload)>250000:
-        raise ValueError('Duplicate-check context exceeds the bounded review limit.')
-    return model_json(payload, load_prompt('timeline_action_review'), 'decisions')['decisions']
+    from workflows.hfl.automatic_action_review import (
+        AutomaticActionReviewError, merge_decisions, review_shards, validate_decisions,
+    )
+    if not candidates:
+        return []
+    shards = review_shards(candidates, snapshot, evidence, redact_secrets)
+    reviews = []
+    for index, (context, payload) in enumerate(shards):
+        try:
+            response = model_json(payload, load_prompt('timeline_action_review'), 'decisions')
+        except TimelineModelError as exc:
+            raise AutomaticActionReviewError('unusable_response', 'model',
+                shard=index + 1, shards=len(shards)) from exc
+        except Exception as exc:
+            raise AutomaticActionReviewError('provider_error', 'model',
+                shard=index + 1, shards=len(shards)) from exc
+        decisions = response.get('decisions') if isinstance(response, dict) else None
+        reviews.append(validate_decisions(candidates, decisions,
+            context['existing_actions'], context['dismissed_ideas']))
+    return merge_decisions(candidates, reviews)
 
 
 def create_automatic_actions(start,end,canonical,evidence,*,review=review_actions,today=None):
+    from workflows.hfl.automatic_action_review import AutomaticActionReviewError
+    from workflows.hfl.timeline_store import FollowUpConflict
     today=today or datetime.now(SGT).date()
     candidates=[item for item in canonical.suggestions(start,end) if item['status']=='suggested' and item.get('confidence')=='high']
     result={'state':'complete','created':0,'duplicates':0,'deferred':0,'created_ids':[]}
-    # Full comparison is required: exceeding the bound defers, never truncates old actions.
+    # At most five batches, each with at most 32 preflighted review shards.
     for offset in range(0,min(len(candidates),40),8):
         batch=candidates[offset:offset+8]
-        snapshot=canonical.automation_snapshot()
-        if len(snapshot['actions'])+len(snapshot['dismissed_ideas'])>500:
-            result.update(state='deferred',message='Too many existing records for a complete duplicate check. Review manually.')
-            result['deferred']+=len(candidates)-offset
-            return result
+        stage = 'snapshot'
         try:
+            snapshot=canonical.automation_snapshot()
+            # Read candidates AFTER the snapshot so intervening edits cannot be
+            # blessed by a newer digest. Recheck eligibility, never revive cards.
+            current = {item['id']: item for item in canonical.suggestions(start,end)}
+            batch = [current[item['id']] for item in batch if item['id'] in current
+                     and current[item['id']]['status'] == 'suggested'
+                     and current[item['id']].get('confidence') == 'high']
+            if not batch:
+                continue
+            stage = 'review'
             decisions=review(batch,snapshot,evidence)
+            stage = 'commit'
             applied=canonical.apply_auto_decisions(batch,decisions,snapshot['digest'],today)
         except Exception as exc:
-            result.update(state='failed',message='Automatic creation paused; review or duplicate check could not finish. Explore can retry.',error=type(exc).__name__)
+            diagnostic = {'reason': 'unexpected_error', 'stage': stage}
+            state = 'failed'
+            if isinstance(exc, AutomaticActionReviewError):
+                diagnostic = exc.diagnostic()
+                if exc.stage == 'planning':
+                    state = 'deferred'
+            elif isinstance(exc, FollowUpConflict):
+                diagnostic = {'reason': 'snapshot_conflict', 'stage': 'commit'}
+                state = 'deferred'
+            if result['created'] or result['duplicates'] or result['deferred']:
+                state = 'partial'
+            result.update(state=state,
+                message='Ideas are saved; automatic creation did not finish. Check current eligibility before an explicit retry.',
+                error=type(exc).__name__, diagnostic=diagnostic)
             result['deferred']+=len(candidates)-offset
             return result
         for key in ('created','duplicates','deferred'): result[key]+=applied[key]
         result['created_ids']+=applied['created_ids']
     result['deferred']+=max(0,len(candidates)-40)
+    if result['deferred']:
+        result['state'] = 'partial' if result['created'] or result['duplicates'] else 'deferred'
+        result['message'] = 'Ideas are saved; some candidates remain for manual review.'
+        if len(candidates) > 40:
+            result['diagnostic'] = {'reason': 'candidate_budget_exhausted', 'stage': 'planning', 'candidate_limit': 40}
     return result
 
 
@@ -305,7 +346,7 @@ def explore_period(start, end, *, run_id=None, store=None, collect=collect_perio
         try:
             result['automatic_actions']=create_automatic_actions(start,end,canonical,compact,review=auto_review)
         except Exception as exc:
-            result['automatic_actions']={'state':'failed','message':'Automatic creation did not finish. Cached ideas remain available; Explore can retry.','error':type(exc).__name__}
+            result['automatic_actions']={'state':'failed','message':'Ideas are saved; automatic creation did not finish. Check current eligibility before an explicit retry.','error':type(exc).__name__, 'diagnostic':{'reason':'unexpected_error','stage':'automatic_actions'}}
         canonical.finish_period(start,end,run_id,result)
         return {"state":"complete",**result}
     except Exception as exc:
