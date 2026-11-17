@@ -76,6 +76,15 @@ def test__update_values__user_entered(given):
     assert_that(when.get("updatedCells"), greater_than_or_equal_to(1))
 
 
+@skip_write
+@pytest.mark.sanity
+def test__append_values__adds_rows_after_data(given):
+    values = [["test_append_a", "test_append_b"]]
+    when = given.append_values("Z:AA", values, SheetInputOption.RAW)
+
+    assert_that(when.get("updates", {}).get("updatedRows"), equal_to(1))
+
+
 # ─────────────────────────────────────────────────────────────
 # Clear
 # ─────────────────────────────────────────────────────────────

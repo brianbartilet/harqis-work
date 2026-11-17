@@ -218,6 +218,23 @@ Wraps `apps/oanda/references/web/api/` services. Requires valid `OANDA` section 
 
 ---
 
+### Interactive Brokers (`apps/ibkr/mcp.py`)
+
+Wraps the read-only IBKR Flex Web Service (`apps/ibkr/references/web/api/flex.py`). [API docs](https://www.interactivebrokers.com/campus/ibkr-api-page/flex-web-service/). Requires the `IBKR` section in `apps_config.yaml` (`IBKR_FLEX_TOKEN`, `IBKR_FLEX_QUERY_ID_TRADES`; pass `query_id` to read another saved query, e.g. the Activity one). The token can only download reports — no order placement.
+
+| Tool | Args | Returns |
+|------|------|---------|
+| `get_ibkr_trades` | `asset_category?`, `from_date?`, `to_date?`, `query_id?` | Executions from the Flex Query (symbol, side, quantity, price, commission, trade time, trade ID); `from_date`/`to_date` (`YYYY-MM-DD`) fetch any historical range, `to_date` defaults to today |
+| `get_ibkr_cash_transactions` | `transaction_type?`, `from_date?`, `to_date?`, `query_id?` | Deposits, withdrawals, dividends, … from the Activity Flex Query (date, currency, amount, type, transaction ID); optional range, capped at yesterday |
+
+**Example prompts:**
+- *"Which stocks did I trade on IBKR today?"*
+- *"Show today's IBKR fills and the total commission paid."*
+- *"List my IBKR stock trades since the start of last month."*
+- *"How much did I deposit into IBKR this week?"*
+
+---
+
 ### YNAB (`apps/ynab/mcp.py`)
 
 Wraps `apps/ynab/references/web/api/` services. Requires valid `YNAB` section in `apps_config.yaml`.

@@ -22,6 +22,7 @@ Operational scripts for **harqis-work**, organised by purpose:
 | [`verify_instance_isolation.py`](#verify_instance_isolationpy) | Captures and compares a sibling HARQIS Compose project and checkout-specific processes during a co-deployment soak test. |
 | [`setup_hfl_share_hermes.py`](#setup_hfl_share_hermespy) | Dry-run-first setup/check for a locked-down Hermes profile that serves Share Corpus Q&A through a connected Codex model. |
 | `second_brain_feed.py` | Authenticated CLI snapshot/SSE client for the Thinking Second Brain feed. |
+| `ibkr_trade_log.py` | Standalone runner for the IBKR trade log — separate `capture` (IBKR → local ledger) and `sync` (ledger → Google Sheet) operations, plus `run`, `create-sheet`, `prepare-sheet` and a one-off `capture-history` dividend backfill; for Windows Task Scheduler on hosts without Celery. See `workflows/finance/README.md`. |
 | [`sync-to-host.ps1`](#sync-to-hostps1) | Push gitignored config (`.env/`, `frontend/.env`, `machines.local.toml`) to a remote checkout via `tar \| ssh`. Driven by the `[sync]` / `[ssh.*]` blocks in `machines.local.toml`. |
 | [`../machines.toml`](#machinestoml) | Per-machine topology (role, queue list, disabled services). Lives at the repo root so per-machine `machines.local.toml` overrides sit next to it. Auto-detected from hostname. |
 | [`tailscale/`](#tailscale) | Tailscale ACL policy. Unchanged. |

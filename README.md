@@ -46,6 +46,7 @@ At its core the platform has four layers:
 | `google_drive` | Google Drive — upload, download, export, manage files/folders | REST API (OAuth) | No | [API Docs](https://developers.google.com/drive/api/reference/rest/v3) · [Console](https://console.cloud.google.com/) |
 | `grok` | xAI Grok — chat completions, live web search, X post search, embeddings | REST (native SDK) | Yes | [API Docs](https://docs.x.ai/api-reference) · [Console](https://console.x.ai/) |
 | `hfl_corpus` | Canonical Homework-for-Life Activity Corpus — entry writes, ES projection status, search, documents, and references | REST API | Yes | [OpenAPI](apps/hfl_corpus/openapi.yaml) |
+| `ibkr` | Interactive Brokers — read-only Flex Web Service reports (trade confirmations → Google Sheets trade log) | REST API (Flex) | Yes (offline) | [API Docs](https://www.interactivebrokers.com/campus/ibkr-api-page/flex-web-service/) · [Site](https://www.interactivebrokers.com/) |
 | `investagrams` | Philippine stock analytics | Web scraping | No | [Site](https://www.investagrams.com/) |
 | `jira` | Jira project management | REST API (DC/Bearer) | Yes | [API Docs](https://developer.atlassian.com/server/jira/platform/rest-apis/) · [Site](https://www.atlassian.com/software/jira) |
 | `justtcg` | Multi-game TCG pricing analytics (MTG, Pokémon, Yu-Gi-Oh!, Lorcana…) — prices + 24h/7d/30d/90d/1y change & trend stats | REST API | Yes | [API Docs](https://justtcg.com/docs) · [Site](https://justtcg.com/) |
@@ -492,6 +493,7 @@ harqis-work/
 │   ├── google_drive/               # Google Drive upload/download/export
 │   ├── grok/                       # xAI Grok LLM (chat, web search, X search, embeddings)
 │   ├── hfl_corpus/                 # HFL Activity Corpus REST client + OpenAPI contract
+│   ├── ibkr/                       # Interactive Brokers Flex Web Service (read-only trade reports)
 │   ├── investagrams/               # Philippine stock analytics (web scraping)
 │   ├── jira/                       # Jira project management
 │   ├── justtcg/                    # Multi-game TCG pricing analytics API
@@ -861,6 +863,13 @@ MOO_PWD_MD5=                      # configured Moo stub credential
 YNAB_ACCESS_TOKEN=
 YNAB_BUDGET_PHP=
 YNAB_BUDGET_SGD=
+IBKR_FLEX_TOKEN=                   # Interactive Brokers Flex Web Service token (read-only reports)
+IBKR_FLEX_QUERY_ID_TRADES=         # Trade Confirmation Flex Query ID (period: Today)
+IBKR_FLEX_QUERY_ID_ACTIVITY=       # optional Activity Flex Query ID (Trades, last 7 days) for backfill
+IBKR_CAPTURE_START_DATE=           # YYYY-MM-DD; IBKR trades before this date are not captured
+TRADE_LOG_SHEET_ID=                # Google Sheet the trade log syncs to (workflows/finance)
+GOOGLE_SERVICE_ACCOUNT=            # optional service-account key (file name in .env/ or JSON) for unattended Sheets access
+TRADE_LOG_TEMPLATE_YAML=           # optional trade log sheet layout as YAML (instead of .harqis-data/finance/trade_log_sheet.yaml)
 
 # ── Magic: The Gathering ──────────────────────────────────────────────────────
 ECHO_MTG_BEARER_TOKEN=

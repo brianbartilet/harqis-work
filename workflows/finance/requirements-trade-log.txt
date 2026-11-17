@@ -1,0 +1,16 @@
+# Minimal dependencies for the IBKR trade log (scripts/ibkr_trade_log.py) on hosts that
+# don't need the full harqis-work stack, e.g. a scheduled cloud runner. Install with:
+#   pip install -r workflows/finance/requirements-trade-log.txt
+#   pip install --no-deps "harqis-core @ git+https://github.com/brianbartilet/harqis-core.git@<commit from requirements.txt>"
+# (harqis-core's own dependency list includes desktop/browser tooling this job never imports.)
+python-dotenv
+PyYAML
+requests
+PyHamcrest
+jsonpickle
+paramiko
+google-api-python-client
+google-auth
+google-auth-httplib2
+google-auth-oauthlib
+httplib2

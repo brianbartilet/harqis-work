@@ -33,6 +33,8 @@ from workflows.tcg.tasks_config import WORKFLOW_TCG
 from workflows.git_forks.tasks_config import WORKFLOW_GIT_FORKS
 from workflows.second_brain.tasks_config import WORKFLOW_SECOND_BRAIN
 from workflows.files.tasks_config import WORKFLOW_FILES
+# from workflows.finance.tasks_config import WORKFLOW_FINANCE   # uncomment to activate (see workflows/finance/README.md)
+# CONFIG_DICTIONARY = CONFIG_DICTIONARY | WORKFLOW_FINANCE       # add to the merge below
 
 # Set Celery to use the same timezone settings as the Django project
 SPROUT.conf.enable_utc = USE_TZ
