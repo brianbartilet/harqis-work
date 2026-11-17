@@ -4247,6 +4247,27 @@
       "status": "deferred",
       "tools": [],
       "reason": "Owner-session projection of action assignments to visible Fleet agents; dedicated machine-facing authentication and MCP service contract is deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/specialists",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated Fleet specialist configuration and preview; machine-facing contract deferred."
+    },
+    {
+      "method": "GET",
+      "path": "/agents/api/specialists/{identity}",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated Fleet specialist configuration and preview; machine-facing contract deferred."
+    },
+    {
+      "method": "POST",
+      "path": "/agents/api/specialist-preview",
+      "status": "deferred",
+      "tools": [],
+      "reason": "Owner-authenticated Fleet specialist configuration and preview; machine-facing contract deferred."
     }
   ]
 }

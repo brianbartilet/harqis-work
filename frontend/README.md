@@ -22,6 +22,10 @@ The frontend currently exposes nine modules:
 
 `/dashboard` remains as a compatibility redirect to `/home`.
 
+Agent Fleet (`/agents`) supports all 283 profiles in the pinned Agency Agents catalog in its
+Add/Edit Agent form. See the [profile selection and update guide](../agents/prompts/agency/README.md)
+for description helpers, instruction previews, Hermes application and provider limitations.
+
 Files deployment requires the catalog-host `files` queue, persistent SQLite
 storage, configured source roots, and Drive/SFTP credentials as applicable.
 Follow [Files deployment](../docs/info/FILES-DEPLOYMENT.md). Public package pages

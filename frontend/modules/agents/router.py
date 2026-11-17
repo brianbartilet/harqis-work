@@ -43,6 +43,30 @@ def catalogue():
     return service.catalogue()
 
 
+@api.get('/specialists')
+def specialist_catalogue():
+    from modules.agents import specialists
+    return {'items': checked(specialists.catalog)}
+
+
+@api.get('/specialists/{identity}')
+def specialist_detail(identity: str):
+    from modules.agents import specialists
+    return checked(specialists.detail, identity)
+
+
+@api.post('/specialist-preview')
+def specialist_preview(raw: dict, user=Depends(owner_auth)):
+    from modules.agents import specialists
+    from modules.agents.projection import visible
+    existing = checked(service.store().get, raw['agent_id']) if raw.get('agent_id') else None
+    if existing and not visible(existing, user):
+        raise HTTPException(404, 'Agent unavailable.')
+    item = checked(service.validate, raw.get('profile'), existing)
+    return {'instructions': specialists.compose(item),
+            'status': 'Applied to new Hermes sessions' if item['runtime'] == 'hermes' else 'Provider setup required'}
+
+
 @api.get('/entities')
 def connected_entities(user=Depends(owner_auth)):
     from modules.agents.entities import snapshot

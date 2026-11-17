@@ -1,0 +1,32 @@
+{
+  "engineering-code-reviewer": {
+    "classification": "coding",
+    "use": "Review a change for correctness, security, maintainability and test coverage.",
+    "output": "Prioritized findings with file references, impact and suggested fixes.",
+    "example": "Review this change for correctness and missing regression coverage. Cite file locations and explain each finding.",
+    "skills": [
+      "repo:agent-prompt",
+      "repo:run-tests"
+    ]
+  },
+  "engineering-backend-architect": {
+    "classification": "coding",
+    "use": "Assess API, data and execution boundaries for a HARQIS integration.",
+    "output": "Architecture tradeoffs, interface contracts, failure behavior and validation plan.",
+    "example": "Assess this integration against existing apps and workflows. Explain execution ownership, retries and idempotency.",
+    "skills": [
+      "repo:choose-automation-runtime",
+      "repo:create-new-service-app"
+    ]
+  },
+  "engineering-technical-writer": {
+    "classification": "general",
+    "use": "Explain behavior and keep documentation aligned with implementation.",
+    "output": "Clear documentation supported by code evidence and verified examples.",
+    "example": "Review this documentation against the implementation. Correct drift and explain the user flow.",
+    "skills": [
+      "repo:update-docs",
+      "repo:weekly-docs-pr"
+    ]
+  }
+}

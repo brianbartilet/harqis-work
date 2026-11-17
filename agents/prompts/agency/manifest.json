@@ -1,0 +1,2853 @@
+{
+  "revision": "8ae6164602c95ca78828b148b9052460ee426885",
+  "profiles": [
+    {
+      "id": "engineering-code-reviewer",
+      "name": "Code Reviewer",
+      "description": "Expert code reviewer who provides constructive, actionable feedback focused on correctness, maintainability, security, and performance \u2014 not style preferences.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-code-reviewer.md",
+      "hash": "7509fcc3ea1dda46511b2801996305bf3d4a125576f9655ff0b63df25602f446",
+      "skills": [
+        "repo:agent-prompt",
+        "repo:run-tests"
+      ],
+      "use": "Review a change for correctness, security, maintainability and test coverage.",
+      "output": "Prioritized findings with file references, impact and suggested fixes.",
+      "example": "Review this change for correctness and missing regression coverage. Cite file locations and explain each finding."
+    },
+    {
+      "id": "engineering-backend-architect",
+      "name": "Backend Architect",
+      "description": "Senior backend architect specializing in scalable system design, database architecture, API development, and cloud infrastructure. Builds robust, secure, performant server-side applications and microservices",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-backend-architect.md",
+      "hash": "ac717bde4848d7663fff8a3c7edc711fd119256de6a7ce38c036619372f42c99",
+      "skills": [
+        "repo:choose-automation-runtime",
+        "repo:create-new-service-app"
+      ],
+      "use": "Assess API, data and execution boundaries for a HARQIS integration.",
+      "output": "Architecture tradeoffs, interface contracts, failure behavior and validation plan.",
+      "example": "Assess this integration against existing apps and workflows. Explain execution ownership, retries and idempotency."
+    },
+    {
+      "id": "engineering-technical-writer",
+      "name": "Technical Writer",
+      "description": "Expert technical writer specializing in developer documentation, API references, README files, and tutorials. Transforms complex engineering concepts into clear, accurate, and engaging docs that developers actually read and use.",
+      "division": "Engineering",
+      "classification": "general",
+      "path": "engineering/engineering-technical-writer.md",
+      "hash": "bf5c809977e10904b988ab8b218853ce8dfa38b2cbd89a7d2cfadba44ac25761",
+      "skills": [
+        "repo:update-docs",
+        "repo:weekly-docs-pr"
+      ],
+      "use": "Explain behavior and keep documentation aligned with implementation.",
+      "output": "Clear documentation supported by code evidence and verified examples.",
+      "example": "Review this documentation against the implementation. Correct drift and explain the user flow."
+    },
+    {
+      "id": "academic-anthropologist",
+      "name": "Anthropologist",
+      "description": "Expert in cultural systems, rituals, kinship, belief systems, and ethnographic method \u2014 builds culturally coherent societies that feel lived-in rather than invented",
+      "division": "Academic",
+      "classification": "general",
+      "path": "academic/academic-anthropologist.md",
+      "hash": "2668602164abf574cb4e432a0cd40727a943de0b59864abb5b73956a0eb26146",
+      "skills": []
+    },
+    {
+      "id": "academic-geographer",
+      "name": "Geographer",
+      "description": "Expert in physical and human geography, climate systems, cartography, and spatial analysis \u2014 builds geographically coherent worlds where terrain, climate, resources, and settlement patterns make scientific sense",
+      "division": "Academic",
+      "classification": "general",
+      "path": "academic/academic-geographer.md",
+      "hash": "4acf4a6ee6ae96ce562323c8ce508db9f2eb0ece016fc754214be9587c071c0d",
+      "skills": []
+    },
+    {
+      "id": "academic-historian",
+      "name": "Historian",
+      "description": "Expert in historical analysis, periodization, material culture, and historiography \u2014 validates historical coherence and enriches settings with authentic period detail grounded in primary and secondary sources",
+      "division": "Academic",
+      "classification": "general",
+      "path": "academic/academic-historian.md",
+      "hash": "2c59c10dceec033d9e92990b6156553471b7b94dd8e0c64fe27148f612be8955",
+      "skills": []
+    },
+    {
+      "id": "academic-narratologist",
+      "name": "Narratologist",
+      "description": "Expert in narrative theory, story structure, character arcs, and literary analysis \u2014 grounds advice in established frameworks from Propp to Campbell to modern narratology",
+      "division": "Academic",
+      "classification": "general",
+      "path": "academic/academic-narratologist.md",
+      "hash": "12d7a6fa6134c014e3734f8203f0b8634e627cffe5985fa1b69d25c4a69094b5",
+      "skills": []
+    },
+    {
+      "id": "academic-psychologist",
+      "name": "Psychologist",
+      "description": "Expert in human behavior, personality theory, motivation, and cognitive patterns \u2014 builds psychologically credible characters and interactions grounded in clinical and research frameworks",
+      "division": "Academic",
+      "classification": "general",
+      "path": "academic/academic-psychologist.md",
+      "hash": "193b7dba6d04346d15ee21753fd1cdb69dc1a21a5ac30d5d62726654820a5633",
+      "skills": []
+    },
+    {
+      "id": "academic-statistician",
+      "name": "Statistician",
+      "description": "Expert in quantitative research methodology, experimental design, and statistical inference \u2014 pressure-tests claims, designs sound studies, and separates real signal from noise, chance, and bias",
+      "division": "Academic",
+      "classification": "general",
+      "path": "academic/academic-statistician.md",
+      "hash": "4b023595c59becec2026cab38807f835e48e280885f9cd381bab7845cbf4280c",
+      "skills": []
+    },
+    {
+      "id": "design-brand-guardian",
+      "name": "Brand Guardian",
+      "description": "Expert brand strategist and guardian specializing in brand identity development, consistency maintenance, and strategic brand positioning",
+      "division": "Design",
+      "classification": "general",
+      "path": "design/design-brand-guardian.md",
+      "hash": "d1d5c78af85d4d35be94b93d5c011d17e3cf5dcb69b2037a3ebf3059803b893e",
+      "skills": []
+    },
+    {
+      "id": "design-image-prompt-engineer",
+      "name": "Image Prompt Engineer",
+      "description": "Expert photography prompt engineer specializing in crafting detailed, evocative prompts for AI image generation. Masters the art of translating visual concepts into precise language that produces stunning, professional-quality photography through generative AI tools.",
+      "division": "Design",
+      "classification": "general",
+      "path": "design/design-image-prompt-engineer.md",
+      "hash": "63a564d01dc5812c494cd8aa034ce1217031d8fe8b3eca1323316879769ff13f",
+      "skills": []
+    },
+    {
+      "id": "design-inclusive-visuals-specialist",
+      "name": "Inclusive Visuals Specialist",
+      "description": "Representation expert who defeats systemic AI biases to generate culturally accurate, affirming, and non-stereotypical images and video.",
+      "division": "Design",
+      "classification": "general",
+      "path": "design/design-inclusive-visuals-specialist.md",
+      "hash": "6529724ca198344f31209c0e685a7460c087483b5a4b3a965798e09df70dde07",
+      "skills": []
+    },
+    {
+      "id": "design-persona-walkthrough",
+      "name": "Persona Walkthrough Specialist",
+      "description": "Simulate cognitive walkthroughs of web pages from a defined persona's psychological perspective \u2014 captures emotional reactions and rational thought at each scroll position, then delivers structured CRO reports grounded in LIFT, Cialdini, and Fogg frameworks",
+      "division": "Design",
+      "classification": "general",
+      "path": "design/design-persona-walkthrough.md",
+      "hash": "8def8c73df7f79a61704e7353b85b915afa31c4a9fa1100fbb9220c50d6a1c55",
+      "skills": []
+    },
+    {
+      "id": "design-ui-designer",
+      "name": "UI Designer",
+      "description": "Expert UI designer specializing in visual design systems, component libraries, and pixel-perfect interface creation. Creates beautiful, consistent, accessible user interfaces that enhance UX and reflect brand identity",
+      "division": "Design",
+      "classification": "general",
+      "path": "design/design-ui-designer.md",
+      "hash": "4dc51255ffcb47e2bf4289a7d49a7cc224238af759f9e6e3c56771c698575d6d",
+      "skills": []
+    },
+    {
+      "id": "design-ui-finish-gate-reviewer",
+      "name": "UI Finish-Gate Reviewer",
+      "description": "Product-interface reviewer who catches generic, interchangeable UI before it ships by grounding critique in real product evidence, a written design contract, and a hard implementation finish gate.",
+      "division": "Design",
+      "classification": "general",
+      "path": "design/design-ui-finish-gate-reviewer.md",
+      "hash": "cc2cc803782a791797b63530bfd46ee676148f05bc1db7c614c8860f9798bc86",
+      "skills": []
+    },
+    {
+      "id": "design-ux-architect",
+      "name": "UX Architect",
+      "description": "Technical architecture and UX specialist who provides developers with solid foundations, CSS systems, and clear implementation guidance",
+      "division": "Design",
+      "classification": "general",
+      "path": "design/design-ux-architect.md",
+      "hash": "7d373da3fd204db3c830f28e03cdf85bcacd3858e38fbdad58489953f811c296",
+      "skills": []
+    },
+    {
+      "id": "design-ux-researcher",
+      "name": "UX Researcher",
+      "description": "Expert user experience researcher specializing in user behavior analysis, usability testing, and data-driven design insights. Provides actionable research findings that improve product usability and user satisfaction",
+      "division": "Design",
+      "classification": "general",
+      "path": "design/design-ux-researcher.md",
+      "hash": "25f59c4333df2d0f1170ff7a1b11ea8415fd3d0ef80c3e0985209aeb4018680f",
+      "skills": []
+    },
+    {
+      "id": "design-visual-storyteller",
+      "name": "Visual Storyteller",
+      "description": "Expert visual communication specialist focused on creating compelling visual narratives, multimedia content, and brand storytelling through design. Specializes in transforming complex information into engaging visual stories that connect with audiences and drive emotional engagement.",
+      "division": "Design",
+      "classification": "general",
+      "path": "design/design-visual-storyteller.md",
+      "hash": "f4950c9d65b5d105ec48ebce4b7621154e3bf89871dbbf07af245476930eb4dd",
+      "skills": []
+    },
+    {
+      "id": "design-whimsy-injector",
+      "name": "Whimsy Injector",
+      "description": "Expert creative specialist focused on adding personality, delight, and playful elements to brand experiences. Creates memorable, joyful interactions that differentiate brands through unexpected moments of whimsy",
+      "division": "Design",
+      "classification": "general",
+      "path": "design/design-whimsy-injector.md",
+      "hash": "b1cc9abd37723ff12b508717e4f7f9621aafd8c20014894d93a8d6e2bc5657a4",
+      "skills": []
+    },
+    {
+      "id": "engineering-ai-data-remediation-engineer",
+      "name": "AI Data Remediation Engineer",
+      "description": "Specialist in self-healing data pipelines \u2014 uses air-gapped local SLMs and semantic clustering to automatically detect, classify, and fix data anomalies at scale. Focuses exclusively on the remediation layer: intercepting bad data, generating deterministic fix logic via Ollama, and guaranteeing zero data loss. Not a general data engineer \u2014 a surgical specialist for when your data is broken and the pipeline can't stop.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-ai-data-remediation-engineer.md",
+      "hash": "5aa193052f15283493eeb9749bc346d09c02407f26760fe0d08f8bd9242ede79",
+      "skills": []
+    },
+    {
+      "id": "engineering-ai-engineer",
+      "name": "AI Engineer",
+      "description": "Expert AI/ML engineer specializing in machine learning model development, deployment, and integration into production systems. Focused on building intelligent features, data pipelines, and AI-powered applications with emphasis on practical, scalable solutions.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-ai-engineer.md",
+      "hash": "f25a69aad25acd35dd1d62e33d5a814f4a26b075d90f968b4d778452e53924d8",
+      "skills": []
+    },
+    {
+      "id": "engineering-api-platform-engineer",
+      "name": "API Platform Engineer",
+      "description": "Expert API platform engineer for public and partner APIs \u2014 contract-first design (OpenAPI/gRPC), versioning and deprecation policy, SDK generation, API gateway concerns (auth, rate limiting, quotas), and developer-portal DX.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-api-platform-engineer.md",
+      "hash": "21076c3abab2c93f459ff7e2becc83287a200d966c40fc1db868fcbcf36067dd",
+      "skills": []
+    },
+    {
+      "id": "engineering-ats-validator-architect",
+      "name": "ATS Validator Architect",
+      "description": "Architect and validator for Applicant Tracking Systems (ATS) and resume parsers. Combines deterministic information retrieval (BM25/TF-IDF and n-grams without AI), quantified Google/IBM X-Y-Z heuristics calibrated by seniority, layout linearization and PDF text layer integrity auditing, regulatory compliance (EU AI Act, NYC LL 144), sub-5ms client-side execution, and Agent-Native BYOK architecture.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-ats-validator-architect.md",
+      "hash": "742c17d1885f4345c366a4050e12e3b61711f38dc576a24fe365ed3ee7f266d5",
+      "skills": []
+    },
+    {
+      "id": "engineering-autonomous-optimization-architect",
+      "name": "Autonomous Optimization Architect",
+      "description": "Intelligent system governor that continuously shadow-tests APIs for performance while enforcing strict financial and security guardrails against runaway costs.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-autonomous-optimization-architect.md",
+      "hash": "76a8df3dfd4af54d0830daef736873209bd62cb155b9ed0f3c3a6aec369a9519",
+      "skills": []
+    },
+    {
+      "id": "engineering-china-network-engineer",
+      "name": "China Network Engineer",
+      "description": "Expert in mainland China's mainstream enterprise networking stacks \u2014 Huawei VRP, H3C Comware, Ruijie RGOS, and Hillstone StoneOS \u2014 covering routing, switching, firewalling, NAT, and MLPS 2.0 (\u7b49\u4fdd) compliant border design for domestic deployments.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-china-network-engineer.md",
+      "hash": "d375db645d1192fb8be3dd4e40de005d55edd33557abf909a4a4135257e03788",
+      "skills": []
+    },
+    {
+      "id": "engineering-cms-developer",
+      "name": "CMS Developer",
+      "description": "Drupal and WordPress specialist for theme development, custom plugins/modules, content architecture, and code-first CMS implementation",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-cms-developer.md",
+      "hash": "e072ac6e3d485483818880846b145c85b5224045a68c45dddc4e087940d57ba4",
+      "skills": []
+    },
+    {
+      "id": "engineering-codebase-onboarding-engineer",
+      "name": "Codebase Onboarding Engineer",
+      "description": "Expert developer onboarding specialist who helps new engineers understand unfamiliar codebases fast by reading source code, tracing code paths, and stating only facts grounded in the code.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-codebase-onboarding-engineer.md",
+      "hash": "07aa548b45887c3ad768efad5fdbf6e57bea639df4f1b74c7e383142f454e2a1",
+      "skills": []
+    },
+    {
+      "id": "engineering-data-engineer",
+      "name": "Data Engineer",
+      "description": "Expert data engineer specializing in building reliable data pipelines, lakehouse architectures, and scalable data infrastructure. Masters ETL/ELT, Apache Spark, dbt, streaming systems, and cloud data platforms to turn raw data into trusted, analytics-ready assets.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-data-engineer.md",
+      "hash": "777c902efa52e796d227dd0cfb332e129273c084f7205379a1c7bcda68002472",
+      "skills": []
+    },
+    {
+      "id": "engineering-data-visualization-engineer",
+      "name": "Data Visualization Engineer",
+      "description": "Expert data visualization engineer \u2014 chart-type selection by data and question, perceptually honest encodings, colorblind-safe data palettes, accessible and interactive charts, and rendering large datasets performantly with D3, Vega, and charting libraries.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-data-visualization-engineer.md",
+      "hash": "0f5b5391f82aa98ca489768d31024f7a5f840a8ee5fe968fe1499ed538948ce5",
+      "skills": []
+    },
+    {
+      "id": "engineering-database-optimizer",
+      "name": "Database Optimizer",
+      "description": "Expert database specialist focusing on schema design, query optimization, indexing strategies, and performance tuning for PostgreSQL, MySQL, and modern databases like Supabase and PlanetScale.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-database-optimizer.md",
+      "hash": "6d773003e3b9251068ab537be94d6827c118201e0e17c11d789cb29dc245bf99",
+      "skills": []
+    },
+    {
+      "id": "engineering-database-reliability-engineer",
+      "name": "Database Reliability Engineer",
+      "description": "Expert database reliability engineer (DBRE) \u2014 high availability and replication, automated failover, backup and point-in-time recovery, zero-downtime online schema migrations, connection pooling, and disaster-recovery drills. Focused on keeping data safe and available, not query tuning.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-database-reliability-engineer.md",
+      "hash": "0096dc3c1b31e33814c509fda43853cc77cef6252bb94da527b833be13b53a5a",
+      "skills": []
+    },
+    {
+      "id": "engineering-desktop-app-engineer",
+      "name": "Desktop App Engineer",
+      "description": "Expert desktop application engineer for Electron and Tauri \u2014 secure IPC and process isolation, code signing and notarization, auto-update pipelines, native OS integration, and resource-footprint discipline.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-desktop-app-engineer.md",
+      "hash": "aadae54475480341ee9db1017bc19778596f80ff25092970dabc7fba75b1d951",
+      "skills": []
+    },
+    {
+      "id": "engineering-developer-tooling-engineer",
+      "name": "Developer Tooling Engineer",
+      "description": "Expert developer-tooling and CLI engineer \u2014 building command-line tools and internal developer platforms with great DX: intuitive command design, helpful errors, shell completions, fast startup, cross-platform distribution, and scriptable, composable interfaces.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-developer-tooling-engineer.md",
+      "hash": "948d44fddfa47e2363236de150f9dc948edd79599609a92af8bf6b72b5b9b609",
+      "skills": []
+    },
+    {
+      "id": "engineering-devops-automator",
+      "name": "DevOps Automator",
+      "description": "Expert DevOps engineer specializing in infrastructure automation, CI/CD pipeline development, and cloud operations",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-devops-automator.md",
+      "hash": "1b67b3bdc6a076d42281e38bb811250eb04415bb241cdd4c3a7df38ecd20e88b",
+      "skills": []
+    },
+    {
+      "id": "engineering-drupal-performance",
+      "name": "Drupal Performance Engineer",
+      "description": "Expert Drupal 10/11 performance engineer specializing in Core Web Vitals, render and dynamic page caching, BigPipe, cache tags and contexts, database query and Views optimization, CSS/JS aggregation, responsive images and lazy loading, CDN integration, and opcache/PHP-FPM tuning for fast, audit-passing sites",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-drupal-performance.md",
+      "hash": "544942f460b76e15c2cd6e9a820b4048e3344186db3a7123d99adfbdf6c41d09",
+      "skills": []
+    },
+    {
+      "id": "engineering-drupal-shopping-cart",
+      "name": "Drupal Shopping Cart Engineer",
+      "description": "Expert Drupal e-commerce engineer specializing in Drupal Commerce for product catalog management, payment gateway integration, checkout workflow design, order management, tax and promotion configuration, and high-reliability storefront delivery on Drupal 10/11",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-drupal-shopping-cart.md",
+      "hash": "cbd06e6d27363029dbbc6638297d47608c78d3b93b3e4a6ff52d16757199ee50",
+      "skills": []
+    },
+    {
+      "id": "engineering-electrical-engineer",
+      "name": "Electrical Engineer",
+      "description": "Power systems engineer for telecom sites, buildings and infrastructure projects. Sizes loads, cables, batteries, rectifiers, generators and solar; designs earthing and lightning protection; reviews drawings, BOQs and commissioning records; and turns electrical requirements into software calculation rules and validation checks with explicit professional-review boundaries.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-electrical-engineer.md",
+      "hash": "e62de4808d0209db518f4bde393af88dd5e3d0d74b053d14de91c2b80d2638c0",
+      "skills": []
+    },
+    {
+      "id": "engineering-email-intelligence-engineer",
+      "name": "Email Intelligence Engineer",
+      "description": "Expert in extracting structured, reasoning-ready data from raw email threads for AI agents and automation systems",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-email-intelligence-engineer.md",
+      "hash": "70955ab959caccfd769963e9151a645a425e31d40777d00bf31e20fa0d7f8d03",
+      "skills": []
+    },
+    {
+      "id": "engineering-embedded-firmware-engineer",
+      "name": "Embedded Firmware Engineer",
+      "description": "Specialist in bare-metal and RTOS firmware - ESP32/ESP-IDF, PlatformIO, Arduino, ARM Cortex-M, STM32 HAL/LL, Nordic nRF5/nRF Connect SDK, FreeRTOS, Zephyr",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-embedded-firmware-engineer.md",
+      "hash": "f01fc2e817071c4ae10f14b49f0c4866a802f5bf3d8901d3ad0ab68cf61f2743",
+      "skills": []
+    },
+    {
+      "id": "engineering-feishu-integration-developer",
+      "name": "Feishu Integration Developer",
+      "description": "Full-stack integration expert specializing in the Feishu (Lark) Open Platform \u2014 proficient in Feishu bots, mini programs, approval workflows, Bitable (multidimensional spreadsheets), interactive message cards, Webhooks, SSO authentication, and workflow automation, building enterprise-grade collaboration and automation solutions within the Feishu ecosystem.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-feishu-integration-developer.md",
+      "hash": "22f4c40c0d2681918b1bd5884edfca2a3556325054d1b8e912f6524111e2e4fb",
+      "skills": []
+    },
+    {
+      "id": "engineering-filament-optimization-specialist",
+      "name": "Filament Optimization Specialist",
+      "description": "Expert in restructuring and optimizing Filament PHP admin interfaces for maximum usability and efficiency. Focuses on impactful structural changes \u2014 not just cosmetic tweaks.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-filament-optimization-specialist.md",
+      "hash": "428f6a6be2318a123678b2838600e33c5e193afecbe8f828fa97c779eaf85fbf",
+      "skills": []
+    },
+    {
+      "id": "engineering-finops-engineer",
+      "name": "FinOps Engineer",
+      "description": "Expert cloud cost engineer for AWS/GCP/Azure \u2014 cost allocation and tagging, rightsizing, commitment planning (reserved instances/savings plans), egress and storage optimization, and unit-economics dashboards that tie spend to business value.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-finops-engineer.md",
+      "hash": "2971ce273c45e96002127fd8456cfcb3dce761595aab5b6428cd1f5036dc9cd1",
+      "skills": []
+    },
+    {
+      "id": "engineering-frontend-developer",
+      "name": "Frontend Developer",
+      "description": "Expert frontend developer specializing in modern web technologies, React/Vue/Angular frameworks, UI implementation, and performance optimization",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-frontend-developer.md",
+      "hash": "1ae4cc10b2e0163bd3ed921ad54080b865cd02e591becd8919b64b73fab06dad",
+      "skills": []
+    },
+    {
+      "id": "engineering-gaussdb-expert",
+      "name": "GaussDB Expert Engineer",
+      "description": "Expert database specialist focusing on GaussDB OLTP \u2014 Huawei's self-developed enterprise-grade relational database (NOT GaussDB(DWS) OLAP, NOT GaussDB(for openGauss) cloud service, NOT GaussDB(for MySQL)). Covers schema design, distributed table design, query optimization, indexing, Ustore engine, and performance tuning for both distributed and centralized deployments.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-gaussdb-expert.md",
+      "hash": "db3e2fbd178e4df20885c5d5f27b0a552061c7736374f9977807fc374ff99e07",
+      "skills": []
+    },
+    {
+      "id": "engineering-git-workflow-master",
+      "name": "Git Workflow Master",
+      "description": "Expert in Git workflows, branching strategies, and version control best practices including conventional commits, rebasing, worktrees, and CI-friendly branch management.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-git-workflow-master.md",
+      "hash": "d3f7718f852e03d5cd83a97340550a5b82694547c4b9b22c9e77bb40c1467ba3",
+      "skills": []
+    },
+    {
+      "id": "engineering-i18n-engineer",
+      "name": "Internationalization Engineer",
+      "description": "Expert i18n engineer for ICU MessageFormat, CLDR plural rules, RTL and bidirectional layouts, locale-aware date/number/currency formatting, string extraction pipelines, and pseudo-localization testing.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-i18n-engineer.md",
+      "hash": "4239debe839a7ba60ad1339bb5527e816dda87a6ff3e1fa4caddd838b56917fc",
+      "skills": []
+    },
+    {
+      "id": "engineering-identity-access-engineer",
+      "name": "Identity & Access Engineer",
+      "description": "Expert identity engineer for OAuth 2.0/OIDC flows, enterprise SSO (SAML/OIDC) and SCIM provisioning, passkeys/WebAuthn, session architecture, and multi-tenant authorization with RBAC/ABAC.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-identity-access-engineer.md",
+      "hash": "803b047d1b838fba2687a95bf2b8528cee86cf744130037f8380b1cc172c3f8e",
+      "skills": []
+    },
+    {
+      "id": "engineering-incident-response-commander",
+      "name": "Incident Response Commander",
+      "description": "Expert incident commander specializing in production incident management, structured response coordination, post-mortem facilitation, SLO/SLI tracking, and on-call process design for reliable engineering organizations.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-incident-response-commander.md",
+      "hash": "89b9c1294879dd24804c8b6d7805fde193e868a3c930a1ac515a36d527b8522a",
+      "skills": []
+    },
+    {
+      "id": "engineering-iot-fleet-engineer",
+      "name": "IoT Fleet Engineer",
+      "description": "Expert IoT and edge fleet engineer \u2014 device provisioning and identity, MQTT/telemetry pipelines, staged over-the-air (OTA) firmware updates with rollback, edge compute, and observability across fleets of unreliable, intermittently-connected devices.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-iot-fleet-engineer.md",
+      "hash": "90cfb3b713d0cd11e9529f6158ed72ac99fe1d945a838d9d740009a51e9d3421",
+      "skills": []
+    },
+    {
+      "id": "engineering-it-service-manager",
+      "name": "IT Service Manager",
+      "description": "Expert IT service management specialist using ITIL 4 framework for service catalog design, incident and problem management, change control, SLA governance, CMDB maintenance, and continual service improvement \u2014 ensuring IT delivers reliable, measurable business value across any organization size",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-it-service-manager.md",
+      "hash": "26c23ef51726da346dcdf5b9eb004e7c03cfae4ad6a995ed46a26ec6cd5520e6",
+      "skills": []
+    },
+    {
+      "id": "engineering-knowledge-graph-engineer",
+      "name": "Knowledge Graph Engineer",
+      "description": "Structures information and capabilities into interconnected nodes (entities) and edges (relationships) \u2014 enabling dynamic context navigation, modular competency chaining, lower token costs, and hallucination reduction.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-knowledge-graph-engineer.md",
+      "hash": "5c01d27d814425a6f72e55bbf14011e8bbdbd088ec2e7854675d8c39dd3f8185",
+      "skills": []
+    },
+    {
+      "id": "engineering-llm-post-training-engineer",
+      "name": "LLM Post-Training Engineer",
+      "description": "Evidence-driven owner for SFT, preference optimization, RLHF/RLVR, MoE post-training, and the release gates that turn a checkpoint into a defensible model change.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-llm-post-training-engineer.md",
+      "hash": "aa697dc1c0eb402551b9f6764a89938c8787c9628760b74065d3e383299a980a",
+      "skills": []
+    },
+    {
+      "id": "engineering-minimal-change-engineer",
+      "name": "Minimal Change Engineer",
+      "description": "Engineering specialist focused on minimum-viable diffs \u2014 fixes only what was asked, refuses scope creep, prefers three similar lines over a premature abstraction. The discipline that prevents bug-fix PRs from becoming refactor avalanches.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-minimal-change-engineer.md",
+      "hash": "9999cc74e7b3936af892ef2c2793d105bb92f6c47789aa23db6df92bf68b45e5",
+      "skills": []
+    },
+    {
+      "id": "engineering-mobile-app-builder",
+      "name": "Mobile App Builder",
+      "description": "Specialized mobile application developer with expertise in native iOS/Android development and cross-platform frameworks",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-mobile-app-builder.md",
+      "hash": "1a3e043f806b0b7c071d58b2ee3ab3c58c8342e2727c1ca9e6e5175f86986caf",
+      "skills": []
+    },
+    {
+      "id": "engineering-mobile-release-engineer",
+      "name": "Mobile Release Engineer",
+      "description": "Expert mobile release and distribution engineer for iOS and Android \u2014 code signing, provisioning, fastlane pipelines, App Store Connect and Play Console submission, phased rollouts, and crash-triaged release health.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-mobile-release-engineer.md",
+      "hash": "3fae6975de4c2038a7fb0c4a8e366b8f87e8f3bb89e0a64ce4d4bcfdead15617",
+      "skills": []
+    },
+    {
+      "id": "engineering-multi-agent-systems-architect",
+      "name": "Multi-Agent Systems Architect",
+      "description": "Systems architect specializing in the design, coordination, and governance of multi-agent AI pipelines \u2014 covering topology selection, context management, inter-agent trust, failure recovery, human-in-the-loop gating, and observability for production-grade agent systems.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-multi-agent-systems-architect.md",
+      "hash": "d93dd20fef67bf85a537ba0f869fad1a17d0e589f20899d1bbe1f095a7bcb91b",
+      "skills": []
+    },
+    {
+      "id": "engineering-network-engineer",
+      "name": "Network Engineer",
+      "description": "Expert network engineer for Cisco IOS/IOS-XE, Cisco ASA/FTD, Juniper Junos, and Palo Alto PAN-OS routing, switching, firewalling, and troubleshooting.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-network-engineer.md",
+      "hash": "1400d7393e47b05c629d2902b2114911d6e55f34a703c2b77da24bd5f2b31576",
+      "skills": []
+    },
+    {
+      "id": "engineering-orgscript-engineer",
+      "name": "OrgScript Engineer",
+      "description": "Expert in designing, parsing, and implementing OrgScript grammar, AST validation, and business logic definitions.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-orgscript-engineer.md",
+      "hash": "f8426369743ff0086e32cb9facfc3935488d99a1c2de92961917f9b27d401427",
+      "skills": []
+    },
+    {
+      "id": "engineering-payments-billing-engineer",
+      "name": "Payments & Billing Engineer",
+      "description": "Expert payments engineer for PSP integrations (Stripe, Adyen, Braintree, PayPal), idempotent payment flows, webhook processing, subscription billing, SCA/3DS, PCI scope reduction, and financial reconciliation.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-payments-billing-engineer.md",
+      "hash": "ce47609b6805087e2f731ea62f69edffaf61e1968049042e2ca3d225d4392b40",
+      "skills": []
+    },
+    {
+      "id": "engineering-pdf-engine-architect",
+      "name": "PDF Engine Architect",
+      "description": "Architect and specialist in deterministic HTML-to-PDF document compilation, Playwright browser context pools, dynamic Euclidean page sizing, LayoutNG subpixel budgeting, tagged PDF (PDF/UA-1 & PDF/A-2b), and 1:1 sheet canvas editors.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-pdf-engine-architect.md",
+      "hash": "367dd859aeda52d2a3de6ffd33b8c38eac625e884a2f71574a73d38350f8f457",
+      "skills": []
+    },
+    {
+      "id": "engineering-platform-engineer",
+      "name": "Platform Engineer",
+      "description": "Expert internal developer platform (IDP) engineer specializing in golden paths, paved roads, and self-serve infrastructure that multiplies engineering velocity.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-platform-engineer.md",
+      "hash": "0736a0c476ff46e16e33b36ec143352107b82d69b3501bcdaefe22feee252652",
+      "skills": []
+    },
+    {
+      "id": "engineering-privacy-engineer",
+      "name": "Privacy Engineer",
+      "description": "Expert privacy engineer who implements privacy in code \u2014 PII discovery and classification, data minimization, consent enforcement at the API layer, automated DSAR and deletion across services, pseudonymization/tokenization, and retention automation. Builds the technical controls a privacy policy only promises.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-privacy-engineer.md",
+      "hash": "0d00d2f0d3008a55000eb01f13adac54f40daf471d240a7c073477efe92376a6",
+      "skills": []
+    },
+    {
+      "id": "engineering-prompt-engineer",
+      "name": "Prompt Engineer",
+      "description": "Specialist in crafting, testing, and systematically optimizing prompts for LLMs \u2014 turning vague instructions into reliable, production-grade AI behaviors.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-prompt-engineer.md",
+      "hash": "e94ccdc64a6a4fe064550dee7242778632696813d98dc1d6053f64d3794794d3",
+      "skills": []
+    },
+    {
+      "id": "engineering-rag-pipeline-engineer",
+      "name": "RAG Pipeline Engineer",
+      "description": "Production RAG specialist focused on chunking strategy, retrieval quality, hybrid search, re-ranking, and eval-driven iteration. Builds pipelines that actually retrieve the right context \u2014 not just pipelines that run.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-rag-pipeline-engineer.md",
+      "hash": "d9b75715fc6eb5712054658727a6f9082d4be2579766d2b42a6060595caa9a96",
+      "skills": []
+    },
+    {
+      "id": "engineering-rapid-prototyper",
+      "name": "Rapid Prototyper",
+      "description": "Specialized in ultra-fast proof-of-concept development and MVP creation using efficient tools and frameworks",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-rapid-prototyper.md",
+      "hash": "247ea109c45d9ed372b85b5a436c52a801fee234740e3caa114d72d0e1f05f80",
+      "skills": []
+    },
+    {
+      "id": "engineering-realtime-collaboration-engineer",
+      "name": "Realtime Collaboration Engineer",
+      "description": "Expert realtime systems engineer for WebSocket/SSE infrastructure, presence, CRDT and OT-based collaborative editing, offline-first sync engines, and fan-out scaling with reconnect-safe protocols.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-realtime-collaboration-engineer.md",
+      "hash": "79b1fa3544a7f768ca3702b8b41f2969c9ea14ddb73c7fe349fc652219f91a75",
+      "skills": []
+    },
+    {
+      "id": "engineering-rust-refactoring-specialist",
+      "name": "Rust Refactoring Specialist",
+      "description": "Expert Rust engineer for repository-scale refactoring, safe renames, module restructuring, duplication removal, panic hardening, ownership improvements, and compiler or Clippy remediation.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-rust-refactoring-specialist.md",
+      "hash": "06ca53dbd12694560bf01feb94cbbd8c428e4abe6ac92c8a72eeb277ce179a78",
+      "skills": []
+    },
+    {
+      "id": "engineering-search-relevance-engineer",
+      "name": "Search Relevance Engineer",
+      "description": "Expert search engineer for Elasticsearch and OpenSearch \u2014 index and analyzer design, BM25 query tuning, hybrid lexical+vector retrieval, and judgment-based relevance evaluation with nDCG and online experiments.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-search-relevance-engineer.md",
+      "hash": "5562f37cbb561dce6dac47b1dd4e75cb7bde6c0c48045198db346ba7d6d790af",
+      "skills": []
+    },
+    {
+      "id": "engineering-section-508-specialist",
+      "name": "Section 508 Accessibility Specialist",
+      "description": "Expert U.S. federal Section 508 accessibility engineer (the 508 legal baseline is WCAG 2.0 Level AA; WCAG 2.1/2.2 AA are recommended best practice, and ADA Title II requires WCAG 2.1 AA for state/local government) specializing in accessible web development, ARIA implementation, screen reader testing (JAWS/NVDA/VoiceOver), keyboard navigation, color contrast, accessible forms and PDFs, VPAT/ACR authoring, automated and manual auditing (axe/WAVE/Lighthouse), and remediation for government and enterprise sites",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-section-508-specialist.md",
+      "hash": "d4fb7139c69e270fd626cfc1410b7412bd864d010903b459f9eb90c8359809f9",
+      "skills": []
+    },
+    {
+      "id": "engineering-senior-developer",
+      "name": "Senior Developer",
+      "description": "Premium implementation specialist - Masters Laravel/Livewire/FluxUI, advanced CSS, Three.js integration",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-senior-developer.md",
+      "hash": "63b8da6c12b95f54bbdbcd0666abeb9519a98b35395233e1b1d8e5c102c82599",
+      "skills": []
+    },
+    {
+      "id": "engineering-servicenow-developer-mentor",
+      "name": "ServiceNow Developer & Mentor",
+      "description": "ServiceNow platform developer and step-by-step troubleshooter \u2014 Business Rules, Script Includes, GlideRecord/GlideAggregate, Flow Designer, ACLs, and \"is this OOTB or did custom break it?\" isolation",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-servicenow-developer-mentor.md",
+      "hash": "0a35abb24b63834dc910f7813e7a657cfb06c93f6760f0204da75aabd6b722bd",
+      "skills": []
+    },
+    {
+      "id": "engineering-software-architect",
+      "name": "Software Architect",
+      "description": "Expert software architect specializing in system design, domain-driven design, architectural patterns, and technical decision-making for scalable, maintainable systems.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-software-architect.md",
+      "hash": "b85121691776147bacde26673e68fbbacd6a7f0816d1ca8e203c264d25ce1d30",
+      "skills": []
+    },
+    {
+      "id": "engineering-solidity-smart-contract-engineer",
+      "name": "Solidity Smart Contract Engineer",
+      "description": "Expert Solidity developer specializing in EVM smart contract architecture, gas optimization, upgradeable proxy patterns, DeFi protocol development, and security-first contract design across Ethereum and L2 chains.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-solidity-smart-contract-engineer.md",
+      "hash": "9e6f96fb29cc71faf2638bce3a5aa06ff15b4c674ca4ec039e5e4515a7844839",
+      "skills": []
+    },
+    {
+      "id": "engineering-sre",
+      "name": "SRE (Site Reliability Engineer)",
+      "description": "Expert site reliability engineer specializing in SLOs, error budgets, observability, chaos engineering, and toil reduction for production systems at scale.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-sre.md",
+      "hash": "85b305e495506913f50c7cb28de42444a85fbc4898cd3ad4e1dc9b358b4ab5e8",
+      "skills": []
+    },
+    {
+      "id": "engineering-universal-document-compiler",
+      "name": "Universal Document Compiler",
+      "description": "Architect of schema-agnostic document ASTs, algorithmic data-shape layout inference, bidirectional CST-to-canvas synchronization, and universal paged document publishing.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-universal-document-compiler.md",
+      "hash": "70c47b2a1edfa10dd3b3206d22516565a4d3e134f6ca92e086770e2d088ea6f0",
+      "skills": []
+    },
+    {
+      "id": "engineering-uswds-developer",
+      "name": "USWDS Developer",
+      "description": "Expert U.S. Web Design System frontend developer specializing in USWDS components and design tokens, accessible-by-default patterns, responsive government UI, Sass settings/theming, the federal design language, integration into CMS platforms (Drupal/WordPress), and compliance with 21st Century IDEA and the Federal Website Standards",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-uswds-developer.md",
+      "hash": "d3c46e2340d50a97cec536edd985abd2fe6b5f012c3c02e5e9187cd061b27ca7",
+      "skills": []
+    },
+    {
+      "id": "engineering-video-streaming-engineer",
+      "name": "Video Streaming Engineer",
+      "description": "Expert video streaming engineer for adaptive bitrate delivery \u2014 HLS/DASH packaging, ffmpeg transcode ladders, CMAF low-latency, DRM, CDN delivery, and QoE-driven player tuning.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-video-streaming-engineer.md",
+      "hash": "7abdbe217f43c41c7d0563d28683d44855a0e8c8871e7874ecd3deb31a543df0",
+      "skills": []
+    },
+    {
+      "id": "engineering-voice-ai-integration-engineer",
+      "name": "Voice AI Integration Engineer",
+      "description": "Expert in building end-to-end speech transcription pipelines using Whisper-style models and cloud ASR services \u2014 from raw audio ingestion through preprocessing, transcript cleanup, subtitle generation, speaker diarization, and structured downstream integration into apps, APIs, and CMS platforms.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-voice-ai-integration-engineer.md",
+      "hash": "c6f3cc0829fc2b6c989f2aed10929e59365ec3bae89089205e27acbc57c17c7c",
+      "skills": []
+    },
+    {
+      "id": "engineering-webassembly-engineer",
+      "name": "WebAssembly Engineer",
+      "description": "Expert WebAssembly engineer \u2014 compiling Rust/C++/Go to Wasm, JS interop and the boundary marshalling cost, WASI and server-side runtimes (Wasmtime/Wasmer), the component model, and near-native performance tuning.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-webassembly-engineer.md",
+      "hash": "746f387160d62d9d13a78c75c20a7f14607fe45cec1fd20f48848e89c5429ed4",
+      "skills": []
+    },
+    {
+      "id": "engineering-wechat-mini-program-developer",
+      "name": "WeChat Mini Program Developer",
+      "description": "Expert WeChat Mini Program developer specializing in \u5c0f\u7a0b\u5e8f development with WXML/WXSS/WXS, WeChat API integration, payment systems, subscription messaging, and the full WeChat ecosystem.",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-wechat-mini-program-developer.md",
+      "hash": "322e068fb168e5ce95b1f66c132de4c1e5c794a114b342d01d997d785e865f43",
+      "skills": []
+    },
+    {
+      "id": "engineering-wordpress-performance",
+      "name": "WordPress Performance Engineer",
+      "description": "Expert WordPress performance engineer specializing in Core Web Vitals, object caching (Redis/Memcached), page caching, database and WP_Query optimization, the Transients API, asset minification/deferral/critical CSS, image optimization and lazy loading, CDN integration, plugin performance auditing, and PHP-FPM/opcache tuning for fast, audit-passing sites",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-wordpress-performance.md",
+      "hash": "58ed429ace903aac3a2c9e190ecae5b61966b7330e9e51ea66aa03eb4112854f",
+      "skills": []
+    },
+    {
+      "id": "engineering-wordpress-shopping-cart",
+      "name": "WordPress Shopping Cart Engineer",
+      "description": "Expert WordPress e-commerce engineer specializing in WooCommerce for product catalog management, payment gateway integration, checkout customization, order management, tax and coupon configuration, and conversion-optimized storefront delivery on WordPress",
+      "division": "Engineering",
+      "classification": "coding",
+      "path": "engineering/engineering-wordpress-shopping-cart.md",
+      "hash": "a2ef45cebe1cf03175b16ef48a2a01acdd2b7e8eda289114f568ebe0f1ae4112",
+      "skills": []
+    },
+    {
+      "id": "finance-bookkeeper-controller",
+      "name": "Bookkeeper & Controller",
+      "description": "Expert bookkeeper and controller specializing in day-to-day accounting operations, financial reconciliations, month-end close processes, and internal controls. Ensures the accuracy, completeness, and timeliness of financial records while maintaining GAAP compliance and audit readiness at all times.",
+      "division": "Finance",
+      "classification": "general",
+      "path": "finance/finance-bookkeeper-controller.md",
+      "hash": "5510a24274d8f7897ca3f4df2c3318262138a2c82827b37dd2489dcfca8de75a",
+      "skills": []
+    },
+    {
+      "id": "finance-financial-analyst",
+      "name": "Financial Analyst",
+      "description": "Expert financial analyst specializing in financial modeling, forecasting, scenario analysis, and data-driven decision support. Transforms raw financial data into actionable business intelligence that drives strategic planning, investment decisions, and operational optimization.",
+      "division": "Finance",
+      "classification": "general",
+      "path": "finance/finance-financial-analyst.md",
+      "hash": "3547907cd52e6108a4c666fd576d5e42715ac337586a3958a722deee4c1f77bb",
+      "skills": []
+    },
+    {
+      "id": "finance-fpa-analyst",
+      "name": "FP&A Analyst",
+      "description": "Expert Financial Planning & Analysis (FP&A) analyst specializing in budgeting, variance analysis, financial planning, rolling forecasts, and strategic decision support. Bridges the gap between the numbers and the business narrative to drive operational performance and strategic resource allocation.",
+      "division": "Finance",
+      "classification": "general",
+      "path": "finance/finance-fpa-analyst.md",
+      "hash": "5fa9137c80e0b91fbe62815e7981d7b6a2ca5bafe43013c56d1b847a3c963141",
+      "skills": []
+    },
+    {
+      "id": "finance-investment-researcher",
+      "name": "Investment Researcher",
+      "description": "Expert investment researcher specializing in market research, due diligence, portfolio analysis, and asset valuation. Conducts rigorous fundamental and quantitative analysis to identify investment opportunities, assess risks, and support data-driven portfolio decisions across public equities, private markets, and alternative assets.",
+      "division": "Finance",
+      "classification": "general",
+      "path": "finance/finance-investment-researcher.md",
+      "hash": "4851318dcd82fdfd68403656450761b439a01c6071b8755e49dbd215149bc2c1",
+      "skills": []
+    },
+    {
+      "id": "finance-tax-strategist",
+      "name": "Tax Strategist",
+      "description": "Expert tax strategist specializing in tax optimization, multi-jurisdictional compliance, transfer pricing, and strategic tax planning. Navigates complex tax codes to minimize liability while ensuring full regulatory compliance across local, state, federal, and international tax regimes.",
+      "division": "Finance",
+      "classification": "general",
+      "path": "finance/finance-tax-strategist.md",
+      "hash": "37ea1a246e1290f473ef59abe1bba9ecc4f346c9867522fefcc11d37cd0265ab",
+      "skills": []
+    },
+    {
+      "id": "blender-addon-engineer",
+      "name": "Blender Add-on Engineer",
+      "description": "Blender tooling specialist - Builds Python add-ons, asset validators, exporters, and pipeline automations that turn repetitive DCC work into reliable one-click workflows",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/blender/blender-addon-engineer.md",
+      "hash": "e9a778fb9a78c31b6c2e2d8a0912cccd32652c1627be4794ae70f5ceb0021076",
+      "skills": []
+    },
+    {
+      "id": "economy-designer",
+      "name": "Economy Designer",
+      "description": "Virtual economy architect - Masters currency systems, sources and sinks, monetization modeling, inflation control, and data-driven economic balancing for live games",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/economy-designer.md",
+      "hash": "a6767b808ef0c155d85f5569e9e53285c97dce4c9df25aa24a09a65246967998",
+      "skills": []
+    },
+    {
+      "id": "game-audio-engineer",
+      "name": "Game Audio Engineer",
+      "description": "Interactive audio specialist - Masters FMOD/Wwise integration, adaptive music systems, spatial audio, and audio performance budgeting across all game engines",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/game-audio-engineer.md",
+      "hash": "d7a2eebd8c20021e543222bc962cb5a111924c5438e9f771a6db42d74cd19232",
+      "skills": []
+    },
+    {
+      "id": "game-designer",
+      "name": "Game Designer",
+      "description": "Systems and mechanics architect - Masters GDD authorship, player psychology, economy balancing, and gameplay loop design across all engines and genres",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/game-designer.md",
+      "hash": "203c4d7f0358a628ea21e3b9c16980f28003bd035b5cfd41a2daec04f6b84e5a",
+      "skills": []
+    },
+    {
+      "id": "godot-gameplay-scripter",
+      "name": "Godot Gameplay Scripter",
+      "description": "Composition and signal integrity specialist - Masters GDScript 2.0, C# integration, node-based architecture, and type-safe signal design for Godot 4 projects",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/godot/godot-gameplay-scripter.md",
+      "hash": "20cc00332db9cbf19f9a86dd87bd4b514d348ab0c4c0536b151c936b38be4392",
+      "skills": []
+    },
+    {
+      "id": "godot-multiplayer-engineer",
+      "name": "Godot Multiplayer Engineer",
+      "description": "Godot 4 networking specialist - Masters the MultiplayerAPI, scene replication, ENet/WebRTC transport, RPCs, and authority models for real-time multiplayer games",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/godot/godot-multiplayer-engineer.md",
+      "hash": "7e86e269a98652c4e41c2f5d26b594c99e176d724b11f505550ab51cc21dfbb8",
+      "skills": []
+    },
+    {
+      "id": "godot-shader-developer",
+      "name": "Godot Shader Developer",
+      "description": "Godot 4 visual effects specialist - Masters the Godot Shading Language (GLSL-like), VisualShader editor, CanvasItem and Spatial shaders, post-processing, and performance optimization for 2D/3D effects",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/godot/godot-shader-developer.md",
+      "hash": "947e775e411cd11ea0ed92419737801e602f6aa450037313433ab11aa7681bb4",
+      "skills": []
+    },
+    {
+      "id": "level-designer",
+      "name": "Level Designer",
+      "description": "Spatial storytelling and flow specialist - Masters layout theory, pacing architecture, encounter design, and environmental narrative across all game engines",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/level-designer.md",
+      "hash": "79c1d41b7dfc477f6f364ba8b6dec02dc0c081235fe8f8b61c8b062b5dc3b344",
+      "skills": []
+    },
+    {
+      "id": "narrative-designer",
+      "name": "Narrative Designer",
+      "description": "Story systems and dialogue architect - Masters GDD-aligned narrative design, branching dialogue, lore architecture, and environmental storytelling across all game engines",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/narrative-designer.md",
+      "hash": "7a5489c7b0502aa167030018137e3f349d2c32505c0ad7b9ec1de066a9a93f0d",
+      "skills": []
+    },
+    {
+      "id": "roblox-avatar-creator",
+      "name": "Roblox Avatar Creator",
+      "description": "Roblox UGC and avatar pipeline specialist - Masters Roblox's avatar system, UGC item creation, accessory rigging, texture standards, and the Creator Marketplace submission pipeline",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/roblox-studio/roblox-avatar-creator.md",
+      "hash": "6bdb5af6fe5c390da43f7bdcc4d73b6fbdef2a8b19bd6d30bf1fef6b4258f16a",
+      "skills": []
+    },
+    {
+      "id": "roblox-experience-designer",
+      "name": "Roblox Experience Designer",
+      "description": "Roblox platform UX and monetization specialist - Masters engagement loop design, DataStore-driven progression, Roblox monetization systems (Passes, Developer Products, UGC), and player retention for Roblox experiences",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/roblox-studio/roblox-experience-designer.md",
+      "hash": "36fb12b8b76ba666e8e9e2830328f63e713556b8f503fe12ab883902a77b308a",
+      "skills": []
+    },
+    {
+      "id": "roblox-systems-scripter",
+      "name": "Roblox Systems Scripter",
+      "description": "Roblox platform engineering specialist - Masters Luau, the client-server security model, RemoteEvents/RemoteFunctions, DataStore, and module architecture for scalable Roblox experiences",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/roblox-studio/roblox-systems-scripter.md",
+      "hash": "6eb8875978afb987563afa5fb0ee5a7789387348c362cf9a44cba6c2098821db",
+      "skills": []
+    },
+    {
+      "id": "technical-artist",
+      "name": "Technical Artist",
+      "description": "Art-to-engine pipeline specialist - Masters shaders, VFX systems, LOD pipelines, performance budgeting, and cross-engine asset optimization",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/technical-artist.md",
+      "hash": "9b7e75b629b7b1c87a0bc37e6abaec91e0ad7ae02e8a091c5a876e2bea817742",
+      "skills": []
+    },
+    {
+      "id": "unity-architect",
+      "name": "Unity Architect",
+      "description": "Data-driven modularity specialist - Masters ScriptableObjects, decoupled systems, and single-responsibility component design for scalable Unity projects",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/unity/unity-architect.md",
+      "hash": "15502fbcd46fcd7559bcd85d15b512317ceed27ffb90fc54e79f3c32bf682c1a",
+      "skills": []
+    },
+    {
+      "id": "unity-editor-tool-developer",
+      "name": "Unity Editor Tool Developer",
+      "description": "Unity editor automation specialist - Masters custom EditorWindows, PropertyDrawers, AssetPostprocessors, ScriptedImporters, and pipeline automation that saves teams hours per week",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/unity/unity-editor-tool-developer.md",
+      "hash": "8b368fe6ee0a4c0c71d10324cd8de4378c7bdaae9bc871a5561199b4a802b5dc",
+      "skills": []
+    },
+    {
+      "id": "unity-multiplayer-engineer",
+      "name": "Unity Multiplayer Engineer",
+      "description": "Networked gameplay specialist - Masters Netcode for GameObjects, Unity Gaming Services (Relay/Lobby), client-server authority, lag compensation, and state synchronization",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/unity/unity-multiplayer-engineer.md",
+      "hash": "e7d47ee13ad113a03cbc4605ec3583c272105aa305e8a64be77464a3bb9bee92",
+      "skills": []
+    },
+    {
+      "id": "unity-shader-graph-artist",
+      "name": "Unity Shader Graph Artist",
+      "description": "Visual effects and material specialist - Masters Unity Shader Graph, HLSL, URP/HDRP rendering pipelines, and custom pass authoring for real-time visual effects",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/unity/unity-shader-graph-artist.md",
+      "hash": "3e2033f179a95da207627d1d7521395d434ac76c30a3b20f08f90a05b7405c52",
+      "skills": []
+    },
+    {
+      "id": "unreal-multiplayer-architect",
+      "name": "Unreal Multiplayer Architect",
+      "description": "Unreal Engine networking specialist - Masters Actor replication, GameMode/GameState architecture, server-authoritative gameplay, network prediction, and dedicated server setup for UE5",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/unreal-engine/unreal-multiplayer-architect.md",
+      "hash": "c31c693ad7e34f9baa5b626565ac763f9fdfdb7f3e2d42f9e0bdddba9cd98b73",
+      "skills": []
+    },
+    {
+      "id": "unreal-systems-engineer",
+      "name": "Unreal Systems Engineer",
+      "description": "Performance and hybrid architecture specialist - Masters C++/Blueprint continuum, Nanite geometry, Lumen GI, and Gameplay Ability System for AAA-grade Unreal Engine projects",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/unreal-engine/unreal-systems-engineer.md",
+      "hash": "a4a6b98e7387c96f01bb0e9e971c27003ea30bce6d57b09e3ab7e34331746042",
+      "skills": []
+    },
+    {
+      "id": "unreal-technical-artist",
+      "name": "Unreal Technical Artist",
+      "description": "Unreal Engine visual pipeline specialist - Masters the Material Editor, Niagara VFX, Procedural Content Generation, and the art-to-engine pipeline for UE5 projects",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/unreal-engine/unreal-technical-artist.md",
+      "hash": "54bdd46bc872ba21fbcf7e02492c9f5bef82a6d3a35ee3de757d3b678edd6b82",
+      "skills": []
+    },
+    {
+      "id": "unreal-world-builder",
+      "name": "Unreal World Builder",
+      "description": "Open-world and environment specialist - Masters UE5 World Partition, Landscape, procedural foliage, HLOD, and large-scale level streaming for seamless open-world experiences",
+      "division": "Game Development",
+      "classification": "coding",
+      "path": "game-development/unreal-engine/unreal-world-builder.md",
+      "hash": "7d2bf21ac77089b99f1fa36f6102fa938c9014c3107e9dcb9069b896e2b4001e",
+      "skills": []
+    },
+    {
+      "id": "gis-3d-scene-developer",
+      "name": "3D & Scene Developer",
+      "description": "Web 3D visualization specialist who creates immersive 3D scenes, terrain models, point cloud visualizations, and interactive web experiences using Cesium, ArcGIS Scene Viewer, and modern 3D web frameworks.",
+      "division": "GIS",
+      "classification": "general",
+      "path": "gis/gis-3d-scene-developer.md",
+      "hash": "56f753732d35e54f0527a2cbdc60c73c9215463d4704cc66242e3bbaa1c744e7",
+      "skills": []
+    },
+    {
+      "id": "gis-analyst",
+      "name": "GIS Analyst",
+      "description": "Day-to-day GIS operator who creates maps, manages layers, performs spatial queries, and maintains geospatial data integrity across desktop and web environments.",
+      "division": "GIS",
+      "classification": "general",
+      "path": "gis/gis-analyst.md",
+      "hash": "db86d14315eb0ee9fc4cc4699c3844b40f2004a988370f32fe55dadfac2c40a7",
+      "skills": []
+    },
+    {
+      "id": "gis-bim-specialist",
+      "name": "BIM/GIS Specialist",
+      "description": "Integration specialist who bridges Building Information Modeling and Geographic Information Systems \u2014 Revit/IFC data conversion, indoor mapping, digital twin architecture, and facility management data models.",
+      "division": "GIS",
+      "classification": "general",
+      "path": "gis/gis-bim-specialist.md",
+      "hash": "724609ec55d1b83c88672ada351763ac6c219adca2d36faea0790bdda953e567",
+      "skills": []
+    },
+    {
+      "id": "gis-cartography-designer",
+      "name": "Cartography Designer",
+      "description": "Map aesthetics specialist who designs beautiful, readable, and effective maps \u2014 color theory, typography, label placement, basemap selection, and visual hierarchy for both print and web.",
+      "division": "GIS",
+      "classification": "general",
+      "path": "gis/gis-cartography-designer.md",
+      "hash": "2223d403dfdd863d42c0aa29c912cba0c91ffdc9ad8192630f7b08e4b4c7e804",
+      "skills": []
+    },
+    {
+      "id": "gis-drone-reality-mapping",
+      "name": "Drone/Reality Mapping Specialist",
+      "description": "Photogrammetry and reality capture expert who processes drone imagery into orthomosaics, digital terrain models, point clouds, and 3D meshes \u2014 bridging field capture and GIS-ready products.",
+      "division": "GIS",
+      "classification": "general",
+      "path": "gis/gis-drone-reality-mapping.md",
+      "hash": "2e670d99f491e1b4b76d4a5a91e33eb7a5a9ddfd9e67dda1d3c24cd57faea1f2",
+      "skills": []
+    },
+    {
+      "id": "gis-geoai-ml-engineer",
+      "name": "GeoAI/ML Engineer",
+      "description": "Geospatial machine learning specialist who builds models for feature extraction, object detection, image segmentation, and land cover classification from satellite and aerial imagery.",
+      "division": "GIS",
+      "classification": "general",
+      "path": "gis/gis-geoai-ml-engineer.md",
+      "hash": "6323600aecb9a1867a90158b10fa066280d1ffc77411c2b453248d125a505448",
+      "skills": []
+    },
+    {
+      "id": "gis-geoprocessing-specialist",
+      "name": "Geoprocessing Specialist",
+      "description": "ArcPy and Python toolbox expert who automates spatial workflows \u2014 builds .pyt toolboxes, Model Builder processes, batch geoprocessing automation, and custom analysis scripts for ArcGIS Pro.",
+      "division": "GIS",
+      "classification": "general",
+      "path": "gis/gis-geoprocessing-specialist.md",
+      "hash": "28efb48c3c4312ac7a662c8f2da69cc013d74e5d59880a04a71a40783e0ba424",
+      "skills": []
+    },
+    {
+      "id": "gis-qa-engineer",
+      "name": "GIS QA Engineer",
+      "description": "Quality assurance specialist who validates geospatial data integrity \u2014 topology checks, metadata audits, CRS consistency, accuracy assessment, and compliance verification.",
+      "division": "GIS",
+      "classification": "general",
+      "path": "gis/gis-qa-engineer.md",
+      "hash": "f7247c7df478d963db720562af361394454c20b6af3fc78a02791ec6624bfc38",
+      "skills": []
+    },
+    {
+      "id": "gis-solution-engineer",
+      "name": "Solution Engineer",
+      "description": "Hands-on GIS prototype builder who takes strategy from Technical Consultant and turns it into working demos, proof-of-concepts, and technical validations across the full Esri and open-source stack.",
+      "division": "GIS",
+      "classification": "general",
+      "path": "gis/gis-solution-engineer.md",
+      "hash": "a871691ed7e305047281238eb225f64df4b03274fe82278879788de3c839f054",
+      "skills": []
+    },
+    {
+      "id": "gis-spatial-data-engineer",
+      "name": "Spatial Data Engineer",
+      "description": "ETL specialist who transforms messy geospatial data from any source into clean, standardized, production-ready datasets \u2014 format conversion, CRS reprojection, attribute normalization, and automated pipelines.",
+      "division": "GIS",
+      "classification": "general",
+      "path": "gis/gis-spatial-data-engineer.md",
+      "hash": "b8f0e43cee6538aa7880168335ceac8e1a4700965b49f3b6c227b0f13d399e5f",
+      "skills": []
+    },
+    {
+      "id": "gis-spatial-data-scientist",
+      "name": "Spatial Data Scientist",
+      "description": "Advanced spatial analytics specialist who applies statistical modeling, spatial econometrics, clustering, and predictive analytics to geospatial data \u2014 finding patterns that aren't visible on a map.",
+      "division": "GIS",
+      "classification": "general",
+      "path": "gis/gis-spatial-data-scientist.md",
+      "hash": "03254a9fa2a9522800eddf743b8305bc2d4b2093e233e6c9b593da6f0746c657",
+      "skills": []
+    },
+    {
+      "id": "gis-technical-consultant",
+      "name": "Technical Consultant",
+      "description": "Strategic GIS advisor who translates business problems into geospatial solutions \u2014 gap analysis, technology roadmaps, RFP responses, and digital transformation strategy across Esri and open-source ecosystems.",
+      "division": "GIS",
+      "classification": "general",
+      "path": "gis/gis-technical-consultant.md",
+      "hash": "f0228896fc57ea0b8fcf3c3fab188a6d4063ba6bf704aa93b0e46e27ba096736",
+      "skills": []
+    },
+    {
+      "id": "gis-web-gis-developer",
+      "name": "Web GIS Developer",
+      "description": "Full-stack web GIS engineer who builds interactive mapping applications \u2014 MapLibre GL JS, ArcGIS JS API, Leaflet, real-time dashboards, REST API integration, and geospatial web services.",
+      "division": "GIS",
+      "classification": "general",
+      "path": "gis/gis-web-gis-developer.md",
+      "hash": "dbf3ceea4bb8fdc2f2fc61bf96806adeb89f725c8d67a01cd103d256e56909a7",
+      "skills": []
+    },
+    {
+      "id": "healthcare-clinical-evidence-agent",
+      "name": "Clinical Evidence Agent",
+      "description": "Evidence standards and clinical credibility framework for AI agents operating in healthcare contexts. Defines how to distinguish validated from unvalidated clinical claims, how to write for both peer review and investor audiences from the same evidence base, and how to frame clinical decision support without claiming diagnostic authority.",
+      "division": "Healthcare",
+      "classification": "general",
+      "path": "healthcare/healthcare-clinical-evidence-agent.md",
+      "hash": "5fd6223b0fb17c7625b2ca8ba9f1f6fb649560c074a39b0d72e22e984487a688",
+      "skills": []
+    },
+    {
+      "id": "healthcare-innovation-strategist",
+      "name": "Healthcare Innovation Strategist",
+      "description": "Strategic narrative architect for healthcare founders operating at the intersection of clinical credibility, healthcare finance, and complex deployment contexts. Maintains narrative coherence across investor, regulatory, sovereign, and clinical audiences. Built for founders who need to translate complex clinical and financial realities into language that moves capital, changes policy, and builds trust with doctors and patients simultaneously.",
+      "division": "Healthcare",
+      "classification": "general",
+      "path": "healthcare/healthcare-innovation-strategist.md",
+      "hash": "e1bd8f9f8c5ac7db333632d482e017c6086519eee310da6879db5c121129fbbd",
+      "skills": []
+    },
+    {
+      "id": "healthcare-sovereign-health-systems-agent",
+      "name": "Sovereign Health Systems Agent",
+      "description": "Government health mandate engagement framework for AI agents operating at the intersection of national health infrastructure, UHC policy, and emerging market deployment. Defines how to navigate sovereign health ministry engagement, frame health technology for mandate alignment, and sequence a dual-market launch across regulated and sovereign contexts.",
+      "division": "Healthcare",
+      "classification": "general",
+      "path": "healthcare/healthcare-sovereign-health-systems-agent.md",
+      "hash": "8e846a8643def597e351719853da63b4b6d9f0bf41978ac25e896750427989fa",
+      "skills": []
+    },
+    {
+      "id": "marketing-aeo-foundations",
+      "name": "AEO Foundations Architect",
+      "description": "Expert in AI Engine Optimization infrastructure \u2014 implements llms.txt, AI-aware robots.txt, token-budgeted content, structured Markdown availability, and agent discovery files so AI crawlers, citation engines, and browsing agents can find, parse, and act on your site",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-aeo-foundations.md",
+      "hash": "b7ef7e1188c924833974bab5cc57f166a7eb6b681d63ccd22eb05c91c25a3c8b",
+      "skills": []
+    },
+    {
+      "id": "marketing-agentic-search-optimizer",
+      "name": "Agentic Search Optimizer",
+      "description": "Expert in WebMCP readiness and agentic task completion \u2014 audits whether AI agents can actually accomplish tasks on your site (book, buy, register, subscribe), implements WebMCP declarative and imperative patterns, and measures task completion rates across AI browsing agents",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-agentic-search-optimizer.md",
+      "hash": "de143d3db98f6532dcd9d21ae363d1c2fb508dc806c1f7325bba59e8fbd24184",
+      "skills": []
+    },
+    {
+      "id": "marketing-ai-citation-strategist",
+      "name": "AI Citation Strategist",
+      "description": "Expert in AI recommendation engine optimization (AEO/GEO) \u2014 audits brand visibility across ChatGPT, Claude, Gemini, and Perplexity, identifies why competitors get cited instead, and delivers content fixes that improve AI citations",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-ai-citation-strategist.md",
+      "hash": "1d23c94aced61beb0e7a3151ad4c14ccb8205a95e48d4bc6c0fda6739c2e356d",
+      "skills": []
+    },
+    {
+      "id": "marketing-app-store-optimizer",
+      "name": "App Store Optimizer",
+      "description": "Expert app store marketing specialist focused on App Store Optimization (ASO), conversion rate optimization, and app discoverability",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-app-store-optimizer.md",
+      "hash": "1987be72f8fd43ca694f9145cb0dbe37eabc5b1f04439425d7b59185db9263c9",
+      "skills": []
+    },
+    {
+      "id": "marketing-baidu-seo-specialist",
+      "name": "Baidu SEO Specialist",
+      "description": "Expert Baidu search optimization specialist focused on Chinese search engine ranking, Baidu ecosystem integration, ICP compliance, Chinese keyword research, and mobile-first indexing for the China market.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-baidu-seo-specialist.md",
+      "hash": "895a5e8440066ad0b8fa6fe79a91c7750d246a233b01bf7932584b74e9c5becb",
+      "skills": []
+    },
+    {
+      "id": "marketing-bilibili-content-strategist",
+      "name": "Bilibili Content Strategist",
+      "description": "Expert Bilibili marketing specialist focused on UP\u4e3b growth, danmaku culture mastery, B\u7ad9 algorithm optimization, community building, and branded content strategy for China's leading video community platform.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-bilibili-content-strategist.md",
+      "hash": "4268a7b51025967fbb4a80c0aeb5e4a80abaad9344f5dec164a8d1fb6ea62d06",
+      "skills": []
+    },
+    {
+      "id": "marketing-book-co-author",
+      "name": "Book Co-Author",
+      "description": "Strategic thought-leadership book collaborator for founders, experts, and operators turning voice notes, fragments, and positioning into structured first-person chapters.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-book-co-author.md",
+      "hash": "09ea2fb4770180b072c92100be84b808367c40ef8a3f2119cfd059206aa4c717",
+      "skills": []
+    },
+    {
+      "id": "marketing-carousel-growth-engine",
+      "name": "Carousel Growth Engine",
+      "description": "Autonomous TikTok and Instagram carousel generation specialist. Analyzes any website URL with Playwright, generates viral 6-slide carousels via Gemini image generation, publishes to TikTok and Instagram through their official APIs or a multi-platform publishing service with auto-added music, fetches analytics, and iteratively improves through a data-driven learning loop.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-carousel-growth-engine.md",
+      "hash": "42a36a3ca0a11b6adc57eb3277dda7628a4db80169b5ea69c5262b7e85d7c06f",
+      "skills": []
+    },
+    {
+      "id": "marketing-china-ecommerce-operator",
+      "name": "China E-Commerce Operator",
+      "description": "Expert China e-commerce operations specialist covering Taobao, Tmall, Pinduoduo, and JD ecosystems with deep expertise in product listing optimization, live commerce, store operations, 618/Double 11 campaigns, and cross-platform strategy.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-china-ecommerce-operator.md",
+      "hash": "aa6743c68cce9dd00fd31751e9e3c2bea3987857cad332c68c7f68e683e98ba7",
+      "skills": []
+    },
+    {
+      "id": "marketing-china-market-localization-strategist",
+      "name": "China Market Localization Strategist",
+      "description": "Full-stack China market localization expert who transforms real-time trend signals into executable go-to-market strategies across Douyin, Xiaohongshu, WeChat, Bilibili, and beyond",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-china-market-localization-strategist.md",
+      "hash": "7f6351003b0d6525c7f44870078252d4616287953e33dcace3c8b7da2e9e4325",
+      "skills": []
+    },
+    {
+      "id": "marketing-content-creator",
+      "name": "Content Creator",
+      "description": "Expert content strategist and creator for multi-platform campaigns. Develops editorial calendars, creates compelling copy, manages brand storytelling, and optimizes content for engagement across all digital channels.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-content-creator.md",
+      "hash": "26ddce44f057068a3935c13d53becd3c57385fb47fcdcfdd891b80269070b3d5",
+      "skills": []
+    },
+    {
+      "id": "marketing-cross-border-ecommerce",
+      "name": "Cross-Border E-Commerce Specialist",
+      "description": "Full-funnel cross-border e-commerce strategist covering Amazon, Shopee, Lazada, AliExpress, Temu, and TikTok Shop operations, international logistics and overseas warehousing, compliance and taxation, multilingual listing optimization, brand globalization, and DTC independent site development.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-cross-border-ecommerce.md",
+      "hash": "073dba84e8159c763c073fcf16f14d57685611c50555a7cde346df85a25c6293",
+      "skills": []
+    },
+    {
+      "id": "marketing-developer-community-builder",
+      "name": "Developer Community Builder",
+      "description": "Grows and sustains developer communities \u2014 Discord servers, GitHub discussions, forums, and contributor programs \u2014 turning users into advocates and advocates into contributors.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-developer-community-builder.md",
+      "hash": "f1d87ae21d21ee90f73cd94754b2a99e4af7fec64b23290fea59fb2b4637db11",
+      "skills": []
+    },
+    {
+      "id": "marketing-douyin-strategist",
+      "name": "Douyin Strategist",
+      "description": "Short-video marketing expert specializing in the Douyin platform, with deep expertise in recommendation algorithm mechanics, viral video planning, livestream commerce workflows, and full-funnel brand growth through content matrix strategies.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-douyin-strategist.md",
+      "hash": "87e3b91287fc97ad0dedb2f407a49d551b52b8513c8c61d06c1a93d837a7ae46",
+      "skills": []
+    },
+    {
+      "id": "marketing-email-strategist",
+      "name": "Email Marketing Strategist",
+      "description": "Expert email marketing strategist for CRM-driven campaigns, lifecycle automation, segmentation architecture, and deliverability. Designs sequences (welcome, nurture, reactivation, win-back, review, referral) grounded in 2025-2026 benchmarks, AI-driven personalization, and post-Apple MPP measurement.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-email-strategist.md",
+      "hash": "605c98066a4a1b5538d76476a11316247316ecb8da88beda68a21f2c8918f19b",
+      "skills": []
+    },
+    {
+      "id": "marketing-global-podcast-strategist",
+      "name": "Global Podcast Strategist",
+      "description": "Expert podcast growth specialist focused on show positioning, audience development, content strategy, and monetisation. Transforms raw ideas into authoritative audio brands that compound listeners and revenue over time on Spotify, Apple Podcasts, and YouTube.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-global-podcast-strategist.md",
+      "hash": "98416e338db666c5cc1d6bfd37c35daffa00532010623fdb4a92ed7dce76a7aa",
+      "skills": []
+    },
+    {
+      "id": "marketing-growth-hacker",
+      "name": "Growth Hacker",
+      "description": "Expert growth strategist specializing in rapid user acquisition through data-driven experimentation. Develops viral loops, optimizes conversion funnels, and finds scalable growth channels for exponential business growth.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-growth-hacker.md",
+      "hash": "6938b4fccaf4447e8c4b8fd071ce383a484cd3fb72583d87ac9835fa9741a7c7",
+      "skills": []
+    },
+    {
+      "id": "marketing-instagram-curator",
+      "name": "Instagram Curator",
+      "description": "Expert Instagram marketing specialist focused on visual storytelling, community building, and multi-format content optimization. Masters aesthetic development and drives meaningful engagement.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-instagram-curator.md",
+      "hash": "bab95910975a95409eca10e28c44cf762cd46f9d8b7d551bcb347ef0f39e68fd",
+      "skills": []
+    },
+    {
+      "id": "marketing-kuaishou-strategist",
+      "name": "Kuaishou Strategist",
+      "description": "Expert Kuaishou marketing strategist specializing in short-video content for China's lower-tier city markets, live commerce operations, community trust building, and grassroots audience growth on \u5feb\u624b.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-kuaishou-strategist.md",
+      "hash": "d28742e505fa7bf6b39a88ccb6c2052ee5b4f569d17cebb81401fa8810a5ad49",
+      "skills": []
+    },
+    {
+      "id": "marketing-linkedin-content-creator",
+      "name": "LinkedIn Content Creator",
+      "description": "Expert LinkedIn content strategist focused on thought leadership, personal brand building, and high-engagement professional content. Masters LinkedIn's algorithm and culture to drive inbound opportunities for founders, job seekers, developers, and anyone building a professional presence.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-linkedin-content-creator.md",
+      "hash": "344896bff33acf0b5107bbba3c84ee1fb310f3652b44c7e53553c934c735ed4f",
+      "skills": []
+    },
+    {
+      "id": "marketing-livestream-commerce-coach",
+      "name": "Livestream Commerce Coach",
+      "description": "Veteran livestream e-commerce coach specializing in host training and live room operations across Douyin, Kuaishou, Taobao Live, and Channels, covering script design, product sequencing, paid-vs-organic traffic balancing, conversion closing techniques, and real-time data-driven optimization.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-livestream-commerce-coach.md",
+      "hash": "2d53e67cd70d825aeeddc9fd8b3b4a496887893b64df85c19903a2e7dbcb101f",
+      "skills": []
+    },
+    {
+      "id": "marketing-multi-platform-publisher",
+      "name": "Multi-Platform Publisher",
+      "description": "Expert orchestrator for one-click Chinese blog publishing. Routes a single article to \u77e5\u4e4e / \u5c0f\u7ea2\u4e66 / CSDN / B\u7ad9 / \u516c\u4f17\u53f7 / \u6398\u91d1 via Wechatsync (main channel) with xhs-mcp and biliup as specialized fallbacks. Handles per-platform content adaptation, draft-first publishing, rate control, and risk-avoidance. Does NOT auto-publish \u2014 always stops at draft for human review.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-multi-platform-publisher.md",
+      "hash": "adfc6c481c0c1e1c03df21a17ccb5fb4d4c56a84193249abb27cb3d44e4f1f5e",
+      "skills": []
+    },
+    {
+      "id": "marketing-podcast-strategist",
+      "name": "Podcast Strategist",
+      "description": "Content strategy and operations expert for the Chinese podcast market, with deep expertise in Xiaoyuzhou, Ximalaya, and other major audio platforms, covering show positioning, audio production, audience growth, multi-platform distribution, and monetization to help podcast creators build sticky audio content brands.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-podcast-strategist.md",
+      "hash": "37fb126529afb4aa6f4409ca02307330d26b01f695dfbaade017d569169d936b",
+      "skills": []
+    },
+    {
+      "id": "marketing-pr-communications-manager",
+      "name": "PR & Communications Manager",
+      "description": "Strategic public relations and communications specialist for media relations, press releases, crisis communications, executive thought leadership, brand reputation management, and integrated communications planning \u2014 building and protecting reputations through earned media, storytelling, and proactive narrative control",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-pr-communications-manager.md",
+      "hash": "e255a9ebf00a0db0dc12e72fe2a647195ceacf3c0e63f38788e077966d69b800",
+      "skills": []
+    },
+    {
+      "id": "marketing-private-domain-operator",
+      "name": "Private Domain Operator",
+      "description": "Expert in building enterprise WeChat (WeCom) private domain ecosystems, with deep expertise in SCRM systems, segmented community operations, Mini Program commerce integration, user lifecycle management, and full-funnel conversion optimization.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-private-domain-operator.md",
+      "hash": "1170edb4c9534149b77cf9c3279c347b0136a578e44e70320f16f784e7fe5f3c",
+      "skills": []
+    },
+    {
+      "id": "marketing-reddit-community-builder",
+      "name": "Reddit Community Builder",
+      "description": "Expert Reddit marketing specialist focused on authentic community engagement, value-driven content creation, and long-term relationship building. Masters Reddit culture navigation.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-reddit-community-builder.md",
+      "hash": "03bb723420800754bcbf23994cba707c45123f7eefe3e1964188cf92ecc2b7d7",
+      "skills": []
+    },
+    {
+      "id": "marketing-seo-specialist",
+      "name": "SEO Specialist",
+      "description": "Expert search engine optimization strategist specializing in technical SEO, content optimization, link authority building, and organic search growth. Drives sustainable traffic through data-driven search strategies.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-seo-specialist.md",
+      "hash": "cfa35eb3626230e1bc96ab3d434b42005b092fd4de8f517efe4a4b3f8fca60d0",
+      "skills": []
+    },
+    {
+      "id": "marketing-short-video-editing-coach",
+      "name": "Short-Video Editing Coach",
+      "description": "Hands-on short-video editing coach covering the full post-production pipeline, with mastery of CapCut Pro, Premiere Pro, DaVinci Resolve, and Final Cut Pro across composition and camera language, color grading, audio engineering, motion graphics and VFX, subtitle design, multi-platform export optimization, editing workflow efficiency, and AI-assisted editing.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-short-video-editing-coach.md",
+      "hash": "4634520ab5e84b26bb6658f4f8c0f737ed7dd0b5c631b9211482a4cf4037ccbf",
+      "skills": []
+    },
+    {
+      "id": "marketing-social-media-strategist",
+      "name": "Social Media Strategist",
+      "description": "Expert social media strategist for LinkedIn, Twitter, and professional platforms. Creates cross-platform campaigns, builds communities, manages real-time engagement, and develops thought leadership strategies.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-social-media-strategist.md",
+      "hash": "7c698a9280872666b2726b7ca305c6d4890fcb95a098c7c316beb9bf5fdb4274",
+      "skills": []
+    },
+    {
+      "id": "marketing-tiktok-strategist",
+      "name": "TikTok Strategist",
+      "description": "Expert TikTok marketing specialist focused on viral content creation, algorithm optimization, and community building. Masters TikTok's unique culture and features for brand growth.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-tiktok-strategist.md",
+      "hash": "980ca09138f63ec2d934e111af4fa59d76a483bb23220a5f862aa4e9f0c9124a",
+      "skills": []
+    },
+    {
+      "id": "marketing-twitter-engager",
+      "name": "Twitter Engager",
+      "description": "Expert Twitter marketing specialist focused on real-time engagement, thought leadership building, and community-driven growth. Builds brand authority through authentic conversation participation and viral thread creation.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-twitter-engager.md",
+      "hash": "df58c7df04fb808d282d7a551c84e039bebdf4a17318a09b84fa285a118f54ab",
+      "skills": []
+    },
+    {
+      "id": "marketing-video-optimization-specialist",
+      "name": "Video Optimization Specialist",
+      "description": "Video marketing strategist specializing in YouTube algorithm optimization, audience retention, chaptering, thumbnail concepts, and cross-platform video syndication.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-video-optimization-specialist.md",
+      "hash": "9cf82969be8898c96192617becf5e38e8de6b79650c362d840c53d2c10f2e8b9",
+      "skills": []
+    },
+    {
+      "id": "marketing-wechat-official-account",
+      "name": "WeChat Official Account Manager",
+      "description": "Expert WeChat Official Account (OA) strategist specializing in content marketing, subscriber engagement, and conversion optimization. Masters multi-format content and builds loyal communities through consistent value delivery.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-wechat-official-account.md",
+      "hash": "b74a42aff9b960cb2a221e362d2006865924ffece9e3514df81f1116322d2dce",
+      "skills": []
+    },
+    {
+      "id": "marketing-weibo-strategist",
+      "name": "Weibo Strategist",
+      "description": "Full-spectrum operations expert for Sina Weibo, with deep expertise in trending topic mechanics, Super Topic community management, public sentiment monitoring, fan economy strategies, and Weibo advertising, helping brands achieve viral reach and sustained growth on China's leading public discourse platform.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-weibo-strategist.md",
+      "hash": "7a79f1ec3894ab2e32cb0b0b729b77fda176defaffdb59f4feae29e56a767917",
+      "skills": []
+    },
+    {
+      "id": "marketing-x-twitter-intelligence-analyst",
+      "name": "X/Twitter Intelligence Analyst",
+      "description": "Social intelligence specialist for X/Twitter research, trend detection, account monitoring, and evidence-backed audience insights using public signals and structured data workflows.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-x-twitter-intelligence-analyst.md",
+      "hash": "e3dd504765e720f0dce0c5b68254ab65c440798edccfe6af6aafd0d3925d6dcb",
+      "skills": []
+    },
+    {
+      "id": "marketing-xiaohongshu-specialist",
+      "name": "Xiaohongshu Specialist",
+      "description": "Expert Xiaohongshu marketing specialist focused on lifestyle content, trend-driven strategies, and authentic community engagement. Masters micro-content creation and drives viral growth through aesthetic storytelling.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-xiaohongshu-specialist.md",
+      "hash": "c0afe07b77d7795ff6c5ea928360f0e545d51a6df231d42d6282168ace027154",
+      "skills": []
+    },
+    {
+      "id": "marketing-zhihu-strategist",
+      "name": "Zhihu Strategist",
+      "description": "Expert Zhihu marketing specialist focused on thought leadership, community credibility, and knowledge-driven engagement. Masters question-answering strategy and builds brand authority through authentic expertise sharing.",
+      "division": "Marketing",
+      "classification": "general",
+      "path": "marketing/marketing-zhihu-strategist.md",
+      "hash": "35f6fd759a67860f92d1ae5245bdf45f5eb524277453a28011899aeb450f5c4c",
+      "skills": []
+    },
+    {
+      "id": "paid-media-auditor",
+      "name": "Paid Media Auditor",
+      "description": "Comprehensive paid media auditor who systematically evaluates Google Ads, Microsoft Ads, and Meta accounts across 200+ checkpoints spanning account structure, tracking, bidding, creative, audiences, and competitive positioning. Produces actionable audit reports with prioritized recommendations and projected impact.",
+      "division": "Paid Media",
+      "classification": "general",
+      "path": "paid-media/paid-media-auditor.md",
+      "hash": "ce0346ba6a1b1652e350733cd3c124ab200e869c116fd85bcd0225d9764b0c56",
+      "skills": []
+    },
+    {
+      "id": "paid-media-creative-strategist",
+      "name": "Ad Creative Strategist",
+      "description": "Paid media creative specialist focused on ad copywriting, RSA optimization, asset group design, and creative testing frameworks across Google, Meta, Microsoft, and programmatic platforms. Bridges the gap between performance data and persuasive messaging.",
+      "division": "Paid Media",
+      "classification": "general",
+      "path": "paid-media/paid-media-creative-strategist.md",
+      "hash": "a24a303228178eb23d514fee63831cf7e1a3d7e5276c54ce5b58dce566700c41",
+      "skills": []
+    },
+    {
+      "id": "paid-media-paid-social-strategist",
+      "name": "Paid Social Strategist",
+      "description": "Cross-platform paid social advertising specialist covering Meta (Facebook/Instagram), LinkedIn, TikTok, Pinterest, X, and Snapchat. Designs full-funnel social ad programs from prospecting through retargeting with platform-specific creative and audience strategies.",
+      "division": "Paid Media",
+      "classification": "general",
+      "path": "paid-media/paid-media-paid-social-strategist.md",
+      "hash": "c8004c7f640dfef9c7c698f69c4c3712d063df06c8d391c809df92ba420af3db",
+      "skills": []
+    },
+    {
+      "id": "paid-media-ppc-strategist",
+      "name": "PPC Campaign Strategist",
+      "description": "Senior paid media strategist specializing in large-scale search, shopping, and performance max campaign architecture across Google, Microsoft, and Amazon ad platforms. Designs account structures, budget allocation frameworks, and bidding strategies that scale from $10K to $10M+ monthly spend.",
+      "division": "Paid Media",
+      "classification": "general",
+      "path": "paid-media/paid-media-ppc-strategist.md",
+      "hash": "3e172aa58ad7f9ea3bad947def69dfe26d66134c0aa88dca60e5aea4b8e25f67",
+      "skills": []
+    },
+    {
+      "id": "paid-media-programmatic-buyer",
+      "name": "Programmatic & Display Buyer",
+      "description": "Display advertising and programmatic media buying specialist covering managed placements, Google Display Network, DV360, trade desk platforms, partner media (newsletters, sponsored content), and ABM display strategies via platforms like Demandbase and 6Sense.",
+      "division": "Paid Media",
+      "classification": "general",
+      "path": "paid-media/paid-media-programmatic-buyer.md",
+      "hash": "c2a54b847823906485bed6e704fc7a013e3d9cf1340045354aae9a9e0c96e7e1",
+      "skills": []
+    },
+    {
+      "id": "paid-media-search-query-analyst",
+      "name": "Search Query Analyst",
+      "description": "Specialist in search term analysis, negative keyword architecture, and query-to-intent mapping. Turns raw search query data into actionable optimizations that eliminate waste and amplify high-intent traffic across paid search accounts.",
+      "division": "Paid Media",
+      "classification": "general",
+      "path": "paid-media/paid-media-search-query-analyst.md",
+      "hash": "bfd792539f93515118429f20c528fdaee320a172ca861fbc7ffb0209dffb723e",
+      "skills": []
+    },
+    {
+      "id": "paid-media-tracking-specialist",
+      "name": "Tracking & Measurement Specialist",
+      "description": "Expert in conversion tracking architecture, tag management, and attribution modeling across Google Tag Manager, GA4, Google Ads, Meta CAPI, LinkedIn Insight Tag, and server-side implementations. Ensures every conversion is counted correctly and every dollar of ad spend is measurable.",
+      "division": "Paid Media",
+      "classification": "general",
+      "path": "paid-media/paid-media-tracking-specialist.md",
+      "hash": "8caa9bbc8f5a8aaeb5ac156dbb27818f27e79512472053b824484496b0ca5b96",
+      "skills": []
+    },
+    {
+      "id": "product-behavioral-nudge-engine",
+      "name": "Behavioral Nudge Engine",
+      "description": "Behavioral psychology specialist that adapts software interaction cadences and styles to maximize user motivation and success.",
+      "division": "Product",
+      "classification": "general",
+      "path": "product/product-behavioral-nudge-engine.md",
+      "hash": "058868fb1a86e78859471dfa4285b1d62c23b2f83edbb345a227fc4beff39562",
+      "skills": []
+    },
+    {
+      "id": "product-dx-engineer",
+      "name": "DX Engineer",
+      "description": "Removes every unnecessary step between a developer and their first success \u2014 SDK samples, onboarding flows, error messages, and the feedback loops that make products feel like they were built by someone who's used them.",
+      "division": "Product",
+      "classification": "general",
+      "path": "product/product-dx-engineer.md",
+      "hash": "af7f005d51cd5d74885c1850c3570c2aee67a2a655d6fa9a695e895ff986a448",
+      "skills": []
+    },
+    {
+      "id": "product-feedback-synthesizer",
+      "name": "Feedback Synthesizer",
+      "description": "Expert in collecting, analyzing, and synthesizing user feedback from multiple channels to extract actionable product insights. Transforms qualitative feedback into quantitative priorities and strategic recommendations.",
+      "division": "Product",
+      "classification": "general",
+      "path": "product/product-feedback-synthesizer.md",
+      "hash": "9f7bc1474bf8bf95c0573c20df5e3d8ae70c3b9659ec5ea7958cc4692b958270",
+      "skills": []
+    },
+    {
+      "id": "product-manager",
+      "name": "Product Manager",
+      "description": "Holistic product leader who owns the full product lifecycle \u2014 from discovery and strategy through roadmap, stakeholder alignment, go-to-market, and outcome measurement. Bridges business goals, user needs, and technical reality to ship the right thing at the right time.",
+      "division": "Product",
+      "classification": "general",
+      "path": "product/product-manager.md",
+      "hash": "4a3fe4661e72e5173877bcba7c362392181774b20efc27ac1789171e98676c9d",
+      "skills": []
+    },
+    {
+      "id": "product-sprint-prioritizer",
+      "name": "Sprint Prioritizer",
+      "description": "Expert product manager specializing in agile sprint planning, feature prioritization, and resource allocation. Focused on maximizing team velocity and business value delivery through data-driven prioritization frameworks.",
+      "division": "Product",
+      "classification": "general",
+      "path": "product/product-sprint-prioritizer.md",
+      "hash": "da5233770ca85a3931b72d80b37dd09616a54fd24075c607667853acf65b000a",
+      "skills": []
+    },
+    {
+      "id": "product-trend-researcher",
+      "name": "Trend Researcher",
+      "description": "Expert market intelligence analyst specializing in identifying emerging trends, competitive analysis, and opportunity assessment. Focused on providing actionable insights that drive product strategy and innovation decisions.",
+      "division": "Product",
+      "classification": "general",
+      "path": "product/product-trend-researcher.md",
+      "hash": "69c8e54a9413ba411195e8d5274ee3cd88fa8cda18486db70c0f19ce374550a2",
+      "skills": []
+    },
+    {
+      "id": "project-management-experiment-tracker",
+      "name": "Experiment Tracker",
+      "description": "Expert project manager specializing in experiment design, execution tracking, and data-driven decision making. Focused on managing A/B tests, feature experiments, and hypothesis validation through systematic experimentation and rigorous analysis.",
+      "division": "Project Management",
+      "classification": "general",
+      "path": "project-management/project-management-experiment-tracker.md",
+      "hash": "a3be595199d9f1bdfd46d6217f49fc1d765a11abbcae65b4fc4336deab6d9311",
+      "skills": []
+    },
+    {
+      "id": "project-management-jira-workflow-steward",
+      "name": "Jira Workflow Steward",
+      "description": "Expert delivery operations specialist who enforces Jira-linked Git workflows, traceable commits, structured pull requests, and release-safe branch strategy across software teams.",
+      "division": "Project Management",
+      "classification": "general",
+      "path": "project-management/project-management-jira-workflow-steward.md",
+      "hash": "1e63812bd80317f4f69403701b6e1ff28d2fcf61862288f93fa4e4676bf46e17",
+      "skills": []
+    },
+    {
+      "id": "project-management-meeting-notes-specialist",
+      "name": "Meeting Notes Specialist",
+      "description": "Extract structured decisions, action items, and open questions from meeting transcripts or rough notes into a clean 4-section summary.",
+      "division": "Project Management",
+      "classification": "general",
+      "path": "project-management/project-management-meeting-notes-specialist.md",
+      "hash": "53a6efaa379b70cbc3276b44544ecf569789fffe892ba82eb68e8672407de91f",
+      "skills": []
+    },
+    {
+      "id": "project-management-project-shepherd",
+      "name": "Project Shepherd",
+      "description": "Expert project manager specializing in cross-functional project coordination, timeline management, and stakeholder alignment. Focused on shepherding projects from conception to completion while managing resources, risks, and communications across multiple teams and departments.",
+      "division": "Project Management",
+      "classification": "general",
+      "path": "project-management/project-management-project-shepherd.md",
+      "hash": "0feb647366d78b61c1633b12e370ffb1dea52facb9d750ef6c952de1e996031c",
+      "skills": []
+    },
+    {
+      "id": "project-management-studio-operations",
+      "name": "Studio Operations",
+      "description": "Expert operations manager specializing in day-to-day studio efficiency, process optimization, and resource coordination. Focused on ensuring smooth operations, maintaining productivity standards, and supporting all teams with the tools and processes needed for success.",
+      "division": "Project Management",
+      "classification": "general",
+      "path": "project-management/project-management-studio-operations.md",
+      "hash": "8a2e5098d94688d191a128b6b2fdbbf3724bfcd2f4944766de6e25a0709f1517",
+      "skills": []
+    },
+    {
+      "id": "project-management-studio-producer",
+      "name": "Studio Producer",
+      "description": "Senior strategic leader specializing in high-level creative and technical project orchestration, resource allocation, and multi-project portfolio management. Focused on aligning creative vision with business objectives while managing complex cross-functional initiatives and ensuring optimal studio operations.",
+      "division": "Project Management",
+      "classification": "general",
+      "path": "project-management/project-management-studio-producer.md",
+      "hash": "d942feab0f50ea7b8e98cb73bdaf05226d2a6c53c6359c7380149f7545bb199d",
+      "skills": []
+    },
+    {
+      "id": "project-manager-senior",
+      "name": "Senior Project Manager",
+      "description": "Converts specs to tasks and remembers previous projects. Focused on realistic scope, no background processes, exact spec requirements",
+      "division": "Project Management",
+      "classification": "general",
+      "path": "project-management/project-manager-senior.md",
+      "hash": "70fb27cab174c97375293311211d5563c5ac257fba274450d1ca9c05b540ef2d",
+      "skills": []
+    },
+    {
+      "id": "research-synthesist",
+      "name": "Research Synthesist",
+      "description": "Expert in literature review, source evaluation, and evidence synthesis \u2014 turns a scattered pile of sources into a structured, honestly-weighted map of what the evidence actually supports",
+      "division": "Research",
+      "classification": "general",
+      "path": "research/research-synthesist.md",
+      "hash": "3618b4a2a73523147731ae38ac4096cea0e83a7de930f55ea9ea6c69e3c77f30",
+      "skills": []
+    },
+    {
+      "id": "sales-account-strategist",
+      "name": "Account Strategist",
+      "description": "Expert post-sale account strategist specializing in land-and-expand execution, stakeholder mapping, QBR facilitation, and net revenue retention. Turns closed deals into long-term platform relationships through systematic expansion planning and multi-threaded account development.",
+      "division": "Sales",
+      "classification": "general",
+      "path": "sales/sales-account-strategist.md",
+      "hash": "dd9b2c37c41827286ef91d64057a5b0ff4795c2e57bd44695436feeb5a3f0423",
+      "skills": []
+    },
+    {
+      "id": "sales-coach",
+      "name": "Sales Coach",
+      "description": "Expert sales coaching specialist focused on rep development, pipeline review facilitation, call coaching, deal strategy, and forecast accuracy. Makes every rep and every deal better through structured coaching methodology and behavioral feedback.",
+      "division": "Sales",
+      "classification": "general",
+      "path": "sales/sales-coach.md",
+      "hash": "83f0be3daa7e78b24bfb41c7514d5f2936e9690c42ab7a0d8b5bc66a8b829f62",
+      "skills": []
+    },
+    {
+      "id": "sales-deal-strategist",
+      "name": "Deal Strategist",
+      "description": "Senior deal strategist specializing in MEDDPICC qualification, competitive positioning, and win planning for complex B2B sales cycles. Scores opportunities, exposes pipeline risk, and builds deal strategies that survive forecast review.",
+      "division": "Sales",
+      "classification": "general",
+      "path": "sales/sales-deal-strategist.md",
+      "hash": "fdd92f2ced04ad842e25fd9ebcc341372ce2630d4ec152a29c53f7b8535b855e",
+      "skills": []
+    },
+    {
+      "id": "sales-discovery-coach",
+      "name": "Discovery Coach",
+      "description": "Coaches sales teams on elite discovery methodology \u2014 question design, current-state mapping, gap quantification, and call structure that surfaces real buying motivation.",
+      "division": "Sales",
+      "classification": "general",
+      "path": "sales/sales-discovery-coach.md",
+      "hash": "8244a25e5b8785058b19ef92dca9e543a2c990e4dde1166d194f14514e3ae278",
+      "skills": []
+    },
+    {
+      "id": "sales-engineer",
+      "name": "Sales Engineer",
+      "description": "Senior pre-sales engineer specializing in technical discovery, demo engineering, POC scoping, competitive battlecards, and bridging product capabilities to business outcomes. Wins the technical decision so the deal can close.",
+      "division": "Sales",
+      "classification": "general",
+      "path": "sales/sales-engineer.md",
+      "hash": "355014b3ecf52aaa1209a5d7b089e5e65c3aad7874eef513e60b6da79fec572e",
+      "skills": []
+    },
+    {
+      "id": "sales-offer-lead-gen-strategist",
+      "name": "Offer & Lead Gen Strategist",
+      "description": "Top-of-funnel architect who designs irresistible offers and lead magnets that attract qualified buyers at scale. Specializes in value-equation offer construction, lead magnet typology, multi-channel lead generation, and compounding reach through customers, employees, agencies, and affiliates.",
+      "division": "Sales",
+      "classification": "general",
+      "path": "sales/sales-offer-lead-gen-strategist.md",
+      "hash": "75a12987fb2a205ac029c2ebf43d1ae1a1502d1707ab4921923928489ff3778c",
+      "skills": []
+    },
+    {
+      "id": "sales-outbound-strategist",
+      "name": "Outbound Strategist",
+      "description": "Signal-based outbound specialist who designs multi-channel prospecting sequences, defines ICPs, and builds pipeline through research-driven personalization \u2014 not volume.",
+      "division": "Sales",
+      "classification": "general",
+      "path": "sales/sales-outbound-strategist.md",
+      "hash": "4f6c8abf9c936fbe5f4b66fc8044096e3dd5199f8f8ae9d0309ad92bc0653174",
+      "skills": []
+    },
+    {
+      "id": "sales-pipeline-analyst",
+      "name": "Pipeline Analyst",
+      "description": "Revenue operations analyst specializing in pipeline health diagnostics, deal velocity analysis, forecast accuracy, and data-driven sales coaching. Turns CRM data into actionable pipeline intelligence that surfaces risks before they become missed quarters.",
+      "division": "Sales",
+      "classification": "general",
+      "path": "sales/sales-pipeline-analyst.md",
+      "hash": "d105ed717423298d754e58300566003ef464d79268183a43b5853cf67d11f61c",
+      "skills": []
+    },
+    {
+      "id": "sales-proposal-strategist",
+      "name": "Proposal Strategist",
+      "description": "Strategic proposal architect who transforms RFPs and sales opportunities into compelling win narratives. Specializes in win theme development, competitive positioning, executive summary craft, and building proposals that persuade rather than merely comply.",
+      "division": "Sales",
+      "classification": "general",
+      "path": "sales/sales-proposal-strategist.md",
+      "hash": "84c42e0ae7e11e6b239b7f921bdb0c33398102f94998c2eaa41114a3a46dc4c9",
+      "skills": []
+    },
+    {
+      "id": "security-ai-generated-code-auditor",
+      "name": "AI-Generated Code Security Auditor",
+      "description": "Security reviewer for AI-generated and vibe-coded apps \u2014 hunts the hardcoded secrets, broken row-level security, and prompt-injection sinks that coding assistants ship by default, then drives a scan, fix, and rescan loop with honest, CWE-mapped findings.",
+      "division": "Security",
+      "classification": "coding",
+      "path": "security/security-ai-generated-code-auditor.md",
+      "hash": "ac2196a914bfb00dddfef93edb9eef1860f924f9582d814cd303ab45e4fc71bc",
+      "skills": []
+    },
+    {
+      "id": "security-appsec-engineer",
+      "name": "Application Security Engineer",
+      "description": "AppSec specialist who secures the software development lifecycle through threat modeling, secure code review, SAST/DAST integration, and developer security education that makes secure code the default.",
+      "division": "Security",
+      "classification": "coding",
+      "path": "security/security-appsec-engineer.md",
+      "hash": "a19f0bda46f4adca5737365dbc3c7ed93e9d93b71349536d92ff055dcf4e3b83",
+      "skills": []
+    },
+    {
+      "id": "security-architect",
+      "name": "Security Architect",
+      "description": "Expert security architect specializing in threat modeling, secure-by-design architecture, trust-boundary analysis, defense-in-depth, and risk-based security reviews across web, API, cloud-native, and distributed systems. Designs the security model; hands code-level SAST/DAST and SDLC work to the AppSec Engineer.",
+      "division": "Security",
+      "classification": "coding",
+      "path": "security/security-architect.md",
+      "hash": "0f7cd89d723764da98f399a71378ec3dd26e2245f095f43421137db8267b8d93",
+      "skills": []
+    },
+    {
+      "id": "security-blockchain-security-auditor",
+      "name": "Blockchain Security Auditor",
+      "description": "Expert smart contract security auditor specializing in vulnerability detection, formal verification, exploit analysis, and comprehensive audit report writing for DeFi protocols and blockchain applications.",
+      "division": "Security",
+      "classification": "coding",
+      "path": "security/security-blockchain-security-auditor.md",
+      "hash": "35bcc88d3b4b2016d0057cfc5f823d9c2326db2f412e89c2fc3796c4f226210b",
+      "skills": []
+    },
+    {
+      "id": "security-cloud-security-architect",
+      "name": "Cloud Security Architect",
+      "description": "Cloud-native security specialist designing zero trust architectures, implementing defense-in-depth across AWS, Azure, and GCP, and securing infrastructure-as-code pipelines from day one.",
+      "division": "Security",
+      "classification": "coding",
+      "path": "security/security-cloud-security-architect.md",
+      "hash": "fa18b1e1ed59534c1126f4b44ef06419f3975d98675b37d54ee11a9e3f970d1b",
+      "skills": []
+    },
+    {
+      "id": "security-compliance-auditor",
+      "name": "Compliance Auditor",
+      "description": "Expert technical compliance auditor specializing in SOC 2, ISO 27001, HIPAA, and PCI-DSS audits \u2014 from readiness assessment through evidence collection to certification.",
+      "division": "Security",
+      "classification": "coding",
+      "path": "security/security-compliance-auditor.md",
+      "hash": "ebb550ceef8011be23fe5a6fab0a7b3f77c2433f4d6aa22617a7eb87db97274f",
+      "skills": []
+    },
+    {
+      "id": "security-incident-responder",
+      "name": "Incident Responder",
+      "description": "Digital forensics and incident response specialist who leads breach investigations, contains active threats, coordinates crisis response, and writes post-mortems that prevent recurrence.",
+      "division": "Security",
+      "classification": "coding",
+      "path": "security/security-incident-responder.md",
+      "hash": "be8d0eedd37ddc79767e8fcff518b1d7c565a4e388624a7d62c099270bc0b9e3",
+      "skills": []
+    },
+    {
+      "id": "security-penetration-tester",
+      "name": "Penetration Tester",
+      "description": "Offensive security specialist conducting authorized penetration tests, red team operations, and vulnerability assessments across networks, web applications, and cloud infrastructure.",
+      "division": "Security",
+      "classification": "coding",
+      "path": "security/security-penetration-tester.md",
+      "hash": "f52c2524309fb048250b412daa6a2ad0a906b5daff01f64f195052d024b9e1a0",
+      "skills": []
+    },
+    {
+      "id": "security-secrets-credential-engineer",
+      "name": "Secrets & Credential Hygiene Engineer",
+      "description": "Owns the full lifecycle of secrets and credentials \u2014 detection, prevention, vaulting, rotation, and leak response \u2014 so an application runs on short-lived, least-privilege credentials that are never in the code and are already rotated by the time a leak is found.",
+      "division": "Security",
+      "classification": "coding",
+      "path": "security/security-secrets-credential-engineer.md",
+      "hash": "356c73f5feb867b3e0d3c58d463a98f5f1b241709ff9dc9e64a5bd6d91457484",
+      "skills": []
+    },
+    {
+      "id": "security-senior-secops",
+      "name": "Senior SecOps Engineer",
+      "description": "Defensive application security specialist who scans every code submission for secrets and sensitive data exposure before anything else, then implements or audits security controls following the organization's security standard \u2014 covering authentication, authorization, tokens, cookies, HTTP headers, CORS, rate limiting, CSP, secrets management, input validation, and secure logging.",
+      "division": "Security",
+      "classification": "coding",
+      "path": "security/security-senior-secops.md",
+      "hash": "911247426e5c45469ea1c6f274d1716723bfe93d51c6f45bdb23bbc488ecb8ef",
+      "skills": []
+    },
+    {
+      "id": "security-threat-detection-engineer",
+      "name": "Threat Detection Engineer",
+      "description": "Expert detection engineer specializing in SIEM rule development, MITRE ATT&CK coverage mapping, threat hunting, alert tuning, and detection-as-code pipelines for security operations teams.",
+      "division": "Security",
+      "classification": "coding",
+      "path": "security/security-threat-detection-engineer.md",
+      "hash": "b15c0d8be90232a64471d0947dd30cfcd9efeeb2dab2579bb415ca8beb7db7f1",
+      "skills": []
+    },
+    {
+      "id": "security-threat-intelligence-analyst",
+      "name": "Threat Intelligence Analyst",
+      "description": "Cyber threat intelligence specialist who tracks adversary groups, maps attack campaigns to MITRE ATT&CK, produces actionable intelligence reports, and builds detection rules that catch real threats.",
+      "division": "Security",
+      "classification": "coding",
+      "path": "security/security-threat-intelligence-analyst.md",
+      "hash": "9298ca898264ab38d3f9d57adf743e7e168a8c5fb47af5abc81d57a1f66d73c2",
+      "skills": []
+    },
+    {
+      "id": "macos-spatial-metal-engineer",
+      "name": "macOS Spatial/Metal Engineer",
+      "description": "Native Swift and Metal specialist building high-performance 3D rendering systems and spatial computing experiences for macOS and Vision Pro",
+      "division": "Spatial Computing",
+      "classification": "coding",
+      "path": "spatial-computing/macos-spatial-metal-engineer.md",
+      "hash": "b0bdd78da0cdbd1ee0055401ddaba4d7cb750e3107d219b6f12794c1a023e69f",
+      "skills": []
+    },
+    {
+      "id": "terminal-integration-specialist",
+      "name": "Terminal Integration Specialist",
+      "description": "Terminal emulation, text rendering optimization, and SwiftTerm integration for modern Swift applications",
+      "division": "Spatial Computing",
+      "classification": "coding",
+      "path": "spatial-computing/terminal-integration-specialist.md",
+      "hash": "3082737f766821cf1c5372b9067ff67c873916de8c30b173478fe8bbc9a10087",
+      "skills": []
+    },
+    {
+      "id": "visionos-spatial-engineer",
+      "name": "visionOS Spatial Engineer",
+      "description": "Native visionOS spatial computing, SwiftUI volumetric interfaces, and Liquid Glass design implementation",
+      "division": "Spatial Computing",
+      "classification": "coding",
+      "path": "spatial-computing/visionos-spatial-engineer.md",
+      "hash": "8d154bb42d6952056b0eb3fd0d030e6e22a638f11c16c04b59326973ee08b20d",
+      "skills": []
+    },
+    {
+      "id": "xr-cockpit-interaction-specialist",
+      "name": "XR Cockpit Interaction Specialist",
+      "description": "Specialist in designing and developing immersive cockpit-based control systems for XR environments",
+      "division": "Spatial Computing",
+      "classification": "coding",
+      "path": "spatial-computing/xr-cockpit-interaction-specialist.md",
+      "hash": "c8473bd555ad22da7d4978e94a3aec07ae9519b2080572b409639deb9a8e7110",
+      "skills": []
+    },
+    {
+      "id": "xr-immersive-developer",
+      "name": "XR Immersive Developer",
+      "description": "Expert WebXR and immersive technology developer with specialization in browser-based AR/VR/XR applications",
+      "division": "Spatial Computing",
+      "classification": "coding",
+      "path": "spatial-computing/xr-immersive-developer.md",
+      "hash": "a9aa13187bfb774f3eb734ae9869ef249ec3290674f0bb3c1368b69bfa25a2b0",
+      "skills": []
+    },
+    {
+      "id": "xr-interface-architect",
+      "name": "XR Interface Architect",
+      "description": "Spatial interaction designer and interface strategist for immersive AR/VR/XR environments",
+      "division": "Spatial Computing",
+      "classification": "coding",
+      "path": "spatial-computing/xr-interface-architect.md",
+      "hash": "995b459992ab42162269a3bc607131371206742df9c55a4ef614e0171f34e92b",
+      "skills": []
+    },
+    {
+      "id": "accounts-payable-agent",
+      "name": "Accounts Payable Agent",
+      "description": "Autonomous payment processing specialist that executes vendor payments, contractor invoices, and recurring bills across any payment rail \u2014 crypto, fiat, stablecoins. Integrates with AI agent workflows via tool calls.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/accounts-payable-agent.md",
+      "hash": "f0f401daf0b61441eedb41a077e4bef13e0ff626483652d3c8a6eaae08b09a6e",
+      "skills": []
+    },
+    {
+      "id": "agentic-identity-trust",
+      "name": "Agentic Identity & Trust Architect",
+      "description": "Designs identity, authentication, and trust verification systems for autonomous AI agents operating in multi-agent environments. Ensures agents can prove who they are, what they're authorized to do, and what they actually did.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/agentic-identity-trust.md",
+      "hash": "99d79e4d57e55d44151b770d89efea4ea3bc6647af27bfd4a6b256ebc5a1a63e",
+      "skills": []
+    },
+    {
+      "id": "agents-orchestrator",
+      "name": "Agents Orchestrator",
+      "description": "Autonomous pipeline manager that orchestrates the entire development workflow. You are the leader of this process.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/agents-orchestrator.md",
+      "hash": "3f900ee286eba5a809388ecc22ad860c4a3ef9ed7ff25488e80eac18f3a0f317",
+      "skills": []
+    },
+    {
+      "id": "automation-governance-architect",
+      "name": "Automation Governance Architect",
+      "description": "Governance-first architect for business automations (n8n-first) who audits value, risk, and maintainability before implementation.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/automation-governance-architect.md",
+      "hash": "8aab89104fec352f1f601ec5e6db11c9628d0b2072e6324484fd7e4c8462f55e",
+      "skills": []
+    },
+    {
+      "id": "business-strategist",
+      "name": "Business Strategist",
+      "description": "Senior management consulting specialist for competitive analysis, market entry strategy, business model design, growth planning, organizational strategy, and strategic decision-making \u2014 translating complex market dynamics into clear, actionable strategies that create sustainable competitive advantage",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/business-strategist.md",
+      "hash": "9314906805d8dee81c3e2d10cb93513a391731d9fceb2e4c936257005a144b92",
+      "skills": []
+    },
+    {
+      "id": "change-management-consultant",
+      "name": "Change Management Consultant",
+      "description": "Expert change management specialist using ADKAR, Kotter, and Prosci frameworks to guide organizations through technology implementations, restructuring, culture transformation, and M&A integration \u2014 managing resistance, building adoption, and ensuring changes stick long after go-live",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/change-management-consultant.md",
+      "hash": "1feb05dfd0bb4d0942a24a8abb409090ffbc252623e15daa09f5bc8c838b0e5a",
+      "skills": []
+    },
+    {
+      "id": "chief-financial-officer",
+      "name": "Chief Financial Officer",
+      "description": "Strategic finance executive who governs capital allocation, treasury operations, financial planning, M&A finance, investor relations, and board reporting \u2014 translating financial complexity into clear decisions that drive business performance and stakeholder confidence.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/chief-financial-officer.md",
+      "hash": "05efa4015fc7feac9bb41942fa6e9eb2b79e2219bf1280b290c754fd16e15a08",
+      "skills": []
+    },
+    {
+      "id": "corporate-training-designer",
+      "name": "Corporate Training Designer",
+      "description": "Expert in enterprise training system design and curriculum development \u2014 proficient in training needs analysis, instructional design methodology, blended learning program design, internal trainer development, leadership programs, and training effectiveness evaluation and continuous optimization.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/corporate-training-designer.md",
+      "hash": "e70733229e87dde01bd404f502d2f5b491821f681d7230b314b18d98111b898c",
+      "skills": []
+    },
+    {
+      "id": "customer-service",
+      "name": "Customer Service",
+      "description": "Friendly, professional customer service specialist for any industry \u2014 handling inquiries, complaints, account support, FAQs, and seamless escalation with warmth, efficiency, and a genuine commitment to customer satisfaction",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/customer-service.md",
+      "hash": "71d5b8ccd6fb6c5861230169a708ec5d8c0af628de44fc293ae256181573424f",
+      "skills": []
+    },
+    {
+      "id": "customer-success-manager",
+      "name": "Customer Success Manager",
+      "description": "Strategic customer success specialist for onboarding, health scoring, QBR facilitation, churn prevention, expansion identification, and renewal management \u2014 driving net revenue retention by turning customers into long-term partners who achieve measurable outcomes",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/customer-success-manager.md",
+      "hash": "2fc5ebc10734a621d65d1bfe0a253158f0a7418ee39b7c93a18efe6b26661cfe",
+      "skills": []
+    },
+    {
+      "id": "data-consolidation-agent",
+      "name": "Data Consolidation Agent",
+      "description": "AI agent that consolidates extracted sales data into live reporting dashboards with territory, rep, and pipeline summaries",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/data-consolidation-agent.md",
+      "hash": "7e7de097ff27e3aa2732a9f1ab0bd7acaaef73dabf53fc7be6c90c8ab6afab11",
+      "skills": []
+    },
+    {
+      "id": "data-privacy-officer",
+      "name": "Data Privacy Officer",
+      "description": "Corporate data privacy specialist and DPO who builds GDPR, CCPA, and global privacy compliance programs \u2014 covering data mapping, privacy impact assessments, consent management, breach response, vendor due diligence, and regulatory engagement.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/data-privacy-officer.md",
+      "hash": "77e495853a6ef839c8a2f87dae1c8de7b41e11d5e187828fa42c1d9a1e1ae00f",
+      "skills": []
+    },
+    {
+      "id": "esg-sustainability-officer",
+      "name": "ESG & Sustainability Officer",
+      "description": "Corporate sustainability strategist and ESG reporting specialist who builds environmental, social, and governance programs, manages disclosures, drives decarbonization initiatives, and aligns business strategy with stakeholder and regulatory expectations.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/esg-sustainability-officer.md",
+      "hash": "a8feee4c7b9687ee89ec5ea0879ff98b4cc4451431052369bf00f90d9382b7dd",
+      "skills": []
+    },
+    {
+      "id": "government-digital-presales-consultant",
+      "name": "Government Digital Presales Consultant",
+      "description": "Presales expert for China's government digital transformation market (ToG), proficient in policy interpretation, solution design, bid document preparation, POC validation, compliance requirements (classified protection/cryptographic assessment/Xinchuang domestic IT), and stakeholder management \u2014 helping technical teams efficiently win government IT projects.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/government-digital-presales-consultant.md",
+      "hash": "0676fd83a462828901c64df516034b0912468c85abb751d3e484038d3288b848",
+      "skills": []
+    },
+    {
+      "id": "grant-writer",
+      "name": "Grant Writer",
+      "description": "Expert grant writing specialist for nonprofits, research institutions, and social enterprises \u2014 covering prospect research, letter of inquiry writing, full proposal development, budget narratives, federal and foundation grants, and post-award reporting to maximize funding success",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/grant-writer.md",
+      "hash": "6be5a68dc7628c8292253b60a2bfbc7f76053e9c32aae4d40ff341594534e67b",
+      "skills": []
+    },
+    {
+      "id": "healthcare-aging-parent-care-companion",
+      "name": "Aging Parent Care Companion",
+      "description": "Compassionate, HIPAA-aligned care coordination and decision-support agent for family caregivers managing an aging parent's appointments, medications, care team communication, and their own caregiver wellbeing",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/healthcare-aging-parent-care-companion.md",
+      "hash": "fca0725bc30a447d6666df5060333eac2a4f81083cc02670118045678c79a035",
+      "skills": []
+    },
+    {
+      "id": "healthcare-customer-service",
+      "name": "Healthcare Customer Service",
+      "description": "Empathetic healthcare customer service specialist for patient support, billing inquiries, appointment management, insurance questions, complaint resolution, and seamless escalation to clinical or administrative staff",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/healthcare-customer-service.md",
+      "hash": "b2e4117a8b449a94409235f74315b52909716985dd94b82b87413a54ca471d73",
+      "skills": []
+    },
+    {
+      "id": "healthcare-marketing-compliance",
+      "name": "Healthcare Marketing Compliance Specialist",
+      "description": "Expert in healthcare marketing compliance in China, proficient in the Advertising Law, Medical Advertisement Management Measures, Drug Administration Law, and related regulations \u2014 covering pharmaceuticals, medical devices, medical aesthetics, health supplements, and internet healthcare across content review, risk control, platform rule interpretation, and patient privacy protection, helping enterprises conduct effective health marketing within legal boundaries.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/healthcare-marketing-compliance.md",
+      "hash": "942cc3b43da5f0e6103b7e5087941df4247c602228b2c4b0c6487140e89b176e",
+      "skills": []
+    },
+    {
+      "id": "hospitality-guest-services",
+      "name": "Hospitality Guest Services",
+      "description": "Comprehensive hospitality guest services specialist for hotels, resorts, restaurants, and event venues \u2014 covering reservations, check-in/check-out, concierge services, guest complaint resolution, loyalty program management, and post-stay follow-up to deliver exceptional guest experiences that drive loyalty and revenue",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/hospitality-guest-services.md",
+      "hash": "1c5819c560d3902eca44a4fb372bae9e882e5b9e8455e51aa3e8d9662a5d184a",
+      "skills": []
+    },
+    {
+      "id": "hr-onboarding",
+      "name": "HR Onboarding",
+      "description": "Comprehensive HR onboarding specialist for employee orientation, documentation management, compliance tracking, benefits enrollment, culture integration, and new hire support \u2014 delivering a seamless first-day-to-first-year experience that drives retention and productivity",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/hr-onboarding.md",
+      "hash": "28a52c26f27ab24d7fe11f5e48cfe712f6d27da142ec97911683b4a3ad92332c",
+      "skills": []
+    },
+    {
+      "id": "identity-graph-operator",
+      "name": "Identity Graph Operator",
+      "description": "Operates a shared identity graph that multiple AI agents resolve against. Ensures every agent in a multi-agent system gets the same canonical answer for \"who is this entity?\" - deterministically, even under concurrent writes.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/identity-graph-operator.md",
+      "hash": "91e86c3070bc93a6fb93e386f08943386f255488e1a6f892fb2152095c9a64f9",
+      "skills": []
+    },
+    {
+      "id": "language-translator",
+      "name": "Language Translator",
+      "description": "Real-time Spanish \u2194 English translation specialist with cultural context, regional dialect awareness, travel phrase guidance, and tone-appropriate communication for everyday, business, and emergency situations",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/language-translator.md",
+      "hash": "afd1e4b5fb1bb8fa9b8b5770774e0d7b003722681f664147ce7b9dddbcd52a4c",
+      "skills": []
+    },
+    {
+      "id": "legal-billing-time-tracking",
+      "name": "Legal Billing & Time Tracking",
+      "description": "Comprehensive legal billing and time tracking specialist for accurate time capture, invoice generation, billing narrative writing, collections management, trust account compliance, and billing analysis \u2014 maximizing revenue recovery while maintaining client relationships and ethical compliance across any firm size or billing model",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/legal-billing-time-tracking.md",
+      "hash": "27f84055643150459f4de3102ba05c17696e5967a0efc64426fb600ab3c5d12c",
+      "skills": []
+    },
+    {
+      "id": "legal-client-intake",
+      "name": "Legal Client Intake",
+      "description": "Comprehensive legal client intake specialist for qualifying prospects, collecting case information, scheduling consultations, managing conflict checks, and delivering attorney-ready intake summaries across any practice area and firm size",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/legal-client-intake.md",
+      "hash": "b0b1cce8a30f08ada6d630b010b1af99f765f5eca667436af6592545667f4c79",
+      "skills": []
+    },
+    {
+      "id": "legal-document-review",
+      "name": "Legal Document Review",
+      "description": "Comprehensive legal document review specialist for contracts, litigation documents, and real estate agreements \u2014 summarizing documents, flagging risk clauses, comparing contract versions, and checking compliance across any law firm size or practice area",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/legal-document-review.md",
+      "hash": "02bf51dbc9d8ffc93a8b053a09ec61ee2a3a9905e395fbd24389a532d20d1dba",
+      "skills": []
+    },
+    {
+      "id": "loan-officer-assistant",
+      "name": "Loan Officer Assistant",
+      "description": "Comprehensive loan officer assistant for mortgage and lending professionals \u2014 covering borrower intake, pre-qualification, document collection, pipeline management, compliance tracking, rate quoting, and closing coordination across residential, commercial, and consumer lending",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/loan-officer-assistant.md",
+      "hash": "3d6bfdb598187fb19fba6ab4b50ff357870cda04ea846aa975649d04788df84b",
+      "skills": []
+    },
+    {
+      "id": "lsp-index-engineer",
+      "name": "LSP/Index Engineer",
+      "description": "Language Server Protocol specialist building unified code intelligence systems through LSP client orchestration and semantic indexing",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/lsp-index-engineer.md",
+      "hash": "305f647acd4f666b8ad44a253ae9dba74891a50725bd13a55e16c652c5200613",
+      "skills": []
+    },
+    {
+      "id": "ma-integration-manager",
+      "name": "M&A Integration Manager",
+      "description": "Mergers and acquisitions integration specialist who designs and executes post-merger integration programs \u2014 covering Day 1 readiness, 100-day planning, synergy tracking, cultural integration, functional workstream coordination, and transition service agreement management.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/ma-integration-manager.md",
+      "hash": "007dcfaee61d45e852a95c37a4529b1d162a178551f1a7f963ee558f1ace6fb5",
+      "skills": []
+    },
+    {
+      "id": "medical-billing-coding-specialist",
+      "name": "Medical Billing & Coding Specialist",
+      "description": "Expert medical billing and coding specialist for ICD-10-CM/PCS, CPT, and HCPCS coding, claim submission, denial management, revenue cycle optimization, compliance auditing, and payer contract analysis \u2014 maximizing clean claim rates and revenue recovery for healthcare providers of all sizes",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/medical-billing-coding-specialist.md",
+      "hash": "e9f597ef3a214d886a2b861347183c3674b6e24278c9308ed998a02972e7007c",
+      "skills": []
+    },
+    {
+      "id": "operations-manager",
+      "name": "Operations Manager",
+      "description": "Business operations specialist who applies Lean, Six Sigma, and systems thinking to process mapping, capacity planning, KPI governance, vendor management, and organizational efficiency \u2014 turning operational complexity into repeatable, measurable performance.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/operations-manager.md",
+      "hash": "3c133a31ae1542922444d77d7c8f9964127704ba94638dde12e37a9ad0fd35bd",
+      "skills": []
+    },
+    {
+      "id": "organizational-psychologist",
+      "name": "Organizational Psychologist",
+      "description": "Applied organizational psychologist who diagnoses team dynamics, psychological safety, burnout risk, and culture health \u2014 using evidence-based frameworks to help leaders build high-performing, resilient, and psychologically safe organizations.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/organizational-psychologist.md",
+      "hash": "b7e523e1557ef9e98d5a0b515809996c6bbc0de6a49b1dc355d803e3bae09be2",
+      "skills": []
+    },
+    {
+      "id": "personal-growth-mentor",
+      "name": "Personal Growth Mentor",
+      "description": "Cross-domain personal development mentor for goal clarity, habit design, strategic decisions, and accountability without motivational fluff.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/personal-growth-mentor.md",
+      "hash": "623c1ef061d98fedbb941245a39fa5b8c5236ef94194724bfe5c54b8050143d4",
+      "skills": []
+    },
+    {
+      "id": "real-estate-buyer-seller",
+      "name": "Real Estate Buyer & Seller",
+      "description": "Comprehensive real estate agent assistant for buyer representation, seller representation, listing management, offer negotiation, transaction coordination, and closing support \u2014 delivering a world-class client experience from first showing to final closing across residential and investment real estate",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/real-estate-buyer-seller.md",
+      "hash": "00e2f54e76be38c85c4eb406135a0944a3f610d287e6747fbfac37a12c82920a",
+      "skills": []
+    },
+    {
+      "id": "recruitment-specialist",
+      "name": "Recruitment Specialist",
+      "description": "Expert recruitment operations and talent acquisition specialist \u2014 skilled in China's major hiring platforms, talent assessment frameworks, and labor law compliance. Helps companies efficiently attract, screen, and retain top talent while building a competitive employer brand.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/recruitment-specialist.md",
+      "hash": "cf3d73aae046a12538f64bd67bc5def7946de070485c388ce467251ac8d1e892",
+      "skills": []
+    },
+    {
+      "id": "report-distribution-agent",
+      "name": "Report Distribution Agent",
+      "description": "AI agent that automates distribution of consolidated sales reports to representatives based on territorial parameters",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/report-distribution-agent.md",
+      "hash": "f5796b3cb693123e6c59f7058c100fe817b744f819d3e281442964714f72bac5",
+      "skills": []
+    },
+    {
+      "id": "resume-tailor",
+      "name": "Resume Tailor",
+      "description": "Candidate-side resume optimization specialist who analyzes job descriptions, maps real experience to role requirements, improves ATS keyword alignment, and rewrites bullets without fabricating qualifications.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/resume-tailor.md",
+      "hash": "be3d173ce4807d49671c7956f107029a4cb4061651882a0a3ea8c4f20738273f",
+      "skills": []
+    },
+    {
+      "id": "retail-customer-returns",
+      "name": "Retail Customer Returns",
+      "description": "Comprehensive retail customer returns specialist for processing returns, exchanges, and refunds across in-store, online, and omnichannel retail \u2014 handling policy enforcement, fraud prevention, customer retention, vendor returns, and returns analytics to maximize recovery while preserving customer loyalty",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/retail-customer-returns.md",
+      "hash": "5cd60860a6ea57a95ec6d14246d6b0032e0e13ba0220ec4a79527fdc0ccd0f9c",
+      "skills": []
+    },
+    {
+      "id": "sales-data-extraction-agent",
+      "name": "Sales Data Extraction Agent",
+      "description": "AI agent specialized in monitoring Excel files and extracting key sales metrics (MTD, YTD, Year End) for internal live reporting",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/sales-data-extraction-agent.md",
+      "hash": "202a6f04df452385fd1185a6bb23a0c9a47e624088eac14179bed4975f0b268a",
+      "skills": []
+    },
+    {
+      "id": "sales-outreach",
+      "name": "Sales Outreach",
+      "description": "Consultative B2B sales outreach specialist for cold prospecting, lead follow-up, objection handling, proposal writing, and pipeline management \u2014 combining data-driven targeting with genuine relationship-building to open doors and close deals",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/sales-outreach.md",
+      "hash": "84d4ca90d4bed4649904c8f239f8e13f373274c8bceb6fd7eb2479e6f9e28c90",
+      "skills": []
+    },
+    {
+      "id": "specialized-chief-of-staff",
+      "name": "Chief of Staff",
+      "description": "Master coordinator for founders and executives \u2014 filters noise, owns processes, enforces consistency, routes decisions, and positions outputs for impact so the boss can think clearly.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-chief-of-staff.md",
+      "hash": "c0d053f19f32d369b6e9a4ded3a3b93efd792648b88b28f0ecd37a899b91b7b3",
+      "skills": []
+    },
+    {
+      "id": "specialized-civil-engineer",
+      "name": "Civil Engineer",
+      "description": "Expert civil and structural engineer with global standards coverage \u2014 Eurocode, DIN, ACI, AISC, ASCE, AS/NZS, CSA, GB, IS, AIJ, and more. Specializes in structural analysis, geotechnical design, construction documentation, building code compliance, and multi-standard international projects.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-civil-engineer.md",
+      "hash": "37c9c37511345799235dcb41a4bd92c5577614c392b9a1fa3a1afee112e5de3b",
+      "skills": []
+    },
+    {
+      "id": "specialized-codebase-archaeologist",
+      "name": "Codebase Archaeologist",
+      "description": "Multi-session, multi-tool drift detection specialist who audits codebases touched by several AI coding tools (Claude, Cursor, Copilot, Windsurf, etc.) over time, finding silent logic mismatches, dead code, and doc-vs-code divergence that no single session would ever notice on its own.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-codebase-archaeologist.md",
+      "hash": "c1b2c22711cb6e74dd834f831d6a8b3f10c93cd462722073b01acae9d0a40700",
+      "skills": []
+    },
+    {
+      "id": "specialized-cultural-intelligence-strategist",
+      "name": "Cultural Intelligence Strategist",
+      "description": "CQ specialist that detects invisible exclusion, researches global context, and ensures software resonates authentically across intersectional identities.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-cultural-intelligence-strategist.md",
+      "hash": "91f1d2ef19bcf05f8d3b2758049d2dee909939a18ec2d086f192358179455abc",
+      "skills": []
+    },
+    {
+      "id": "specialized-developer-advocate",
+      "name": "Developer Advocate",
+      "description": "Expert developer advocate specializing in building developer communities, creating compelling technical content, optimizing developer experience (DX), and driving platform adoption through authentic engineering engagement. Bridges product and engineering teams with external developers.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-developer-advocate.md",
+      "hash": "106d007f1dfa3ccc10e327b8fd1b74723fa01da1e444c61d1499cb8ac214d528",
+      "skills": []
+    },
+    {
+      "id": "specialized-document-generator",
+      "name": "Document Generator",
+      "description": "Expert document creation specialist who generates professional PDF, PPTX, DOCX, and XLSX files using code-based approaches with proper formatting, charts, and data visualization.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-document-generator.md",
+      "hash": "cd2ca961e0f7baa18942aaaa315e333ea4315604bbb6a182d7daa31b76dfc3a3",
+      "skills": []
+    },
+    {
+      "id": "specialized-fedramp-rmf-compliance",
+      "name": "FedRAMP & RMF Compliance Engineer",
+      "description": "Expert FedRAMP and NIST Risk Management Framework compliance engineer specializing in both FedRAMP authorization pathways \u2014 the traditional Rev5 path (NIST 800-53 Rev 5 control implementation, System Security Plans, 3PAO assessment, agency authorization) and the modernized FedRAMP 20x path (Key Security Indicators, automated machine-readable validation, compliance-as-code) \u2014 plus the ATO process, continuous monitoring (ConMon), POA&M management, FIPS 199 categorization, authorization boundary diagrams, OSCAL machine-readable packages, and cloud security compliance for government and regulated industries",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-fedramp-rmf-compliance.md",
+      "hash": "3269ca423abba6405b074ddff80da26ff1d73ae01787cc34bc7a1d45732936b0",
+      "skills": []
+    },
+    {
+      "id": "specialized-focus-music-architect",
+      "name": "Focus Music Architect",
+      "description": "Instrumental focus music specialist and neuroacoustic prompt engineer \u2014 crafts high-yield prompts, soundscape architectures, BPM curves, and binaural layers for deep cognitive flow and generative audio models.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-focus-music-architect.md",
+      "hash": "9dd1e29f12a4a8acd8872aa263e01f40a766a3b2752517916fe0273fd265bd27",
+      "skills": []
+    },
+    {
+      "id": "specialized-french-consulting-market",
+      "name": "French Consulting Market Navigator",
+      "description": "Navigate the French ESN/SI freelance ecosystem \u2014 margin models, platform mechanics (Malt, collective.work), portage salarial, rate positioning, and payment cycle realities",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-french-consulting-market.md",
+      "hash": "68ebd164a0b3e0493d8deec43f4122e24b293c0a8f77786b2c3a4c8f3924c045",
+      "skills": []
+    },
+    {
+      "id": "specialized-korean-business-navigator",
+      "name": "Korean Business Navigator",
+      "description": "Korean business culture for foreign professionals \u2014 \ud488\uc758 decision process, nunchi reading, KakaoTalk business etiquette, hierarchy navigation, and relationship-first deal mechanics",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-korean-business-navigator.md",
+      "hash": "71eb41ef3705fe155eee87d99e0ec7a52a237af442dd66e3421e225b76580f21",
+      "skills": []
+    },
+    {
+      "id": "specialized-master-plan-architect",
+      "name": "Master Plan Architect",
+      "description": "Master planning architect, technical educator, and ruthless plan critic who specializes in deep architectural teaching, Red Teaming / risk critique, and crafting comprehensive Implementation Plans in Markdown with ZERO code execution.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-master-plan-architect.md",
+      "hash": "0a9187c15055d76e5867d930eae43daccacd67fa213963ebdc91302044fc354d",
+      "skills": []
+    },
+    {
+      "id": "specialized-mcp-builder",
+      "name": "MCP Builder",
+      "description": "Expert Model Context Protocol developer who designs, builds, and tests MCP servers that extend AI agent capabilities with custom tools, resources, and prompts.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-mcp-builder.md",
+      "hash": "f1a9bbde3c5672408a5e0d71d3d888fd635e517ad8b1c5db210aa87e62c39dd4",
+      "skills": []
+    },
+    {
+      "id": "specialized-model-qa",
+      "name": "Model QA Specialist",
+      "description": "Independent model QA expert who audits ML and statistical models end-to-end - from documentation review and data reconstruction to replication, calibration testing, interpretability analysis, performance monitoring, and audit-grade reporting.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-model-qa.md",
+      "hash": "effef0d607e8955ff846e1c264237d6d14dd573bcfd02c191e126868c3cbffde",
+      "skills": []
+    },
+    {
+      "id": "specialized-pricing-analyst",
+      "name": "Pricing Analyst",
+      "description": "Specialized pricing analyst who develops optimal pricing models through market research, competitor analysis, cost structure evaluation, and margin optimization \u2014 turning pricing from guesswork into a data-driven competitive advantage.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-pricing-analyst.md",
+      "hash": "fb8a63681615666bb2efe45b7fd2d9ad8a072ab9066efae6b61d454a58039f85",
+      "skills": []
+    },
+    {
+      "id": "specialized-salesforce-architect",
+      "name": "Salesforce Architect",
+      "description": "Solution architecture for Salesforce platform \u2014 multi-cloud design, integration patterns, governor limits, deployment strategy, and data model governance for enterprise-scale orgs",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-salesforce-architect.md",
+      "hash": "756fd2dc09f76422dfecb8104e2334f8876f8b95cb6734f8f044c36c641b22e1",
+      "skills": []
+    },
+    {
+      "id": "specialized-strategy-duel-agent",
+      "name": "Strategy Duel Agent",
+      "description": "Conducts live strategy duels using game theory and the 36 Chinese stratagems",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-strategy-duel-agent.md",
+      "hash": "3012369325bd06ec6e73f980d4e28947fe1f3dd0121e8ccd5ffb5834b50f3911",
+      "skills": []
+    },
+    {
+      "id": "specialized-workflow-architect",
+      "name": "Workflow Architect",
+      "description": "Workflow design specialist who maps complete workflow trees for every system, user journey, and agent interaction \u2014 covering happy paths, all branch conditions, failure modes, recovery paths, handoff contracts, and observable states to produce build-ready specs that agents can implement against and QA can test against.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/specialized-workflow-architect.md",
+      "hash": "a7a73de5d9d3d748f4b30a2d632511304a97d42feb9fbf2a3e7cac27e7386e52",
+      "skills": []
+    },
+    {
+      "id": "study-abroad-advisor",
+      "name": "Study Abroad Advisor",
+      "description": "Full-spectrum study abroad planning expert covering the US, UK, Canada, Australia, Europe, Hong Kong, and Singapore \u2014 proficient in undergraduate, master's, and PhD application strategy, school selection, essay coaching, profile enhancement, standardized test planning, visa preparation, and overseas life adaptation, helping Chinese students craft personalized end-to-end study abroad plans.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/study-abroad-advisor.md",
+      "hash": "afd4b1033e76671b4d7a17a74329d7d81f491351004c77876a2615137140b84f",
+      "skills": []
+    },
+    {
+      "id": "supply-chain-strategist",
+      "name": "Supply Chain Strategist",
+      "description": "Expert supply chain management and procurement strategy specialist \u2014 skilled in supplier development, strategic sourcing, quality control, and supply chain digitalization. Grounded in China's manufacturing ecosystem, helps companies build efficient, resilient, and sustainable supply chains.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/supply-chain-strategist.md",
+      "hash": "aa6c0f0e7bfc7948a9ac5c76d3a0c140c54a59393eac54bdf15b12a9555662da",
+      "skills": []
+    },
+    {
+      "id": "zk-steward",
+      "name": "ZK Steward",
+      "description": "Knowledge-base steward in the spirit of Niklas Luhmann's Zettelkasten. Default perspective: Luhmann; switches to domain experts (Feynman, Munger, Ogilvy, etc.) by task. Enforces atomic notes, connectivity, and validation loops. Use for knowledge-base building, note linking, complex task breakdown, and cross-domain decision support.",
+      "division": "Specialized",
+      "classification": "general",
+      "path": "specialized/zk-steward.md",
+      "hash": "01fdb11cc8df0ada78aa31007c1565a3d118d64e9e97ff86b8dd838782a44082",
+      "skills": []
+    },
+    {
+      "id": "support-analytics-reporter",
+      "name": "Analytics Reporter",
+      "description": "Expert data analyst transforming raw data into actionable business insights. Creates dashboards, performs statistical analysis, tracks KPIs, and provides strategic decision support through data visualization and reporting.",
+      "division": "Support",
+      "classification": "general",
+      "path": "support/support-analytics-reporter.md",
+      "hash": "eec3a4afdb04cc6617c452e3c67fbfc8eea070e96055b6a39dae62be5c07a452",
+      "skills": []
+    },
+    {
+      "id": "support-executive-summary-generator",
+      "name": "Executive Summary Generator",
+      "description": "Consultant-grade AI specialist trained to think and communicate like a senior strategy consultant. Transforms complex business inputs into concise, actionable executive summaries using McKinsey SCQA, BCG Pyramid Principle, and Bain frameworks for C-suite decision-makers.",
+      "division": "Support",
+      "classification": "general",
+      "path": "support/support-executive-summary-generator.md",
+      "hash": "298891fcf297de5d9b343e9ab9b63864317de63256b15c0c72e6cec172f8f0ff",
+      "skills": []
+    },
+    {
+      "id": "support-finance-tracker",
+      "name": "Finance Tracker",
+      "description": "Expert financial analyst and controller specializing in financial planning, budget management, and business performance analysis. Maintains financial health, optimizes cash flow, and provides strategic financial insights for business growth.",
+      "division": "Support",
+      "classification": "general",
+      "path": "support/support-finance-tracker.md",
+      "hash": "ae682fa7901d2c81840f78119253e6886eadded764c8fff6e6a1a54da73e436f",
+      "skills": []
+    },
+    {
+      "id": "support-infrastructure-maintainer",
+      "name": "Infrastructure Maintainer",
+      "description": "Expert infrastructure specialist focused on system reliability, performance optimization, and technical operations management. Maintains robust, scalable infrastructure supporting business operations with security, performance, and cost efficiency.",
+      "division": "Support",
+      "classification": "general",
+      "path": "support/support-infrastructure-maintainer.md",
+      "hash": "982365c821220e6b47f08d54013af20d0ff2b58fc8d38a7639e2eb8b18d0872b",
+      "skills": []
+    },
+    {
+      "id": "support-legal-compliance-checker",
+      "name": "Legal Compliance Checker",
+      "description": "Expert legal and compliance specialist ensuring business operations, data handling, and content creation comply with relevant laws, regulations, and industry standards across multiple jurisdictions.",
+      "division": "Support",
+      "classification": "general",
+      "path": "support/support-legal-compliance-checker.md",
+      "hash": "08d938c5666e41b3cf197c2f7b37070d7f39aca62b7147d157200eb6dbeeced6",
+      "skills": []
+    },
+    {
+      "id": "support-support-responder",
+      "name": "Support Responder",
+      "description": "Expert customer support specialist delivering exceptional customer service, issue resolution, and user experience optimization. Specializes in multi-channel support, proactive customer care, and turning support interactions into positive brand experiences.",
+      "division": "Support",
+      "classification": "general",
+      "path": "support/support-support-responder.md",
+      "hash": "26b4c8706d88ea30358254dd5ac1a2886766015918300130dff070230e05794b",
+      "skills": []
+    },
+    {
+      "id": "testing-accessibility-auditor",
+      "name": "Accessibility Auditor",
+      "description": "Expert accessibility specialist who audits interfaces against WCAG standards, tests with assistive technologies, and ensures inclusive design. Defaults to finding barriers \u2014 if it's not tested with a screen reader, it's not accessible.",
+      "division": "Testing",
+      "classification": "coding",
+      "path": "testing/testing-accessibility-auditor.md",
+      "hash": "362935907af23839775b9c6162f38c0c5a740542ab4350cb5c5b5a0d9f9a4268",
+      "skills": []
+    },
+    {
+      "id": "testing-api-tester",
+      "name": "API Tester",
+      "description": "Expert API testing specialist focused on comprehensive API validation, performance testing, and quality assurance across all systems and third-party integrations",
+      "division": "Testing",
+      "classification": "coding",
+      "path": "testing/testing-api-tester.md",
+      "hash": "ab91de9188d48bd9c417282c33673a37b066215e90e08c0f1b270d036084e3bb",
+      "skills": []
+    },
+    {
+      "id": "testing-evidence-collector",
+      "name": "Evidence Collector",
+      "description": "Screenshot-obsessed, fantasy-allergic QA specialist - Reports reproducible issues with evidence and marks untested scope honestly",
+      "division": "Testing",
+      "classification": "coding",
+      "path": "testing/testing-evidence-collector.md",
+      "hash": "ff1868ae89f3be62f6f0da1fc8693582f18578c77751b8a65a53169ef15ececd",
+      "skills": []
+    },
+    {
+      "id": "testing-performance-benchmarker",
+      "name": "Performance Benchmarker",
+      "description": "Expert performance testing and optimization specialist focused on measuring, analyzing, and improving system performance across all applications and infrastructure",
+      "division": "Testing",
+      "classification": "coding",
+      "path": "testing/testing-performance-benchmarker.md",
+      "hash": "16a841f67392d084b773c6d9f05341d093e9017f3e116f6df0de59a5a3f59c34",
+      "skills": []
+    },
+    {
+      "id": "testing-reality-checker",
+      "name": "Reality Checker",
+      "description": "Stops fantasy approvals, evidence-based certification - Default to \"NEEDS WORK\", requires overwhelming proof for production readiness",
+      "division": "Testing",
+      "classification": "coding",
+      "path": "testing/testing-reality-checker.md",
+      "hash": "6d32fcdb114233e13902ec6372d50293b120e85d490b5e81d372c29808f988a1",
+      "skills": []
+    },
+    {
+      "id": "testing-test-automation-engineer",
+      "name": "Test Automation Engineer",
+      "description": "Expert end-to-end test automation engineer for Playwright and Cypress \u2014 resilient selectors, flake elimination, isolated test data, CI parallelization, and trace-driven failure debugging.",
+      "division": "Testing",
+      "classification": "coding",
+      "path": "testing/testing-test-automation-engineer.md",
+      "hash": "4299d038e88387546d645ccbe767b1dfdb7de10da55eba1ab103149972cd2b9b",
+      "skills": []
+    },
+    {
+      "id": "testing-test-results-analyzer",
+      "name": "Test Results Analyzer",
+      "description": "Expert test analysis specialist focused on comprehensive test result evaluation, quality metrics analysis, and actionable insight generation from testing activities",
+      "division": "Testing",
+      "classification": "coding",
+      "path": "testing/testing-test-results-analyzer.md",
+      "hash": "d33114b519ba657fc9f29db12495d3c31097a8282d170cfd57cbcb029f61f2de",
+      "skills": []
+    },
+    {
+      "id": "testing-tool-evaluator",
+      "name": "Tool Evaluator",
+      "description": "Expert technology assessment specialist focused on evaluating, testing, and recommending tools, software, and platforms for business use and productivity optimization",
+      "division": "Testing",
+      "classification": "coding",
+      "path": "testing/testing-tool-evaluator.md",
+      "hash": "01c8aecd0121dd7dde2696282a288aeb7b14c5381b1f8087db540312ed6ea684",
+      "skills": []
+    },
+    {
+      "id": "testing-workflow-optimizer",
+      "name": "Workflow Optimizer",
+      "description": "Expert process improvement specialist focused on analyzing, optimizing, and automating workflows across all business functions for maximum productivity and efficiency",
+      "division": "Testing",
+      "classification": "coding",
+      "path": "testing/testing-workflow-optimizer.md",
+      "hash": "f15e65baf794b4f6d6ef540661eda5b402fff0adb36ac98c7d08af7d6490a7bf",
+      "skills": []
+    }
+  ]
+}
