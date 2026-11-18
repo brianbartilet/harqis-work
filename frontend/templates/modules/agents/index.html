@@ -15,7 +15,7 @@
 {% include 'modules/hfl_corpus/partials/timeline.html' %}
 {% include 'modules/hfl_corpus/partials/entry_capture.html' %}
 <script src="{{ static_asset('js/entry-capture.js') }}" defer></script>
-<script type="application/json" id="fleet-csrf">{{ csrf|tojson }}</script>
+<script type="application/json" id="fleet-csrf" data-memory-csrf>{{ csrf|tojson }}</script>
 <script type="application/json" id="fleet-hud-config">{{ {'sizes': hud_sizes, 'colors': hud_colors, 'catalog': hud_catalog}|tojson }}</script>
 <script type="application/json" id="fleet-connector-icons">{{ {'codex': static_asset('img/connectors/codex.svg'), 'nod': static_asset('img/connectors/nod.svg'), 'n8n': static_asset('img/connectors/n8n.svg'), 'github': static_asset('img/connectors/github.svg'), 'jira': static_asset('img/connectors/jira.svg'), 'grokbot': static_asset('img/connectors/grokbot.svg')}|tojson }}</script>
 <script type="application/json" id="fleet-owner">{{ user|tojson }}</script>
