@@ -25,7 +25,8 @@ from fastapi.responses import (
 from markupsafe import Markup
 from pydantic import BaseModel, ValidationError
 
-from modules.hfl_corpus import workspace_views
+from modules.hfl_corpus import workspace_views, kanban_preferences
+from auth import get_current_user
 from modules.hfl_corpus.view_scope import filter_scope, request_scope
 from config import get_settings
 from modules.hfl_corpus.corpus import (
@@ -102,6 +103,18 @@ def _workspace_authorize(request, *, write=False):
         raise HTTPException(401, 'Authentication required')
     if write and not verify_csrf_token(request.headers.get('x-csrf-token', ''), user):
         raise HTTPException(403, 'Invalid form token. Please refresh the page and try again.')
+
+
+@router.get('/kanban/preferences')
+async def kanban_preferences_read(request: Request):
+    _workspace_authorize(request)
+    return await asyncio.to_thread(kanban_preferences.listing, get_current_user(request))
+
+
+@router.put('/kanban/preferences')
+async def kanban_preferences_write(request: Request, payload: kanban_preferences.SortWrite):
+    _workspace_authorize(request, write=True)
+    return await asyncio.to_thread(kanban_preferences.save, get_current_user(request), payload)
 
 
 @router.get('/workspace-views')

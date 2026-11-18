@@ -83,25 +83,34 @@
       if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Could not save. Refresh and retry.');
       return data;
     }
-    async function open(kind,operation,title,opener) {
+    async function open(kind,operation,title,opener, listMove=null) {
       if(busy||activeDialog||!canStart())return;
-      const group=groups[kind], selected=[...group.selected].map(id=>group.rows.get(id)).filter(Boolean);
+      const group=groups[kind], selected=listMove?.rows || [...group.selected].map(id=>group.rows.get(id)).filter(Boolean);
       if(!selected.length)return;
       const d=window.HflIdeas.dialog(title);activeDialog=d;
       d.node.classList.add('bulk-dialog');
-      d.node.addEventListener('close',()=>{activeDialog=null;const current=root.querySelector(`[data-bulk-kind="${kind}"] [data-bulk-menu]`);(current&&!current.disabled?current:root.querySelector(`[data-bulk-kind="${kind}"] [data-bulk-toggle]`)||opener)?.focus();},{once:true});
+      if(listMove)d.node.classList.add('kanban-move-dialog');
+      d.node.addEventListener('close',()=>{activeDialog=null;const listTrigger=listMove&&root.querySelector(`[data-status="${listMove.current}"] [data-list-menu]`);const current=root.querySelector(`[data-bulk-kind="${kind}"] [data-bulk-menu]`);(listTrigger||(current&&!current.disabled?current:root.querySelector(`[data-bulk-kind="${kind}"] [data-bulk-toggle]`)||opener))?.focus();},{once:true});
       d.footer.firstChild.textContent='Cancel';
       const summary=node('p',`${selected.length} ${kind==='action'?'action':'idea'}${selected.length===1?'':'s'} selected.`);
       summary.setAttribute('role','status');d.body.append(summary);
+      if(listMove)d.body.append(node('p','Matches the current search and Space filters.','kanban-move-guidance'));
       const submit=node('button',operation==='status'?'Move':operation==='dismiss'?'Dismiss':'Add');submit.type='submit';d.footer.append(submit);
       let select=null;
       if(operation==='dismiss')d.body.append(node('p','Move all selected cards to Dismissed?'));
       else {
-        const label=node('label',operation==='status'?'Status':operation==='board_ids'?'Board':'Space');
+        const label=node('label',listMove?'Move from '+window.HflEntitySemantics.action.labels[listMove.current]+' to':operation==='status'?'Status':operation==='board_ids'?'Board':'Space');
         select=node('select');select.required=true;select.name='target';label.append(select);d.body.append(label);
         if(operation==='status'){
-          const choices=Object.entries(window.HflEntitySemantics[kind==='action'?'action':'idea'].labels);
-          choices.forEach(([value,text])=>{const option=node('option',text);option.value=value;select.append(option);});
+          const labels=window.HflEntitySemantics[kind==='action'?'action':'idea'].labels;
+          const choices=kind==='action'?['open','active','in_progress','incomplete','done','dismissed'].map(value=>[value,labels[value]]):Object.entries(labels);
+          choices.forEach(([value,text])=>{const option=node('option',text+(value===listMove?.current?' (current)':''));option.value=value;option.disabled=value===listMove?.current;select.append(option);});
+          if(listMove){
+            select.value=listMove.target;
+            const guidance=node('p',null,'kanban-move-guidance');d.body.append(guidance);
+            const updateGuidance=()=>{guidance.textContent=select.value==='active'?'Enabled agents may start when moved to Ready.':select.value==='done'?'These actions will be marked complete.':select.value==='dismissed'?'These actions will move to Dismissed; their history is kept.':'';guidance.hidden=!guidance.textContent;};
+            select.onchange=updateGuidance;updateGuidance();
+          }
           if(kind==='idea')d.body.append(node('p','Adopted changes status only. These ideas will leave this drawer; no actions are created.','board-hint'));
         }else{
           if(operation==='board_ids'&&kind==='action')d.body.append(node('p','Adding actions to a new board returns them to In Review, matching individual card updates.','board-hint'));
@@ -129,11 +138,11 @@
             const path=kind==='action'?'/hfl-corpus/timeline/items/':'/hfl-corpus/timeline/ideas/objects/';
             await json(path+encodeURIComponent(item.id),{method:'PATCH',body:JSON.stringify({version:item.version,...changes})});
             succeeded++;group.selected.delete(item.id);
-          }catch(e){failures.push({title:item.title,message:e.message});}
+          }catch(e){failures.push({title:item.title,message:e.message});group.selected.add(item.id);group.enabled=true;}
         }
         // Refresh before allowing retries, so retained selections use the current versions.
         busy=false;
-        try{await refresh();}finally{root.inert=false;d.body.inert=false;}
+        try{await refresh();}catch(e){d.error.textContent='Updates finished, but the board could not refresh. Refresh before retrying.';}finally{root.inert=false;d.body.inert=false;}
         for(const name of Object.keys(groups))update(name);
         summary.textContent=`${succeeded} updated · ${failures.length} failed.`;
         d.node.querySelector('h2').textContent=failures.length?'Bulk update finished with errors':'Bulk update complete';
@@ -154,6 +163,7 @@
     root.addEventListener('keydown',event=>{if(event.key!=='Escape')return;const host=event.target.closest('[data-bulk-kind]');if(host&&!host.querySelector('[data-bulk-options]').hidden){event.stopPropagation();closeMenu(host);host.querySelector('[data-bulk-menu]').focus();}},{signal});
     return {
       mount,
+      moveRows(rows,current,target,opener){return open('action','status','Move actions to status',opener,{rows:rows.map(row=>structuredClone(row)),current,target});},
       get busy(){return busy;},
       get editing(){return !!activeDialog||!!root.querySelector('[data-bulk-options]:not([hidden])');},
       selecting:kind=>groups[kind].enabled,

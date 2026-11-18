@@ -31,6 +31,21 @@ window.HflDrawerIndicator = (button, name) => {
   const listeners = new AbortController();
   let sequence = 0, pending = false, moving = false, dragging = null, disposed = false;
   let items = new Map(), rendered = '', timer, sorters = [];
+  let sorting={}, listMenu=null, savingSort=false;
+  const sortOptions=[['updated_desc','Updated date (newest)'],['updated_asc','Updated date (oldest)'],['created_desc','Created date (newest)'],['created_asc','Created date (oldest)'],['name','Name (alphabetical)']];
+  function compareCards(state,a,b){
+    const order=sorting[state]?.sort||'updated_desc';
+    const names=()=>String(a.title||'').localeCompare(String(b.title||''),undefined,{sensitivity:'base',numeric:true});
+    let difference;
+    if(order==='name')difference=names();
+    else{
+      const field=order.startsWith('created')?'created_at':'updated_at';
+      const first=Date.parse(a[field]),second=Date.parse(b[field]);
+      // Missing dates stay last in either direction.
+      difference=Number.isNaN(first)?(Number.isNaN(second)?0:1):Number.isNaN(second)?-1:(first-second)*(order.endsWith('desc')?-1:1);
+    }
+    return difference||names()||a.id.localeCompare(b.id);
+  }
   let ideasOpen=false, ideaRows=[], ideaIndicator, ideasCheckedAt=0;
   const actionSearch = $('[data-board-search]');
   const ideaSearch = document.createElement('input');
@@ -78,6 +93,96 @@ window.HflDrawerIndicator = (button, name) => {
     if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Could not load follow-ups. Retry.');
     return data;
   }
+  async function preferences(payload){
+    const csrf=JSON.parse(document.querySelector('[data-memory-csrf]')?.textContent||'""');
+    const response=await fetch('/hfl-corpus/kanban/preferences',{cache:'no-store',method:payload?'PUT':'GET',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},...(payload?{body:JSON.stringify(payload)}:{})});
+    const data=await response.json();
+    if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'Could not load or save list sorting. Refresh and retry.');
+    return data.sorting||{};
+  }
+  function closeListMenu(focus=false){
+    if(!listMenu)return;
+    const {panel,opener}=listMenu;listMenu=null;
+    panel.remove();opener.setAttribute('aria-expanded','false');
+    if(focus)opener.focus();
+  }
+  function openListMenu(state,opener){
+    if(moving||dragging||savingCards||bulk.busy||savingSort)return;
+    if(listMenu?.opener===opener){closeListMenu(true);return;}
+    closeListMenu();
+    const panel=node('div',null,'kanban-list-menu');panel.setAttribute('popover','auto');panel.setAttribute('role','dialog');
+    panel.setAttribute('aria-label',label(state)+' list actions');
+    opener.setAttribute('aria-expanded','true');
+    listMenu={panel,opener};dialog.append(panel);
+    let currentView='main';
+    const shortSort={updated_desc:'Updated · newest',updated_asc:'Updated · oldest',created_desc:'Created · newest',created_asc:'Created · oldest',name:'Name · A–Z'};
+    const menuIcon=path=>`<svg aria-hidden="true" width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`;
+    const position=()=>{
+      const rect=opener.getBoundingClientRect();
+      const width=panel.offsetWidth||260;
+      panel.style.left=Math.max(8,Math.min(rect.right-width,window.innerWidth-width-8))+'px';
+      panel.style.top=Math.max(8,Math.min(rect.bottom+6,window.innerHeight-panel.offsetHeight-8))+'px';
+    };
+    function button(text,fn){const b=node('button',text);b.type='button';b.onclick=fn;return b;}
+    function show(view='main'){
+      currentView=view;
+      panel.replaceChildren();
+      const header=node('div',null,'kanban-list-menu-header');
+      if(view!=='main'){const back=button('',()=>show());back.innerHTML=menuIcon('m12 5-5 5 5 5');back.setAttribute('aria-label','Back to list actions');header.append(back);}
+      header.append(node('strong',view==='sort'?'Sort by':view==='move'?'Move to':label(state)));
+      const close=button('',()=>closeListMenu(true));close.innerHTML=menuIcon('m6 6 8 8M14 6l-8 8');close.setAttribute('aria-label','Close list actions');header.append(close);panel.append(header);
+      if(view==='main'){
+        const submenu=(text,description,view,accessible)=>{
+          const choice=button('',()=>show(view));choice.className='kanban-submenu-choice';choice.setAttribute('aria-label',accessible);choice.setAttribute('aria-haspopup','dialog');
+          const copy=node('span',null,'kanban-menu-copy');copy.append(node('span',text),node('small',description));
+          const arrow=node('span',null,'kanban-menu-chevron');arrow.innerHTML=menuIcon('m7 5 5 5-5 5');choice.append(copy,arrow);return choice;
+        };
+        panel.append(submenu('Sort by',shortSort[sorting[state]?.sort||'updated_desc'],'sort','Sort by'));
+        const count=[...items.values()].filter(item=>item.status===state&&matches(item,query(actionSearch))).length;
+        const move=submenu('Move all actions',`${count} matching action${count===1?'':'s'}`,'move','Move all actions to status');
+        move.disabled=!count;panel.append(move);
+      }else if(view==='sort'){
+        for(const [value,title] of sortOptions){
+          const choice=button(shortSort[value],async()=>{
+            if(savingSort)return;
+            savingSort=true;panel.querySelectorAll('button').forEach(b=>b.disabled=true);
+            try{
+              sorting=await preferences({status:state,sort:value,revision:sorting[state]?.revision||0});
+              closeListMenu();render([...items.values()]);
+              lanes.querySelector(`[data-status="${state}"] [data-list-menu]`)?.focus();
+              status.textContent=label(state)+' sorted by '+title.toLowerCase();
+            }catch(e){closeListMenu(true);error.textContent=e.message;error.hidden=false;}
+            finally{savingSort=false;}
+          });
+          choice.setAttribute('aria-label',title);choice.setAttribute('aria-pressed',String((sorting[state]?.sort||'updated_desc')===value));panel.append(choice);
+        }
+      }else{
+        for(const target of states){
+          const choice=button(label(target),()=>{
+            const rows=[...items.values()].filter(item=>item.status===state&&matches(item,query(actionSearch)));
+            closeListMenu();bulk.moveRows(rows,state,target,opener);
+          });choice.setAttribute('aria-label',label(target)+(target===state?' (current)':''));
+          if(target===state){choice.append(node('small','Current','kanban-current-badge'));choice.disabled=true;}
+          panel.append(choice);
+        }
+      }
+      position();(panel.querySelector('button[aria-pressed=true]')||panel.querySelector(':scope > button:not(:disabled)'))?.focus();
+    }
+    panel.addEventListener('toggle',event=>{if(event.newState==='closed'&&listMenu?.panel===panel)closeListMenu();});
+    panel.addEventListener('keydown',event=>{
+      if(event.key==='ArrowLeft'&&currentView!=='main'){event.preventDefault();show();return;}
+      if(event.key==='ArrowRight'&&document.activeElement?.classList.contains('kanban-submenu-choice')){event.preventDefault();document.activeElement.click();return;}
+      if(event.key==='Escape'){event.preventDefault();event.stopPropagation();closeListMenu(true);}
+      if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){
+        event.preventDefault();const buttons=[...panel.querySelectorAll('button:not(:disabled)')],index=buttons.indexOf(document.activeElement);
+        const next=event.key==='Home'?0:event.key==='End'?buttons.length-1:(index+(event.key==='ArrowDown'?1:buttons.length-1))%buttons.length;
+        buttons[next]?.focus();
+      }
+    });
+    show();panel.showPopover();position();panel.querySelector(':scope > button:not(:disabled)')?.focus();
+  }
+  window.addEventListener('resize',()=>closeListMenu(),{signal:listeners.signal});
+  lanes.addEventListener('scroll',()=>closeListMenu(),{capture:true,signal:listeners.signal});
   function render(rows) {
     const actionQuery=query(actionSearch), ideaQuery=query(ideaSearch);
     const visibleIdeas=ideaRows.filter(item=>matches(item,ideaQuery));
@@ -87,7 +192,7 @@ window.HflDrawerIndicator = (button, name) => {
       return item.status==='suggested'&&item.origin!=='manual'&&!item.promoted_to&&!item.followup_id&&created>=weekAgo&&created<=now;
     });
     ideaIndicator?.(recentSuggestions.map(item=>item.id),recentSuggestions.length,ideasOpen);
-    const signature=JSON.stringify([rows,ideasOpen,ideaRows,actionQuery,ideaQuery]);
+    const signature=JSON.stringify([rows,ideasOpen,ideaRows,actionQuery,ideaQuery,sorting]);
     if(signature===rendered)return;
     const expanded=new Set([...lanes.querySelectorAll('details[open]')].map(el=>el.closest('[data-followup-id]').dataset.followupId+':'+el.querySelector('summary').textContent));
     const scroll=new Map([...lanes.children].map(el=>[el.dataset.status,el.scrollTop]));
@@ -103,45 +208,40 @@ window.HflDrawerIndicator = (button, name) => {
     const focusId=focused?.closest('[data-followup-id]')?.dataset.followupId, focusText=focused?.textContent;
     const oldItems=items, oldCards=new Map([...lanes.querySelectorAll('[data-followup-id]')].map(el=>[el.dataset.followupId,el]));
     items=new Map(rows.map(item=>[item.id,item]));
+    closeListMenu();
     sorters.forEach(sorter=>sorter.destroy());sorters=[];
     dialog.querySelector('.ideas-drawer-overlay')?.remove();
     lanes.replaceChildren();
     for(const state of states){
       const section=node('section',null,'followups-lane');section.dataset.status=state;section.setAttribute('aria-label',label(state));
-      const matching=rows.filter(item=>item.status===state&&matches(item,actionQuery)).sort((a,b)=>(a.board_position??2147483647)-(b.board_position??2147483647));
-      section.append(node('h3',label(state)+' · '+matching.length));
+      const matching=rows.filter(item=>item.status===state&&matches(item,actionQuery)).sort((a,b)=>compareCards(state,a,b));
+      const header=node('div',null,'kanban-list-header'),heading=node('h3',label(state)+' · '+matching.length),menu=node('button','⋯','kanban-list-menu-trigger');
+      menu.type='button';menu.dataset.listMenu='';menu.setAttribute('aria-label',label(state)+' list actions');menu.setAttribute('aria-haspopup','dialog');menu.setAttribute('aria-expanded','false');
+      menu.title='List actions · '+(sortOptions.find(([value])=>value===(sorting[state]?.sort||'updated_desc'))?.[1]);
+      menu.onclick=()=>openListMenu(state,menu);header.append(heading,menu);section.append(header);
       for(const item of matching){
         if(oldCards.has(item.id)&&JSON.stringify(oldItems.get(item.id))===JSON.stringify(item)){
           section.append(oldCards.get(item.id));continue;
         }
         const card=actions.card(item);card.tabIndex=0;card.dataset.matrix=item.matrix||'unclassified';
         const clone=node('button','⧉','action-clone-handle');clone.type='button';clone.title='Clone action';clone.setAttribute('aria-label','Clone '+item.title);clone.onclick=()=>window.HflIdeas.cloneObject('actionable',item.id);card.prepend(clone);
-        const grip=node('button','⠿','action-drag-handle');grip.type='button';grip.setAttribute('aria-label','Move '+item.title);grip.title='Drag to move card; Alt+Up/Down to reorder';card.prepend(grip);
-        card.setAttribute('aria-keyshortcuts','Alt+ArrowUp Alt+ArrowDown');
-        card.title='Drag to reorder or change status. Alt+Up/Down reorders within this column.';
-        card.addEventListener('keydown',event=>{
-          if(![card,grip].includes(event.target)||!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key)||moving||bulk.busy)return;
-          event.preventDefault();
-          const lane=card.parentElement, cards=[...lane.querySelectorAll('[data-followup-id]')], index=cards.indexOf(card), next=index+(event.key==='ArrowUp'?-1:1);
-          if(next<0||next>=cards.length)return;
-          lane.insertBefore(card,next<index?cards[next]:cards[next].nextSibling);
-          move(item.id,state,[...lane.querySelectorAll('[data-followup-id]')].map(el=>el.dataset.followupId));
-        });
+        const grip=node('button','⠿','action-drag-handle');grip.type='button';grip.setAttribute('aria-label','Move '+item.title);grip.title='Drag to another status list';card.prepend(grip);
+        card.title='Drag to another status list. Cards follow the list’s selected sort order.';
         card.querySelectorAll('details').forEach(el=>el.open=expanded.has(item.id+':'+el.querySelector('summary').textContent));
         section.append(card);
       }
       if(!matching.length)section.append(node('p',actionQuery?'No matching actions':'No actions','agenda-description'));
       lanes.append(section);section.scrollTop=scroll.get(state)||0;
       sorters.push(new Sortable(section,{
-        group:'hfl-actions',draggable:'.agenda-card',filter:'button:not(.action-drag-handle),a,input,summary,textarea,select,label,pre,code,table',preventOnFilter:false,
+        group:'hfl-actions',sort:false,draggable:'.agenda-card',filter:'button:not(.action-drag-handle),a,input,summary,textarea,select,label,pre,code,table',preventOnFilter:false,
         forceFallback:true,fallbackOnBody:false,fallbackTolerance:4,
         animation:150,delay:180,delayOnTouchOnly:true,touchStartThreshold:5,ghostClass:'followups-drag-placeholder',
         onMove:()=>!savingCards&&!moving&&!bulk.busy,
         onStart:event=>{dragging=event.item.dataset.followupId;dialog.dataset.busy='true';},
         onEnd:event=>{
           const id=event.item.dataset.followupId;dragging=null;pointerHeld=false;
-          if(event.from===event.to&&event.oldIndex===event.newIndex){delete dialog.dataset.busy;return;}
-          move(id,event.to.dataset.status,[...event.to.querySelectorAll('[data-followup-id]')].map(el=>el.dataset.followupId));
+          if(event.from===event.to){delete dialog.dataset.busy;return;}
+          move(id,event.to.dataset.status);
         }
       }));
     }
@@ -235,9 +335,11 @@ window.HflDrawerIndicator = (button, name) => {
     }
   }
   async function refresh(force=false) {
-    if(!dialog.open || disposed || moving || dragging || pointerHeld || savingCards || bulk.busy || (bulk.editing&&!force) || (pending&&!force))return;
+    if(!dialog.open || disposed || moving || dragging || pointerHeld || savingCards || savingSort || listMenu || bulk.busy || (bulk.editing&&!force) || (pending&&!force))return;
     const ticket=++sequence;pending=true;context();if(force||!rendered)status.textContent='Refreshing follow-ups…';lanes.setAttribute('aria-busy','true');
     try{
+      const savedSorting=await preferences();
+      if(ticket!==sequence||disposed)return;
       const params=all.checked?new URLSearchParams():new URLSearchParams(location.search);
       params.set('include_closed','true');params.set('recent_dismissed','true');
       const rows=[];let total=0;
@@ -248,27 +350,27 @@ window.HflDrawerIndicator = (button, name) => {
         rows.push(...data.items);total=data.total;
         if(!data.items.length)break;
       }while(rows.length<total);
-      if(dragging||moving||pointerHeld||savingCards||bulk.busy||bulk.editing&&!force)return;
+      if(dragging||moving||pointerHeld||savingCards||savingSort||listMenu||bulk.busy||bulk.editing&&!force)return;
       if(ideasOpen||page&&(force||Date.now()-ideasCheckedAt>30000)){
         const ideaParams=new URLSearchParams(params);ideaParams.delete('offset');ideaParams.set('dismissed','0');
         ideaRows=(await window.HflIdeas.api('/reuse/board-ideas?'+ideaParams)).items.filter(item=>item.status!=='adopted'&&!item.promoted_to&&!item.followup_id);
         if(ticket!==sequence)return;
         ideasCheckedAt=Date.now();
       }
-      render(rows);error.hidden=true;
+      if(savingSort||listMenu)return;
+      sorting=savedSorting;render(rows);error.hidden=true;
       updateCount(rows);
     }catch(e){if(ticket===sequence){error.textContent=e.message;error.hidden=false;status.textContent='Could not refresh. Displayed actions may be out of date. Use Refresh to retry.';}}
     finally{if(ticket===sequence){pending=false;lanes.removeAttribute('aria-busy');if(page)window.BrainPageLoading?.finish();}}
   }
-  async function move(id,state,order){
+  async function move(id,state){
     const item=items.get(id);if(!item||moving)return;
-    moving=true;dialog.dataset.busy='true';++sequence;pending=false;lanes.inert=true;status.textContent='Saving card order…';
-    let failure='',statusSaved=false;
+    moving=true;dialog.dataset.busy='true';++sequence;pending=false;lanes.inert=true;status.textContent='Moving action…';
+    let failure='';
     try{
-      if(item.status!==state){const data=await request('/'+id,{method:'PATCH',body:JSON.stringify({version:item.version,status:state})});items.set(id,data.item);statusSaved=true;}
-      await request('/order',{method:'PUT',body:JSON.stringify({status:state,items:order.map(identity=>({id:identity,version:items.get(identity).version}))})});
+      if(item.status!==state){const data=await request('/'+id,{method:'PATCH',body:JSON.stringify({version:item.version,status:state})});items.set(id,data.item);}
     }
-    catch(e){failure=e.message+(statusSaved?' Status changed, but the card order was not saved.':' The move was not saved.');}
+    catch(e){failure=e.message+' The move was not saved.';}
     finally{moving=false;delete dialog.dataset.busy;lanes.inert=false;}
     rendered='';await refresh(true);actions.load();
     if(failure){error.textContent=failure+' The board has been reloaded.';error.hidden=false;}
@@ -317,7 +419,7 @@ window.HflDrawerIndicator = (button, name) => {
   window.addEventListener('hfl:action-error',async event=>{if(dialog.open){await refresh(true);error.textContent=event.detail;error.hidden=false;}},{signal:listeners.signal});
   window.addEventListener('hfl:view-replacing',()=>{
     try{if(dialog.open)sessionStorage.setItem('hfl:followups-restore',JSON.stringify({all:all.checked}));}catch(_){}
-    disposed=true;++sequence;clearInterval(timer);bulk.dispose();listeners.abort();sorters.forEach(sorter=>sorter.destroy());
+    disposed=true;++sequence;closeListMenu();clearInterval(timer);bulk.dispose();listeners.abort();sorters.forEach(sorter=>sorter.destroy());
   },{signal:listeners.signal});
   function closeIdeasDrawer(){
     ideasOpen=false;dialog.querySelector('.ideas-drawer-toggle')?.setAttribute('aria-expanded','false');render([...items.values()]);dialog.querySelector('.ideas-drawer-toggle')?.focus();

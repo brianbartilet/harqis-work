@@ -12,6 +12,7 @@ def test_board_search_keeps_queries_focus_and_selection(width, tmp_path):
         browser = p.chromium.launch(channel='msedge')
         page = browser.new_page(viewport={'width': width, 'height': 850})
         template = (root / 'templates/modules/hfl_corpus/partials/followups_board.html').read_text(encoding='utf-8')
+        template = template.replace("{% if actions_page %}{% include 'partials/second_brain_navigation.html' %}{% endif %}", '')
         # Use the real toolbar controls without the surrounding Jinja branches.
         toolbar = template.split('<div class="followups-toolbar">', 1)[1].split('{% if actions_page %}', 1)[0]
         page.route('http://localhost/preview', lambda route: route.fulfill(content_type='text/html', body=f'''
@@ -40,6 +41,7 @@ def test_board_search_keeps_queries_focus_and_selection(width, tmp_path):
           window.HflObjectDescription=item=>item.body||item.description||'';
           window.HflChecklistMarkdown=(el,text)=>{el.textContent=text;};
           window.HflIdeas={api:async()=>({items:testIdeas})};
+          window.HflEntitySemantics={action:{labels:{}},idea:{labels:{suggested:'Suggested'}}};
         }''')
         for name in ['vendor/sortablejs-1.15.2.min.js', 'js/hfl-bulk-actions.js', 'js/hfl-followups.js']:
             page.add_script_tag(path=str(root / 'static' / name))
@@ -75,7 +77,7 @@ def test_board_search_keeps_queries_focus_and_selection(width, tmp_path):
         expect(ideas).to_have_count(2)
         expect(idea_search).to_be_focused()
         idea_search.fill('no match')
-        expect(page.get_by_text('No matching ideas', exact=True)).to_be_visible()
+        expect(page.get_by_text('No matching ideas. Try a different search.', exact=True)).to_be_visible()
         idea_search.fill('speech')
         expect(ideas).to_have_attribute('data-idea-id', 'i')
         idea_search.fill('')

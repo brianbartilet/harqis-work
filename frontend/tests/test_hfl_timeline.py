@@ -1052,10 +1052,11 @@ def test_followups_board_filter_drag_refresh_and_editor(agenda, authenticated_cl
             second_card.press('Alt+ArrowUp')
         playwright.expect(lane.locator('[data-followup-id]').first).to_have_attribute('data-followup-id',second['id'])
         playwright.expect(board.locator('[data-board-status]')).to_contain_text('3 actions')
-        assert agenda.board_order()[second['id']] < agenda.board_order()[first['id']]
+        # Automatic sorting leaves the legacy manual order untouched.
+        assert agenda.board_order()[first['id']] < agenda.board_order()[second['id']]
         board.locator('[data-board-refresh]').click()
         playwright.expect(lane.locator('[data-followup-id]').first).to_have_attribute('data-followup-id',second['id'])
-        # A new page must recover the server order, not a DOM/local-storage order.
+        # A new page must retain the updated-newest default, ignoring legacy manual order.
         page.reload()
         assert '/hfl-corpus/actions' in page.url
         playwright.expect(board.locator('[data-board-context]')).to_have_text('All activity')
@@ -1250,7 +1251,8 @@ def test_kanban_bulk_actions(agenda, authenticated_client, monkeypatch, tmp_path
         lane = page.locator('[data-status="open"].followups-lane')
         playwright.expect(lane.locator('[data-followup-id]').first).to_have_attribute('data-followup-id', second['id'])
         playwright.expect(page.locator('[data-board-status]')).to_contain_text('2 actions')
-        assert agenda.board_order()[second['id']] < agenda.board_order()[first['id']]
+        # Automatic sorting leaves the legacy manual order untouched.
+        assert agenda.board_order()[first['id']] < agenda.board_order()[second['id']]
         playwright.expect(second_card.locator('[data-bulk-check]')).to_be_checked()
         page.locator('[data-board-refresh]').click()
         playwright.expect(lane.locator('[data-followup-id]').first).to_have_attribute('data-followup-id', second['id'])
@@ -1286,7 +1288,7 @@ def test_kanban_bulk_actions(agenda, authenticated_client, monkeypatch, tmp_path
         modal.get_by_role('button', name='Close', exact=True).click()
         assert agenda.get(second['id'])['notes'] == 'Concurrent edit'
 
-        # Ordinary keyboard reordering still works after leaving selection mode.
+        # Automatic sorting still applies after leaving selection mode; old reorder keys do nothing.
         controls.locator('[data-bulk-toggle]').click()
         second_card.focus()
         second_card.press('Alt+ArrowUp')
@@ -1347,7 +1349,7 @@ def test_kanban_bulk_actions(agenda, authenticated_client, monkeypatch, tmp_path
             assert set(ideas.idea(idea['id'])[field]) == ({'existing', 'target'} if field == 'workspace_ids' else {old_board['id'], new_board['id']})
         idea_card.locator('[data-bulk-check]').check()
         modal = open_bulk('Move to status', 'idea')
-        playwright.expect(modal.locator('select option')).to_have_text(['Open', 'Has actions', 'Dismissed'])
+        playwright.expect(modal.locator('select option')).to_have_text(['Adopted', 'Dismissed', 'Suggested'])
         modal.get_by_role('combobox').select_option('adopted')
         page.screenshot(path=str(tmp_path / f'bulk-ideas-dialog-{width}.png'))
         modal.get_by_role('button', name='Move', exact=True).click()

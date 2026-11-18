@@ -78,6 +78,8 @@ def _empty_owner_profile():
     _require_test_profile_path(pin_store.path)
     with settings_connection() as db:
         db.execute("DELETE FROM app_settings")
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='kanban_sort_preferences'").fetchone():
+            db.execute('DELETE FROM kanban_sort_preferences')
     with store._connect() as connection:
         connection.execute("DELETE FROM owner_profile")
     with pin_store._connect() as connection:
