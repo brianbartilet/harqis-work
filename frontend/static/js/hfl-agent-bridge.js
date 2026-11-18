@@ -236,6 +236,20 @@
           card.append(element('small', 'Execution: ' + settings.agent_mode + ' · Profile: ' + (settings.hermes_profile || 'Worker default')));
         }
         if (run.state === 'queued') card.append(element('p', 'Waiting for an agent to start. You can leave this dialog and check back later.'));
+        if(run.provider_state==='unknown')card.append(element('p','Nod submission is unresolved. Checking its receipt; work will not be resent automatically.'));
+        if(run.provider_state==='unknown'&&!run.provider_receipt?.turnId){
+          const recovery=element('details');recovery.append(element('summary','Resolve an unaccepted submission'));
+          const label=element('label','How did you verify that Nod did not start this work?'),evidence=element('textarea');evidence.maxLength=2000;label.append(evidence);
+          const checkLabel=element('label'),confirmed=element('input');confirmed.type='checkbox';checkLabel.append(confirmed,document.createTextNode('I checked Nod and this execution is not running.'));
+          const error=element('p');error.setAttribute('role','status');
+          recovery.append(label,checkLabel,button('Record verification and release',async()=>{try{await api('/runs/'+run.id+'/resolve-provider',{evidence:evidence.value,confirmed_not_running:confirmed.checked});await refresh();}catch(e){error.textContent=e.message;}}),error);card.append(recovery);
+        }
+        if(run.provider_receipt?.turnId)card.append(element('small','Nod turn '+run.provider_receipt.turnId));
+        if(run.children?.length){
+          const delegated=element('details');delegated.append(element('summary','Delegated work · '+run.children.length));
+          for(const child of run.children){const row=element('section');row.append(element('strong',(child.snapshot.execution_settings.action_assignment?.name||'Agent')+' · '+child.state),element('p',child.result?.summary||'Waiting for execution evidence.'),element('small','Child run '+child.id));delegated.append(row);}
+          card.append(delegated);
+        }
         if (run.snapshot?.continuation) {
           const reply = element('p', run.snapshot.continuation.reply ? 'Your reply: ' + run.snapshot.continuation.reply : 'Retry requested after a fix.');
           reply.className = 'agent-continuation-reply'; card.append(reply);

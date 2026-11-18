@@ -6,8 +6,12 @@ sessions and returns Markdown output, evidence, files and attributed history.
 
 ## Owner behavior
 
-Open **App Settings** from the avatar menu (alongside **Profile**), or visit
-`/settings`. **Actions polling minutes** defaults to 30 (1–1440).
+Action execution now supports Hermes and connected Nod agents through the
+[provider execution bridge](ACTION-PROVIDER-EXECUTION.md). Celery Beat discovers
+Ready Actions and reconciles provider receipts every minute. Per-Action schedules
+and permitted Butler delegation targets are configured in **Agent settings**.
+The legacy **Actions polling minutes** value is retained for API compatibility;
+it no longer controls Action discovery.
 **Pinned dates backfill days** defaults to 7 (1–31). Personal profile fields stay
 in Profile; credentials stay on the host, while optional model/provider overrides
 are available in App Settings.
@@ -19,7 +23,8 @@ outcome, notes and linked activity supply supporting context. Review and due dat
 do not limit discovery. Blank prompts are not executed.
 
 The lifecycle is **In Review → Ready → In Progress → Done**.
-In Progress includes queued and running executions. Failed, blocked or partial work becomes
+Queued Actions retain their status until provider acceptance. In Progress means
+the provider accepted execution. Failed, blocked or partial work becomes
 **Incomplete**, shown in red with precedence over other calendar status dots.
 Moving an action back to Ready requests a fresh attempt on the next discovery
 pass. Old attempts retain their history and cannot overwrite the new revision.

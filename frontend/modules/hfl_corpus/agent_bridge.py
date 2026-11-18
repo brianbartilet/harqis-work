@@ -128,17 +128,33 @@ def action_execution_settings(kind, source_id):
 
 
 def enqueue(kind, source_id, request_key, actor, auto_complete=True):
+    if not isinstance(request_key, str) or not 1 <= len(request_key) <= 200:
+        raise ValueError('A bounded request key is required.')
+    with bridge_store().connect() as db:
+        prior = db.execute('SELECT id,source_key FROM agent_requests WHERE request_key=?', (request_key,)).fetchone()
+    if prior:
+        if prior['source_key'] != f'{kind}:{source_id}':
+            raise BridgeConflict('Request key already belongs to another source.')
+        return bridge_store().get(prior['id'])
+    if kind == 'actionable':
+        from modules.hfl_corpus.action_execution import store as execution_store
+        with execution_store().connect() as db:
+            outstanding = db.execute("SELECT 1 FROM action_provider_receipts p JOIN agent_requests r ON r.id=p.run_id WHERE r.source_key=? AND p.state!='finished'", (f'actionable:{source_id}',)).fetchone()
+        if outstanding:
+            raise BridgeConflict('A Nod execution or unresolved submission still owns this Action. Reconcile it before requesting another attempt.')
     snapshot = source_snapshot(kind, source_id)
     if kind == 'actionable' and actor == 'hermes-schedule' and snapshot['source']['status'] != 'active':
         raise BridgeConflict('Only Ready actions can be picked up automatically.')
     snapshot['auto_complete'] = False if kind == 'mindmap' else auto_complete
+    snapshot['requested_by'] = get_settings().app_username if actor in {'action-trigger', 'hermes-schedule'} else actor
+    if kind == 'actionable' and snapshot['execution_settings'].get('action_assignment', {}).get('runtime') == 'nod':
+        from modules.hfl_corpus.action_execution import instructions
+        instructions({'id': 'preflight', 'snapshot': snapshot})
     snapshot['context'] = evidence_context(snapshot)
     store = bridge_store()
     if kind == 'actionable':
         retire_reopened(snapshot)
     run = store.enqueue(snapshot, request_key, actor)
-    if run['state'] == 'queued':
-        apply_action(run, 'in_progress')
     return store.get(run['id'])
 
 
@@ -224,27 +240,7 @@ def sweep():
     instant = datetime.now(ZoneInfo('Asia/Singapore'))
     today = instant.date()
     results, skipped = [], []
-    if store.dispatch_due('actions-poll', settings['actions_polling_minutes']):
-        try:
-            offset = 0
-            while True:
-                page = action_call('GET', f'?offset={offset}')
-                # Collect before mutation: status edits can reorder the canonical list.
-                if offset == 0:
-                    items = []
-                items.extend(page['items'])
-                offset += len(page['items'])
-                if offset >= page['total'] or not page['items']:
-                    break
-            for item in sorted(items, key=priority_key):
-                if item['status'] == 'active' and item.get('agent_enabled', True) and item.get('prompt', '').strip():
-                    try:
-                        run = enqueue('actionable', item['id'], f"actionable:{item['id']}:revision:{item['version']}", 'hermes-schedule')
-                        results.append(run['id'])
-                    except (ValueError, KeyError, httpx.HTTPError):
-                        skipped.append('actionable:' + item['id'])
-        except httpx.HTTPError:
-            skipped.append('actionables:service-unavailable')
+    # Action discovery is owned solely by Celery Beat / action_execution.tick.
     subscriptions = {sub['source_key']: sub for sub in store.subscriptions()}
     for pin in get_memory_pin_store().snapshot()['ranges']:
         key = 'pin:' + str(pin['id'])
@@ -291,7 +287,7 @@ def reconcile_runs():
         for run in store.list(state=state, limit=1000, oldest=True):
             try:
                 if state == 'queued':
-                    apply_action(run, 'in_progress')
+                    continue
                 elif state in {'review', 'accepting'} and run['snapshot'].get('auto_complete'):
                     accept(run['id'], 'policy:' + POLICY)
                 elif state in {'failed', 'awaiting_input'} and not run['applied']:
@@ -302,10 +298,11 @@ def reconcile_runs():
 
 
 def apply_action(run, status):
-    if run['snapshot']['kind'] != 'actionable':
+    if run['snapshot']['kind'] != 'actionable' or run['snapshot'].get('delegation'):
         return
     source_id = run['snapshot']['source_id']
-    actor = f"agent:hermes:{run['id']}:{status}"
+    provider = run['snapshot'].get('execution_settings', {}).get('action_assignment', {}).get('runtime', 'hermes')
+    actor = f"agent:{provider}:{run['id']}:{status}"
     history = action_call('GET', '/' + source_id + '/history')['history']
     existing = next((row for row in history if row['actor'] == actor), None)
     if existing:
@@ -384,6 +381,11 @@ def owner_auth(request: Request):
 
 
 def worker_auth(request: Request):
+    match = re.fullmatch(r'/api/hfl-agent/delegation/([a-f0-9]{32})', request.url.path)
+    if match:
+        from modules.hfl_corpus.action_execution import delegation_parent
+        delegation_parent(match[1], request.headers.get('Authorization', ''))
+        return 'butler-delegation'
     expected = os.environ.get('HFL_AGENT_BRIDGE_TOKEN', '').strip()
     authorization = request.headers.get('Authorization', '')
     supplied = authorization[7:] if authorization.startswith('Bearer ') else ''
@@ -650,6 +652,14 @@ def source_view(kind: str, source_id: str):
     store = bridge_store()
     store.expire()
     runs, events = store.list(key), store.events(key)
+    from modules.hfl_corpus.action_execution import children
+    for run in runs:
+        run['children'] = children(run['id'])
+        with store.connect() as db:
+            receipt = db.execute('SELECT state,receipt FROM action_provider_receipts WHERE run_id=?', (run['id'],)).fetchone()
+        if receipt:
+            run['provider_state'] = receipt['state']
+            run['provider_receipt'] = json.loads(receipt['receipt'])
     for run in runs:
         run['result']['output_html'] = str(render_markdown(run['result'].get('summary', '')))
     for event in events:
@@ -728,6 +738,9 @@ def accept_map_proposal(identity: str, payload: dict, user=Depends(owner_auth)):
 
 @owner_router.post('/runs/{run_id}/{decision}')
 def decide(run_id: str, decision: str, background_tasks: BackgroundTasks, payload: dict | None = None, user=Depends(owner_auth)):
+    if decision == 'resolve-provider':
+        from modules.hfl_corpus.action_execution import resolve_submission
+        return checked(resolve_submission, run_id, payload or {}, user)
     if decision == 'continue':
         return continue_attempt(run_id, payload or {}, user)
     if decision == 'accept':
@@ -743,6 +756,9 @@ def decide(run_id: str, decision: str, background_tasks: BackgroundTasks, payloa
 def continue_attempt(run_id: str, payload: dict, user: str):
     store = bridge_store()
     parent = checked(store.get, run_id)
+    from modules.hfl_corpus.action_execution import store as execution_store
+    if any(r['run_id'] == run_id for r in execution_store().receipts()):
+        raise HTTPException(409, 'This Nod turn is still tracked. Resolve its approval or receipt in Nod before starting another attempt.')
     reply = payload.get('reply', '')
     if not isinstance(reply, str) or len(reply) > 8000:
         raise HTTPException(400, 'Reply must be text of at most 8,000 characters.')
@@ -750,6 +766,8 @@ def continue_attempt(run_id: str, payload: dict, user: str):
     if not reply and parent['state'] == 'awaiting_input' and parent['result'].get('blocked_reason') == 'input':
         raise HTTPException(400, 'Answer the question before continuing.')
     original = parent['snapshot']
+    if original.get('delegation'):
+        raise HTTPException(409, 'Continue delegated work through its parent Action.')
     current = checked(source_snapshot, original['kind'], original['source_id'])
     def instructions(source):
         return {k: v for k, v in source.items() if k not in {'version', 'status', 'updated_at'}}
@@ -770,13 +788,11 @@ def continue_attempt(run_id: str, payload: dict, user: str):
     artifacts.update({item['name']: {**item, 'run_id': run_id} for item in store.artifacts(run_id)})
     if len(artifacts) > 30:
         raise HTTPException(400, 'Continuation exceeds the 30-file limit.')
-    current.update(auto_complete=original.get('auto_complete', True), context=original.get('context', {}),
+    current.update(auto_complete=original.get('auto_complete', True), context=original.get('context', {}), requested_by=user,
                    occurrence_date=original.get('occurrence_date'),
                    operation_scope=original.get('operation_scope', parent['request_key']),
                    continuation={'parent_run_id': run_id, 'reply': reply, 'history': history, 'artifacts': list(artifacts.values())})
     run = checked(store.continue_run, run_id, current, payload.get('request_key'), user, reply)
-    if run['state'] == 'queued':
-        checked(apply_action, run, 'in_progress')
     return store.get(run['id'])
 
 
@@ -805,7 +821,10 @@ def worker_ready():
 def queue():
     bridge_store().expire()
     reconcile_runs()
-    return {'runs': [{'id': run['id']} for run in bridge_store().list(state='queued', oldest=True)]}
+    from modules.hfl_corpus.action_execution import runtime
+    runs = [run for run in bridge_store().list(state='queued', oldest=True) if runtime(run) == 'hermes']
+    runs.sort(key=lambda run: not bool(run['snapshot'].get('delegation')))
+    return {'runs': [{'id': run['id']} for run in runs]}
 
 
 @worker_router.get('/settings')
@@ -828,6 +847,9 @@ def retry_delivery():
 def claim(run_id: str, payload: dict = None, agent=Depends(worker_auth)):
     store = bridge_store()
     run = checked(store.get, run_id)
+    from modules.hfl_corpus.action_execution import runtime
+    if runtime(run) != 'hermes':
+        raise HTTPException(409, 'This execution belongs to another provider.')
     host = run['snapshot'].get('execution_settings', {}).get('agent_host')
     if host and (payload or {}).get('host') != host:
         raise HTTPException(409, 'This request belongs to another worker host.')
@@ -835,27 +857,39 @@ def claim(run_id: str, payload: dict = None, agent=Depends(worker_auth)):
         raise HTTPException(409, 'This request is no longer queued.')
     try:
         current = source_snapshot(run['snapshot']['kind'], run['snapshot']['source_id'])
+        if run['snapshot'].get('delegation'):
+            from modules.hfl_corpus.action_execution import validate_source
+            validate_source(run)
     except (KeyError, BridgeConflict, ValueError):
         checked(store.owner_transition, run_id, 'cancelled', 'bridge', 'Source is no longer eligible for execution.')
         raise HTTPException(409, 'Source is no longer eligible for execution.') from None
     except httpx.HTTPError:
         raise HTTPException(502, 'The canonical actionable service is unavailable.') from None
-    if current['instruction_hash'] != run['snapshot']['instruction_hash'] or (current['kind'] == 'actionable' and current['source']['version'] != (run['expected_version'] or run['snapshot']['source']['version'])):
+    if (not run['snapshot'].get('delegation') and current['instruction_hash'] != run['snapshot']['instruction_hash']) or (current['kind'] == 'actionable' and current['source']['version'] != (run['expected_version'] or run['snapshot']['source']['version'])):
         checked(store.owner_transition, run_id, 'cancelled', 'bridge', 'Source changed before execution; request a new run.')
         raise HTTPException(409, 'Instructions changed; request a new run.')
+    if not run['snapshot'].get('delegation') and current.get('execution_settings', {}).get('action_assignment') != run['snapshot'].get('execution_settings', {}).get('action_assignment'):
+        checked(store.owner_transition, run_id, 'cancelled', 'bridge', 'Assignment changed before execution.')
+        raise HTTPException(409, 'Assignment changed; request a new run.')
     run = checked(store.claim, run_id, agent, concurrency=read_settings()['agent_concurrency'])
     try:
         apply_action(run, 'in_progress')
     except (ValueError, KeyError, httpx.HTTPError):
         store.report(run_id, agent, run['lease_token'], 'start-failed', 'failed', {'summary': 'Could not update the actionable. No agent work started.'})
         raise HTTPException(409, 'Could not start the actionable; inspect its current state.') from None
-    return store.get(run_id, private=True)
+    result = store.get(run_id, private=True)
+    if result['snapshot'].get('execution_settings', {}).get('action_assignment', {}).get('mode') == 'butler':
+        from modules.hfl_corpus.action_execution import delegation_token
+        result['delegation_token'] = delegation_token(result)
+    return result
 
 
 @worker_router.post('/runs/{run_id}/events')
 def report(run_id: str, payload: dict, background_tasks: BackgroundTasks, agent=Depends(worker_auth)):
     if payload.get('kind') == 'succeeded':
         current = checked(bridge_store().get, run_id)
+        from modules.hfl_corpus.action_execution import review_children
+        checked(review_children, current, payload.get('payload') or {})
         if current['snapshot']['kind'] == 'mindmap':
             proposals = (payload.get('payload') or {}).get('ideas')
             members = {n['id'] for n in current['snapshot']['source']['members']}

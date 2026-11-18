@@ -137,15 +137,19 @@ class AgentBridgeStore:
     def claim(self, run_id, agent, concurrency=None):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            row = db.execute('SELECT * FROM agent_requests WHERE id=?', (run_id,)).fetchone()
+            if not row or row['state'] != 'queued':
+                raise BridgeConflict('This request is no longer queued.')
             if concurrency is not None:
-                used = db.execute("SELECT count(*) FROM agent_requests WHERE state='running'").fetchone()[0]
+                # One reserved child slot prevents coordinating parents from
+                # occupying every Hermes worker while awaiting their children.
+                if json.loads(row['snapshot']).get('delegation'):
+                    concurrency += 1
+                used = db.execute("SELECT count(*) FROM agent_requests WHERE state='running' AND agent!='nod'").fetchone()[0]
                 if db.execute("SELECT 1 FROM sqlite_master WHERE name='action_agent_sessions'").fetchone():
                     used += db.execute("SELECT count(*) FROM action_agent_sessions WHERE state='running'").fetchone()[0]
                 if used >= concurrency:
                     raise BridgeConflict('Worker capacity reached; waiting for an execution slot.')
-            row = db.execute('SELECT * FROM agent_requests WHERE id=?', (run_id,)).fetchone()
-            if not row or row['state'] != 'queued':
-                raise BridgeConflict('This request is no longer queued.')
             if concurrency is not None and row['source_key'].startswith('actionable:') and db.execute("SELECT 1 FROM sqlite_master WHERE name='action_agent_sessions'").fetchone():
                 if db.execute("SELECT 1 FROM action_agent_sessions WHERE source_id=? AND state IN ('waiting','running')", (row['source_key'].split(':', 1)[1],)).fetchone():
                     raise BridgeConflict('The action already has an interactive turn waiting or running.')
@@ -273,7 +277,7 @@ class AgentBridgeStore:
     def expire(self):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            for row in db.execute("SELECT id FROM agent_requests WHERE state='running' AND lease_until<?", (now(),)).fetchall():
+            for row in db.execute("SELECT id FROM agent_requests WHERE state='running' AND agent!='nod' AND lease_until<?", (now(),)).fetchall():
                 payload = {'summary': 'Agent heartbeat expired. Inspect the result before starting a new attempt.'}
                 db.execute("UPDATE agent_requests SET state='failed',result=?,delivery='pending',updated_at=? WHERE id=?", (json.dumps(payload), now(), row['id']))
                 self.event(db, row['id'], 'expired', 'failed', 'bridge', payload)

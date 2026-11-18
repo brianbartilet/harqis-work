@@ -6,7 +6,7 @@ Usage: python scripts/agents/hfl/agent_bridge_runner.py --once
        python scripts/agents/hfl/agent_bridge_runner.py --smoke
        python scripts/agents/hfl/agent_bridge_runner.py --check
 
-Minute discovery belongs to Hermes; --watch consumes queued requests.
+Action discovery belongs to Celery; --watch consumes queued Hermes requests.
 """
 from __future__ import annotations
 
@@ -316,6 +316,18 @@ def run_hermes(run, heartbeat, *, timeout=1200):
     # The queue lease and owner API token are not needed by the agent subprocess.
     environment.pop('HFL_AGENT_BRIDGE_TOKEN', None)
     environment.pop('HFL_AGENT_CAPABILITY_CHECK', None)
+    if run.get('delegation_token'):
+        environment['HFL_ACTION_DELEGATION_TOKEN'] = run['delegation_token']
+        environment['HFL_ACTION_PARENT_RUN'] = run['id']
+        environment['HFL_AGENT_BRIDGE_URL'] = os.environ['HFL_AGENT_BRIDGE_URL']
+        helper = REPO_ROOT / 'apps/hfl_corpus/action_execution.py'
+        interpreter = REPO_ROOT / ('.venv/Scripts/python.exe' if os.name == 'nt' else '.venv/bin/python')
+        prompt += ('\n\nDelegation tool: run ' + str(interpreter) + ' ' + str(helper) +
+                   ' with JSON on stdin: {"operation":"delegate","agent_id":"...","prompt":"...","request_key":"stable-key"}. '
+                   'Read results with {"operation":"results"}. Do not print environment capabilities. '
+                   'Permitted agent IDs: ' + json.dumps(settings.get('permitted_agent_ids', [])) +
+                   '. Wait for delegated results, review every child, and include reviewed_child_ids in your final JSON. '
+                   'If a child is incomplete, report the parent blocker with complete=false. Do not claim completion while child work is pending.')
     environment['HFL_AGENT_EXECUTION_SETTINGS'] = json.dumps(settings)
     environment['PYTHONIOENCODING'] = 'utf-8'
     environment['PYTHONUTF8'] = '1'
@@ -536,12 +548,13 @@ def main():
                     consume(connection, limit=1)
                 finally:
                     connection.client.close()
-            with ThreadPoolExecutor(max_workers=32) as pool:
+            with ThreadPoolExecutor(max_workers=33) as pool:
                 pending = set()
                 while True:
                     pending = {job for job in pending if not job.done()}
                     try:
-                        capacity = client.call('settings')['agent_concurrency']
+                        # The server reserves the extra slot for delegated children.
+                        capacity = client.call('settings')['agent_concurrency'] + 1
                         if len(pending) < capacity:
                             pending.add(pool.submit(consume_one))
                     except Exception as exc:

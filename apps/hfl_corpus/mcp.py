@@ -31,6 +31,24 @@ def _dict_result(result) -> dict:
 
 def register_hfl_corpus_tools(mcp: FastMCP):
 
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
+    def trigger_hfl_action_execution(action_id: str, request_key: str) -> dict:
+        """Execute an existing Action. Reuse request_key for retries; this starts agent work."""
+        from apps.hfl_corpus.action_execution import trigger
+        return trigger(action_id, request_key)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False))
+    def delegate_hfl_action_execution(agent_id: str, prompt: str, request_key: str) -> dict:
+        """Delegate within the current Butler run to an explicitly permitted agent."""
+        from apps.hfl_corpus.action_execution import delegate
+        return delegate(agent_id, prompt, request_key)
+
+    @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
+    def get_hfl_action_delegation_results() -> dict:
+        """Read child execution receipts and results for the current Butler run."""
+        from apps.hfl_corpus.action_execution import results
+        return results()
+
     @mcp.tool(annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False))
     def get_hfl_corpus_entity_topic_removal_preview() -> dict:
         """Preview topic removal counts and the selection hash without changing state."""

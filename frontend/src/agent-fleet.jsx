@@ -70,7 +70,6 @@ function Editor({agent,catalog,agents,spaces,close,saved,reloadCatalog}){
 }
 const DEFAULTS_SECTIONS = [
   {title:'Scheduling', fields:[
-    ['actions_polling_minutes','Polling Interval (Minutes)'],
     ['pin_backfill_days','Pin Backfill (Days)'],
   ]},
   {title:'Model & Tools', fields:[
