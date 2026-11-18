@@ -1,6 +1,7 @@
 """Fleet persistence, snapshots, capability boundaries and owner UI."""
 import io
 import json
+import re
 from uuid import uuid4
 from pathlib import Path
 from urllib.parse import urlparse
@@ -175,6 +176,24 @@ def test_prepare_retry_does_not_duplicate_actions(fleet, authenticated_client):
     two = post(authenticated_client, '/items/butler/prepare', {})
     assert one.status_code == 200, one.text
     assert one.json()['action_id'] == two.json()['action_id']
+
+
+def test_fleet_action_assignment_uses_shared_editor_csrf(fleet, bridge, authenticated_client):
+    client = authenticated_client
+    page = client.get('/agents')
+    # Match the token source used by hfl-action-agent-settings.js and the bridge.
+    token_node = re.search(r'<script\b[^>]*\bdata-memory-csrf[^>]*>(.*?)</script>', page.text, re.S)
+    assert token_node is not None, 'Fleet must expose the shared action editor token'
+    token = json.loads(token_node.group(1))
+    agent = post(client, '/items', {'name': 'Nod test', 'runtime': 'nod'}).json()['item']
+    item = create_action(bridge[2])
+    endpoint = '/hfl-corpus/agent-bridge/actions/' + item['id'] + '/configuration'
+    payload = {'preset': '', 'overrides': {}, 'assignment_mode': 'agent', 'agent_id': agent['id']}
+    assert client.post(endpoint, json=payload).status_code == 403
+    response = client.post(endpoint, json=payload, headers={'X-CSRF-Token': token})
+    assert response.status_code == 200, response.text
+    assert response.json()['card']['agent_id'] == agent['id']
+    assert client.get(endpoint).json()['card']['agent_id'] == agent['id']
 
 
 def test_butler_request_is_idempotent(fleet, bridge, authenticated_client, monkeypatch):

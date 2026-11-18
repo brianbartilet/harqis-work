@@ -69,6 +69,7 @@ APP_CATALOG: tuple[AppToolSpec, ...] = (
     AppToolSpec("tcg_mp", "TCG Marketplace", "apps.tcg_mp.mcp.register_tcg_mp_tools"),
     AppToolSpec("telegram", "Telegram", "apps.telegram.mcp.register_telegram_tools"),
     AppToolSpec("trello", "Trello", "apps.trello.mcp.register_trello_tools"),
+    AppToolSpec("typesafe", "TypeSafe", "apps.typesafe.mcp.register_typesafe_tools"),
     AppToolSpec("youtube", "YouTube", "apps.youtube.mcp.register_youtube_tools"),
     AppToolSpec("ynab", "YNAB", "apps.ynab.mcp.register_ynab_tools"),
 )
