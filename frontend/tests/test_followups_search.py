@@ -43,7 +43,7 @@ def test_board_search_keeps_queries_focus_and_selection(width, tmp_path):
           window.HflIdeas={api:async()=>({items:testIdeas})};
           window.HflEntitySemantics={action:{labels:{}},idea:{labels:{suggested:'Suggested'}}};
         }''')
-        for name in ['vendor/sortablejs-1.15.2.min.js', 'js/hfl-bulk-actions.js', 'js/hfl-followups.js']:
+        for name in ['vendor/sortablejs-1.15.7.min.js', 'js/hfl-bulk-actions.js', 'js/hfl-followups.js']:
             page.add_script_tag(path=str(root / 'static' / name))
         cards = page.locator('[data-followup-id]')
         search = page.get_by_role('searchbox', name='Search actions')

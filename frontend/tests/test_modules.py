@@ -24,8 +24,8 @@ def test_module_shell_uses_versioned_self_hosted_assets(authenticated_client):
     assert {
         '/static/css/app.min.css',
         '/static/vendor/htmx-1.9.12.min.js',
-        '/static/vendor/alpinejs-3.14.1.min.js',
-        '/static/vendor/sortablejs-1.15.2.min.js',
+        '/static/vendor/alpinejs-3.17.5.min.js',
+        '/static/vendor/sortablejs-1.15.7.min.js',
         '/static/css/activity-navigation.css',
         '/static/js/activity-navigation.js',
     } <= asset_paths

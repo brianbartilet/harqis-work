@@ -83,7 +83,7 @@ def test_list_sort_and_filtered_move(width, tmp_path):
             return {node:d,form:d.querySelector('form'),body:d.querySelector('.body'),footer:d.querySelector('footer'),error:d.querySelector('.error')};
           }};
         }''')
-        for name in ['vendor/sortablejs-1.15.2.min.js', 'js/hfl-bulk-actions.js', 'js/hfl-followups.js']:
+        for name in ['vendor/sortablejs-1.15.7.min.js', 'js/hfl-bulk-actions.js', 'js/hfl-followups.js']:
             page.add_script_tag(path=str(root / 'static' / name))
         lane = page.locator('[data-status="open"]')
         cards = lane.locator('[data-followup-id]')

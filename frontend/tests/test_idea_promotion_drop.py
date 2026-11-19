@@ -27,7 +27,7 @@ def test_idea_drag_uses_promotion_target_and_restores_card(width, tmp_path):
           window.HflObjectDescription=()=>'';
           window.HflIdeas={api:async()=>({items:[{id:'idea-one',title:'Test idea',status:'suggested',origin:'manual'}]}),convert:id=>promotions.push(id)};
         }''')
-        for path in ['vendor/sortablejs-1.15.2.min.js', 'js/hfl-bulk-actions.js', 'js/hfl-followups.js']:
+        for path in ['vendor/sortablejs-1.15.7.min.js', 'js/hfl-bulk-actions.js', 'js/hfl-followups.js']:
             page.add_script_tag(path=str(root / path))
         page.locator('.ideas-drawer-toggle').click()
         card = page.locator('[data-idea-id="idea-one"]')

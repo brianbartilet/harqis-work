@@ -6,7 +6,7 @@
     "build:knowledge-graph": "node frontend/scripts/build-knowledge-graph.mjs"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "4.3.3",
+    "@tailwindcss/cli": "4.3.5",
     "alpinejs": "3.17.5",
     "esbuild": "0.28.2",
     "htmx.org": "1.9.12",
