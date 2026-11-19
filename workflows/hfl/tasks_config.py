@@ -42,6 +42,13 @@ def persona_audit_now():
 
 
 WORKFLOW_HFL = {
+    'run-job--reconcile_action_executions': {
+        'task': 'workflows.hfl.tasks.action_execution.reconcile_action_executions',
+        'schedule': crontab(minute='*'), 'kwargs': {},
+        'options': {'queue': WorkflowQueue.HOST, 'expires': 60},
+        'manifesto': {'code_role': 'organize+express', 'para_bucket': 'area',
+                      'express_target': 'hfl:actions', 'review_artifact': 'action_execution_history', 'hfl_signal': True},
+    },
     'run-job--reconcile_fleet_observations': {
         'task': 'workflows.hfl.tasks.fleet_observations.reconcile_fleet_observations',
         'schedule': crontab(minute='*/5'), 'kwargs': {},

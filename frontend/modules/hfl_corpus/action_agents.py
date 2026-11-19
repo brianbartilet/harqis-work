@@ -14,6 +14,64 @@ from workflows.hfl.action_agent_store import ActionAgentStore
 
 owner = APIRouter(prefix='/hfl-corpus/agent-bridge', dependencies=[Depends(bridge.owner_auth)])
 worker = APIRouter(prefix='/api/hfl-agent', dependencies=[Depends(bridge.worker_auth)])
+
+
+@worker.post('/actions/reconcile')
+def reconcile_actions():
+    from modules.hfl_corpus.action_execution import tick
+    return tick()
+
+
+@owner.post('/actions/{source_id}/trigger')
+def trigger_action(source_id: str, payload: dict, user=Depends(bridge.owner_auth)):
+    from modules.hfl_corpus.action_execution import trigger
+    return bridge.checked(trigger, source_id, payload.get('request_key'), user)
+
+
+@worker.post('/actions/{source_id}/trigger')
+def trigger_action_service(source_id: str, payload: dict):
+    from modules.hfl_corpus.action_execution import trigger
+    return bridge.checked(trigger, source_id, payload.get('request_key'), bridge.get_settings().app_username)
+
+
+@owner.get('/actions/{source_id}/schedule')
+def action_schedule(source_id: str):
+    bridge.action_call('GET', '/' + source_id)
+    from modules.hfl_corpus.action_execution import store
+    return next((s for s in store().schedules() if s['source_id'] == source_id), {'enabled': False, 'minutes': 60})
+
+
+@owner.post('/actions/{source_id}/schedule')
+def save_action_schedule(source_id: str, payload: dict, user=Depends(bridge.owner_auth)):
+    from modules.hfl_corpus.action_execution import store
+    if payload.get('enabled') is True:
+        bridge.checked(bridge.source_snapshot, 'actionable', source_id)
+    else:
+        bridge.checked(bridge.action_call, 'GET', '/' + source_id)
+    bridge.checked(store().schedule, source_id, payload.get('minutes'), payload.get('enabled'), user)
+    return action_schedule(source_id)
+
+
+@worker.get('/delegation/{run_id}')
+def delegated_results(run_id: str, request: Request):
+    from modules.hfl_corpus.action_execution import delegation_parent, children
+    delegation_parent(run_id, request.headers.get('Authorization', ''))
+    return {'runs': children(run_id)}
+
+
+@worker.post('/delegation/{run_id}')
+def delegate_action(run_id: str, payload: dict, request: Request):
+    import uuid
+    from modules.hfl_corpus.action_execution import delegation_parent, delegate, store
+    parent = delegation_parent(run_id, request.headers.get('Authorization', ''))
+    token = uuid.uuid4().hex
+    db = store()
+    if not db.lock('delegate:' + run_id, token, seconds=60):
+        raise HTTPException(409, 'A delegation request is being recorded. Retry with the same request key.')
+    try:
+        return bridge.checked(delegate, parent, payload)
+    finally:
+        db.unlock('delegate:' + run_id, token)
 CONFIG_KEYS = {'agent_mode','hermes_profile','agent_toolsets','agent_model','agent_provider',
                'agent_default_recipient','agent_timeout_seconds','agent_max_turns',
                'agent_repository','agent_base_branch','agent_host'}
@@ -88,6 +146,7 @@ def configuration(source_id: str, user=Depends(bridge.owner_auth)):
             'action_html': {key: str(bridge.render_markdown(action.get(key) or '')) for key in ('prompt','expected_outcome','description','notes','completion_note')},
             'effective': effective(source_id, require_active=False, execute=False), 'defaults': read_settings(),
             'card': configs.get('card:' + source_id, {'preset': '', 'overrides': {}}),
+            'schedule': action_schedule(source_id),
             'agents': agents(user),
             'presets': {key[7:]: value for key, value in configs.items() if key.startswith('preset:')}}
 

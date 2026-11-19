@@ -124,6 +124,11 @@ def state(user, identity):
 
 def send(user, identity, raw):
     data, client, _ = context(user, identity, active=True)
+    from modules.hfl_corpus.action_execution import store as execution_store
+    from workflows.hfl.agent_bridge_store import digest
+    occupied = next((r for r in execution_store().receipts() if r['installation'] == digest(data['site'])), None)
+    if occupied and raw.get('request_id') != occupied['request']['request_id'] and 'approval_id' not in raw:
+        raise HTTPException(409, 'An Action owns this Nod conversation. Wait for its result; approvals can still be answered.')
     if set(raw) - {'thread_id', 'binding', 'request_id', 'text', 'approval_id', 'message_id', 'approved'}:
         raise HTTPException(422, 'Unsupported Nod message fields.')
     if raw.get('binding') != binding(data):

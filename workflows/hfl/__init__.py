@@ -40,3 +40,4 @@ import workflows.hfl.tasks.entity_consolidation  # noqa: F401
 import workflows.hfl.tasks.persona_audit
 import workflows.hfl.tasks.github_updates
 import workflows.hfl.tasks.fleet_observations
+import workflows.hfl.tasks.action_execution

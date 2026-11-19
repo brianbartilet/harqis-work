@@ -1351,3 +1351,11 @@ replay, existing links, fork metadata, pagination, status transitions and API au
 mutation test is opt-in/skipped. Run the existing integration tests and frontend
 route coverage contract after changes. Source health monitors task receipts without
 requiring new entries on every poll.
+# Action execution
+
+`tasks.action_execution.reconcile_action_executions` is the single Beat-owned
+Action discovery/reconciliation task. It runs every minute on the host queue and
+calls the credential-owning frontend using the existing `HFL_AGENT_BRIDGE_URL`
+and `HFL_AGENT_BRIDGE_TOKEN`. See
+[Action provider execution](../../docs/info/ACTION-PROVIDER-EXECUTION.md) for
+status transitions, Nod receipts, Butler delegation, and rollout checks.

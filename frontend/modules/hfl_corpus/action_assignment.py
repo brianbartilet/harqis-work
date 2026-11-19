@@ -44,7 +44,11 @@ def validate(raw, old, user):
     instructions = raw.get('additional_instructions', old.get('additional_instructions', ''))
     if not isinstance(instructions, str) or len(instructions) > 20000:
         raise ValueError('Action guidance must be at most 20,000 characters.')
-    return dict(assignment_mode=mode, agent_id=identity, specialist_mode=profile_mode,
+    permitted = raw.get('permitted_agent_ids', old.get('permitted_agent_ids', []))
+    available = {a['id'] for a in agents(user) if a['active']}
+    if not isinstance(permitted, list) or len(permitted) > 20 or any(not isinstance(a, str) or a not in available for a in permitted):
+        raise ValueError('Choose up to 20 available delegation targets.')
+    return dict(assignment_mode=mode, agent_id=identity, permitted_agent_ids=sorted(set(permitted)), specialist_mode=profile_mode,
                 specialist_profile=profile, additional_instructions=instructions)
 
 
@@ -60,6 +64,9 @@ def resolve(card, defaults, *, execute=True, require_active=True):
             reason = 'The assigned agent is unavailable. Edit this Action to choose another agent.'
     if mode == 'manual':
         reason = 'Manual action. Assign an agent or the butler before starting automated work.'
+    elif agent and agent['runtime'] == 'nod' and agent.get('connector_provider') == 'nod' and agent.get('connector_user'):
+        if not agent['active']:
+            reason = 'The assigned agent is inactive. Choose an active agent.'
     elif agent and agent['runtime'] != 'hermes':
         reason = f"{agent['name']} is assigned, but its connector does not support Action execution. Continue in its provider or assign Hermes/the butler."
     elif agent and not agent['active']:
@@ -70,6 +77,10 @@ def resolve(card, defaults, *, execute=True, require_active=True):
     if agent and agent['runtime'] == 'hermes' and not reason:
         settings = service.execution(identity, require_active=require_active)
     settings.update(card.get('overrides', {}))
+    settings['permitted_agent_ids'] = card.get('permitted_agent_ids', [])
+    if agent and agent['runtime'] == 'nod' and not reason:
+        settings['provider_owner'] = agent['connector_user']
+        settings['fleet_agent'] = copy.deepcopy({k: agent.get(k) for k in ('id', 'name', 'runtime', 'version', 'instructions')})
     profile_mode = 'inherit'
     profile = (agent or {}).get('specialist_profile')
     # Recompose from raw agent instructions, never append a second profile copy.

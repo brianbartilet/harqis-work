@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 import pytest
+from modules.hfl_corpus.action_execution import tick as action_tick
 
 
 @pytest.fixture
@@ -71,23 +72,20 @@ def test_polling_skips_blank_prompts_and_reopen_creates_fresh_attempt(bridge, au
     actions.update(blank['id'], {'version': 1, 'prompt': '  ', 'status': 'active'}, actor='owner')
     item = create_action(actions)
     actions.update(item['id'], {'version': 1, 'status': 'active'}, actor='owner')
-    ids = module.sweep()['runs']
+    ids = action_tick()['runs']
     assert len(ids) == 1
     assert actions.get(blank['id'])['status'] == 'active'
-    assert actions.get(item['id'])['status'] == 'in_progress'
+    assert actions.get(item['id'])['status'] == 'active'
     first = authenticated_client.post(f'/api/hfl-agent/runs/{ids[0]}/claim', headers=WORKER, json={}).json()
     event(authenticated_client, first, 'failed', {'summary': 'Download failed.'})
     assert actions.get(item['id'])['status'] == 'incomplete'
     current = actions.get(item['id'])
     actions.update(item['id'], {'version': current['version'], 'status': 'active'}, actor='owner')
-    assert module.sweep()['runs'] == []  # Configured cadence is durable across ticks.
-    with store.connect() as db:
-        db.execute("DELETE FROM agent_dispatch_state WHERE key='actions-poll'")
-    second = module.sweep()['runs'][0]
+    second = action_tick()['runs'][0]
     assert second != first['id']
     assert len(store.list('actionable:' + item['id'])) == 2
     assert event(authenticated_client, first, 'progress', {'summary': 'Late result'}).status_code == 409
-    assert actions.get(item['id'])['status'] == 'in_progress'
+    assert actions.get(item['id'])['status'] == 'active'
 
 
 def test_external_action_opt_out_survives_edits_and_scheduler_ticks(bridge):
@@ -96,7 +94,7 @@ def test_external_action_opt_out_survives_edits_and_scheduler_ticks(bridge):
                            'expected_outcome': 'Review later', 'prompt': 'A complete prompt',
                            'agent_enabled': False}, actor='owner-api')[0]
     actions.update(item['id'], {'version': 1, 'notes': 'Edited', 'status': 'active'}, actor='owner')
-    assert module.sweep()['runs'] == []
+    assert action_tick()['runs'] == []
     assert actions.get(item['id'])['status'] == 'active'
     assert actions.get(item['id'])['agent_enabled'] is False
 
@@ -412,18 +410,18 @@ def test_auth_and_csrf_do_not_expose_worker_authority(bridge, authenticated_clie
 def test_review_drafts_wait_for_ready_and_discovery_is_deduplicated(bridge):
     module, store, actions = bridge
     item = create_action(actions)
-    assert module.sweep()['runs'] == []
+    assert action_tick()['runs'] == []
     item = actions.update(item['id'], {'version': item['version'], 'prompt': 'Fully drafted instructions'}, actor='owner')
     with store.connect() as db:
         db.execute("DELETE FROM agent_dispatch_state WHERE key='actions-poll'")
-    assert module.sweep()['runs'] == []
+    assert action_tick()['runs'] == []
     assert actions.get(item['id'])['status'] == 'open'
     actions.update(item['id'], {'version': item['version'], 'status': 'active'}, actor='owner')
     with store.connect() as db:
         db.execute("DELETE FROM agent_dispatch_state WHERE key='actions-poll'")
-    first = module.sweep()['runs']
+    first = action_tick()['runs']
     assert len(first) == 1
-    assert module.sweep()['runs'] == []
+    assert action_tick()['runs'] == []
     manual = module.enqueue('actionable', item['id'], 'manual', 'owner')
     assert manual['id'] == first[0]
     assert len(store.list()) == 1
@@ -451,11 +449,11 @@ def test_stale_instructions_cancel_before_claim(bridge, authenticated_client):
     module, store, actions = bridge
     item = create_action(actions)
     run = module.enqueue('actionable', item['id'], 'stale', 'owner')
-    actions.update(item['id'], {'version': 2, 'prompt': 'Changed'}, actor='owner')
+    actions.update(item['id'], {'version': item['version'], 'prompt': 'Changed'}, actor='owner')
     response = authenticated_client.post(f"/api/hfl-agent/runs/{run['id']}/claim", headers=WORKER, json={})
     assert response.status_code == 409
     assert store.get(run['id'])['state'] == 'cancelled'
-    assert actions.get(item['id'])['status'] == 'in_progress'
+    assert actions.get(item['id'])['status'] == 'open'
 
 
 def test_returning_to_review_prevents_queued_worker_pickup(bridge, authenticated_client):
@@ -657,7 +655,7 @@ Draft ready. <img src=x onerror=alert(1)> is literal text.
         page.get_by_role('heading', name='Completed', exact=True).wait_for()
         report = page.locator('.agent-result-card').first
         assert report.locator('.markdown-body').evaluate('(el) => getComputedStyle(el).whiteSpace') == 'normal'
-        assert report.locator('.agent-output-file').count() == 2
+        playwright.expect(report.locator('.agent-output-file')).to_have_count(2)
         assert report.get_by_role('link', name='Download result.md').get_attribute('href').endswith('/result.md')
         assert report.locator('.agent-output-evidence').get_attribute('open') is None
         report.get_by_text('Sources and evidence · 2', exact=True).click()
@@ -715,7 +713,7 @@ def test_continue_preserves_context_files_and_operation_scope(bridge, authentica
     assert second['snapshot']['operation_scope'] == first['request_key']
     assert second['snapshot']['continuation']['history'][0]['result'] == stopped
     assert second['snapshot']['continuation']['artifacts'][0]['name'] == 'report.md'
-    assert actions.get(item['id'])['status'] == 'in_progress'
+    assert actions.get(item['id'])['status'] == 'incomplete'
     assert store.get(first['id'])['state'] == 'cancelled'
     assert authenticated_client.post(path, headers=owner_headers(), json=payload).json()['id'] == second['id']
     assert authenticated_client.post(path, headers=owner_headers(), json={**payload, 'reply': 'Different'}).status_code == 409
@@ -793,7 +791,7 @@ def test_sweep_queues_important_actions_before_less_important_urgency(bridge):
     for matrix in ('Q3', 'Q2', 'Q1', 'Q4'):
         item = create_action(actions)
         actions.update(item['id'], {'version':1, 'matrix':matrix, 'status':'active'}, actor='owner')
-    runs = module.sweep()['runs']
+    runs = action_tick()['runs']
     assert [store.get(run)['snapshot']['source']['matrix'] for run in runs] == ['Q1','Q2','Q3','Q4']
 
 

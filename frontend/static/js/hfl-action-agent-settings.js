@@ -40,12 +40,28 @@
     menu.append(trigger,options);wrap.append(heading,menu);controls.append(wrap);
     menu.onkeydown=event=>{const buttons=[...options.querySelectorAll('button')];if(event.key==='Escape'){menu.open=false;trigger.focus();event.preventDefault();}else if(['ArrowDown','ArrowUp'].includes(event.key)&&buttons.length){menu.open=true;const i=buttons.indexOf(document.activeElement);buttons[(i+(event.key==='ArrowDown'?1:buttons.length-1)+buttons.length)%buttons.length].focus();event.preventDefault();}};
     const agent=config.agents.find(a=>a.id===draft.agent_id);
-    if(agent&&agent.runtime!=='hermes')controls.append(el('p','Assignment only: this connector cannot run Actions yet. Continue in its provider or choose Hermes/the butler.'));
+    if(agent&&!['hermes','nod'].includes(agent.runtime))controls.append(el('p','Assignment only: this connector cannot run Actions yet.'));
+    if(agent?.runtime==='nod')controls.append(el('p','Nod runs one Action at a time in its shared conversation. Supporting files are not supported for Nod Actions yet.'));
    }
-   if(draft.assignment_mode==='butler')controls.append(el('p','The butler plans the work and reports progress and results here.'));
+   if(draft.assignment_mode==='butler'){
+    controls.append(el('p','The butler plans the work, reviews delegated results, and reports progress here.'));
+    const permitted=el('fieldset');permitted.className='action-execution-options';permitted.append(el('legend','Permitted delegation targets'));
+    for(const agent of config.agents.filter(a=>a.active&&a.id!=='butler'&&['hermes','nod'].includes(a.runtime))){
+     const label=el('label'),input=el('input');input.type='checkbox';input.checked=(draft.permitted_agent_ids||[]).includes(agent.id);
+     input.onchange=()=>{draft.permitted_agent_ids=input.checked?[...new Set([...(draft.permitted_agent_ids||[]),agent.id])]:(draft.permitted_agent_ids||[]).filter(id=>id!==agent.id);changed();};
+     label.className='action-execution-check';label.append(input,document.createTextNode(agent.name));permitted.append(label);
+    }
+    controls.append(permitted);
+   }
    if(draft.assignment_mode==='manual'){
     controls.append(el('p','You handle this Action. No agent will run automatically.'));return;
    }
+   const schedule=el('fieldset');schedule.className='action-execution-options';schedule.append(el('legend','Action trigger'));
+   const enabledLabel=el('label'),enabledInput=el('input');enabledInput.type='checkbox';enabledInput.checked=!!draft.schedule_enabled;
+   enabledLabel.className='action-execution-check';enabledLabel.append(enabledInput,document.createTextNode('Scheduled discovery while Ready'));schedule.append(enabledLabel);
+   const intervalLabel=el('label','Interval (minutes)'),interval=el('input');interval.type='number';interval.min='1';interval.max='10080';interval.value=draft.schedule_minutes||60;
+   interval.oninput=()=>{draft.schedule_minutes=Number(interval.value);changed();};enabledInput.onchange=()=>{draft.schedule_enabled=enabledInput.checked;changed();};intervalLabel.append(interval);schedule.append(intervalLabel,el('small','Closed Actions stay closed. Without a schedule, Ready Actions are discovered within one minute.'));
+   controls.append(schedule);
    function modal(title,trigger){
     const popup=el('dialog');popup.className='agenda-dialog action-profile-dialog';popup.setAttribute('aria-label',title);
     const header=el('header');header.className='agenda-dialog-header';header.append(el('h2',title));
@@ -72,7 +88,7 @@
    load=(async()=>{try{
     const data=await api(base+(sourceId?'/actions/'+encodeURIComponent(sourceId)+'/configuration':'/configuration/defaults'));
     if(!alive)return;config=data;config.agents||=[];
-    if(!dirty)draft={...draft,...config.card,assignment_mode:config.card.assignment_mode||(config.card.agent_id?'agent':'legacy'),...(!sourceId?initialAssignment:{})};
+    if(!dirty)draft={...draft,...config.card,schedule_enabled:!!config.schedule?.enabled,schedule_minutes:config.schedule?.minutes||60,assignment_mode:config.card.assignment_mode||(config.card.agent_id?'agent':'legacy'),...(!sourceId?initialAssignment:{})};
     render();status.hidden=true;
    }catch(e){if(alive){status.hidden=false;status.textContent=e.message;}}finally{load=null;}})();return load;
   }
@@ -88,6 +104,8 @@
     const saving=structuredClone(draft),version=revision;
     const result=await api(base+'/actions/'+encodeURIComponent(item.id)+'/configuration',{...config.card,...saving});
     const enabled=saving.assignment_mode!=='manual'&&result.effective.action_assignment.executable;
+    if(enabled&&saving.schedule_enabled)await api(base+'/actions/'+encodeURIComponent(item.id)+'/schedule',{minutes:saving.schedule_minutes||60,enabled:true});
+    else if(config.schedule?.enabled)await api(base+'/actions/'+encodeURIComponent(item.id)+'/schedule',{minutes:saving.schedule_minutes||60,enabled:false});
     const saved=await api('/hfl-corpus/timeline/items/'+encodeURIComponent(item.id),{version:item.version,agent_enabled:enabled},'PATCH');
     sourceId=item.id;config=result;if(version===revision){draft={...draft,...result.card};dirty=false;}paintSummary();window.dispatchEvent(new Event('hfl:agent-updated'));return saved.item;
    },

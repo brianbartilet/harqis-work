@@ -32,6 +32,10 @@ class TimelineRoute(APIRoute):
                 if request.method == 'PATCH' and re.fullmatch(r'/hfl-corpus/timeline/items/[^/]+', request.url.path):
                     from modules.integrations.service import guard_status
                     await asyncio.to_thread(guard_status, get_current_user(request), request.url.path.rsplit('/', 1)[-1], await request.json())
+                    from modules.hfl_corpus.action_execution import validate_ready
+                    raw = await request.json()
+                    if raw.get('status') == 'active' or raw.get('agent_enabled') is True:
+                        await asyncio.to_thread(validate_ready, request.url.path.rsplit('/', 1)[-1], raw)
                 settings = get_settings()
                 if settings.hfl_corpus_api_url and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') != '1':
                     target = settings.hfl_corpus_api_url.rstrip('/') + '/api/hfl/timeline' + request.url.path.split('/timeline', 1)[1]
@@ -249,7 +253,7 @@ async def followup_update(request: Request, followup_id: str, background_tasks: 
     raw = await body(request)
     agent_actor = raw.pop('_agent_actor', None)
     if agent_actor is not None:
-        if not request.url.path.startswith('/api/hfl/') or not isinstance(agent_actor, str) or not re.fullmatch(r'agent:hermes:[a-f0-9]{32}:(active|in_progress|done|incomplete)', agent_actor):
+        if not request.url.path.startswith('/api/hfl/') or not isinstance(agent_actor, str) or not re.fullmatch(r'agent:(hermes|nod):[a-f0-9]{32}:(active|in_progress|done|incomplete)', agent_actor):
             raise HTTPException(400, 'Invalid agent attribution.')
         user = agent_actor
     try:
