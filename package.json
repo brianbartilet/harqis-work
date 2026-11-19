@@ -12,7 +12,7 @@
     "htmx.org": "1.9.12",
     "sortablejs": "1.15.2",
     "swagger-ui-dist": "5.35.0",
-    "tailwindcss": "4.3.3"
+    "tailwindcss": "4.3.5"
   },
   "dependencies": {
     "d3-force-3d": "3.0.6",
