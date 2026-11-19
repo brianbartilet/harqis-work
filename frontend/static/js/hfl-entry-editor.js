@@ -112,6 +112,7 @@
   if (warning) {
     sessionStorage.removeItem('hfl-entry-save-warning');
     const notice = document.createElement('p'); notice.className = 'corpus-action-toast'; notice.role = 'status'; notice.textContent = warning;
+    notice.setAttribute('data-notification-persistent', '');
     document.querySelector('[data-document-header]')?.after(notice);
   }
   const url = new URL(location.href), pendingEdit = url.searchParams.get('edit_entry');

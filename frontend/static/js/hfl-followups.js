@@ -248,9 +248,10 @@ window.HflDrawerIndicator = (button, name) => {
     if(ideasOpen){
       const section=node('section',null,'followups-lane ideas-drawer');section.id='board-ideas-drawer';section.dataset.status='ideas';section.setAttribute('aria-label','Ideas');
       const header=node('div',null,'ideas-drawer-header');header.append(node('h3','Ideas · '+(ideaQuery?visibleIdeas.length+' of ':'')+ideaRows.length));
-      section.append(header,ideaSearch);
+      const pinnedControls=node('div',null,'ideas-drawer-controls');
+      pinnedControls.append(header,ideaSearch);section.append(pinnedControls);
       const ideaToolbar=node('div',null,'ideas-bulk-toolbar'),ideaBulk=node('div'),ideaRefresh=node('button','Refresh');
-      ideaRefresh.type='button';ideaRefresh.onclick=()=>refresh(true);ideaToolbar.append(ideaBulk,ideaRefresh);section.append(ideaToolbar);
+      ideaRefresh.type='button';ideaRefresh.onclick=()=>refresh(true);ideaToolbar.append(ideaBulk,ideaRefresh);pinnedControls.append(ideaToolbar);
       const newestIdeas=[...visibleIdeas].sort((a,b)=>(Date.parse(b.created_at)||0)-(Date.parse(a.created_at)||0));
       if(!newestIdeas.length)section.append(node('p',ideaQuery?'No matching ideas. Try a different search.':'No ideas yet. Use Create → Idea to capture something worth exploring.','drawer-empty'));
       for(const item of newestIdeas){
