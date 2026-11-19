@@ -10,7 +10,7 @@
     "alpinejs": "3.14.1",
     "esbuild": "0.28.2",
     "htmx.org": "1.9.12",
-    "sortablejs": "1.15.2",
+    "sortablejs": "1.15.7",
     "swagger-ui-dist": "5.35.0",
     "tailwindcss": "4.3.5"
   },
