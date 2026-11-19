@@ -7,7 +7,7 @@ harqis-core @ git+https://github.com/brianbartilet/harqis-core.git@d2aa596ee89fe
 anthropic>=2.3.0,<3
 anyio>=4.15.1,<5
 cryptography>=50.0.2,<51
-Flask>=3.1,<4
+Flask>=3.1.3,<4
 flower>=2,<3
 Markdown>=3.6,<4
 bleach>=6.4.0,<7
