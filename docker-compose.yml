@@ -4,6 +4,9 @@ name: ${COMPOSE_PROJECT_NAME:-harqis-work}
 # existing upstream Compose project and persistent volume. See scripts/README.md.
 # It intentionally survives this project's down/restart lifecycle.
 
+# Published ports default to this host only. Remote workers/devices must opt in
+# per service with *_BIND_ADDRESS set to a private interface IP and firewall ACLs.
+# See docs/info/SECURITY.md before changing these defaults.
 services:
 
   # ── Message Broker ─────────────────────────────────────────────────────────
@@ -12,8 +15,8 @@ services:
     image: rabbitmq:3-management-alpine
     restart: unless-stopped
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"
-      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+      - "${RABBITMQ_BIND_ADDRESS:-127.0.0.1}:${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_BIND_ADDRESS:-127.0.0.1}:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
@@ -29,7 +32,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_BIND_ADDRESS:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
     volumes:
       - ${HARQIS_DATA_ROOT:-./.harqis-data}/redis:/data
     healthcheck:
@@ -44,7 +47,7 @@ services:
     image: eclipse-mosquitto:latest
     restart: unless-stopped
     ports:
-      - "${MQTT_PORT:-1883}:1883"
+      - "${MQTT_BIND_ADDRESS:-127.0.0.1}:${MQTT_PORT:-1883}:1883"
     volumes:
       - ./apps/own_tracks/mosquitto/config:/mosquitto/config
       - ./apps/own_tracks/mosquitto/data:/mosquitto/data
@@ -54,7 +57,7 @@ services:
     image: owntracks/recorder:latest
     restart: unless-stopped
     ports:
-      - "${OWNTRACKS_PORT:-8083}:8083"
+      - "${OWNTRACKS_BIND_ADDRESS:-127.0.0.1}:${OWNTRACKS_PORT:-8083}:8083"
     environment:
       OTR_HOST: mosquitto
       OTR_PORT: 1883
@@ -72,7 +75,7 @@ services:
     image: docker.n8n.io/n8nio/n8n:2.47.7
     restart: unless-stopped
     ports:
-      - "${HOST_PORT_N8N:-5678}:5678"
+      - "${N8N_BIND_ADDRESS:-127.0.0.1}:${HOST_PORT_N8N:-5678}:5678"
     volumes:
       - ${HARQIS_DATA_ROOT:-./.harqis-data}/n8n:/home/node/.n8n
       - ./workflows.mapping:/data/workflows.mapping:ro
@@ -98,7 +101,7 @@ services:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.13.0
     restart: unless-stopped
     ports:
-      - "${ELASTICSEARCH_PORT:-9200}:9200"
+      - "${ELASTICSEARCH_BIND_ADDRESS:-127.0.0.1}:${ELASTICSEARCH_PORT:-9200}:9200"
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
@@ -122,7 +125,7 @@ services:
     image: docker.elastic.co/kibana/kibana:8.13.0
     restart: unless-stopped
     ports:
-      - "${KIBANA_PORT:-5601}:5601"
+      - "${KIBANA_BIND_ADDRESS:-127.0.0.1}:${KIBANA_PORT:-5601}:5601"
     environment:
       ELASTICSEARCH_HOSTS: http://elasticsearch:9200
     depends_on:
@@ -143,7 +146,7 @@ services:
       - "--address=0.0.0.0"
       - "--basic-auth=${FLOWER_USER}:${FLOWER_PASSWORD}"
     ports:
-      - "${FLOWER_PORT:-5555}:5555"
+      - "${FLOWER_BIND_ADDRESS:-127.0.0.1}:${FLOWER_PORT:-5555}:5555"
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -176,7 +179,7 @@ services:
     env_file:
       - ./.env/apps.env
     ports:
-      - "${NGROK_INSPECT_PORT:-4040}:4040"
+      - "${NGROK_INSPECT_BIND_ADDRESS:-127.0.0.1}:${NGROK_INSPECT_PORT:-4040}:4040"
     depends_on:
       - n8n
 

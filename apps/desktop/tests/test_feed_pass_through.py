@@ -98,12 +98,13 @@ def test__feed_decorator_passes_dict_through(tmp_path):
     assert "summary" not in captured_block["block_text"]
 
 
-def test__feed_decorator_noop_on_nonexistent_path(tmp_path):
+def test__feed_decorator_noop_on_nonexistent_path(tmp_path, monkeypatch):
     """A configured path that doesn't exist on this OS must be a no-op.
 
     Covers the cross-OS case too: DESKTOP_PATH_FEED=``G:\\My Drive\\LOGS``
     (a Windows drive path) on a POSIX worker is just a non-existent
-    relative path here. The decorator must skip cleanly, pass the wrapped
+    relative path here. On Windows use an isolated missing directory because
+    that drive may actually exist. The decorator must skip cleanly, pass the wrapped
     value through, and crucially NOT create a junk directory in the cwd
     (regression: Path(...).resolve()+mkdir used to do exactly that).
     """
@@ -114,7 +115,9 @@ def test__feed_decorator_noop_on_nonexistent_path(tmp_path):
     def fake_prepend(*, path, block_text, encoding, lock_cfg):
         calls.append(path)
 
-    fake_config = {"feed": {"path_to_feed": r"G:\My Drive\LOGS"}}
+    monkeypatch.chdir(tmp_path)
+    missing = tmp_path / "missing-feed" if os.name == "nt" else Path(r"G:\My Drive\LOGS")
+    fake_config = {"feed": {"path_to_feed": str(missing)}}
     cwd_before = set(os.listdir("."))
 
     with patch.object(feed_module, "CONFIG", fake_config), \
@@ -130,7 +133,7 @@ def test__feed_decorator_noop_on_nonexistent_path(tmp_path):
 
     assert result == {"text": "should not be written", "summary": "x"}
     assert calls == []
-    assert not Path(r"G:\My Drive\LOGS").exists()
+    assert not missing.exists()
     assert set(os.listdir(".")) == cwd_before
 
 

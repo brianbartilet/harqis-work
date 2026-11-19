@@ -1,0 +1,73 @@
+name: Security checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install checksum-verified Gitleaks
+        run: |
+          curl --fail --location --retry 3 -o /tmp/gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz' | sha256sum --check
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+      - name: Scan locally fetched history
+        run: /tmp/gitleaks git . --log-opts=--all --redact=100
+
+  npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - run: npm audit --audit-level=moderate
+
+  python-audit:
+    # Visible advisory report until harqis-core permits patched Pillow/Paramiko.
+    # Do not hide their IDs with blanket ignores. See docs/info/SECURITY.md.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Install audit tooling separately
+        run: |
+          python -m venv /tmp/audit-tools
+          /tmp/audit-tools/bin/pip install pip-audit uv
+      - name: Resolve application dependencies without installing the application
+        run: /tmp/audit-tools/bin/uv pip compile requirements.txt -o /tmp/resolved.txt
+      - name: Check default and private-network Compose bindings
+        run: |
+          /tmp/audit-tools/bin/pip install 'pytest>=9.0.3,<10'
+          /tmp/audit-tools/bin/python -m pytest scripts/tests/test_release_security.py -q
+      - name: Report Python advisories
+        id: audit
+        continue-on-error: true
+        run: /tmp/audit-tools/bin/pip-audit -r /tmp/resolved.txt --no-deps --disable-pip --format json --output python-audit.json
+      - name: Surface unresolved advisories
+        if: steps.audit.outcome == 'failure'
+        run: |
+          echo '::warning::Python audit found advisories or could not complete. Review the report and docs/info/SECURITY.md; this job is not a release clearance.'
+          echo 'Python audit requires review. See the attached report and docs/info/SECURITY.md.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: python-security-audit
+          path: python-audit.json
+          if-no-files-found: error

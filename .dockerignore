@@ -42,3 +42,27 @@ docs/
 .hermes/
 # OpenClaw agent state (deprecated) — host-only, never inside the image
 .openclaw/
+# Private host configuration and runtime data (Git ignores do not protect builds).
+machines.local.toml
+fork-fleet.local.toml
+*.local.toml.new
+machines.toml.new
+.harqis-data/
+.codex/
+.claude/
+.tmp/
+outputs/
+results/
+node_modules/
+.venv.backup-*/
+.venv.failed-*/
+apps/own_tracks/recorder_store/
+apps/own_tracks/mosquitto/data/
+apps/own_tracks/mosquitto/log/
+*.db
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+celerybeat-schedule*
+*.bak*
+*.zip*

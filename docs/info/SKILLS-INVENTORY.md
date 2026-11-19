@@ -34,6 +34,7 @@ of truth.
 | `/create-new-service-app` | Scaffold or extend a complete app integration from a spec, URL, or named skeleton. |
 | `/create-new-workflow` | Design and implement an RPA-style Celery workflow that chains app integrations. |
 | `/deploy-harqis` | Deploy the platform as a host or worker node, including services, workers, frontend, MCP, and agents. |
+| `/design-agent-connector` | Explore a provider API/MCP and implement its connector, fleet agent, and related entity mappings. |
 | `/dumps-summary` | Generate the daily dumps summary Markdown through the canonical repository script. |
 | `/generate-gherkin-scenarios` | Generate repository-standard Gherkin scenarios from requirements or tickets. |
 | `/generate-registry` | Regenerate the frontend workflow catalogue from workflow task configurations. |

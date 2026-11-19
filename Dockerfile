@@ -33,7 +33,7 @@ ENV PATH=/app/venv/bin:$PATH
 USER harqis
 
 # Cache layer: only requirements first.
-COPY --chown=harqis:harqis requirements.txt .
+COPY --chown=harqis:harqis requirements.txt constraints-security.txt .
 
 # requirements.txt declares a resolver-compatible runtime set, including the
 # MCP/OpenAI/Pydantic stack and a commit-pinned harqis-core package.

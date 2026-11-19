@@ -1,5 +1,10 @@
 # scripts/
 
+Docker service ports default to loopback. Existing remote workers and devices
+need explicit private-interface bindings before the next deployment; see the
+[network migration guide](../docs/info/SECURITY.md#network-access).
+
+
 Operational scripts for **harqis-work**, organised by purpose:
 
 - **Deploy / runtime** scripts live at the **root of `scripts/`** — they bring

@@ -1,15 +1,17 @@
+-c constraints-security.txt
+
 harqis-core @ git+https://github.com/brianbartilet/harqis-core.git@d2aa596ee89fe62b57edf9352099cf72e97c418c
 
 # Shared application/runtime stack. These are direct harqis-work dependencies;
 # they must not arrive accidentally through harqis-core package metadata.
 anthropic>=2.3.0,<3
 anyio>=4.15.1,<5
-cryptography>=46,<47
+cryptography>=50.0.2,<51
 Flask>=3.1,<4
 flower>=2,<3
 Markdown>=3.6,<4
 bleach>=6,<7
-filelock>=3.13,<4
+filelock>=4.2.1,<5
 fastembed>=0.9.1,<0.10
 google-api-python-client>=2.187,<3
 google-auth>=2.29,<3
@@ -30,7 +32,7 @@ PySide6>=6.12.0,<7
 python-dotenv>=1.1,<2
 tqdm>=4.66,<5
 yt-dlp>=2025.6,<2027
-pytest>=8,<9
+pytest>=9.0.3,<10
 pytest-dotenv>=0.5.2
 pytest-timeout>=2.4,<3
 redis>=5.0.0
@@ -48,7 +50,7 @@ opencv-python-headless>=4.9.0
 #   pdf → pypdf · docx → python-docx · xlsx → openpyxl · pptx → python-pptx
 # (Audio transcription is intentionally NOT wired yet — audio files are
 # recorded metadata-only until a transcriber is chosen; see workflows/hfl/README.md.)
-pypdf>=4.0.0
+pypdf>=6.21.4,<7
 pytesseract>=0.3.13
 python-docx>=1.1.0
 openpyxl>=3.1.0

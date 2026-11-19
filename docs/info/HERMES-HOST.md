@@ -5,6 +5,11 @@ of the harqis-work platform. It is not just a service runner — it is the persi
 of the Hermes agent system: secrets vault, task orchestrator, MCP endpoint, and long-term
 memory store.
 
+**Network migration:** Docker ports default to loopback. Before recreating the
+stack on a multi-machine installation, configure explicit private-interface
+bindings for remote workers/devices and firewall restrictions. See
+[Security and network access](SECURITY.md#network-access).
+
 **Related docs:**
 - [HERMES.md](HERMES.md) — Hermes agent runtime, `~/.hermes/` layout, MCP + cron
 - [AI-TOOLS-WIRING.md](AI-TOOLS-WIRING.md) — reasoning-model harness and Hermes wiring
@@ -43,9 +48,9 @@ memory store.
 
 | Component | Path | Purpose |
 |---|---|---|
-| **Apps** | `apps/` | 20+ REST/local service integrations (finance, trading, calendar, messaging, etc.) |
+| **Apps** | `apps/` | REST/local service integrations (finance, trading, calendar, messaging, etc.) |
 | **Workflows** | `workflows/` | Celery tasks that run on schedules, trigger actions, push data to a desktop HUD |
-| **MCP server** | `mcp/` | Exposes every app as a callable tool to Claude agents (55 tools) |
+| **MCP server** | `mcp/` | Exposes configured app tools to compatible agents through the shared catalog |
 | **Frontend** | `frontend/` | Web dashboard to manually trigger any task |
 | **Hermes memory** | `~/.hermes/` (per-machine) | Persistent agent memory, lessons, plans, and logs |
 

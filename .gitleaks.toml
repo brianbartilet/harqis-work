@@ -1,0 +1,33 @@
+title = "HARQIS reviewed secret-scanner false positives"
+
+[extend]
+useDefault = true
+
+# Match both the file and the specific harmless text, including historical commits.
+[[allowlists]]
+description = "Synthetic stderr redaction fixture"
+condition = "AND"
+paths = ['''scripts/agents/dumps/tests/test_android_wrapper\.py$''']
+regexTarget = "match"
+regexes = ['''secret = "child-stderr-secret-8d4f71"''']
+
+[[allowlists]]
+description = "Minified xterm constructor assignment"
+condition = "AND"
+paths = ['''frontend/static/vendor/xterm-5\.5\.0\.js$''']
+regexTarget = "match"
+regexes = ['''t\.FourKeyMap=t\.TwoKeyMap=void''']
+
+[[allowlists]]
+description = "Workflow audit skill description, not a credential"
+condition = "AND"
+paths = ['''\.agents/skills/workflow-token-audit/SKILL\.md$''']
+regexTarget = "match"
+regexes = ['''token usage, daily/weekly/monthly''']
+
+[[allowlists]]
+description = "Blank environment example followed by another variable name"
+condition = "AND"
+paths = ['''(^|/)(README\.md|docs/info/SETUP\.md)$''']
+regexTarget = "match"
+regexes = ['''DISCORD_BOT_TOKEN=\s+DISCORD_DEFAULT_GUILD_ID''']
