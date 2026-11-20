@@ -16,7 +16,8 @@ URL = '/agents/api/butler/briefings'
 def test_unread_launcher_detects_closed_panel_updates(fleet, authenticated_client, tmp_path, width):
     pw = pytest.importorskip('playwright.sync_api')
     data = {'items':[{'id':'notification-demo','title':'Review delivery','date':'2026-11-15',
-                     'state':'running','answer':'','mock':True}], 'demo_available':False}
+                     'state':'running','answer':'','mock':True,
+                     'agent_name':'Research agent','agent':{'id':'research','name':'Research agent','runtime':'codex','color':'#facc15','thumbnail':'missing-avatar.png'}}], 'demo_available':False}
     with pw.sync_playwright() as engine:
         browser=engine.chromium.launch(channel='chrome',headless=True)
         try:
@@ -47,6 +48,12 @@ def test_unread_launcher_detects_closed_panel_updates(fleet, authenticated_clien
             launch.click()
             pane=page.get_by_role('tabpanel',name='Briefings',exact=True)
             pw.expect(pane.get_by_text('Your report is ready.',exact=True)).to_be_visible()
+            card=pane.locator('.butler-briefing-card')
+            pw.expect(card.locator('.butler-agent-type')).to_have_text('codex')
+            pw.expect(card.locator('.agent-avatar-initials')).to_have_text('RA')
+            assert card.evaluate("e=>e.style.getPropertyValue('--briefing-agent-color')")=='#facc15'
+            assert card.evaluate('e=>e.scrollWidth<=e.clientWidth')
+            page.screenshot(path=str(tmp_path/f'butler-agent-card-{width}.png'))
             pw.expect(launch).to_have_attribute('data-unread','true')
             pane.get_by_role('button',name='Mark as read',exact=True).click()
             pw.expect(launch).to_have_attribute('data-unread','false')
@@ -79,6 +86,9 @@ def test_scheduled_worker_result_is_visible_once_and_owner_scoped(fleet, bridge,
     first = client.get(URL).json()['items']
     assert len(first) == 1 and first[0]['state'] == 'pending'
     assert first[0]['date'] == '2026-11-13'
+    assert first[0]['agent']['id'] == 'butler'
+    assert first[0]['agent']['runtime'] == 'hermes'
+    assert set(first[0]['agent']) == {'id','name','runtime','color','thumbnail','classification'}
     run = client.post('/api/hfl-agent/runs/' + first[0]['run_id'] + '/claim', headers=WORKER, json={}).json()
     assert client.get(URL).json()['items'][0]['state'] == 'running'
     assert event(client, run, 'plan', {'summary': 'Review recent activity without writes.'}).status_code == 200

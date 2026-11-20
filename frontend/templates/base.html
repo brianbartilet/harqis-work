@@ -292,6 +292,7 @@
   <dialog id="butler-preview"><form id="butler-preview-form"><h2>Preview HFL action</h2><label>Title<input id="butler-action-title" maxlength="160" required></label><label>Expected outcome<textarea id="butler-action-outcome" maxlength="10000" required rows="6"></textarea></label><p>The original request becomes the task prompt. Saving creates an action for review; it does not start execution.</p><p id="butler-preview-error" role="alert"></p><div><button type="submit">Review exact action</button><button type="button" id="butler-preview-close">Cancel</button></div></form></dialog>
 </section>
 <script src="{{ static_asset('js/butler.js') }}" defer></script>
+<script src="{{ static_asset('js/agent-avatar.js') }}" defer></script>
 <script src="{{ static_asset('js/butler-briefings.js') }}" defer></script>
 {% endif %}
 </body>

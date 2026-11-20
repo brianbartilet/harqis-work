@@ -169,6 +169,11 @@ def _recover_legacy(db, user):
                 break
 
 
+def agent_identity(agent):
+    """Public presentation fields only; never expose execution configuration."""
+    return {key: agent.get(key, '') for key in ('id', 'name', 'runtime', 'color', 'thumbnail', 'classification')}
+
+
 def agent_updates(user):
     """Bounded recorded updates, never agent dispatch or a second schedule.
 
@@ -195,7 +200,7 @@ def agent_updates(user):
             continue
         record = run['snapshot'].get('source', {})
         updates.append({'id': 'agent-update:' + run['id'], 'date': run['updated_at'],
-                        'title': record.get('title', 'Agent result'), 'agent_name': agent['name'],
+                        'title': record.get('title', 'Agent result'), 'agent_name': agent['name'], 'agent': agent_identity(agent),
                         'state': run['state'], 'answer': str((run.get('result') or {}).get('summary') or '')[:5000],
                         'detail': 'Recorded execution update; action completion is reviewed separately.',
                         'workspace_ids': record.get('workspace_ids', []),
@@ -206,7 +211,7 @@ def agent_updates(user):
             continue
         from modules.agents.ecosystem import safe_url
         updates.append({'id': 'agent-update:' + record['id'], 'date': record.get('created', ''),
-                        'title': record['label'], 'agent_name': agent['name'], 'state': record['state'],
+                        'title': record['label'], 'agent_name': agent['name'], 'agent': agent_identity(agent), 'state': record['state'],
                         'answer': record.get('summary', '')[:5000], 'detail': 'Reported by ' + record.get('source', 'agent'),
                         'workspace_ids': record.get('workspace_ids', []), 'url': safe_url(record.get('url', ''))})
     # Provider receipts include work completed outside the action bridge.
@@ -218,7 +223,7 @@ def agent_updates(user):
         if payload.get('kind') not in {'nod-turn', 'n8n-execution'}:
             continue  # Codex already contributes its execution objects above.
         updates.append({'id': 'agent-update:' + event['id'], 'date': payload.get('stopped_at') or event['created'],
-                        'title': agent['name'] + ' · ' + payload.get('status', 'unknown'), 'agent_name': agent['name'],
+                        'title': agent['name'] + ' · ' + payload.get('status', 'unknown'), 'agent_name': agent['name'], 'agent': agent_identity(agent),
                         'state': payload.get('status', 'unknown'), 'answer': payload.get('summary', '')[:5000],
                         'detail': 'Recorded provider execution receipt.', 'workspace_ids': agent.get('workspace_ids', []),
                         'url': payload.get('url', '')})
@@ -231,7 +236,7 @@ def agent_updates(user):
         if not agent or agent['id'] == 'butler' or turn.get('state') not in {'completed', 'failed'}:
             continue
         updates.append({'id': 'agent-update:' + turn['id'], 'date': turn['created'],
-                        'title': agent['name'] + ' · ' + turn['state'], 'agent_name': agent['name'],
+                        'title': agent['name'] + ' · ' + turn['state'], 'agent_name': agent['name'], 'agent': agent_identity(agent),
                         'state': turn['state'], 'answer': str(turn.get('answer', ''))[:5000],
                         'detail': 'Recorded gateway response.', 'workspace_ids': agent.get('workspace_ids', []),
                         'url': '/agents?agent=' + agent['id']})
@@ -248,12 +253,15 @@ def history(user):
             ON c.user=d.user AND c.request_id=d.request_id
             WHERE d.user=? ORDER BY d.scheduled_date DESC,d.request_id DESC LIMIT 100
         ''', (user,)))
+    from modules.agents.projection import visible
+    butler = next((agent_identity(a) for a in service.initialize().list() if a['id'] == 'butler' and visible(a, user)),
+                  {'name': 'HARQIS Butler', 'runtime': 'hermes', 'color': '#67e8f9'})
     items = []
     for row in rows:
         meta = json.loads(row['payload'])
         if meta.get('mock') and not demo_available():
             continue
-        item = {'id': row['request_id'], 'date': row['scheduled_date'],
+        item = {'id': row['request_id'], 'date': row['scheduled_date'], 'agent': butler, 'agent_name': butler['name'],
                 'title': 'Weekly briefing' if meta.get('cadence') == 'weekly' else 'Daily briefing' if meta.get('cadence') == 'daily' else 'Scheduled briefing',
                 'timezone': meta.get('timezone', ''), 'mock': bool(meta.get('mock')),
                 'state': 'pending', 'answer': '', 'detail': 'Waiting for the scheduled worker.',
