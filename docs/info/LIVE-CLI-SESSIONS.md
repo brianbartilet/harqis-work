@@ -9,8 +9,12 @@ See the original [investigation](../thesis/BROWSER-CLI-AGENT-SESSIONS.md).
 Hermes, retaining action context, transcripts and isolated repository workspaces.
 
 **Trigger:** manually start/open a session from an Action's agent workspace.
-The CLI selector chooses a runtime and a worker for a new session; it does not
-change the Action's automatic assignment or reasoning-model configuration.
+The toolbar displays the selected session's agent and runtime as read-only
+information. **New session** opens a runtime/worker selector; this choice applies
+only to that session, not the Action assignment. Edit the Action to change future
+assignment or execution defaults. Session details use the captured settings and
+show a changed next-session assignment separately. Restoring retains the original
+runtime and context. An existing live session is reused until it is ended.
 Fleet's Hermes, Codex and Claude agent panels expose **Open session**. This
 creates an owner-scoped, unlinked session or reopens that agent's history in the
 same dialog. It never creates an Action just to open a terminal.

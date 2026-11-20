@@ -146,7 +146,7 @@
       information.setAttribute('aria-label','Fleet session information');
       header.querySelector('.agent-sidebar-toggle').textContent='Session details';
       const helpBody=header.querySelector('.agent-header-help-body');
-      helpBody.replaceChildren(element('strong','Fleet sessions'),element('p','Start work without an Action. Save as Action when you want to track it. Closing this dialog leaves the CLI running. End session retains history; Discard removes unlinked history after stopping the CLI.'));
+      helpBody.replaceChildren(element('strong','Fleet sessions'),element('p','Save as Action when you want to track this work. Spaces are copied from the Fleet agent when the session starts.'),element('p','Closing this dialog leaves the CLI running. End session stops it and keeps its history. Discard stops an unsaved session and removes its history.'));
       dialog.append(header,body);if(!dialog.open)dialog.showModal();return;
     }
     const error = element('p'); error.className = 'agenda-error'; error.setAttribute('role', 'alert'); error.hidden = true;

@@ -18,7 +18,7 @@ Keep the owner informed through this Action's updates and final output.
 
 
 def agents(user):
-    return [{k: a.get(k) for k in ('id', 'name', 'runtime', 'active', 'classification', 'specialist_profile')}
+    return [{k: a.get(k) for k in ('id', 'name', 'runtime', 'color', 'active', 'classification', 'specialist_profile')}
             for a in service.initialize().list() if visible(a, user) and not a.get('mock') and not a.get('managed_sharing')]
 
 

@@ -9,13 +9,6 @@
     const shape=document.createElementNS(svg.namespaceURI,'path');shape.setAttribute('d',path);svg.append(shape);
     node.replaceChildren(svg);node.classList.add('agent-toolbar-icon');node.title=label;node.setAttribute('aria-label',label);
   }
-  const fields = [
-    ['agent_mode','Execution permissions','select'], ['hermes_profile','Hermes profile'],
-    ['agent_toolsets','Toolsets / MCP servers'], ['agent_model','Model'], ['agent_provider','Provider'],
-    ['agent_repository','Repository on worker'], ['agent_base_branch','Base branch'], ['agent_host','Worker hostname'],
-    ['agent_timeout_seconds','Turn timeout (seconds)','number'], ['agent_max_turns','Maximum turns','number'],
-    ['agent_default_recipient','Default email recipient']
-  ];
   async function api(path, payload) {
     const csrf = JSON.parse(document.querySelector('[data-memory-csrf]')?.textContent || '""');
     const response = await fetch('/hfl-corpus/agent-bridge' + path, {
@@ -81,6 +74,8 @@
     const runtimePicker=el('select');runtimePicker.setAttribute('aria-label','CLI runtime and worker');
     runtimePicker.append(new Option('Assigned Hermes · default worker',''));
     controls.append(runtimePicker);
+    const runtimeIdentity=el('div',undefined,'agent-runtime-identity');
+    function typePill(agent,runtime){const pill=el('span',runtime||agent?.runtime||'hermes','action-agent-type');if(/^#[0-9a-f]{6}$/i.test(agent?.color||''))pill.style.setProperty('--agent-type-color',agent.color);return pill;}
     const actionsMenu=el('details',undefined,'agent-terminal-actions');
     const actionsToggle=el('summary','Actions');
     iconControl(actionsToggle,'Actions','M4 6h16 M4 12h16 M4 18h16');
@@ -129,17 +124,22 @@
       parent.append(node); return node;
     }
     const configureRow=el('div',undefined,'agent-configure-row');details.append(configureRow);
-    if(!fleet)button('Edit assignment',async()=>{if(!window.HflIdeas?.openAction)throw Error('Reload to edit the Action.');await window.HflIdeas.openAction(sourceId);},configureRow);
-    if(!fleet)button('Execution settings', configure, configureRow);
+    if(!fleet)configureRow.append(el('small','Change the assignment and future execution settings in Edit action. Existing sessions keep their original settings.'));
     const defaults=el('a','Agent default settings');defaults.href='/agents';defaults.target='_blank';defaults.rel='noopener noreferrer';
     defaults.title='Open Agents to change shared execution defaults';configureRow.append(defaults);
-    const newSessionButton=button('New session', async()=>attach(await api(source+'/sessions',launchOptions())));
+    const newSessionButton=button('New session',newSession);
     iconControl(newSessionButton,'New session','M12 5v14 M5 12h14');
     if(!fleet)button('Save session', async()=>{if(!session)throw new Error('Start a session first.');await api('/sessions/'+session.id,{saved:true});await refreshList();});
     button('Restore selected',async()=>{const id=sessions.value;if(!id)throw new Error('Select a session.');const selected=sessionList.find(s=>s.id===id);if(['queued','starting','idle','waiting','running'].includes(selected.state))attach(selected);else attach(await api(source+'/sessions',{restore:id}));});
     if(!fleet)button('Remove from history',async()=>{if(!session)return;if(!window.confirm('Remove this session from history? Attached files remain on the action.'))return;await api('/sessions/'+session.id+'/forget',{});session=null;cursor=0;terminal.reset();download.hidden=true;const data=await refreshList();if(data.sessions.length)attach(data.sessions[0]);else showEmpty();});
     button('End session',async()=>{if(session)await api('/sessions/'+session.id,{closed:true});});
-    const saveAction=fleet?button('Save as Action',saveAsAction):null;if(saveAction)saveAction.disabled=true;
+    const saveAction=fleet?button('Save as Action',saveAsAction):null;
+    function updateActionControl(){
+      if(!saveAction)return;
+      iconControl(saveAction,session?.action_id?'Open Action':'Save as Action',session?.action_id?'M14 3h7v7 M21 3l-9 9 M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5':'M9 5H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4 M9 3h6v4H9z M19 5v6 M16 8h6');
+      saveAction.disabled=!session;
+    }
+    updateActionControl();
     if(fleet)button('Discard session…',discardSession);
     const reviewSessionFiles=!fleet?button('Review session files',reviewFiles,actionsBody):null;if(reviewSessionFiles)reviewSessionFiles.hidden=true;
     const download = el('a','Download transcript'); download.hidden=true;
@@ -148,7 +148,7 @@
     }
     actionsBody.append(download);
     controls.append(runtimePicker,sessions,newSessionButton);if(saveAction)controls.append(saveAction);controls.append(fullscreenButton,actionsMenu);
-    if(fleet)runtimePicker.hidden=true;
+    runtimePicker.hidden=true;controls.prepend(runtimeIdentity);
     const viewport = el('div',undefined,'agent-terminal'); viewport.setAttribute('aria-label','Live CLI terminal');
     let pasteNoticeTimer;
     const pasteNotice=el('section',undefined,'agent-session-notice agent-paste-notice');pasteNotice.hidden=true;
@@ -182,7 +182,7 @@
     const noticeText=el('p');noticeText.setAttribute('role','status');sessionNotice.append(noticeText);
     const resumeButton=button('Restore session',async()=>{
       if(!session)return;
-      attach(await api(source+'/sessions',session.native_id?{restore:session.id}:launchOptions()));
+      attach(await api(source+'/sessions',session.native_id?{restore:session.id}:{runtime:session.settings.terminal_runtime||'hermes',host:session.worker||session.settings.agent_host}));
       terminal?.focus();
     },sessionNotice);
     function connectionState(item){
@@ -210,15 +210,7 @@
     const emptyDescription=el('p','Start a session to ask questions, refine your instructions, or work through the next step with your selected CLI.');
     emptyContent.append(icon,emptyHeading,emptyDescription);
     const emptyFeedback=el('p',''); emptyFeedback.setAttribute('role','status');
-    const startButton=button('Start session',async()=>{
-      if(config?.effective.action_assignment?.executable===false&&!runtimePicker.value){
-        if(!window.HflIdeas?.openAction)throw Error('Reload to edit the Action assignment.');
-        await window.HflIdeas.openAction(sourceId);return;
-      }
-      emptyFeedback.textContent='Connecting to '+(config?.effective.action_assignment?.name||'Hermes')+'…';
-      try {attach(await api(source+'/sessions',launchOptions()));terminal?.focus();}
-      catch(e){emptyFeedback.textContent=e.message;throw e;}
-    },emptyContent);
+    const startButton=button('Start session',newSession,emptyContent);
     startButton.classList.add('agenda-primary');
     const emptyNote=el('small',fleet?'Your selected agent provides the session context. You choose what happens next.':'Your action details are included. You choose what happens next.');
     emptyContent.append(emptyNote,emptyFeedback);
@@ -242,26 +234,34 @@
     }
     function showConfig() {
       const s=config.effective, assignment=s.action_assignment;
-      const unavailable=assignment?.executable===false&&(!runtimePicker.value||fleet), manual=assignment?.mode==='manual';
-      newSessionButton.disabled=unavailable;
-      startButton.disabled=fleet&&unavailable;
-      startButton.textContent=unavailable?(manual?'Assign an agent':'Change assignment'):'Start session';
-      emptyHeading.textContent=unavailable?(manual?'Choose an agent to start a session':'Session unavailable for this agent'):'Ready to work on this action?';
-      emptyDescription.textContent=unavailable?(manual?'This action is manual. Assign an active Hermes agent or Butler to work on it here.':'This terminal supports active Hermes agents and Butler. Change the assignment to continue here, or use the assigned provider’s app.'):'Start a session to ask questions, refine your instructions, or work through the next step with your selected CLI.';
-      emptyNote.hidden=unavailable;
-      emptyFeedback.hidden=unavailable;
-      hint.hidden=unavailable&&!session;
-      if(!session)emptyFeedback.textContent=assignment?.reason||'';
+      const unavailable=fleet&&assignment?.executable===false;
+      newSessionButton.disabled=unavailable;startButton.disabled=unavailable;
+      startButton.textContent='Start session';
+      emptyHeading.textContent='Start a session';
+      emptyDescription.textContent='Use the assigned agent, or choose a CLI for this session only.';
+      emptyNote.hidden=unavailable;emptyFeedback.hidden=unavailable;hint.hidden=unavailable&&!session;
+      if(!session)emptyFeedback.textContent='';
+      const snapshot=session?.settings||s, frozen=snapshot.fleet_agent, captured=snapshot.action_assignment;
+      const currentAgent=config.agents?.find(a=>a.id===(frozen?.id||captured?.agent_id))||config.agent||frozen;
+      const runtime=snapshot.terminal_runtime||captured?.runtime||'hermes';
+      const name=(frozen?.runtime||captured?.runtime)===runtime?(frozen?.name||captured?.name||runtime):runtime;
+      runtimeIdentity.replaceChildren(el('span',name),typePill(currentAgent,runtime));runtimeIdentity.title=name;
       description.replaceChildren();
-      for(const [label,value] of [['Agent',assignment?.name||'Hermes'],['Specialist',assignment?.specialist_profile?.name||'None · optional'],['Assignment',assignment?.mode||'Shared defaults'],['Configuration',config.effective.fleet_agent?.name||config.card.preset||'Shared defaults'],['Profile',s.hermes_profile||'Worker profile'],['Permissions',s.agent_mode],['Repository',s.agent_repository||'Isolated worktree'],['Idle expiry',s.agent_session_expiry_minutes+' minutes']])description.append(el('dt',label),el('dd',value));
-      if(session?.settings?.fleet_agent){description.append(el('dt','Session agent'),el('dd',session.settings.fleet_agent.name),el('dt','Session specialist'),el('dd',session.settings.fleet_agent.specialist_profile?.name||'None'));}
+      const identity=el('dd',name);identity.append(typePill(currentAgent,runtime));description.append(el('dt',session?'Session agent':'Assigned agent'),identity);
+      const rows=[['Worker',session?.worker||snapshot.agent_host],['Specialist',frozen?.specialist_profile?.name||captured?.specialist_profile?.name],['Repository',snapshot.agent_repository||'Isolated worktree'],['Idle expiry',snapshot.agent_session_expiry_minutes? snapshot.agent_session_expiry_minutes+' minutes':'']];
+      if(runtime==='hermes'||runtime==='jev')rows.push(['Profile',snapshot.hermes_profile||'Worker profile'],['Permissions',snapshot.agent_mode]);
+      for(const [label,value] of rows)if(value)description.append(el('dt',label),el('dd',value));
+      if(session&&(captured?.agent_id!==assignment?.agent_id||runtime!==assignment?.runtime))description.append(el('dt','Next session assignment'),el('dd',assignment?.name||'Shared defaults'));
       if(fleet){
         emptyHeading.textContent='Start a session with '+config.agent.name;
         emptyDescription.textContent='Work freely, then save as an Action when needed.';
         emptyFeedback.textContent=assignment?.reason||'No Action is created until you choose Save as Action.';
-        if(saveAction){saveAction.disabled=!session;saveAction.textContent=session?.action_id?'Open Action':'Save as Action';}
-        if(summary){summary.replaceChildren(el('span',session?.action_id?'LINKED TO ACTION':'UNLINKED SESSION'),el('h3',session?.title||config.agent.name),el('p','Agent: '+config.agent.name),el('p','Spaces are recorded from this Fleet agent when the session starts. Closing this dialog leaves the CLI running.'));
-          button('Review session files',reviewFiles,summary);
+        updateActionControl();
+        if(summary){summary.replaceChildren(el('h3',config.agent.name));
+          if(session?.action_id&&session.title)summary.append(el('p',session.title,'agent-fleet-session-title'));
+          summary.append(el('p',session?.action_id?'Saved as an Action':'Not saved as an Action','agent-fleet-session-caption'));
+          const fileControls=el('div',undefined,'agent-action-controls');summary.append(fileControls);
+          const filesButton=button('Files',reviewFiles,fileControls);filesButton.title='Review session files';filesButton.setAttribute('aria-label','Review session files');filesButton.disabled=!session;
         }
       }
       if (summary && config.action) {
@@ -358,40 +358,22 @@
     const editorClosed=event=>{if(event.target!==container.closest('dialog'))actionChanged();};
     window.addEventListener('hfl:actions-updated',actionChanged);
     document.addEventListener('close',editorClosed,true);
-    async function configure() {
-      config=await api(source+'/configuration');
-      const dialog=el('dialog',undefined,'agenda-dialog agent-config-dialog');
-      const header=el('header',undefined,'agenda-dialog-header');header.append(el('h2','Configure action agent'));
-      button('Close',()=>dialog.close(),header);
-      const form=el('form',undefined,'agenda-form-body');
-      const fleetLabel=el('label','Fleet agent'),fleet=el('select');fleet.append(new Option('Legacy defaults / preset',''));
-      for(const a of config.agents||[])if(a.runtime==='hermes'&&(a.active||a.id===config.card.agent_id))fleet.append(new Option(a.name+(a.active?'':' (deactivated)'),a.id));
-      fleet.value=config.card.agent_id||'';fleetLabel.append(fleet);form.append(fleetLabel);
-      const presetLabel=el('label','Named preset');const preset=el('select');
-      preset.append(new Option('App Settings defaults',''));
-      Object.keys(config.presets).forEach(name=>preset.append(new Option(name,name)));
-      preset.value=config.card.preset;presetLabel.append(preset);form.append(presetLabel);
-      form.append(el('p','Unchecked fields inherit the preset or App Settings and follow future changes. Checked fields are fixed for this action. Running sessions retain their current settings.'));
-      const inputs={};
-      for(const [key,label,type] of fields){
-        const row=el('label',undefined,'agent-config-field');const override=el('input');override.type='checkbox';override.checked=Object.hasOwn(config.card.overrides,key);override.setAttribute('aria-label','Override '+label);
-        const input=el(type==='select'?'select':'input');
-        if(type==='select'){input.append(new Option('Trusted Hermes','trusted'),new Option('Restricted tools (local shell available)','restricted'));}else{input.type=type||'text';}
-        input.setAttribute('aria-label',label);input.value=config.effective[key];input.disabled=!override.checked;
-        override.onchange=()=>{input.disabled=!override.checked;};
-        row.append(override,el('span',label),input);form.append(row);inputs[key]={override,input,type};
-      }
-      preset.onchange=()=>{for(const [key,item] of Object.entries(inputs)){if(!item.override.checked)item.input.value=config.presets[preset.value]?.overrides[key]??config.defaults[key];}};
-      const values=()=>Object.fromEntries(Object.entries(inputs).filter(([,v])=>v.override.checked).map(([k,v])=>[k,v.type==='number'?Number(v.input.value):v.input.value]));
-      const feedback=el('p','');feedback.setAttribute('role','alert');form.append(feedback);
-      const actions=el('div',undefined,'agent-terminal-controls');form.append(actions);
-      const save=el('button','Save action configuration');save.type='submit';actions.append(save);
-      const presetName=el('input');presetName.placeholder='Name for reusable preset';presetName.setAttribute('aria-label','New preset name');actions.append(presetName);
-      button('Save as preset',async()=>{
-        try {const result=await api('/presets',{name:presetName.value,overrides:{...(config.presets[preset.value]?.overrides||{}),...values()}});config=await api(source+'/configuration');if(![...preset.options].some(o=>o.value===result.name))preset.append(new Option(result.name,result.name));preset.value=result.name;Object.values(inputs).forEach(item=>{item.override.checked=false;item.input.disabled=true;});feedback.textContent='Preset saved. Save action configuration to assign it.';}catch(e){feedback.textContent=e.message;}
-      },actions);
-      form.onsubmit=async event=>{event.preventDefault();save.disabled=true;try{config=await api(source+'/configuration',{...config.card,preset:preset.value,agent_id:fleet.value,assignment_mode:fleet.value===config.card.agent_id?config.card.assignment_mode:(fleet.value?'agent':'legacy'),overrides:values()});showConfig();dialog.close();}catch(e){feedback.textContent=e.message;}finally{save.disabled=false;}};
-      dialog.append(header,form);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();
+    async function newSession(){
+      if(fleet){attach(await api(source+'/sessions',{}));return;}
+      config=await api(source+'/configuration');await refreshRuntimes();
+      const assignment=config.effective.action_assignment;
+      const dialog=el('dialog',undefined,'agenda-dialog'),header=el('header',undefined,'agenda-dialog-header');
+      header.append(el('h2','New session'));button('Close',()=>dialog.close(),header);
+      const form=el('form',undefined,'action-profile-content');
+      form.append(el('p','Assigned agent: '+assignment.name));
+      const label=el('label','CLI and worker · this session only'),picker=runtimePicker.cloneNode(true);picker.hidden=false;picker.value='';picker.setAttribute('aria-label','CLI and worker for new session');
+      picker.options[0].textContent='Use Action assignment';picker.options[0].disabled=!assignment.executable;
+      if(!assignment.executable){const matching=[...picker.options].filter(o=>!o.disabled&&o.value&&JSON.parse(o.value).runtime===assignment.runtime);picker.value=matching.length===1?matching[0].value:'';}
+      label.append(picker);form.append(label,el('p','This choice does not change the Action assignment. An existing live session is reused; end it before starting a different CLI.'));
+      const feedback=el('p');feedback.setAttribute('role','alert');form.append(feedback);
+      const submit=el('button','Start session');submit.type='submit';form.append(submit);
+      form.onsubmit=async event=>{event.preventDefault();submit.disabled=true;try{if(!picker.value&&!assignment.executable)throw Error('Select an available CLI and worker.');attach(await api(source+'/sessions',picker.value?JSON.parse(picker.value):{}));dialog.close();}catch(e){feedback.textContent=e.message;}finally{submit.disabled=false;}};
+      dialog.append(header,form);document.body.append(dialog);dialog.addEventListener('close',()=>{dialog.remove();newSessionButton.focus();},{once:true});dialog.showModal();
     }
     function attach(item){
       empty.hidden=true;root.classList.remove('agent-session-is-empty');
@@ -453,7 +435,7 @@
         }
         const labels={queued:'Waiting for worker',starting:'Starting CLI…',idle:'Ready for commands',waiting:'Waiting for execution capacity',running:'CLI active',expired:'Expired · transcript archived',closed:'Closed · transcript archived',failed:'Stopped · transcript available'};
         status.textContent=session.error||labels[session.state]||session.state;
-        connectionState(session);if(fleet&&saveAction){saveAction.textContent=session.action_id?"Open Action":"Save as Action";}
+        connectionState(session);if(fleet)updateActionControl();
       };
       ws.onclose=()=>{
         if(disposed||socket!==ws)return;

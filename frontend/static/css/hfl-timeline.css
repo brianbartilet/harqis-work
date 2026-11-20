@@ -384,6 +384,8 @@
 .agent-sidebar .agent-results-task h3 { font-size:1rem; color:#f1f5f9; }
 .agent-action-summary { margin:1rem 0 0; }
 .agent-sidebar .agent-results-task { position:relative; }
+.agent-fleet-session-caption { margin:.35rem 0 .75rem; color:#94a3b8; font-size:.8rem; line-height:1.5; }
+.agent-fleet-session-title { margin:.35rem 0; color:#cbd5e1; font-size:.85rem; overflow-wrap:anywhere; }
 .agent-action-controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.5rem; margin:.75rem 0 1rem; }
 .agent-action-controls button { padding:.4rem .65rem; background:#0f172a; color:#e2e8f0; border:1px solid #334155; border-radius:.4rem; font:inherit; font-size:.8rem; }
 .agent-action-checklists:not(:empty) { padding-bottom:1.25rem; border-bottom:1px solid #334155; }
@@ -541,3 +543,14 @@
 .action-execution-check input[type=checkbox] { flex:0 0 auto; width:1rem; height:1rem; margin:0; }
 .action-execution-options input[type=number] { width:100%; box-sizing:border-box; }
 .action-execution-options small { display:block; line-height:1.5; color:#94a3b8; }
+
+.action-agent-type { --agent-type-color:#67e8f9; display:inline-flex; flex:none; border:1px solid color-mix(in srgb,var(--agent-type-color) 45%,transparent); border-radius:999px; background:color-mix(in srgb,var(--agent-type-color) 15%,#0b1221); color:color-mix(in srgb,var(--agent-type-color) 65%,white); padding:2px 8px; font-size:11px; line-height:1.4; white-space:nowrap; }
+.agent-runtime-identity { display:flex; align-items:center; gap:.5rem; min-width:0; max-width:22rem; font-size:.8rem; }
+.agent-runtime-identity > span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.agent-config-summary dd .action-agent-type { margin-left:.4rem; }
+.fleet-work-agent-labels { display:grid; gap:.3rem; font-size:.75rem; }
+.fleet-work-agent-labels > span { display:flex; align-items:center; flex-wrap:wrap; gap:.35rem; }
+.fleet-work-action-controls { display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.5rem; }
+.fleet-work-action-controls button { flex:1; padding:.4rem .5rem; border:1px solid #334155; border-radius:.4rem; background:#0f172a; color:#e2e8f0; font:inherit; font-size:.75rem; }
+.action-agent-workspace .agent-terminal-controls > select { flex:0 1 22rem; width:22rem; }
+@media(max-width:600px) { .agent-runtime-identity { flex-basis:100%; } .action-agent-workspace .agent-terminal-controls > select { flex:1 1 10rem; width:10rem; } }

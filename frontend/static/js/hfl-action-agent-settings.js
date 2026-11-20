@@ -31,7 +31,7 @@
     const wrap=el('div'),heading=el('span','Assigned agent'),menu=el('details');menu.className='action-agent-picker';
     const trigger=el('summary');trigger.setAttribute('aria-label','Assigned agent');
     const current=config.agents.find(a=>a.id===draft.agent_id);
-    function agentLabel(host,agent){host.append(el('span',agent.name));const pill=el('span',agent.runtime);pill.className='action-agent-type';host.append(pill);if(!agent.active)host.append(el('span','Inactive'));}
+    function agentLabel(host,agent){host.append(el('span',agent.name));const pill=el('span',agent.runtime);pill.className='action-agent-type';if(/^#[0-9a-f]{6}$/i.test(agent.color||''))pill.style.setProperty('--agent-type-color',agent.color);host.append(pill);if(!agent.active)host.append(el('span','Inactive'));}
     if(current)agentLabel(trigger,current);else trigger.append(el('span',draft.agent_id?'Unavailable assigned agent':'Select an agent'));
     const options=el('div');options.className='action-agent-options';options.setAttribute('role','group');options.setAttribute('aria-label','Available agents');
     for(const a of config.agents.filter(a=>a.active)){const option=el('button');option.type='button';option.setAttribute('aria-pressed',String(a.id===draft.agent_id));agentLabel(option,a);option.onclick=()=>{draft.agent_id=a.id;render();changed();controls.querySelector('.action-agent-picker summary')?.focus();};options.append(option);}
