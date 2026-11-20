@@ -4,6 +4,19 @@ from types import SimpleNamespace
 from scripts.agents.hfl import terminal_runtimes as runtimes
 
 
+def test_background_worker_finds_user_install_without_shell_path(tmp_path, monkeypatch):
+    monkeypatch.setattr(runtimes.os, 'name', 'posix')
+    monkeypatch.setattr(runtimes.Path, 'home', lambda: tmp_path)
+    expected = str(tmp_path / '.local/bin/codex')
+    monkeypatch.setattr(runtimes.shutil, 'which', lambda name, path=None: expected if path == str(tmp_path / '.local/bin') else None)
+    assert runtimes.executable('codex') == expected
+
+
+def test_explicit_worker_path_takes_precedence(monkeypatch):
+    monkeypatch.setattr(runtimes.shutil, 'which', lambda name, path=None: '/custom/bin/codex' if path is None else '/other/codex')
+    assert runtimes.executable('codex') == '/custom/bin/codex'
+
+
 def test_native_launch_preserves_approval_and_does_not_submit_prompt(tmp_path, monkeypatch):
     monkeypatch.setattr(runtimes, 'executable', lambda name: name)
     settings = {'initial_context': {'prompt': 'DO NOT AUTOMATICALLY EXECUTE'}}

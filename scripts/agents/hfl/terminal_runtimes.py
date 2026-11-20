@@ -10,8 +10,15 @@ NAMES = {'hermes': 'Hermes', 'codex': 'Codex', 'claude': 'Claude', 'jev': 'Jev Â
 
 def executable(runtime):
     path = shutil.which(runtime)
+    if not path and os.name != 'nt':
+        # launchd/systemd workers do not load interactive shell PATH settings.
+        # Preserve explicit PATH precedence, then check standard user installs.
+        for directory in (Path.home() / '.local/bin', Path('/opt/homebrew/bin'), Path('/usr/local/bin')):
+            path = shutil.which(runtime, path=str(directory))
+            if path:
+                break
     if not path:
-        raise ValueError('Install ' + runtime + ' on the execution host.')
+        raise ValueError(runtime + ' was not found in the worker PATH or standard install locations.')
     # npm Windows shims require a shell. Resolve the shipped native Codex binary
     # instead, keeping all user context out of shell command strings.
     if runtime == 'codex' and Path(path).suffix.lower() in {'.cmd', '.ps1', '.bat'}:
