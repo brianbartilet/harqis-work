@@ -29,3 +29,11 @@ test('first-of-type arrivals use the actual saved agent and cold layouts stay mo
  assert.ok(Math.hypot(result[1].x+500,result[1].y+800)<200);
  const cold=placeFleetNodes(input);assert.equal(cold[1].fx,undefined);assert.equal(cold[0].fx,cold[0].x);
 });
+
+test('status nodes are pinned on initial layout and retain saved positions',()=>{
+ const input=[node('status:failed','status')];
+ const [cold]=placeFleetNodes(input);
+ assert.equal(cold.fx,cold.x);assert.equal(cold.fy,cold.y);
+ const [saved]=placeFleetNodes(input,{'status:failed':{x:120,y:240,manual:true}});
+ assert.equal(saved.fx,120);assert.equal(saved.fy,240);
+});

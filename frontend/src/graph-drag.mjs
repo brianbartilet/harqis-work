@@ -2,7 +2,7 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
 
 // Preserve preset spacing while letting connected nodes follow elastically.
 const originalLinkStrength=new WeakMap();
-export function configureDragForces(graph,localDrag=false) {
+export function configureDragForces(graph,localDrag=false,response=1) {
   const linkForce=graph.d3Force('link');
   if(!originalLinkStrength.has(linkForce))originalLinkStrength.set(linkForce,linkForce.strength());
   linkForce.strength(localDrag?.06:originalLinkStrength.get(linkForce));
@@ -10,7 +10,7 @@ export function configureDragForces(graph,localDrag=false) {
   graph.d3Force('link').distance(localDrag?link=>Math.max(30,Math.hypot(link.source.x-link.target.x,link.source.y-link.target.y)):105);
   // Apply attraction before collisions, and the speed limiter after collisions.
   graph.d3Force('collide',null);graph.d3Force('drag-damping',null);
-  graph.d3Force('drag-follow',localDrag?dragFollow(Math.max(.02,graph.zoom?.()||1)):null);
+  graph.d3Force('drag-follow',localDrag?dragFollow(Math.max(.02,graph.zoom?.()||1),response):null);
   const scale=localDrag?Math.max(.02,graph.zoom?.()||1):1;
   graph.d3Force('collide',forceCollide(n=>(n.radius+(localDrag?12:30))/scale).iterations(localDrag?3:2));
   graph.d3Force('x',localDrag?null:forceX(n=>n.clusterX||0).strength(.065));
@@ -19,7 +19,7 @@ export function configureDragForces(graph,localDrag=false) {
     // Presets are not a force-equilibrium layout: reheating must not contract
     // every link to 105 or pull the entire graph back to the old cluster centers.
     graph.d3Force('center',null);
-    graph.d3Force('drag-damping',dragDamping());
+    graph.d3Force('drag-damping',dragDamping(response));
   }else{
     graph.d3Force('drag-damping',null);
   }
@@ -28,7 +28,7 @@ export function configureDragForces(graph,localDrag=false) {
 
 // Nearby children orbit a spring's rest distance from the actual parent.
 // Their bearing is free to change, so collisions can deflect their path.
-export function dragFollow(scale=1){
+export function dragFollow(scale=1,response=1){
   let nodes=[];
   const force=()=>{for(const n of nodes){
     if(!n.dragOrigin||!n.dragParent)continue;
@@ -40,18 +40,18 @@ export function dragFollow(scale=1){
       const progress=1-Math.exp(-Math.hypot(px,py)/100);
       const rest=initial+(Math.min(initial,Math.max(105,((parent.radius||12)+(n.radius||7)+30)/scale))-initial)*progress;
       const dx=parentX-n.x,dy=parentY-n.y,distance=Math.hypot(dx,dy)||1;
-      const pull=(distance-rest)/distance*.10;
+      const pull=(distance-rest)/distance*.10*response;
       n.vx+=dx*pull;n.vy+=dy*pull;
     }else{
       // Weak support for the rest of the connected graph avoids rigid shared hubs.
-      n.vx+=(n.dragOrigin.x+px*.9*weight-n.x)*.06;
-      n.vy+=(n.dragOrigin.y+py*.9*weight-n.y)*.06;
+      n.vx+=(n.dragOrigin.x+px*.9*weight-n.x)*.06*response;
+      n.vy+=(n.dragOrigin.y+py*.9*weight-n.y)*.06*response;
     }
   }};
   force.initialize=value=>{nodes=value;};return force;
 }
 
-export function dragDamping(){
+export function dragDamping(response=1){
   let nodes=[];
   const force=()=>{for(const n of nodes){
     if(!n.dragOrigin)continue;
@@ -66,7 +66,7 @@ export function dragDamping(){
       n.vy=n.dragOrigin.y+dy/distance*reach-n.y;
     }
     // Clamp after correcting the envelope so reversing a drag cannot teleport nodes.
-    const speed=Math.hypot(n.vx,n.vy),maxSpeed=24*weight;
+    const speed=Math.hypot(n.vx,n.vy),maxSpeed=24*weight*response;
     if(speed>maxSpeed){n.vx*=maxSpeed/speed;n.vy*=maxSpeed/speed;}
   }};
   force.initialize=value=>{nodes=value;};

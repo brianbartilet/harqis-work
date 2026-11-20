@@ -1,5 +1,5 @@
 import {releaseDragNeighbors} from './graph-drag.mjs';
-export const isFleetAnchor=node=>['owner','agent','connector'].includes(node.kind);
+export const isFleetAnchor=node=>['owner','agent','connector','status'].includes(node.kind);
 export function pinFleetAnchors(nodes,except){
  for(const node of nodes){
   if(!isFleetAnchor(node)||node===except)continue;
