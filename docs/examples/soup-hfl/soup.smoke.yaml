@@ -1,0 +1,20 @@
+# Synthetic smoke run only; run from the copied experiment directory.
+# Check the selected Soup release and model license before downloading.
+base: HuggingFaceTB/SmolLM2-135M-Instruct
+task: sft
+data:
+  train: ./train.synthetic.jsonl
+  format: chatml
+  val_split: 0.0
+  max_length: 1024
+training:
+  seed: 42
+  epochs: 1
+  lr: 0.0002
+  batch_size: 1
+  quantization: 4bit
+  lora:
+    r: 8
+    alpha: 16
+    dropout: 0.05
+output: ./output
