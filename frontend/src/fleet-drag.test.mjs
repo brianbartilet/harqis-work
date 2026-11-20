@@ -43,5 +43,5 @@ test('faster Fleet response follows a dragged agent sooner and settles finitely'
   assert.ok(Number.isFinite(child.x)&&Number.isFinite(child.y));
   assert.equal(parent.x,-300);sim.stop();return progress;
  };
- assert.ok(run(1.3)>run(1),'Fleet catches up sooner');
+ assert.ok(run(2.2)>run(1.3),'Fleet catches up sooner');
 });
