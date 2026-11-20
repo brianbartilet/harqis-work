@@ -254,7 +254,7 @@ def ecosystem_graph(request: Request, node_limit: int = 1000, user=Depends(owner
         # Preserve the fleet inventory before filling the remaining budget with activity.
         # A large corpus must not crowd workflow definitions out of the API response.
         priority = {'owner': 0, 'agent': 0, 'connector': 0, 'hud': 1, 'workflow': 1,
-                    'application': 2, 'configuration': 2, 'trigger': 2, 'subagent': 2,
+                    'application': 2, 'configuration': 2, 'trigger': 2, 'subagent': 2, 'skill': 2,
                     'action': 3, 'idea': 3, 'status': 3}
         ranked = sorted(data['nodes'], key=lambda n: (priority.get(n['kind'], 4), n['id']))
         data['nodes'] = ranked[:node_limit]
