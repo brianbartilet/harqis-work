@@ -22,6 +22,9 @@ DESCRIPTIONS = {
 }
 # Source terminology is documentation, not a claim that its API is supported.
 EQUIVALENTS = [
+    ('hermes', 'installation', 'connector', 'owner', 'verified'),
+    ('openclaw', 'installation', 'connector', 'installation', 'documented'),
+    ('openclaw', 'Fleet sessions', 'task', 'agent', 'documented'),
     ('grokbot', 'skills', 'skill', 'account', 'documented'),
     ('grokbot', 'library files', 'file', 'account', 'documented'),
     ('grokbot', 'library pages', 'entry', 'account', 'documented'),

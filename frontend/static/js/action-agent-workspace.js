@@ -189,7 +189,7 @@
       if(headerStatus){
         headerStatus.textContent=({queued:'Waiting for worker',starting:'Connecting…',idle:'Ready to type',waiting:'Waiting for capacity',running:'Working…',failed:'Disconnected · Restore session',closed:'Closed · Read-only',expired:'Expired · Restore session'})[item.state]||item.state;
         headerStatus.dataset.state=item.state;
-        if(item.state==='running'&&['codex','claude'].includes(item.settings?.terminal_runtime))headerStatus.textContent='CLI active';
+        if(item.state==='running'&&['codex','claude','openclaw'].includes(item.settings?.terminal_runtime))headerStatus.textContent='CLI active';
       }
       const ended=['failed','closed','expired'].includes(item.state);
       sessionNotice.hidden=!ended;
@@ -383,7 +383,7 @@
       const selected=JSON.stringify({runtime,host:item.settings?.agent_host});
       if([...runtimePicker.options].some(option=>option.value===selected))runtimePicker.value=selected;
       showConfig();
-      hint.textContent=runtime.toUpperCase()+' · Closing this view leaves the CLI running. Paste images to queue file references; press Enter when ready.'+(['codex','claude'].includes(runtime)?' This CLI reserves a slot until ended and uses its host configuration.':'');
+      hint.textContent=runtime.toUpperCase()+' · Closing this view leaves the CLI running. Paste images to queue file references; press Enter when ready.'+(['codex','claude','openclaw'].includes(runtime)?' This CLI reserves a slot until ended and uses its host configuration.':'');
       connectionState(item);
       if(![...sessions.options].some(o=>o.value===item.id))sessions.append(new Option(new Date(item.created).toLocaleString()+' · '+item.state,item.id));
       sessions.value=item.id;status.textContent='Loading session…';connectStream();

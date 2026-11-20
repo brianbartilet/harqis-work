@@ -9,10 +9,11 @@ from modules.integrations import store
 from modules.integrations.providers import Provider, repository, branch, segment, jira_status
 
 
-PROVIDERS = {'github': {'name': 'GitHub', 'capabilities': ['Create and link branches', 'Create draft pull requests', 'Review linked pull requests', 'Save ideas from branches and PRs']},
+PROVIDERS = {'hermes': {'name': 'Hermes', 'capabilities': ['Default HARQIS agent connector', 'Chat with HARQIS Butler', 'Open worker sessions and inspect Fleet connections']}, 'github': {'name': 'GitHub', 'capabilities': ['Create and link branches', 'Create draft pull requests', 'Review linked pull requests', 'Save ideas from branches and PRs']},
              'jira': {'name': 'Jira Cloud', 'capabilities': ['Import assigned issues to Kanban', 'Update Jira status from action cards', 'Refresh issue status']}}
 
 
+PROVIDERS['openclaw'] = {'name': 'OpenClaw', 'capabilities': ['Connect the host OpenClaw Gateway', 'Open interactive TUI sessions in Fleet', 'Inspect connector relationships and recorded Fleet sessions']}
 PROVIDERS['n8n'] = {'name': 'n8n', 'capabilities': ['Browse workflows', 'Discover first-class agents through MCP', 'Link agents to the fleet workspace']}
 PROVIDERS['nod'] = {'name': 'Nod', 'capabilities': ['Talk to your self-hosted Nod assistant', 'Review approvals and task status in Fleet', 'Capture completed activity in the corpus']}
 PROVIDERS['codex'] = {'name': 'Codex', 'capabilities': ['Observe tasks on the HARQIS host', 'Discover installed local plugins', 'Report completed work to Butler and HFL; no remote execution']}

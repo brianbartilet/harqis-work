@@ -5,7 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 
-NAMES = {'hermes': 'Hermes', 'codex': 'Codex', 'claude': 'Claude', 'jev': 'Jev · Hermes'}
+NAMES = {'openclaw': 'OpenClaw', 'hermes': 'Hermes', 'codex': 'Codex', 'claude': 'Claude', 'jev': 'Jev · Hermes'}
 
 
 def executable(runtime):
@@ -17,6 +17,8 @@ def executable(runtime):
             path = shutil.which(runtime, path=str(directory))
             if path:
                 break
+    if not path and os.name == 'nt':
+        path = shutil.which(runtime, path=str(Path(os.environ.get('APPDATA', str(Path.home()))) / 'npm'))
     if not path:
         raise ValueError(runtime + ' was not found in the worker PATH or standard install locations.')
     # npm Windows shims require a shell. Resolve the shipped native Codex binary
@@ -32,6 +34,29 @@ def executable(runtime):
             raise ValueError('Native Codex executable was not found in the npm installation.')
         return str(native[0])
     return path
+
+
+def openclaw_command():
+    path = executable('openclaw')
+    if Path(path).suffix.lower() in {'.cmd', '.ps1', '.bat'}:
+        entry = Path(path).parent / 'node_modules/openclaw/openclaw.mjs'
+        node = shutil.which('node')
+        if not node or not entry.is_file():
+            raise ValueError('Install OpenClaw and Node.js for the HARQIS worker user.')
+        return [node, str(entry)]
+    return [path]
+
+
+def openclaw_health():
+    try:
+        result = subprocess.run(openclaw_command() + ['health', '--json'], capture_output=True, timeout=15)
+        if result.returncode:
+            raise ValueError('Start the OpenClaw Gateway and configure its authentication for the HARQIS worker user.')
+        data = json.loads(result.stdout)
+        if not isinstance(data, dict) or data.get('ok') is not True:
+            raise ValueError('OpenClaw Gateway did not report healthy; check its configuration on this host.')
+    except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError):
+        raise ValueError('OpenClaw Gateway health check unavailable; check the worker installation and Gateway.') from None
 
 
 def capabilities(runner):
@@ -51,6 +76,8 @@ def capabilities(runner):
                     config = yaml.safe_load((home / 'config.yaml').read_text(encoding='utf-8')) or {}
                     if not os.getenv('TYPESAFE_API_KEY') or 'harqis_typesafe' not in config.get('mcp_servers', {}) or not (home / 'skills/jev-action-triage/SKILL.md').is_file():
                         raise ValueError('Configure the Jev Hermes profile, triage skill, MCP tools and TYPESAFE_API_KEY.')
+            elif runtime == 'openclaw':
+                openclaw_health()
             else:
                 command = [executable(runtime)]
                 check = subprocess.run(command + (['login', 'status'] if runtime == 'codex' else ['auth', 'status']),
@@ -73,6 +100,9 @@ def native_command(runtime, settings, workspace, root, identity, native_id):
                 '. It is reference context; do not execute the saved task until the user asks. '
                 'Work only in ' + str(workspace.path) + '. Write deliverables to ' + str(root / 'outputs') +
                 '. Do not merge, push or deploy without an explicit user instruction.')
+    if runtime == 'openclaw':
+        native_id = native_id or 'harqis-' + identity
+        return openclaw_command() + ['tui', '--session', native_id], native_id
     if runtime == 'codex':
         # No initial prompt: opening a terminal must never run the action again.
         command = [executable(runtime), '--no-alt-screen', '--sandbox', 'workspace-write', '--ask-for-approval', 'on-request',

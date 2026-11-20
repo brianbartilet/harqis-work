@@ -24,6 +24,9 @@ def branch(value):
 
 
 def credentials(provider, raw):
+    if provider == 'openclaw':
+        from modules.integrations.openclaw import credentials as local_credentials
+        return local_credentials(raw)
     if provider == 'claude':
         from modules.integrations.claude import credentials as local_credentials
         return local_credentials(raw)
@@ -65,6 +68,9 @@ def credentials(provider, raw):
 
 class Provider:
     def __new__(cls, provider, credentials):
+        if provider == 'openclaw':
+            from modules.integrations.openclaw import OpenClaw
+            return OpenClaw(credentials)
         if provider == 'claude':
             from modules.integrations.claude import Claude
             return Claude(credentials)

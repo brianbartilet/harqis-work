@@ -2,11 +2,16 @@
 <script type="application/json" data-integration-csrf>{{ integration_csrf | tojson }}</script>
 <script defer src="{{ static_asset('js/integrations.js') }}"></script>
 <nav class="integration-tabs" role="tablist" aria-label="Integration groups">
-  <button id="connectors-tab" type="button" role="tab" aria-controls="connector-integrations" aria-selected="true" tabindex="0">Connectors <span class="integration-tab-count" data-connector-count></span></button>
+  <button id="agents-tab" type="button" role="tab" aria-controls="agent-integrations" aria-selected="true" tabindex="0">Agents <span class="integration-tab-count" data-agent-count></span></button>
+  <button id="connectors-tab" type="button" role="tab" aria-controls="connector-integrations" aria-selected="false" tabindex="-1">Connectors <span class="integration-tab-count" data-connector-count></span></button>
   <button id="workflows-tab" type="button" role="tab" aria-controls="workflow-integrations" aria-selected="false" tabindex="-1">Workflows <span class="integration-tab-count">{{ applications | length }}</span></button>
 </nav>
-<section id="connector-integrations" role="tabpanel" aria-labelledby="connectors-tab">
-  <div class="integration-section-heading"><div><h2 id="connector-integrations-title">Connectors</h2><p>Connect your accounts to enable features and actions across HARQIS, from working with cards to interactions and triggers in the frontend and other integrations. Each connector provides its own supported capabilities. Connections belong to your user account and are managed separately from host-configured workflow credentials.</p></div></div>
-  <div class="connector-grid" data-connector-cards data-claude-logo="{{ static_asset('img/connectors/claude.svg') }}" data-codex-logo="{{ static_asset('img/connectors/codex.svg') }}" data-nod-logo="{{ static_asset('img/connectors/nod.svg') }}" data-grokbot-logo="{{ static_asset('img/connectors/grokbot.svg') }}" data-n8n-logo="{{ static_asset('img/connectors/n8n.svg') }}" data-github-logo="{{ static_asset('img/connectors/github.svg') }}" data-jira-logo="{{ static_asset('img/connectors/jira.svg') }}"><p role="status">Loading connections…</p></div>
-  <p data-integration-error role="alert"></p>
+<section id="agent-integrations" role="tabpanel" aria-labelledby="agents-tab">
+  <div class="integration-section-heading"><div><h2>Agents</h2><p>Connectors for agents, AI services, and MCP providers. Connect an installation to discover its supported capabilities and access it in Fleet. Hermes is the default HARQIS agent connector.</p></div></div>
+  <div class="connector-grid" data-agent-cards></div>
 </section>
+<section id="connector-integrations" role="tabpanel" aria-labelledby="connectors-tab" hidden>
+  <div class="integration-section-heading"><div><h2 id="connector-integrations-title">Connectors</h2><p>Connect GitHub and Jira Cloud accounts for direct integrations with the HARQIS frontend. Each connector enables its supported actions and uses your saved account connection.</p></div></div>
+  <div class="connector-grid" data-connector-cards data-hermes-logo="{{ static_asset('img/connectors/hermes.svg') }}" data-openclaw-logo="{{ static_asset('img/connectors/openclaw.svg') }}" data-claude-logo="{{ static_asset('img/connectors/claude.svg') }}" data-codex-logo="{{ static_asset('img/connectors/codex.svg') }}" data-nod-logo="{{ static_asset('img/connectors/nod.svg') }}" data-grokbot-logo="{{ static_asset('img/connectors/grokbot.svg') }}" data-n8n-logo="{{ static_asset('img/connectors/n8n.svg') }}" data-github-logo="{{ static_asset('img/connectors/github.svg') }}" data-jira-logo="{{ static_asset('img/connectors/jira.svg') }}"><p role="status">Loading connections…</p></div>
+</section>
+<p data-integration-error role="alert"></p>

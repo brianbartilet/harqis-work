@@ -11,6 +11,8 @@ api = APIRouter(prefix='/api', dependencies=[Depends(owner_auth)])
 
 
 def provider_name(provider):
+    if provider == 'hermes':
+        raise HTTPException(409, 'Hermes is the managed default connector.')
     if provider not in service.PROVIDERS:
         raise HTTPException(404, 'Connector not found.')
     return provider
@@ -171,6 +173,12 @@ def connectors(user=Depends(owner_auth)):
     return {'items':items, 'links':links}
 
 
+@api.post('/openclaw/link')
+def link_openclaw(raw: dict, user=Depends(owner_auth)):
+    from modules.integrations.openclaw import link
+    return link(user, raw)
+
+
 @api.post('/codex/link')
 def link_codex(raw: dict, user=Depends(owner_auth)):
     from modules.integrations.codex import link
@@ -221,8 +229,8 @@ def connect(provider: str, raw: dict, user=Depends(owner_auth)):
     metadata = {**identity, 'status':'Connected', 'enabled':False, 'connected_since':store.now(),
                 'auth_method':('Fine-grained personal access token' if clean['token'].startswith('github_pat_') else 'Personal access token') if provider == 'github' else 'Email and API token',
                 'expiry':'Unknown', 'site':clean.get('site', '')}
-    if provider in {'codex', 'claude'}:
-        metadata.update(site=identity['site'], auth_method='Local host identity · observation only')
+    if provider in {'codex', 'claude', 'openclaw'}:
+        metadata.update(site=identity['site'], auth_method='Local host identity' if provider == 'openclaw' else 'Local host identity · observation only')
     if provider == 'n8n':
         metadata['public_url'] = clean.get('public_url', '')
         metadata['auth_method'] = 'API key' + (' + MCP token' if clean.get('mcp_token') else '')
@@ -253,8 +261,10 @@ def toggle(provider: str, raw: dict, user=Depends(owner_auth)):
     data.update(enabled=raw['enabled'], status='Connected' if data['credentials'] else 'Not connected')
     data.pop('error', None)
     saved = store.save(user, provider, data)
-    if provider in {'codex', 'claude'} and raw['enabled']:
-        if provider == 'claude':
+    if provider in {'codex', 'claude', 'openclaw'} and raw['enabled']:
+        if provider == 'openclaw':
+            from modules.integrations.openclaw import link
+        elif provider == 'claude':
             from modules.integrations.claude import link
         else:
             from modules.integrations.codex import link

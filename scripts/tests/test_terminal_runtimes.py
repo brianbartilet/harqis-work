@@ -53,3 +53,21 @@ def test_windows_codex_uses_nearest_installed_dependency(tmp_path, monkeypatch):
         path.touch()
     monkeypatch.setattr(runtimes.shutil, 'which', lambda _: str(shim))
     assert runtimes.executable('codex') == str(nested)
+
+
+def test_openclaw_session_is_prompt_free_and_restorable(tmp_path, monkeypatch):
+    monkeypatch.setattr(runtimes, 'openclaw_command', lambda: ['node', '/openclaw.mjs'])
+    command, identity = runtimes.native_command('openclaw', {'initial_context': {'prompt': 'do work'}},
+        SimpleNamespace(path=tmp_path), tmp_path, 'abc', '')
+    assert command == ['node', '/openclaw.mjs', 'tui', '--session', 'harqis-abc']
+    restored, key = runtimes.native_command('openclaw', {}, SimpleNamespace(path=tmp_path), tmp_path, 'new', identity)
+    assert restored == command and key == identity
+
+
+def test_openclaw_health_rejects_unhealthy_snapshot(monkeypatch):
+    import pytest
+    monkeypatch.setattr(runtimes, 'openclaw_command', lambda: ['openclaw'])
+    monkeypatch.setattr(runtimes.subprocess, 'run', lambda *a, **k: SimpleNamespace(returncode=0, stdout=b'{"ok":false}'))
+    with pytest.raises(ValueError, match='did not report healthy'):
+        runtimes.openclaw_health()
+    assert 'openclaw' in runtimes.NAMES

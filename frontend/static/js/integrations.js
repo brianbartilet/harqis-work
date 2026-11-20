@@ -18,11 +18,14 @@
   async function load(){
     const snapshot=await api('/connectors');current=snapshot.items;cardLinks=snapshot.links||[];
     const root=document.querySelector('[data-connector-cards]');
-    document.querySelectorAll('[data-connector-count]').forEach(n=>n.textContent=current.length);
+    document.querySelectorAll('[data-connector-count]').forEach(n=>n.textContent=current.filter(c=>['github','jira'].includes(c.provider)).length);
+    const agentRoot=document.querySelector('[data-agent-cards]');
+    document.querySelectorAll('[data-agent-count]').forEach(n=>n.textContent=current.filter(c=>!['github','jira'].includes(c.provider)).length);
+    if(agentRoot)agentRoot.replaceChildren();
     if(root){root.replaceChildren();for(const item of current){
       const card=el('article',undefined,'connector-card'),header=el('header');const title=el('h2',undefined,'connector-title');
       card.dataset.available=String(item.availability?.available??(item.enabled&&item.status==='Connected'));
-      const logoUrl={claude:root.dataset.claudeLogo,codex:root.dataset.codexLogo,nod:root.dataset.nodLogo,github:root.dataset.githubLogo,jira:root.dataset.jiraLogo,n8n:root.dataset.n8nLogo,grokbot:root.dataset.grokbotLogo}[item.provider];
+      const logoUrl={hermes:root.dataset.hermesLogo,openclaw:root.dataset.openclawLogo,claude:root.dataset.claudeLogo,codex:root.dataset.codexLogo,nod:root.dataset.nodLogo,github:root.dataset.githubLogo,jira:root.dataset.jiraLogo,n8n:root.dataset.n8nLogo,grokbot:root.dataset.grokbotLogo}[item.provider];
       if(logoUrl){const logo=el('img',undefined,'connector-logo');logo.src=logoUrl;logo.alt='';logo.width=20;logo.height=20;logo.onerror=()=>logo.remove();title.append(logo);}
       title.append(document.createTextNode(item.name));header.append(title);
       const headerControls=el('div',undefined,'connector-header-controls');header.append(headerControls);
@@ -46,7 +49,7 @@
         button(row,item.account?'Reconnect':'Connect',()=>setup(item));
         if(item.enabled){button(row,'Refresh Bots',async()=>{await api('/grokbot/sync',{});await load();});link(row,'View fleet','/agents?integration=grokbot');}
       }
-      if(item.enabled&&['codex','claude'].includes(item.provider)){const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);button(row,'Open in Fleet',async()=>{const result=await api('/'+item.provider+'/link',{});location.href='/agents?agent='+encodeURIComponent(result.item.id);});}
+      if(item.enabled&&['codex','claude','openclaw'].includes(item.provider)){const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);button(row,'Open in Fleet',async()=>{const result=await api('/'+item.provider+'/link',{});location.href='/agents?agent='+encodeURIComponent(result.item.id);});}
       if(item.enabled&&item.provider==='nod'){const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);button(row,'Open in Fleet',async()=>{const result=await api('/nod/link',{});location.href='/agents?agent='+encodeURIComponent(result.item.id);});link(row,'Open Nod',item.site);}
       if(item.enabled&&item.provider==='n8n'){
         const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);
@@ -54,7 +57,8 @@
         button(row,'Sync inventory',async()=>{const view=dialog('Synchronize n8n inventory'),query=field(view.body,'Agent search');button(controls(view.body),'Search and synchronize',async()=>{const result=await api('/n8n/sync',{query:query.value});view.body.append(el('p',result.imported+' agents and '+result.workflows+' workflows synchronized. '+(result.warnings||[]).join(' ')));link(view.body,'Open agent fleet','/agents?integration=n8n');});});
         button(row,'Browse workflows',async()=>{const view=dialog('n8n workflows');let cursor='';const next=button(controls(view.body),'Load workflows',async()=>{const data=await api('/n8n/workflows?cursor='+encodeURIComponent(cursor));for(const workflow of data.items)link(view.body,workflow.name+(workflow.active?' · Active':''),(item.public_url||item.site)+'/workflow/'+encodeURIComponent(workflow.id));cursor=data.cursor;next.hidden=!cursor;});next.click();});
       }
-      root.append(card);
+      if(item.managed){for(const control of [connect,disconnect,toggle]){control.disabled=true;control.title='Managed default agent connector';control.setAttribute('data-managed-disabled','');}const footer=el('footer',undefined,'connector-footer');card.append(footer);link(controls(footer),'Open in Fleet','/agents?agent=butler');}
+      (agentRoot&&!['github','jira'].includes(item.provider)?agentRoot:root).append(card);
     }}
     document.querySelectorAll('[data-connector-action]').forEach(b=>{b.hidden=!current.some(c=>c.provider==='jira'&&c.enabled);badges(b.parentElement,b.dataset.connectorAction);});
     window.dispatchEvent(new CustomEvent('integrations:changed',{detail:current}));
@@ -100,14 +104,14 @@
     });
     d.addEventListener('close',()=>{closed=true;key.value='';cancel();},{once:true});
   }
-  function claudeSetup(){
-    const {d,body}=dialog('Connect Claude');
-    body.append(el('p','Connect Claude Code installed on the HARQIS server host using its existing sign-in. Discover user and project skills, link Fleet agents, and inspect recorded work.'));
-    body.append(el('p','If sign-in is needed, run claude auth login on that host as the HARQIS service user, then test again. The CLI worker must also be online to start sessions.'));
+  function claudeSetup(provider='claude'){const name=provider==='openclaw'?'OpenClaw':'Claude';
+    const {d,body}=dialog('Connect '+name);
+    body.append(el('p',provider==='openclaw'?'Connect the OpenClaw installation on the HARQIS host using its existing Gateway configuration.':'Connect Claude Code installed on the HARQIS server host using its existing sign-in. Discover user and project skills, link Fleet agents, and inspect recorded work.'));
+    body.append(el('p',provider==='openclaw'?'Configure OpenClaw and start its Gateway on the HARQIS host as the service user. Test gateway health before enabling; the CLI worker must be online.':'If sign-in is needed, run claude auth login on that host as the HARQIS service user, then test again. The CLI worker must also be online to start sessions.'));
     const state=el('p','Not tested','integration-warning');state.setAttribute('role','status');body.append(state);
     const row=controls(body);let tested=false;
-    const test=button(row,'Test local host',async()=>{tested=false;save.disabled=true;try{const result=await api('/connectors/claude/test',{transport:'local'});tested=true;state.textContent='Test passed · '+result.account;}catch(e){state.textContent='Claude is unavailable on this host.';throw e;}finally{save.disabled=!tested;}});
-    const save=button(row,'Save and enable',async()=>{if(!tested)return;try{await api('/connectors/claude/save',{transport:'local'});await api('/connectors/claude/toggle',{enabled:true});d.close();await load();}catch(e){tested=false;state.textContent='Test the host again before saving.';throw e;}finally{save.disabled=!tested;}});
+    const test=button(row,'Test local host',async()=>{tested=false;save.disabled=true;try{const result=await api('/connectors/'+provider+'/test',{transport:'local'});tested=true;state.textContent='Test passed · '+result.account;}catch(e){state.textContent=name+' is unavailable on this host.';throw e;}finally{save.disabled=!tested;}});
+    const save=button(row,'Save and enable',async()=>{if(!tested)return;try{await api('/connectors/'+provider+'/save',{transport:'local'});await api('/connectors/'+provider+'/toggle',{enabled:true});d.close();await load();}catch(e){tested=false;state.textContent='Test the host again before saving.';throw e;}finally{save.disabled=!tested;}});
     save.setAttribute('data-managed-disabled','');save.disabled=true;
   }
   function codexSetup(item){
@@ -133,7 +137,7 @@
   }
   function setup(item){
     if(item.provider==='grokbot'){grokbotSetup();return;}
-    if(item.provider==='claude'){claudeSetup();return;}
+    if(['claude','openclaw'].includes(item.provider)){claudeSetup(item.provider);return;}
     if(item.provider==='codex'){codexSetup(item);return;}
     const {d,body,error}=dialog('Connect '+item.name);
     body.append(el('p','Test your credentials, then save the connection. Testing does not save credentials. Saved credentials are encrypted and separate from workflow accounts.'));

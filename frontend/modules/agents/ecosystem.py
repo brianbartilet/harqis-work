@@ -115,6 +115,13 @@ def graph(user):
 
     from modules.integrations.n8n_fleet import extend_graph
     extend_graph(agents, nodes, edge, add)
+    from modules.agents import entities
+    scope = 'harqis:hermes:' + user
+    hermes = entities.entity('connector', scope, 'default', 'Hermes', source='hermes', scope=scope,
+                            category='connection', state='managed', url='/applications#agent-integrations',
+                            summary='Default HARQIS agent connector, including HARQIS Butler.')
+    entities.observe(user, [hermes], [('agent:' + a['id'], hermes['id'], 'connected through')
+                                    for a in agents if a['runtime'] == 'hermes' and not a.get('mock')])
     from modules.agents.entities import extend_graph as entity_graph
     entity_graph(user, agents, nodes, edge, add)
     for agent in agents:

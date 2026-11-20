@@ -10,7 +10,7 @@ def snapshot(user):
     result = []
     for provider, info in PROVIDERS.items():
         data = store.get(user, provider)
-        if not data.get('enabled') and provider not in {'codex', 'claude'} and not data.get('account') and not any(a.get('connector_user') == user and a.get('connector_provider', a.get('runtime')) == provider for a in service.store().list()):
+        if not data.get('enabled') and provider not in {'codex', 'claude', 'openclaw'} and not data.get('account') and not any(a.get('connector_user') == user and a.get('connector_provider', a.get('runtime')) == provider for a in service.store().list()):
             continue
         observation = observations.get(provider, {})
         result.append({'provider': provider, 'name': info['name'], 'status': data.get('status', 'unknown'),
@@ -32,7 +32,7 @@ def extend_graph(user, nodes, edge, add):
             existing = [nodes[identity]] if identity in nodes else []
         for item in existing:
             edge('agent:butler', item['id'], 'monitors')
-            if provider in {'codex', 'claude'}:
+            if provider in {'codex', 'claude', 'openclaw'}:
                 import socket
                 for agent in service.store().list():
                     if agent['runtime'] != provider or not projection.inspectable(agent, user):

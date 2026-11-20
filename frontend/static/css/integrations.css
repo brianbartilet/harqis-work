@@ -161,3 +161,7 @@ html:has(.integration-tabs){scrollbar-gutter:stable}
 .integration-dialog .integration-warning{display:block;padding:.75rem 1rem;border:1px solid #854d0e;border-left:3px solid #fbbf24;border-radius:.5rem;background:#422006;color:#fde68a;line-height:1.5;overflow-wrap:anywhere}
 
 .connector-card[data-available="false"]{border-color:#334155;background:#101827}.connector-card[data-available="false"] .connector-logo{filter:grayscale(1);opacity:.5}.connector-card[data-available="false"] h3,.connector-card[data-available="false"]>p,.connector-card[data-available="false"]>ul{color:#94a3b8}
+
+/* Provider marks share the monochrome palette on dark surfaces. */
+.connector-logo, .connector-card[data-available="false"] .connector-logo { filter: grayscale(1) brightness(0) invert(1); }
+.connector-header-controls button:disabled { opacity: .4; cursor: not-allowed; }

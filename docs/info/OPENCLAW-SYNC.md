@@ -1,7 +1,11 @@
+> **Current support:** OpenClaw is available again as a host connector with Fleet
+> CLI sessions. See [Agents connectors](CODEX-FLEET.md#agents-connectors-hermes-and-openclaw).
+> The legacy Git sync procedure below remains historical. Hermes is still the default.
+
 # OpenClaw Sync — Multi-Machine Setup
 
-> ⚠️ **Deprecated — kept for historical reference only.** OpenClaw (the Gateway runtime
-> and the `harqis-openclaw-sync` workspace repo) has been superseded by **Hermes**. Hermes
+> ⚠️ **Deprecated — kept for historical reference only.** The `harqis-openclaw-sync` workspace
+> repository model has been superseded by **Hermes** for default HARQIS work. Hermes
 > stores agent memory, plans, scripts, and logs locally under `~/.hermes/` on each
 > machine — there is **no cross-machine sync repo** to maintain. Do not stand up the
 > OpenClaw sync described below for new machines.

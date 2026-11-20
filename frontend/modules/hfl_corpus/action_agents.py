@@ -87,7 +87,7 @@ def terminal_runtimes(user=Depends(bridge.owner_auth)):
     hosts = store().hosts()
     for host in hosts:
         for runtime in host['runtimes']:
-            if runtime['id'] in {'codex', 'claude'}:
+            if runtime['id'] in {'codex', 'claude', 'openclaw'}:
                 health = connector(user, runtime['id'])
                 from modules.integrations import store as integrations
                 import socket
@@ -103,11 +103,11 @@ def advertise_runtimes(payload: dict):
     host, runtimes = payload.get('host'), payload.get('runtimes')
     if not isinstance(host, str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,200}', host):
         raise HTTPException(400, 'Invalid worker host.')
-    if not isinstance(runtimes, list) or len(runtimes) > 4:
+    if not isinstance(runtimes, list) or len(runtimes) > 5:
         raise HTTPException(400, 'Invalid runtime capabilities.')
     clean = []
     for item in runtimes:
-        if not isinstance(item, dict) or item.get('id') not in {'hermes', 'codex', 'claude', 'jev'} or type(item.get('available')) is not bool:
+        if not isinstance(item, dict) or item.get('id') not in {'hermes', 'codex', 'claude', 'openclaw', 'jev'} or type(item.get('available')) is not bool:
             raise HTTPException(400, 'Invalid runtime capability.')
         clean.append({k: item[k] for k in ('id', 'available')} | {'name': str(item.get('name', item['id']))[:80], 'reason': str(item.get('reason', ''))[:300]})
         if item['id'] == 'jev':
@@ -237,7 +237,7 @@ def start_session(source_id: str, payload: dict, user=Depends(bridge.owner_auth)
     runtime = payload.get('runtime')
     if runtime is not None:
         host = payload.get('host')
-        if runtime in {'codex', 'claude'}:
+        if runtime in {'codex', 'claude', 'openclaw'}:
             from modules.agents.availability import connector
             health = connector(user, runtime)
             if not health['available']:
@@ -252,7 +252,7 @@ def start_session(source_id: str, payload: dict, user=Depends(bridge.owner_auth)
         settings = bridge.checked(effective, source_id, execute=False)
         settings.update(terminal_runtime=runtime, agent_host=host)
         assignment = settings.get('action_assignment', {})
-        if runtime in {'codex', 'claude'} and assignment.get('runtime') == runtime and assignment.get('agent_id'):
+        if runtime in {'codex', 'claude', 'openclaw'} and assignment.get('runtime') == runtime and assignment.get('agent_id'):
             from modules.agents import service as fleet
             from modules.agents.projection import visible
             agent = fleet.initialize().get(assignment['agent_id'])

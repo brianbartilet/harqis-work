@@ -15,7 +15,7 @@ def opened(fleet, client, runtime='codex'):
     from modules.hfl_corpus.action_agents import store
     from modules.agents.sessions import source
     from modules.integrations import store as connectors
-    if runtime in {'codex', 'claude'}:
+    if runtime in {'codex', 'claude', 'openclaw'}:
         connectors.save('frontend-test-user', runtime, {'enabled':True, 'status':'Connected', 'site':'test-installation', 'account_id':'test-installation', 'host':'native-worker'})
     store().advertise('native-worker', [{'id': runtime, 'available': True}])
     agent = fleet_post(client, '/items', {'name': 'Scratch agent', 'runtime': runtime}).json()['item']
@@ -189,3 +189,17 @@ def test_fleet_dialog_save_and_discard(fleet, bridge, authenticated_client, term
         assert not errors
     finally:
         page.close()
+
+
+def test_openclaw_fleet_entry_reuses_session_and_enforces_host(fleet, bridge, authenticated_client):
+    from modules.hfl_corpus.action_agents import store
+    from modules.agents.sessions import source
+    agent, session = opened(fleet, authenticated_client, 'openclaw')
+    assert not session['action_id']
+    assert session['settings']['terminal_runtime'] == 'openclaw'
+    assert session['settings']['agent_host'] == 'native-worker'
+    assert fleet_post(authenticated_client, '/items/' + agent['id'] + '/prepare', {}).status_code == 200
+    assert len(store().sessions(source(agent['id'], 'frontend-test-user'))) == 1
+    store().advertise('native-worker', [{'id': 'openclaw', 'available': False, 'reason': 'Gateway offline'}])
+    response = post(authenticated_client, ROOT + '/fleet/' + agent['id'] + '/sessions', {})
+    assert response.status_code == 409

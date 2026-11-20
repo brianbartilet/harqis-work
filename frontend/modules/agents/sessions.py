@@ -17,7 +17,7 @@ router = APIRouter(prefix='/hfl-corpus/agent-bridge', dependencies=[Depends(term
 
 def agent_for(identity, user, active=False):
     agent = terminal.bridge.checked(service.initialize().get, identity)
-    if not inspectable(agent, user) or agent.get('mock') or agent.get('managed_sharing') or agent['runtime'] not in {'hermes', 'codex', 'claude'}:
+    if not inspectable(agent, user) or agent.get('mock') or agent.get('managed_sharing') or agent['runtime'] not in {'hermes', 'codex', 'claude', 'openclaw'}:
         raise HTTPException(404, 'Fleet CLI agent unavailable.')
     if active and not agent['active']:
         raise HTTPException(409, 'Activate this agent before starting a session.')
@@ -108,7 +108,7 @@ def start(identity: str, payload: dict, user=Depends(terminal.bridge.owner_auth)
         settings['fleet_agent'] = frozen
     hosts = [h['host'] for h in terminal.store().hosts() if any(r['id'] == runtime and r['available'] for r in h['runtimes'])]
     host = settings.get('agent_host')
-    if runtime in {'codex', 'claude'}:
+    if runtime in {'codex', 'claude', 'openclaw'}:
         from modules.integrations import store as integrations
         host = integrations.get(user, runtime).get('host') or socket.gethostname()
     if not host:
@@ -118,7 +118,7 @@ def start(identity: str, payload: dict, user=Depends(terminal.bridge.owner_auth)
         if previous['source_id'] != source(identity, user):
             raise HTTPException(409, 'Restore a session belonging to this Fleet agent.')
         host = previous['worker'] or previous['settings'].get('agent_host')
-        if runtime in {'codex', 'claude'} and host != (integrations.get(user, runtime).get('host') or socket.gethostname()):
+        if runtime in {'codex', 'claude', 'openclaw'} and host != (integrations.get(user, runtime).get('host') or socket.gethostname()):
             raise HTTPException(409, 'The saved session belongs to another connected installation.')
     if host not in hosts:
         raise HTTPException(409, 'No unambiguous available CLI worker for this agent. Check its configured host and CLI installation.')

@@ -137,3 +137,42 @@ Protocol sources: [Remote connections](https://learn.chatgpt.com/docs/remote-con
 and [Codex app-server](https://learn.chatgpt.com/docs/app-server), plus the installed
 CLI's generated JSON schema. The installed executable remains the capability
 authority; unsupported capabilities are never fabricated.
+
+
+## Agents connectors: Hermes and OpenClaw
+
+Integrations opens from Fleet's **Connect services** in a new tab. **Agents** is
+first and selected by default: Hermes, OpenClaw, n8n, Nod, Codex, Claude and Grok
+Bot are agent/AI/MCP connectors. **Connectors** contains GitHub and Jira Cloud for
+direct frontend actions. **Workflows** lists host-configured API integrations.
+
+Hermes remains the managed default connector. Its connect, disconnect and enable
+controls are disabled. Its owner-scoped connector entity links to Hermes agents,
+including HARQIS Butler; worker and gateway availability still governs execution.
+
+OpenClaw is supported again as an optional host connector. On the HARQIS server,
+configure OpenClaw and its Gateway under the service user's account. In Agents,
+select OpenClaw, **Test local host**, **Save and enable**, then **Open in Fleet**.
+The test runs `openclaw health --json` with a timeout and requires `ok: true`.
+Credentials remain in OpenClaw; HARQIS stores the host/installation identity.
+Restart or update the CLI worker so it advertises the new OpenClaw capability.
+
+Fleet **Open session** uses the existing terminal dialog and launches
+`openclaw tui --session harqis-<session-id>` without a prompt or delivery flag.
+It reuses live sessions and preserves the native session key when restored.
+A new Fleet session is unlinked until **Save as Action**; closing the dialog keeps
+it running. **Discard** follows the existing stop-and-discard flow. OpenClaw owns
+its Gateway execution context and schedules; this does not install a scheduler
+or enable automated Action dispatch. The TUI uses its configured Gateway workspace,
+not HARQIS's isolated checkout. HARQIS context is saved locally but not injected.
+
+Installation identities include host, state directory and config path, scoped by
+owner. Repeated linking preserves the Fleet profile and source history. Discovery
+currently covers the connector and Fleet sessions, not OpenClaw's remote accounts,
+skills or schedules. Unavailable Gateway/worker checks disable session entry and
+retain existing records. Windows npm shims launch via Node directly; Unix workers
+also search standard user and Homebrew executable locations.
+
+Protocol reference: https://docs.openclaw.ai/cli/tui and
+https://docs.openclaw.ai/cli/health. Live availability must be verified on the
+configured server; isolated tests do not establish a live connection.

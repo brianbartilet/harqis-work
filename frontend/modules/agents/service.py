@@ -21,7 +21,7 @@ BUTLER = ('You are the HARQIS butler. Help the owner understand the application,
 FIELDS = {'name', 'description', 'persona', 'instructions', 'color', 'active', 'workspace_ids',
           'skills', 'tools', 'workflows', 'triggers', 'subagents', 'overrides', 'thumbnail', 'runtime', 'classification', 'specialist_profile'}
 SERVICES = {'hermes': ('Hermes', 'general'), 'codex': ('Codex', 'coding'),
-            'claude': ('Claude', 'coding'), 'chatgpt': ('ChatGPT', 'general'),
+            'openclaw': ('OpenClaw', 'general'), 'claude': ('Claude', 'coding'), 'chatgpt': ('ChatGPT', 'general'),
             'n8n': ('n8n', 'workflows'), 'nod': ('Nod', 'workflows'),
             'grokbot': ('Grok Bot', 'workflows'), 'service': ('Other agent service', 'general')}
 CLASSIFICATIONS = {'coding': 'Coding agent', 'general': 'General purpose', 'workflows': 'Workflow agent'}

@@ -4,6 +4,8 @@ from fastapi import HTTPException
 
 
 def connector(user, provider):
+    if provider == 'hermes':
+        return {'available': True, 'reason': '', 'state': 'managed'}
     from modules.integrations import store
     import os
     if provider in {'nod', 'n8n'} and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1' and os.getenv('HARQIS_' + provider.upper() + '_MOCK') == '1':
@@ -12,7 +14,7 @@ def connector(user, provider):
     reason = ('Not connected' if data.get('status') == 'Not connected' or not data.get('account_id') and not data.get('site') else
               'Connector disabled' if not data.get('enabled') else
               str(data.get('error') or data.get('status')) if data.get('error') or data.get('status') != 'Connected' else '')
-    if not reason and provider in {'codex', 'claude'}:
+    if not reason and provider in {'codex', 'claude', 'openclaw'}:
         from modules.hfl_corpus.action_agents import store as terminals
         target = data.get('host') or socket.gethostname()
         candidates = [h for h in terminals().hosts() if h['host'] == target]
@@ -34,7 +36,7 @@ def for_agent(user, agent, *, hosts=None, gateways=None):
         reason = 'Preview agent; execution unavailable'
     elif not agent.get('active', True):
         reason = 'Agent deactivated'
-    provider = agent.get('connector_provider') or (runtime if runtime in {'codex', 'claude', 'grokbot', 'n8n', 'nod'} else '')
+    provider = agent.get('connector_provider') or (runtime if runtime in {'codex', 'claude', 'openclaw', 'grokbot', 'n8n', 'nod'} else '')
     if not reason and provider:
         health = connector(user, provider)
         data = store.get(user, provider)
@@ -45,7 +47,7 @@ def for_agent(user, agent, *, hosts=None, gateways=None):
             reason = 'Connected account changed; reconnect this agent'
         if not reason and agent.get('remote_available') is False:
             reason = 'Agent is no longer available from its provider'
-    if not reason and runtime in {'hermes', 'codex', 'claude'}:
+    if not reason and runtime in {'hermes', 'codex', 'claude', 'openclaw'}:
         import os
         gateways = connections.summaries(user) if gateways is None else gateways
         gateway = gateways.get(agent.get('id'), {})
@@ -55,7 +57,7 @@ def for_agent(user, agent, *, hosts=None, gateways=None):
             gateway_ready = gateway_ready or agent.get('id') == preference(user)['agent_id']
         hosts = terminals().hosts() if hosts is None else hosts
         target = agent.get('overrides', {}).get('agent_host')
-        if runtime in {'codex', 'claude'}:
+        if runtime in {'codex', 'claude', 'openclaw'}:
             data = store.get(user, runtime)
             connected_host = data.get('host') or socket.gethostname()
             if target and target != connected_host:

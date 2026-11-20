@@ -47,6 +47,8 @@ def cipher(user, provider):
 
 
 def get(user, provider, *, private=False):
+    if provider == 'hermes':
+        return {'provider': provider, 'status': 'Managed', 'enabled': True, 'managed': True, 'site': 'harqis:hermes'}
     with connection() as db:
         row = db.execute('SELECT * FROM connectors WHERE user=? AND provider=?', (user, provider)).fetchone()
     data = json.loads(row['metadata']) if row else {'status': 'Not connected', 'enabled': False}

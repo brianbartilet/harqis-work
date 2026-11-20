@@ -263,7 +263,7 @@ class TerminalWorker:
             from scripts.agents.hfl.terminal_transport import TerminalTransport
             self.transport = TerminalTransport(self)
         runtime = self.session['settings'].get('terminal_runtime') or 'hermes'
-        native = runtime in {'codex', 'claude'}
+        native = runtime in {'codex', 'claude', 'openclaw'}
         command, hermes_root = ([], '') if native else self.runner.hermes_command()
         root = self.runner.spool_root() / 'terminals' / self.identity
         root.mkdir(parents=True, exist_ok=True)
