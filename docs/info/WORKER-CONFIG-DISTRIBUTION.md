@@ -1,6 +1,6 @@
 # Worker Config Distribution — Centralising `apps.env` + `apps_config.yaml` on the Host
 
-**Related:** [VPS-CLUSTER-AGENT-DESIGN.md](VPS-CLUSTER-AGENT-DESIGN.md)  
+**Related:** [VPS-CLUSTER-AGENT-DESIGN.md](VPS-CLUSTER-AGENT-DESIGN.md) · [EDGE-TAILSCALE-NODE.md](EDGE-TAILSCALE-NODE.md) (over the tailnet, the broker/config/ES addresses below become MagicDNS names — see its §4)  
 **Date:** 2026-04-27
 
 ---
