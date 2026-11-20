@@ -4,7 +4,7 @@ import hashlib
 import json
 
 from modules.agents import service, specialists
-from modules.agents.projection import visible
+from modules.agents.projection import inspectable
 
 COORDINATION = '''## Action coordination
 You are coordinating this Action as the HARQIS butler.
@@ -18,8 +18,9 @@ Keep the owner informed through this Action's updates and final output.
 
 
 def agents(user):
-    return [{k: a.get(k) for k in ('id', 'name', 'runtime', 'color', 'active', 'classification', 'specialist_profile')}
-            for a in service.initialize().list() if visible(a, user) and not a.get('mock') and not a.get('managed_sharing')]
+    from modules.agents.availability import for_agent
+    return [{**{k: a.get(k) for k in ('id', 'name', 'runtime', 'color', 'active', 'classification', 'specialist_profile')}, 'availability': for_agent(user, a)}
+            for a in service.initialize().list() if inspectable(a, user) and not a.get('mock') and not a.get('managed_sharing')]
 
 
 def validate(raw, old, user):
@@ -33,10 +34,13 @@ def validate(raw, old, user):
         identity = ''
     if identity:
         agent = service.initialize().get(identity)
-        if not visible(agent, user) or agent.get('mock') or agent.get('managed_sharing'):
+        if not inspectable(agent, user) or agent.get('mock') or agent.get('managed_sharing'):
             raise ValueError('Choose an available Fleet agent.')
         if not agent['active'] and identity != old.get('agent_id'):
             raise ValueError('Choose an active Fleet agent.')
+        if identity != old.get('agent_id') or mode != old.get('assignment_mode'):
+            from modules.agents.availability import require
+            require(user, agent)
     elif mode == 'agent':
         raise ValueError('Choose a Fleet agent for this assignment.')
     # Specialization belongs to Fleet; normalize legacy Action overrides on save.
@@ -45,10 +49,10 @@ def validate(raw, old, user):
     if not isinstance(instructions, str) or len(instructions) > 20000:
         raise ValueError('Action guidance must be at most 20,000 characters.')
     permitted = raw.get('permitted_agent_ids', old.get('permitted_agent_ids', []))
-    available = {a['id'] for a in agents(user) if a['active']}
-    if not isinstance(permitted, list) or len(permitted) > 20 or any(not isinstance(a, str) or a not in available for a in permitted):
+    available = {a['id'] for a in agents(user) if a['active'] and a['availability']['available']}
+    if not isinstance(permitted, list) or len(permitted) > 20 or any(not isinstance(a, str) or a not in available and a not in old.get('permitted_agent_ids', []) for a in permitted):
         raise ValueError('Choose up to 20 available delegation targets.')
-    return dict(assignment_mode=mode, agent_id=identity, permitted_agent_ids=sorted(set(permitted)), specialist_mode=profile_mode,
+    return dict(assignment_mode=mode, assignment_owner=user, agent_id=identity, permitted_agent_ids=sorted(set(permitted)), specialist_mode=profile_mode,
                 specialist_profile=profile, additional_instructions=instructions)
 
 
@@ -71,6 +75,13 @@ def resolve(card, defaults, *, execute=True, require_active=True):
         reason = f"{agent['name']} is assigned, but its connector does not support Action execution. Continue in its provider or assign Hermes/the butler."
     elif agent and not agent['active']:
         reason = 'The assigned agent is inactive. Choose an active agent.'
+    if agent:
+        from modules.agents.availability import for_agent
+        availability = for_agent(card.get('assignment_owner') or agent.get('connector_user'), agent)
+        if not availability['available']:
+            reason = availability['reason']
+        elif not availability['execution_available']:
+            reason = reason or 'The assigned agent has no available Action execution runtime.'
     if execute and reason:
         raise ValueError(reason)
     settings = dict(defaults)

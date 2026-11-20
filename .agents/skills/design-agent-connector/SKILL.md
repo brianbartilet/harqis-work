@@ -28,6 +28,24 @@ object. A visual association does not authorize execution or share credentials.
 - Record when discovery runs and one schedule owner. Nod, for example, owns its
   remote schedules; manual HARQIS discovery must not install a second scheduler.
 
+## Normalize by agent type
+
+Read `frontend/modules/agents/entity_catalog.py` and the owner's `/agents/api/entity-types`
+catalog before proposing new kinds. Define explicit source-object equivalents per agent
+**type/provider**, applying to every agent of that type. Keywords suggest mappings; they
+do not establish identity or authorize merges. Preserve stable source IDs and owner/account
+scope when changing a displayed type. Use Fleet's entity-type manager for owner overrides.
+
+Record the source term, canonical type, scope, relationships and verification status.
+Distinguish documented product semantics from API-verified discovery. A routine can be a
+workflow linked to a schedule (when) or trigger (event); its executions are tasks. Shared
+skills normalize to `skill`; Library files to `file`, once per account with agent links.
+A container is not itself a file. Do not represent vault credentials as graph objects.
+
+Uploaded/configured skills must render as skill entities. Preserve stale observations and
+history during cleanup; only remove genuinely blank, unreferenced placeholders with a
+recovery audit. Built-in kinds remain available even when no instances exist.
+
 ## Implement the mapping
 
 - Extend the provider adapter and encrypted connector store. Reuse credentials;

@@ -80,7 +80,9 @@ def test_manual_profile_reuse_and_no_duplicate_producer(host):
     assert linked['id'] == manual['id']
     assert codex.link('alice', {})['item']['id'] == manual['id']
     second = service.store().save({**service.defaults('Other'), 'runtime': 'codex'})
-    with pytest.raises(HTTPException): codex.link('alice', {'agent_id': second['id']})
+    assert codex.link('alice', {'agent_id': second['id']})['item']['id'] == second['id']
+    _, progress = codex.checkpoint('alice', 'codex:' + linked['connector_site'])
+    assert progress['observer_agent_id'] == manual['id']
 
 
 def test_pagination_refreshes_recent_work_and_preserves_tasks(host):
@@ -113,7 +115,8 @@ def test_oversight_is_owner_scoped_and_no_dispatch(host, monkeypatch):
     result = oversight.reconcile('alice')
     assert result['status'] == 'complete'
     assert oversight.snapshot('alice')[0]['reporting'] == 'supported'
-    assert oversight.snapshot('bob') == []
+    assert {r['provider'] for r in oversight.snapshot('bob')} == {'codex', 'claude'}
+    assert all(r['status'] == 'Not connected' for r in oversight.snapshot('bob'))
     assert len([e for e in service.store().events() if e['payload']['kind'] == 'codex-turn']) == 1
 
 

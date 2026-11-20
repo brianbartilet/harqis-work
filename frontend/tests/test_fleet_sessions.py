@@ -14,8 +14,11 @@ ROOT = '/hfl-corpus/agent-bridge'
 def opened(fleet, client, runtime='codex'):
     from modules.hfl_corpus.action_agents import store
     from modules.agents.sessions import source
-    agent = fleet_post(client, '/items', {'name': 'Scratch agent', 'runtime': runtime}).json()['item']
+    from modules.integrations import store as connectors
+    if runtime in {'codex', 'claude'}:
+        connectors.save('frontend-test-user', runtime, {'enabled':True, 'status':'Connected', 'site':'test-installation', 'account_id':'test-installation', 'host':'native-worker'})
     store().advertise('native-worker', [{'id': runtime, 'available': True}])
+    agent = fleet_post(client, '/items', {'name': 'Scratch agent', 'runtime': runtime}).json()['item']
     response = fleet_post(client, '/items/' + agent['id'] + '/prepare', {})
     assert response.status_code == 200, response.text
     return agent, store().sessions(source(agent['id'], 'frontend-test-user'))[0]

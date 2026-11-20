@@ -1,6 +1,6 @@
 import {actionStatusNames} from './action-status.mjs';
 // Presentation only: canonical provenance edges remain unchanged.
-export function groupFleet(data,{showStatus=true}={}){
+export function groupFleet(data,{showStatus=true,statusColor='#94a3b8'}={}){
  const nodes=data.nodes.map(n=>({...n})),links=data.links.map(e=>({...e}));
  const hubs=nodes.filter(n=>['agent','owner','connector'].includes(n.kind)).sort((a,b)=>a.id.localeCompare(b.id));
  const ids=new Set(hubs.map(n=>n.id)),owner=hubs.find(n=>n.kind==='owner')?.id;
@@ -14,7 +14,7 @@ export function groupFleet(data,{showStatus=true}={}){
   const key='fleet-status:'+JSON.stringify([n.kind,state]);
   if(!groups.has(key)){
    const label=n.kind==='action'?(actionStatusNames[state]||state):state.replaceAll('_',' ').replace(/^./,s=>s.toUpperCase());
-   groups.set(key,{id:key,kind:'status',label,color:'#94a3b8',groupParents:[],groupKind:n.kind,state,agent_ids:[],radius:13,count:0});
+   groups.set(key,{id:key,kind:'status',label,color:statusColor,groupParents:[],groupKind:n.kind,state,agent_ids:[],radius:13,count:0});
   }
   const group=groups.get(key);group.count++;
   if(n.groupParent&&!group.groupParents.includes(n.groupParent))group.groupParents.push(n.groupParent);

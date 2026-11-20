@@ -27,18 +27,21 @@
   function render(){
    closePicker();summary.remove();controls.replaceChildren();
    select('Work assignment',[['manual','No agent'],['butler','Butler coordination'],['agent','Fleet agent'],['legacy','Default worker']],draft.assignment_mode,v=>{draft.assignment_mode=v;draft.agent_id=v==='butler'?'butler':v==='agent'?draft.agent_id:'';render();});
+   const butler=config.agents.find(a=>a.id==='butler'),butlerOption=controls.querySelector('option[value="butler"]');
+   butlerOption.disabled=!butler||!butler.active||butler.availability?.available===false;
+   butlerOption.title=butler?.availability?.reason||'Butler unavailable';
    if(draft.assignment_mode==='agent'){
     const wrap=el('div'),heading=el('span','Assigned agent'),menu=el('details');menu.className='action-agent-picker';
     const trigger=el('summary');trigger.setAttribute('aria-label','Assigned agent');
     const current=config.agents.find(a=>a.id===draft.agent_id);
-    function agentLabel(host,agent){host.append(el('span',agent.name));const pill=el('span',agent.runtime);pill.className='action-agent-type';if(/^#[0-9a-f]{6}$/i.test(agent.color||''))pill.style.setProperty('--agent-type-color',agent.color);host.append(pill);if(!agent.active)host.append(el('span','Inactive'));}
+    function agentLabel(host,agent){host.append(el('span',agent.name));const pill=el('span',agent.runtime);pill.className='action-agent-type';if(/^#[0-9a-f]{6}$/i.test(agent.color||''))pill.style.setProperty('--agent-type-color',agent.color);host.append(pill);if(!agent.active||agent.availability?.available===false)host.append(el('span',agent.availability?.reason||'Inactive'));}
     if(current)agentLabel(trigger,current);else trigger.append(el('span',draft.agent_id?'Unavailable assigned agent':'Select an agent'));
     const options=el('div');options.className='action-agent-options';options.setAttribute('role','group');options.setAttribute('aria-label','Available agents');
-    for(const a of config.agents.filter(a=>a.active)){const option=el('button');option.type='button';option.setAttribute('aria-pressed',String(a.id===draft.agent_id));agentLabel(option,a);option.onclick=()=>{draft.agent_id=a.id;render();changed();controls.querySelector('.action-agent-picker summary')?.focus();};options.append(option);}
+    for(const a of config.agents){const option=el('button');option.type='button';option.disabled=!a.active||a.availability?.available===false;option.title=a.availability?.reason||'';option.setAttribute('aria-pressed',String(a.id===draft.agent_id));agentLabel(option,a);option.onclick=()=>{draft.agent_id=a.id;render();changed();controls.querySelector('.action-agent-picker summary')?.focus();};options.append(option);}
     if(!config.agents.some(a=>a.active))options.append(el('p','No active Fleet agents available.'));
     const dismiss=event=>{if(!menu.contains(event.target))menu.open=false;};document.addEventListener('pointerdown',dismiss);closePicker=()=>document.removeEventListener('pointerdown',dismiss);
     menu.append(trigger,options);wrap.append(heading,menu);controls.append(wrap);
-    menu.onkeydown=event=>{const buttons=[...options.querySelectorAll('button')];if(event.key==='Escape'){menu.open=false;trigger.focus();event.preventDefault();}else if(['ArrowDown','ArrowUp'].includes(event.key)&&buttons.length){menu.open=true;const i=buttons.indexOf(document.activeElement);buttons[(i+(event.key==='ArrowDown'?1:buttons.length-1)+buttons.length)%buttons.length].focus();event.preventDefault();}};
+    menu.onkeydown=event=>{const buttons=[...options.querySelectorAll('button:not(:disabled)')];if(event.key==='Escape'){menu.open=false;trigger.focus();event.preventDefault();}else if(['ArrowDown','ArrowUp'].includes(event.key)&&buttons.length){menu.open=true;const i=buttons.indexOf(document.activeElement);buttons[(i+(event.key==='ArrowDown'?1:buttons.length-1)+buttons.length)%buttons.length].focus();event.preventDefault();}};
     const agent=config.agents.find(a=>a.id===draft.agent_id);
     if(agent&&!['hermes','nod'].includes(agent.runtime))controls.append(el('p','Assignment only: this connector cannot run Actions yet.'));
     if(agent?.runtime==='nod')controls.append(el('p','Nod runs one Action at a time in its shared conversation. Supporting files are not supported for Nod Actions yet.'));
@@ -47,7 +50,7 @@
     controls.append(el('p','The butler plans the work, reviews delegated results, and reports progress here.'));
     const permitted=el('fieldset');permitted.className='action-execution-options';permitted.append(el('legend','Permitted delegation targets'));
     for(const agent of config.agents.filter(a=>a.active&&a.id!=='butler'&&['hermes','nod'].includes(a.runtime))){
-     const label=el('label'),input=el('input');input.type='checkbox';input.checked=(draft.permitted_agent_ids||[]).includes(agent.id);
+     const label=el('label'),input=el('input');input.type='checkbox';input.checked=(draft.permitted_agent_ids||[]).includes(agent.id);input.disabled=agent.availability?.available===false;input.title=agent.availability?.reason||'';
      input.onchange=()=>{draft.permitted_agent_ids=input.checked?[...new Set([...(draft.permitted_agent_ids||[]),agent.id])]:(draft.permitted_agent_ids||[]).filter(id=>id!==agent.id);changed();};
      label.className='action-execution-check';label.append(input,document.createTextNode(agent.name));permitted.append(label);
     }

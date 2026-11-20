@@ -21,7 +21,8 @@
     document.querySelectorAll('[data-connector-count]').forEach(n=>n.textContent=current.length);
     if(root){root.replaceChildren();for(const item of current){
       const card=el('article',undefined,'connector-card'),header=el('header');const title=el('h2',undefined,'connector-title');
-      const logoUrl={codex:root.dataset.codexLogo,nod:root.dataset.nodLogo,github:root.dataset.githubLogo,jira:root.dataset.jiraLogo,n8n:root.dataset.n8nLogo,grokbot:root.dataset.grokbotLogo}[item.provider];
+      card.dataset.available=String(item.availability?.available??(item.enabled&&item.status==='Connected'));
+      const logoUrl={claude:root.dataset.claudeLogo,codex:root.dataset.codexLogo,nod:root.dataset.nodLogo,github:root.dataset.githubLogo,jira:root.dataset.jiraLogo,n8n:root.dataset.n8nLogo,grokbot:root.dataset.grokbotLogo}[item.provider];
       if(logoUrl){const logo=el('img',undefined,'connector-logo');logo.src=logoUrl;logo.alt='';logo.width=20;logo.height=20;logo.onerror=()=>logo.remove();title.append(logo);}
       title.append(document.createTextNode(item.name));header.append(title);
       const headerControls=el('div',undefined,'connector-header-controls');header.append(headerControls);
@@ -34,7 +35,7 @@
       const toggle=el('button',undefined,'connector-switch');toggle.type='button';toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked',String(item.enabled));toggle.setAttribute('aria-label','Enable '+item.name);
       const track=el('span',undefined,'connector-switch-track');track.setAttribute('aria-hidden','true');toggle.append(track);headerControls.append(toggle);card.append(header);
       toggle.onclick=async()=>{toggle.disabled=true;try{if(!item.enabled&&item.status!=='Connected'){setup(item);}else{const result=await api('/connectors/'+item.provider+'/toggle',{enabled:!item.enabled});await load();document.querySelector('[data-integration-error]').textContent=result.discovery_warning||(result.discovery?.warnings||[]).join(' ');}}catch(e){document.querySelector('[data-integration-error]').textContent=e.message;}finally{toggle.disabled=false;}};
-      const status=el('span',item.status,'connector-status');status.dataset.connected=String(item.status==='Connected');status.dataset.error=String(Boolean(item.error));status.setAttribute('role','status');card.append(status);
+      const status=el('span',item.availability?.available===false?(item.availability.reason||'Unavailable'):item.status,'connector-status');status.dataset.connected=String(item.status==='Connected');status.dataset.error=String(Boolean(item.error));status.setAttribute('role','status');card.append(status);
       if(item.provider==='grokbot'&&item.last_sync)card.append(el('p','Last discovery: '+new Date(item.last_sync).toLocaleString()+' · '+item.bot_count+' Bots','connector-discovery'));
       if(item.account)card.append(el('p',item.account+' · '+item.auth_method),el('p','Connected since '+new Date(item.connected_since).toLocaleDateString()+' · Expiry: '+item.expiry));
       if(item.error)card.append(el('p',item.error));
@@ -45,7 +46,7 @@
         button(row,item.account?'Reconnect':'Connect',()=>setup(item));
         if(item.enabled){button(row,'Refresh Bots',async()=>{await api('/grokbot/sync',{});await load();});link(row,'View fleet','/agents?integration=grokbot');}
       }
-      if(item.enabled&&item.provider==='codex'){const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);button(row,'Open in Fleet',async()=>{const result=await api('/codex/link',{});location.href='/agents?agent='+encodeURIComponent(result.item.id);});}
+      if(item.enabled&&['codex','claude'].includes(item.provider)){const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);button(row,'Open in Fleet',async()=>{const result=await api('/'+item.provider+'/link',{});location.href='/agents?agent='+encodeURIComponent(result.item.id);});}
       if(item.enabled&&item.provider==='nod'){const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);button(row,'Open in Fleet',async()=>{const result=await api('/nod/link',{});location.href='/agents?agent='+encodeURIComponent(result.item.id);});link(row,'Open Nod',item.site);}
       if(item.enabled&&item.provider==='n8n'){
         const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);
@@ -99,6 +100,16 @@
     });
     d.addEventListener('close',()=>{closed=true;key.value='';cancel();},{once:true});
   }
+  function claudeSetup(){
+    const {d,body}=dialog('Connect Claude');
+    body.append(el('p','Connect Claude Code installed on the HARQIS server host using its existing sign-in. Discover user and project skills, link Fleet agents, and inspect recorded work.'));
+    body.append(el('p','If sign-in is needed, run claude auth login on that host as the HARQIS service user, then test again. The CLI worker must also be online to start sessions.'));
+    const state=el('p','Not tested','integration-warning');state.setAttribute('role','status');body.append(state);
+    const row=controls(body);let tested=false;
+    const test=button(row,'Test local host',async()=>{tested=false;save.disabled=true;try{const result=await api('/connectors/claude/test',{transport:'local'});tested=true;state.textContent='Test passed · '+result.account;}catch(e){state.textContent='Claude is unavailable on this host.';throw e;}finally{save.disabled=!tested;}});
+    const save=button(row,'Save and enable',async()=>{if(!tested)return;try{await api('/connectors/claude/save',{transport:'local'});await api('/connectors/claude/toggle',{enabled:true});d.close();await load();}catch(e){tested=false;state.textContent='Test the host again before saving.';throw e;}finally{save.disabled=!tested;}});
+    save.setAttribute('data-managed-disabled','');save.disabled=true;
+  }
   function codexSetup(item){
     const {d,body,error}=dialog('Connect Codex');
     body.append(el('p','Observe Codex installed on the HARQIS server host. This reads saved tasks and installed local plugins using the host’s existing sign-in. It does not start tasks or control a desktop session.'));
@@ -122,6 +133,7 @@
   }
   function setup(item){
     if(item.provider==='grokbot'){grokbotSetup();return;}
+    if(item.provider==='claude'){claudeSetup();return;}
     if(item.provider==='codex'){codexSetup(item);return;}
     const {d,body,error}=dialog('Connect '+item.name);
     body.append(el('p','Test your credentials, then save the connection. Testing does not save credentials. Saved credentials are encrypted and separate from workflow accounts.'));

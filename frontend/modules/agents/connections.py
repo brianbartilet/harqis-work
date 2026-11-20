@@ -19,14 +19,17 @@ def schema(db):
 
 
 def agent_for(user, identity, *, active=False):
-    from modules.agents.projection import visible
+    from modules.agents.projection import inspectable
     agent = service.store().get(identity)
-    if not visible(agent, user) or agent.get('mock'):
+    if not inspectable(agent, user) or agent.get('mock'):
         raise HTTPException(404, 'Agent unavailable.')
     if agent['runtime'] not in {'hermes', 'nod'}:
         raise HTTPException(422, 'This service has no gateway adapter.')
     if active and not agent['active']:
         raise HTTPException(409, 'Activate this agent before starting or continuing work.')
+    if active:
+        from modules.agents.availability import require
+        require(user, agent)
     return agent
 
 

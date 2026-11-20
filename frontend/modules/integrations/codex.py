@@ -70,7 +70,7 @@ class Codex:
             raise HTTPException(409, 'Codex connector belongs to another host. Reconnect on this host.')
         with CodexRPC() as rpc:
             rows(rpc.request('thread/list', {'limit': 1}))
-        return {'account': 'Codex · ' + socket.gethostname(), 'account_id': installation(),
+        return {'account': 'Codex · ' + socket.gethostname(), 'account_id': installation(), 'host': socket.gethostname(),
                 'site': installation(), 'capabilities': {'tasks': True, 'execution': False,
                 'events': False, 'plugins': 'checked during discovery', 'accounts': False}}
 
@@ -95,10 +95,6 @@ def link(user, raw):
             raise HTTPException(404, 'Codex profile unavailable.') from None
         if old['runtime'] != 'codex' or old.get('connector_user') not in {None, user}:
             raise HTTPException(404, 'Codex profile unavailable.')
-        # Never bind two producers to the same installation silently.
-        matches = [a for a in fleet.store().list() if a.get('connector_user') == user and a.get('connector_site') == data['site'] and a.get('connector_provider') == 'codex']
-        if matches and matches[0]['id'] != existing_id:
-            raise HTTPException(409, 'This installation already has a fleet agent. Open it from Integrations.')
         if old.get('connector_site') and old['connector_site'] != data['site']:
             raise HTTPException(409, 'This profile belongs to another installation.')
         identity, profile = existing_id, old
@@ -106,6 +102,9 @@ def link(user, raw):
         matches = [a for a in fleet.store().list() if a.get('connector_user') == user and a.get('connector_site') == data['site'] and a.get('connector_provider') == 'codex']
         if matches:
             identity = matches[0]['id']
+        if raw.get('profile'):
+            import uuid
+            identity = 'codex-' + uuid.uuid4().hex[:24]
     item = fleet.initialize().save({**profile, 'connector_provider': 'codex', 'connector_user': user,
         'connector_site': data['site'], 'remote_id': 'installation'}, identity=identity,
         **({'version': profile['version']} if existing_id else {'seed': True}))
@@ -124,6 +123,10 @@ def refresh(user, identity):
     scope = 'codex:' + agent['connector_site']
     warnings, counts = [], {}
     resource, progress = checkpoint(user, scope)
+    # Installation history has one stable reporting profile, even when several
+    # profiles use this connector. A refresh must never reattribute old receipts.
+    observer_id = progress.setdefault('observer_agent_id', identity)
+    observer = fleet.store().get(observer_id)
     try:
         data, _ = context(user)
         if agent['connector_site'] != data['site']:
@@ -156,7 +159,7 @@ def refresh(user, identity):
                         latest = rpc.request('thread/turns/list', {'threadId': tid, 'limit': 10, 'sortDirection': 'desc', 'itemsView': 'summary'})
                         executions += rows(latest, limit=10)
                     for turn in executions:
-                        record_turn(user, agent, scope, tid, node, turn)
+                        record_turn(user, observer, scope, tid, node, turn)
                     if turns.get('nextCursor'):
                         progress['turns'][tid] = turns['nextCursor']
                     else:

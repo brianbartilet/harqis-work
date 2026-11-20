@@ -69,3 +69,6 @@ test('status nodes use a uniform blue-gray and concise labels',()=>{
  assert.deepEqual(statuses.map(n=>n.label),['In Review','Suggested']);
  assert.ok(statuses.every(n=>n.color==='#94a3b8'));
 });
+test('status groups honor the entity catalog color',()=>{
+ assert.ok(groupFleet(data,{statusColor:'#abcdef'}).nodes.filter(n=>n.kind==='status').every(n=>n.color==='#abcdef'));
+});

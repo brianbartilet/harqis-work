@@ -48,6 +48,8 @@ def select(user, raw):
         raise ValueError('Choose an agent and the current selection version.')
     if not isinstance(raw['agent_id'], str) or len(raw['agent_id']) > 160:
         raise ValueError('Invalid agent selection.')
+    from modules.agents.availability import require
+    require(user, service.initialize().get(raw['agent_id']))
     service.execution(raw['agent_id'])
     with service.store().connect() as db:
         db.execute('BEGIN IMMEDIATE')
@@ -180,6 +182,8 @@ def create_conversation(user, raw):
         if existing:
             return {k: json.loads(existing[0])[k] for k in ('id', 'agent_id', 'name', 'created')}
     selected = preference(user)
+    from modules.agents.availability import require
+    require(user, service.initialize().get(selected['agent_id']))
     settings = service.execution(selected['agent_id'])
     gateway = Gateway()
     gateway.capabilities(require_readonly=True)
@@ -273,6 +277,8 @@ def send(user, conversation_id, raw):
     if not isinstance(message, str) or not 1 <= len(message.strip()) <= 12000:
         raise ValueError('Enter a message of up to 12,000 characters.')
     conversation, gateway = connection(user, conversation_id)
+    from modules.agents.availability import require
+    require(user, service.initialize().get(conversation['agent_id']))
     gateway.capabilities(require_readonly=conversation.get('mode', 'chat') == 'chat')
     identity = 'turn-' + key
     fingerprint = digest([conversation_id, raw])

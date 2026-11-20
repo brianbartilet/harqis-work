@@ -13,7 +13,7 @@ from fastapi import HTTPException
 from modules.agents import service, projection
 from workflows.hfl.agent_fleet_store import now
 
-KINDS = {'connector', 'application', 'account', 'schedule', 'task'}
+KINDS = {'connector', 'application', 'account', 'schedule', 'task', 'skill', 'file', 'entry', 'workflow', 'trigger', 'configuration'}
 
 
 @contextmanager
@@ -45,7 +45,7 @@ def entity(kind, namespace, remote_id, label, **metadata):
                 summary=str(metadata.get('summary', ''))[:1000], url=safe_url(metadata.get('url', ''), allow_http=True),
                 state=str(metadata.get('state', 'observed'))[:80], observed_at=now(),
                 scope=metadata.get('scope', namespace), category=metadata.get('category', ''),
-                mock=bool(metadata.get('mock', False)))
+                mock=bool(metadata.get('mock', False)), source_object=str(metadata.get('source_object', ''))[:100])
 
 
 def observe(user, rows, edges):
@@ -170,7 +170,7 @@ def extend_graph(user, agents, nodes, edge, add):
         for aid in known.get(item['id'], set()):
             add(aid, item['id'], item['kind'], item['label'], item['summary'], item['url'],
                 relation='associated with', source=item['source'], state=item['state'],
-                entity=True, observed_at=item['observed_at'], provenance=item['provenance'], mock=item['mock'])
+                entity=True, observed_at=item['observed_at'], provenance=item['provenance'], mock=item['mock'], source_object=item.get('source_object', ''))
     for link in data['edges']:
         if (link['source'] in nodes or link['source'].startswith('agent:') and link['source'] in known) and link['target'] in nodes:
             edge(link['source'], link['target'], link['relation'])

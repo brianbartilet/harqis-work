@@ -140,6 +140,10 @@ def nod_operation(identity: str, operation: str, raw: dict, user=Depends(owner_a
         return nod.capture(user, identity)
     if operation not in {'send', 'stop'}:
         raise HTTPException(404, 'Nod operation unavailable.')
+    if operation == 'send':
+        from modules.agents import service as fleet
+        from modules.agents.availability import require
+        require(user, fleet.initialize().get(identity))
     return getattr(nod, operation)(user, identity, raw)
 
 
@@ -158,6 +162,9 @@ def connectors(user=Depends(owner_auth)):
                   'account': 'Mock n8n instance', 'auth_method': 'Preview · no credentials', 'mock': True}
                  if item['provider'] == 'n8n' else item for item in items]
     links = []
+    from modules.agents.availability import connector as connector_health
+    for item in items:
+        item['availability'] = connector_health(user, item['provider'])
     for item in items:
         if item.get('enabled') and item.get('status') == 'Connected':
             links.extend({k:v for k,v in link.items() if k != 'creation'} for link in service.visible_links(user, item['provider']))
@@ -169,6 +176,20 @@ def link_codex(raw: dict, user=Depends(owner_auth)):
     from modules.integrations.codex import link
     from modules.agents.router import checked
     return checked(link, user, raw)
+
+
+@api.post('/claude/link')
+def link_claude(raw: dict, user=Depends(owner_auth)):
+    from modules.integrations.claude import link
+    from modules.agents.router import checked
+    return checked(link, user, raw)
+
+
+@api.post('/claude/agents/{identity}/refresh')
+def refresh_claude(identity: str, user=Depends(owner_auth)):
+    from modules.integrations.claude import refresh
+    from modules.agents.router import checked
+    return checked(refresh, user, identity)
 
 
 @api.post('/codex/agents/{identity}/refresh')
@@ -200,7 +221,7 @@ def connect(provider: str, raw: dict, user=Depends(owner_auth)):
     metadata = {**identity, 'status':'Connected', 'enabled':False, 'connected_since':store.now(),
                 'auth_method':('Fine-grained personal access token' if clean['token'].startswith('github_pat_') else 'Personal access token') if provider == 'github' else 'Email and API token',
                 'expiry':'Unknown', 'site':clean.get('site', '')}
-    if provider == 'codex':
+    if provider in {'codex', 'claude'}:
         metadata.update(site=identity['site'], auth_method='Local host identity · observation only')
     if provider == 'n8n':
         metadata['public_url'] = clean.get('public_url', '')
@@ -232,8 +253,11 @@ def toggle(provider: str, raw: dict, user=Depends(owner_auth)):
     data.update(enabled=raw['enabled'], status='Connected' if data['credentials'] else 'Not connected')
     data.pop('error', None)
     saved = store.save(user, provider, data)
-    if provider == 'codex' and raw['enabled']:
-        from modules.integrations.codex import link
+    if provider in {'codex', 'claude'} and raw['enabled']:
+        if provider == 'claude':
+            from modules.integrations.claude import link
+        else:
+            from modules.integrations.codex import link
         saved['discovery'] = link(user, {})['discovery']
     if provider == 'nod' and raw['enabled']:
         from modules.integrations.nod import link

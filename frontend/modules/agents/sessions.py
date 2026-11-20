@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from starlette.concurrency import run_in_threadpool
 from modules.agents import service
-from modules.agents.projection import visible
+from modules.agents.projection import inspectable
 from modules.hfl_corpus import action_agents as terminal
 from modules.hfl_corpus.attachments import AttachmentStore
 
@@ -17,10 +17,13 @@ router = APIRouter(prefix='/hfl-corpus/agent-bridge', dependencies=[Depends(term
 
 def agent_for(identity, user, active=False):
     agent = terminal.bridge.checked(service.initialize().get, identity)
-    if not visible(agent, user) or agent.get('mock') or agent.get('managed_sharing') or agent['runtime'] not in {'hermes', 'codex', 'claude'}:
+    if not inspectable(agent, user) or agent.get('mock') or agent.get('managed_sharing') or agent['runtime'] not in {'hermes', 'codex', 'claude'}:
         raise HTTPException(404, 'Fleet CLI agent unavailable.')
     if active and not agent['active']:
         raise HTTPException(409, 'Activate this agent before starting a session.')
+    if active:
+        from modules.agents.availability import require
+        require(user, agent, 'cli')
     return agent
 
 
@@ -73,9 +76,11 @@ def configuration(identity: str, user=Depends(terminal.bridge.owner_auth)):
     agent = agent_for(identity, user)
     defaults = terminal.read_settings()
     settings = {**defaults, **agent.get('overrides', {})}
+    from modules.agents.availability import for_agent
+    health = for_agent(user, agent)
     settings['action_assignment'] = {'name': agent['name'], 'agent_id': identity, 'runtime': agent['runtime'],
-                                     'executable': bool(agent['active']), 'mode': 'agent',
-                                     'reason': '' if agent['active'] else 'Activate this Fleet agent to start a session.'}
+                                     'executable': health['cli_available'], 'mode': 'agent',
+                                     'reason': health['reason'] or ('' if health['cli_available'] else 'No available CLI runtime.')}
     return {'effective': settings, 'defaults': defaults, 'card': {'agent_id': identity, 'preset': '', 'overrides': {}},
             'presets': {}, 'agent': agent, 'agents': []}
 
@@ -102,7 +107,10 @@ def start(identity: str, payload: dict, user=Depends(terminal.bridge.owner_auth)
         frozen['hash'] = hashlib.sha256(json.dumps(frozen, sort_keys=True).encode()).hexdigest()
         settings['fleet_agent'] = frozen
     hosts = [h['host'] for h in terminal.store().hosts() if any(r['id'] == runtime and r['available'] for r in h['runtimes'])]
-    host = socket.gethostname() if agent.get('connector_provider') == 'codex' else settings.get('agent_host')
+    host = settings.get('agent_host')
+    if runtime in {'codex', 'claude'}:
+        from modules.integrations import store as integrations
+        host = integrations.get(user, runtime).get('host') or socket.gethostname()
     if not host:
         host = socket.gethostname() if socket.gethostname() in hosts else hosts[0] if len(hosts) == 1 else None
     previous = owned(payload['restore'], user) if payload.get('restore') else None
@@ -110,6 +118,8 @@ def start(identity: str, payload: dict, user=Depends(terminal.bridge.owner_auth)
         if previous['source_id'] != source(identity, user):
             raise HTTPException(409, 'Restore a session belonging to this Fleet agent.')
         host = previous['worker'] or previous['settings'].get('agent_host')
+        if runtime in {'codex', 'claude'} and host != (integrations.get(user, runtime).get('host') or socket.gethostname()):
+            raise HTTPException(409, 'The saved session belongs to another connected installation.')
     if host not in hosts:
         raise HTTPException(409, 'No unambiguous available CLI worker for this agent. Check its configured host and CLI installation.')
     settings.update(agent_host=host, terminal_runtime=runtime)

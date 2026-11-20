@@ -159,3 +159,5 @@ html:has(.integration-tabs){scrollbar-gutter:stable}
 
 /* Long sign-in guidance uses a warning panel rather than a status badge. */
 .integration-dialog .integration-warning{display:block;padding:.75rem 1rem;border:1px solid #854d0e;border-left:3px solid #fbbf24;border-radius:.5rem;background:#422006;color:#fde68a;line-height:1.5;overflow-wrap:anywhere}
+
+.connector-card[data-available="false"]{border-color:#334155;background:#101827}.connector-card[data-available="false"] .connector-logo{filter:grayscale(1);opacity:.5}.connector-card[data-available="false"] h3,.connector-card[data-available="false"]>p,.connector-card[data-available="false"]>ul{color:#94a3b8}

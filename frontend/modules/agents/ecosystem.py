@@ -12,7 +12,7 @@ from workflows.hfl.agent_fleet_store import now
 
 KINDS = {'connector': '#22d3ee', 'account': '#fbbf24', 'schedule': '#c4b5fd', 'configuration': '#94a3b8', 'workflow': '#60a5fa', 'trigger': '#c4b5fd', 'application': '#fbbf24',
          'action': ENTITY_SEMANTICS['action']['color'], 'idea': ENTITY_SEMANTICS['idea']['color'], 'entry': '#77dcf5', 'file': '#70edbd',
-         'link': '#93c5fd', 'feed': '#5eead4', 'hud': '#e9c96c', 'task': '#a7f3d0', 'subagent': '#deafff'}
+         'link': '#93c5fd', 'feed': '#5eead4', 'hud': '#e9c96c', 'task': '#a7f3d0', 'subagent': '#deafff', 'skill': '#a78bfa'}
 
 
 def safe_url(value, *, allow_http=False):
@@ -32,12 +32,13 @@ def record(user, raw):
     Providers report bounded metadata and canonical links, never arbitrary files
     or secrets. This owner endpoint does not grant an agent execution authority.
     """
-    allowed = {'id', 'agent_id', 'parent_id', 'kind', 'label', 'summary', 'url', 'created', 'state', 'source', 'workspace_ids', 'delegation_id'}
+    allowed = {'id', 'agent_id', 'parent_id', 'kind', 'label', 'summary', 'url', 'created', 'state', 'source', 'workspace_ids', 'delegation_id', 'source_object'}
     if set(raw) - allowed or not {'id', 'agent_id', 'kind', 'label', 'source'} <= raw.keys():
         raise ValueError('Supply a stable source identity, agent, kind and label.')
-    if raw['kind'] not in KINDS:
+    from modules.agents.entity_catalog import definitions
+    if raw['kind'] not in definitions(user):
         raise ValueError('Unsupported connected object type.')
-    for field in ('id', 'agent_id', 'parent_id', 'label', 'source', 'state', 'delegation_id'):
+    for field in ('id', 'agent_id', 'parent_id', 'label', 'source', 'state', 'delegation_id', 'source_object'):
         if not isinstance(raw.get(field, ''), str) or len(raw.get(field, '')) > 300:
             raise ValueError('Invalid ' + field + '.')
     if not raw['id'].strip() or not raw['source'].strip() or not raw['label'].strip():
@@ -104,9 +105,9 @@ def graph(user):
     labels = {v['id']: v['name'] for v in catalog['skills'] + catalog['workflows']}
     for agent in agents:
         aid = agent['id']
-        for group, kind in [('skills', 'configuration'), ('tools', 'configuration'), ('workflows', 'workflow'), ('triggers', 'trigger')]:
+        for group, kind in [('skills', 'skill'), ('tools', 'configuration'), ('workflows', 'workflow'), ('triggers', 'trigger')]:
             for value in agent[group]:
-                add(aid, group + ':' + value, kind, labels.get(value, value), relation='configured',
+                add(aid, group + ':' + value, kind, labels.get(value, value), relation='configured', source_object=group, agent_type=agent['runtime'], definition=True,
                     url='/workflows' if kind in {'workflow', 'trigger'} else '')
         for child in agent['subagents']:
             if child in by_id:
@@ -162,7 +163,7 @@ def graph(user):
     for item in objects[:500]:
         if item.get('mock') and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') != '1':
             continue
-        extra = {k: item[k] for k in ('state', 'source', 'mock', 'temporary') if k in item}
+        extra = {k: item[k] for k in ('state', 'source', 'mock', 'temporary', 'source_object') if k in item}
         add(item['agent_id'], item['id'], item['kind'], item['label'], item.get('summary', ''),
             item.get('url', ''), item.get('created', ''), **extra)
         if item['id'] not in nodes:
@@ -225,8 +226,25 @@ def graph(user):
     from modules.agents.oversight import extend_graph as oversight_graph
     oversight_graph(user, nodes, edge, add)
     add_owner(nodes, edges)
+    from modules.agents.entity_catalog import definitions, normalize
+    types = definitions(user)
+    source_names = {'nod': {'schedule': 'schedules', 'application': 'applications', 'account': 'connections', 'connector': 'installation'},
+                    'grokbot': {'connector': 'connection'}}
+    for node in nodes.values():
+        if node['kind'] in {'agent', 'owner'}:
+            continue
+        provider = node.get('agent_type') or node.get('source', '')
+        if provider not in service.SERVICES:
+            owners = [by_id[a]['runtime'] for a in node.get('agent_ids', []) if a in by_id]
+            provider = owners[0] if owners and len(set(owners)) == 1 else ''
+        source_object = node.get('source_object') or source_names.get(provider, {}).get(node['kind'], 'skills' if node['kind'] == 'skill' else node['kind'])
+        kind = normalize(types, provider, source_object, node['kind'])
+        if kind in types:
+            node.update(kind=kind, color=types[kind]['color'], source_object=source_object, agent_type=provider)
+    from modules.agents.availability import decorate_graph
+    decorate_graph(user, agents, nodes, edges)
     return {'agents': agents, 'nodes': list(nodes.values()), 'edges': [e for e in edges.values() if e['source'] in nodes and e['target'] in nodes],
-            'types': [{'id': k, 'name': k.replace('_', ' ').title(), 'color': v} for k, v in KINDS.items()],
+            'types': [v for v in types.values() if not v['hidden']],
             'warnings': errors, 'corpus_available': corpus_available,
             'execution_limited': len(runs) > 200,
             'coverage': {'runs': {'returned':min(len(runs),200),'limit':200,'has_more':len(runs)>200}, 'observations':{'returned':min(len(objects),500),'limit':500,'has_more':len(objects)>500}, 'context_feed':{'returned':min(len(feed_items),80),'limit':80,'has_more':len(feed_items)>80}, 'corpus':{'available':corpus_available,'total':None}},

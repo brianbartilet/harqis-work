@@ -14,6 +14,12 @@ test('discovered schedules survive date filters and retain both linked agents',(
   assert.deepEqual(result.nodes.map(n=>n.id),['agent:a','agent:b','schedule']);
   assert.equal(result.links.length,2);
 });
+test('configured skills remain visible when filtering recent work',()=>{
+  const skill={id:'skills:shared',kind:'skill',definition:true,agent_ids:['a'],label:'Review',workspace_ids:[]};
+  const result=filterFleet({...data,nodes:[...data.nodes,skill]}, {types:['skill'],since:'2030-01-01'});
+  assert.ok(result.nodes.some(n=>n.id===skill.id));
+  assert.ok(!filterFleet({...data,nodes:[...data.nodes,skill]}, {types:['file'],since:'2030-01-01'}).nodes.some(n=>n.id===skill.id));
+});
 test('output search retains its parent and removes dangling edges',()=>{
   const result=filterFleet(data,{query:'release',types:['file','task']});
   assert.deepEqual(result.nodes.map(n=>n.id),['agent:a','report']);

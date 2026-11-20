@@ -207,7 +207,8 @@ def agent_updates(user):
                         'url': '/hfl-corpus/actions?integration_agent=' + quote(source.partition(':')[2])})
     for record in observed:
         agent = agents.get(record.get('agent_id'))
-        if not agent or record.get('mock') or record.get('kind') not in {'task', 'action', 'feed'} or record.get('state') not in {'completed', 'failed', 'review', 'awaiting_input'}:
+        grok_output = record.get('source') == 'grokbot' and record.get('source_object') == 'conversation replies' and record.get('state') == 'recorded'
+        if not agent or record.get('mock') or not (grok_output or (record.get('kind') in {'task', 'action', 'feed'} and record.get('state') in {'completed', 'failed', 'review', 'awaiting_input'})):
             continue
         from modules.agents.ecosystem import safe_url
         updates.append({'id': 'agent-update:' + record['id'], 'date': record.get('created', ''),

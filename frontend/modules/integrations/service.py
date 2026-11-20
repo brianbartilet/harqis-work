@@ -16,6 +16,7 @@ PROVIDERS = {'github': {'name': 'GitHub', 'capabilities': ['Create and link bran
 PROVIDERS['n8n'] = {'name': 'n8n', 'capabilities': ['Browse workflows', 'Discover first-class agents through MCP', 'Link agents to the fleet workspace']}
 PROVIDERS['nod'] = {'name': 'Nod', 'capabilities': ['Talk to your self-hosted Nod assistant', 'Review approvals and task status in Fleet', 'Capture completed activity in the corpus']}
 PROVIDERS['codex'] = {'name': 'Codex', 'capabilities': ['Observe tasks on the HARQIS host', 'Discover installed local plugins', 'Report completed work to Butler and HFL; no remote execution']}
+PROVIDERS['claude'] = {'name': 'Claude', 'capabilities': ['Connect Claude Code on the HARQIS host', 'Discover installed user and project skills', 'Link Fleet agents and inspect their recorded work']}
 PROVIDERS['grokbot'] = {'name': 'Grok Bot', 'capabilities': ['Experimental account connection', 'Automatically discover Bots in the fleet', 'Browser sign-in or Cursor API key']}
 
 

@@ -182,9 +182,9 @@ def test_account_switch_disconnect_and_visibility(grok, fleet):
     state['pair'] = pair('second')
     g.connect_key(USER,'key')
     assert len(bots(fleet))==2
-    assert old_id not in [a['id'] for a in listing(USER)]
+    assert not next(a for a in listing(USER) if a['id'] == old_id)['availability']['available']
     g.disconnect(USER)
-    assert not any(a['runtime']=='grokbot' for a in listing(USER))
+    assert all(not a['availability']['available'] for a in listing(USER) if a['runtime']=='grokbot')
     assert len(bots(fleet))==2
     assert g.store.get(USER,'grokbot',private=True)['credentials']=={}
 

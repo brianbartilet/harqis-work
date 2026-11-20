@@ -24,6 +24,9 @@ def branch(value):
 
 
 def credentials(provider, raw):
+    if provider == 'claude':
+        from modules.integrations.claude import credentials as local_credentials
+        return local_credentials(raw)
     if provider == 'codex':
         from modules.integrations.codex import credentials as local_credentials
         return local_credentials(raw)
@@ -62,6 +65,9 @@ def credentials(provider, raw):
 
 class Provider:
     def __new__(cls, provider, credentials):
+        if provider == 'claude':
+            from modules.integrations.claude import Claude
+            return Claude(credentials)
         if provider == 'codex':
             from modules.integrations.codex import Codex
             return Codex(credentials)

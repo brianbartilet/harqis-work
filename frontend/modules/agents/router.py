@@ -39,8 +39,12 @@ def page(request: Request):
 
 
 @api.get('/catalogue')
-def catalogue():
-    return service.catalogue()
+def catalogue(user=Depends(owner_auth)):
+    from modules.agents.availability import for_agent
+    data = service.catalogue()
+    for item in data['services']:
+        item['availability'] = for_agent(user, {**service.defaults(), 'runtime': item['id']})
+    return data
 
 
 @api.get('/specialists')
@@ -116,6 +120,36 @@ def specialist_preview(raw: dict, user=Depends(owner_auth)):
 def connected_entities(user=Depends(owner_auth)):
     from modules.agents.entities import snapshot
     return snapshot(user)
+
+
+@api.get('/entity-types')
+def entity_types(user=Depends(owner_auth)):
+    from modules.agents.entity_catalog import listing
+    return checked(listing, user)
+
+
+@api.post('/entity-types')
+def save_entity_type(raw: dict, user=Depends(owner_auth)):
+    from modules.agents.entity_catalog import save
+    return checked(save, user, raw)
+
+
+@api.post('/entity-types/remove')
+def remove_entity_type(raw: dict, user=Depends(owner_auth)):
+    from modules.agents.entity_catalog import remove
+    return checked(remove, user, raw.get('id'), raw.get('replacement'))
+
+
+@api.post('/entity-types/cleanup')
+def cleanup_entity_types(user=Depends(owner_auth)):
+    from modules.agents.entity_catalog import cleanup
+    return checked(cleanup, user)
+
+
+@api.post('/items/{identity}/grok-outputs')
+def grok_outputs(identity: str, user=Depends(owner_auth)):
+    from modules.integrations.grokbot_outputs import refresh
+    return checked(refresh, user, identity)
 
 
 @api.post('/entities/associate')
@@ -245,6 +279,9 @@ def assign_idea(identity: str, raw: dict, user=Depends(owner_auth)):
     agent_id = raw.get('agent_id', '')
     if not isinstance(agent_id, str) or (agent_id and not any(a['id'] == agent_id and a['active'] for a in listing(user))):
         raise HTTPException(422, 'Choose an active fleet agent.')
+    if agent_id:
+        from modules.agents.availability import require
+        require(user, service.store().get(agent_id))
     import json
     with store().connect() as db:
         db.execute('BEGIN IMMEDIATE')
@@ -414,8 +451,11 @@ def items(user=Depends(owner_auth)):
 
 
 @api.post('/items')
-def create(raw: dict):
-    return {'item': checked(service.initialize().save, checked(service.validate, raw))}
+def create(raw: dict, user=Depends(owner_auth)):
+    from modules.agents.availability import require
+    item = checked(service.validate, raw)
+    require(user, {**item, 'active': True})
+    return {'item': checked(service.initialize().save, item)}
 
 
 @api.post('/items/{identity}')
@@ -437,9 +477,9 @@ def prepare(identity: str, user=Depends(owner_auth)):
 
 @api.get('/items/{identity}/activity')
 def activity(identity: str, user=Depends(owner_auth)):
-    from modules.agents.projection import visible
+    from modules.agents.projection import inspectable
     agent = checked(service.store().get, identity)
-    if not visible(agent, user):
+    if not inspectable(agent, user):
         raise HTTPException(404, 'Agent unavailable.')
     from modules.hfl_corpus.action_agents import store as terminals
     db = terminals()

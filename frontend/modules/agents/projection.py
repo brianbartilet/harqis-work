@@ -5,6 +5,12 @@ from starlette.datastructures import QueryParams
 from modules.agents import service
 
 
+def inspectable(agent, user=None):
+    if agent.get('mock'):
+        return os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1' and agent.get('demo_user') == user
+    return not agent.get('connector_user') or agent['connector_user'] == user
+
+
 def visible(agent, user=None):
     if agent.get('mock'):
         return os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1' and agent.get('demo_user') == user
@@ -37,9 +43,11 @@ def listing(user=None):
                 state = {'completed': 'succeeded', 'submitting': 'queued', 'stopping': 'running',
                          'unknown': 'awaiting_input', 'waiting_for_approval': 'awaiting_input'}.get(value['state'], value['state'])
                 assistant_activity.setdefault(owners[value['conversation_id']], []).append((value['created'], state))
+    from modules.agents.availability import for_agent
+    hosts = db.hosts()
     result = []
     for agent in service.initialize().list():
-        if not visible(agent, user):
+        if not inspectable(agent, user):
             continue
         activity = [(s['activity'], s['state']) for s in sessions if s['settings'].get('fleet_agent', {}).get('id') == agent['id']]
         activity += [(r['updated_at'], r['state']) for r in runs if r['snapshot'].get('execution_settings', {}).get('fleet_agent', {}).get('id') == agent['id']]
@@ -59,7 +67,7 @@ def listing(user=None):
             state = ('Reconnect required' if connector.get('status') == 'Reconnect required' else
                      'Sync delayed' if connector.get('error') else
                      'Unavailable' if not agent.get('remote_available', True) else 'Discovered')
-        result.append({**agent, 'active_sessions': sum(1 for s in sessions if s['settings'].get('fleet_agent', {}).get('id') == agent['id'] and not s['closed'] and s['state'] in {'queued','starting','idle','waiting','running'}), 'gateway': gateways.get(agent['id'], {'enabled': False}),
+        result.append({**agent, 'availability': for_agent(user, agent, hosts=hosts, gateways=gateways), 'active_sessions': sum(1 for s in sessions if s['settings'].get('fleet_agent', {}).get('id') == agent['id'] and not s['closed'] and s['state'] in {'queued','starting','idle','waiting','running'}), 'gateway': gateways.get(agent['id'], {'enabled': False}),
                        'classification': agent.get('classification', service.SERVICES.get(agent['runtime'], ('', 'general'))[1]),
                        'state': 'Mock' if agent.get('mock') else state, 'last_activity': max(activity)[0] if activity else ''})
     return result

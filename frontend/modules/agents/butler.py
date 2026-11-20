@@ -35,6 +35,8 @@ def send(user, raw):
     context = raw.get('context', {})
     if not isinstance(context, dict) or set(context) - {'path', 'space'} or any(not isinstance(v, str) or len(v) > 500 for v in context.values()):
         raise HTTPException(422, 'Invalid page context.')
+    from modules.agents.availability import require
+    require(user, service.initialize().get('butler'))
     service.execution('butler')
     previous = history(user)
     db = service.store()

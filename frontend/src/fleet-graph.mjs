@@ -9,7 +9,7 @@ export function filterFleet(data,{query='',spaces=[],types=[],since='',until='',
   const parents=n=>(n.agent_ids||[]).filter(id=>allowedAgents.has(id));
   const isIntent=n=>['action','idea'].includes(n.kind);
   const midnight=new Date(now);midnight.setHours(0,0,0,0);
-  const definition=n=>n.entity||n.source==='n8n'&&['connector','workflow','application','configuration','trigger'].includes(n.kind);
+  const definition=n=>n.definition||n.entity||n.source==='n8n'&&['connector','workflow','application','configuration','trigger'].includes(n.kind);
   const dateMatch=n=>definition(n)||n.kind==='hud'||isIntent(n)||(['1','24h','today'].includes(range)?(Date.parse(n.created)>=(range==='today'?midnight.getTime():now-86400000)&&Date.parse(n.created)<=now):((!since||n.created?.slice(0,10)>=since)&&(!until||n.created?.slice(0,10)<=until)));
   const isClosedIntent=n=>isIntent(n)&&['done','dismissed','archived'].includes(n.state||n.status||n.record?.status);
   const objects=data.nodes.filter(n=>!['agent','owner'].includes(n.kind)&&enabled.has(n.kind)&&(parents(n).length||(!service&&!(n.agent_ids||[]).length))&&(definition(n)&&!(n.workspace_ids||[]).length||spaceMatch(n))&&textMatch(n)&&dateMatch(n)&&!(n.kind==='workflow'&&((hideInactiveWorkflows&&['inactive','draft'].includes(n.state))||(hideArchivedWorkflows&&n.state==='archived')))&&(includeOwnerActivity||n.kind!=='entry'||(n.agent_ids||[]).length>0)&&(dismissed||!isClosedIntent(n)));

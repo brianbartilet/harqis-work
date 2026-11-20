@@ -82,8 +82,20 @@ def store():
 
 
 @owner.get('/terminal-runtimes')
-def terminal_runtimes():
-    return {'hosts': store().hosts()}
+def terminal_runtimes(user=Depends(bridge.owner_auth)):
+    from modules.agents.availability import connector
+    hosts = store().hosts()
+    for host in hosts:
+        for runtime in host['runtimes']:
+            if runtime['id'] in {'codex', 'claude'}:
+                health = connector(user, runtime['id'])
+                from modules.integrations import store as integrations
+                import socket
+                if host['host'] != (integrations.get(user, runtime['id']).get('host') or socket.gethostname()):
+                    health = {'available': False, 'reason': 'Host does not match the connected installation'}
+                if not health['available']:
+                    runtime.update(available=False, reason=health['reason'])
+    return {'hosts': hosts}
 
 
 @worker.post('/terminal-runtimes')
@@ -225,6 +237,15 @@ def start_session(source_id: str, payload: dict, user=Depends(bridge.owner_auth)
     runtime = payload.get('runtime')
     if runtime is not None:
         host = payload.get('host')
+        if runtime in {'codex', 'claude'}:
+            from modules.agents.availability import connector
+            health = connector(user, runtime)
+            if not health['available']:
+                raise HTTPException(409, health['reason'])
+            from modules.integrations import store as integrations
+            import socket
+            if host != (integrations.get(user, runtime).get('host') or socket.gethostname()):
+                raise HTTPException(409, 'Selected host does not match the connected installation.')
         found = next((r for h in store().hosts() if h['host'] == host for r in h['runtimes'] if r['id'] == runtime and r['available']), None)
         if not found:
             raise HTTPException(409, 'This runtime is unavailable on the selected worker. Refresh its capabilities.')
@@ -237,6 +258,8 @@ def start_session(source_id: str, payload: dict, user=Depends(bridge.owner_auth)
             agent = fleet.initialize().get(assignment['agent_id'])
             if not visible(agent, user) or not agent['active'] or agent.get('mock'):
                 raise HTTPException(409, 'Choose an active, available Fleet agent.')
+            from modules.agents.availability import require
+            require(user, agent)
             settings['fleet_agent'] = {k: agent.get(k) for k in ('id', 'name', 'runtime', 'version', 'persona', 'instructions', 'workspace_ids', 'tools', 'workflows', 'triggers', 'subagents')}
             import hashlib
             settings['fleet_agent']['hash'] = hashlib.sha256(json.dumps(settings['fleet_agent'], sort_keys=True).encode()).hexdigest()
