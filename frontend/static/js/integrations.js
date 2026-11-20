@@ -35,6 +35,7 @@
       const track=el('span',undefined,'connector-switch-track');track.setAttribute('aria-hidden','true');toggle.append(track);headerControls.append(toggle);card.append(header);
       toggle.onclick=async()=>{toggle.disabled=true;try{if(!item.enabled&&item.status!=='Connected'){setup(item);}else{const result=await api('/connectors/'+item.provider+'/toggle',{enabled:!item.enabled});await load();document.querySelector('[data-integration-error]').textContent=result.discovery_warning||(result.discovery?.warnings||[]).join(' ');}}catch(e){document.querySelector('[data-integration-error]').textContent=e.message;}finally{toggle.disabled=false;}};
       const status=el('span',item.status,'connector-status');status.dataset.connected=String(item.status==='Connected');status.dataset.error=String(Boolean(item.error));status.setAttribute('role','status');card.append(status);
+      if(item.provider==='grokbot'&&item.last_sync)card.append(el('p','Last discovery: '+new Date(item.last_sync).toLocaleString()+' · '+item.bot_count+' Bots','connector-discovery'));
       if(item.account)card.append(el('p',item.account+' · '+item.auth_method),el('p','Connected since '+new Date(item.connected_since).toLocaleDateString()+' · Expiry: '+item.expiry));
       if(item.error)card.append(el('p',item.error));
       const capabilities=el('ul');item.capabilities.forEach(c=>capabilities.append(el('li',c)));card.append(capabilities);
@@ -42,8 +43,7 @@
       if(item.provider==='grokbot'){
         const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);
         button(row,item.account?'Reconnect':'Connect',()=>setup(item));
-        if(item.enabled){button(row,'Refresh Bots',async()=>{await api('/grokbot/sync',{});await load();});link(row,'View fleet','/agents');}
-        if(item.last_sync)footer.append(el('p','Last discovery: '+new Date(item.last_sync).toLocaleString()+' · '+item.bot_count+' Bots'));
+        if(item.enabled){button(row,'Refresh Bots',async()=>{await api('/grokbot/sync',{});await load();});link(row,'View fleet','/agents?integration=grokbot');}
       }
       if(item.enabled&&item.provider==='codex'){const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);button(row,'Open in Fleet',async()=>{const result=await api('/codex/link',{});location.href='/agents?agent='+encodeURIComponent(result.item.id);});}
       if(item.enabled&&item.provider==='nod'){const footer=el('footer',undefined,'connector-footer');card.append(footer);const row=controls(footer);button(row,'Open in Fleet',async()=>{const result=await api('/nod/link',{});location.href='/agents?agent='+encodeURIComponent(result.item.id);});link(row,'Open Nod',item.site);}
@@ -61,7 +61,7 @@
   function grokbotSetup(){
     const {d,body,error}=dialog('Connect Grok Bot');
     body.append(el('p','Experimental read-only discovery. Sign in through Cursor or use a Cursor user API key. A successful connection immediately adds your Bots to the fleet.'));
-    const state=el('p','Choose a sign-in method.','connector-status');state.setAttribute('role','status');state.setAttribute('aria-live','polite');body.append(state);
+    const state=el('p','Choose a sign-in method.','integration-warning');state.setAttribute('role','status');state.setAttribute('aria-live','polite');body.append(state);
     let attempt='',timer,closed=false,busy=false;
     const browserArea=el('div');body.append(browserArea);
     const links=el('div');browserArea.append(links);

@@ -195,6 +195,36 @@ def reconcile(user, account, rows):
     return len(rows)
 
 
+def entity_scope(user, account):
+    return PROVIDER + ':' + hashlib.sha256((user + '\0' + account + '\0' + ORIGIN).encode()).hexdigest()
+
+
+def discover_entities(user, account):
+    from modules.agents import entities, service
+    scope = entity_scope(user, account)
+    connector = entities.entity('connector', scope, 'connection', 'Grok Bot',
+        source=PROVIDER, scope=scope, category='connection', url='https://grok.com',
+        state='connected', summary='Grok Bot account connection. Bot execution is managed by Grok.')
+    edges = [('agent:' + a['id'], connector['id'], 'connected through')
+             for a in service.store().list() if a.get('connector_user') == user
+             and a.get('connector_account') == account and a.get('runtime') == PROVIDER
+             and a.get('remote_available', True)]
+    entities.reconcile(user, scope, 'connection', [connector], edges)
+
+
+def stale_entities(user, data, state):
+    if data.get('account_id'):
+        from modules.agents import entities
+        entities.stale(user, entity_scope(user, data['account_id']), 'connection', state)
+
+
+def bot_url(identity):
+    try:
+        return 'https://grok.com/bot/' + str(uuid.UUID(identity))
+    except (ValueError, TypeError, AttributeError):
+        return ''
+
+
 def connect_pair(user, pair, method, attempt=None):
     rows = roster(pair)
     account = account_id(pair)
@@ -220,6 +250,7 @@ def connect_pair(user, pair, method, attempt=None):
     else:
         store.save(user, PROVIDER, metadata, pair)
         clear_attempt(user)
+    discover_entities(user, account)
     return {'status':'Connected', 'imported':count}
 
 
@@ -288,11 +319,13 @@ def sync(user, if_stale=False):
             if account_id(pair) != data['account_id']:
                 raise HTTPException(401, 'Grok Bot account changed. Reconnect explicitly.')
             count = reconcile(user, data['account_id'], rows)
+            discover_entities(user, data['account_id'])
             data.update(status='Connected', last_sync=store.now(), bot_count=count)
             data.pop('error', None)
             store.save(user, PROVIDER, data)
             return {'status':'Connected', 'imported':count}
         except HTTPException as exc:
+            stale_entities(user, data, 'stale')
             data['error'] = exc.detail
             if exc.status_code == 401:
                 data['status'] = 'Reconnect required'
@@ -307,6 +340,8 @@ def toggle(user, enabled):
         data = store.get(user, PROVIDER, private=True)
         if enabled and not data.get('credentials'):
             raise HTTPException(409, 'Connect Grok Bot first.')
+        if not enabled:
+            stale_entities(user, data, 'disabled')
         data['enabled'] = enabled
         store.save(user, PROVIDER, data)
     return sync(user) if enabled else {'status':'disabled'}
@@ -321,5 +356,6 @@ def cancel(user, identity):
 
 def disconnect(user):
     with locked(user):
+        stale_entities(user, store.get(user, PROVIDER), 'disconnected')
         clear_attempt(user)
         return store.save(user, PROVIDER, {'status':'Not connected', 'enabled':False}, {})

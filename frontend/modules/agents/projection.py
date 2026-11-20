@@ -53,6 +53,8 @@ def listing(user=None):
             state = 'running'
         if agent['runtime'] == 'grokbot' and agent.get('connector_user'):
             from modules.integrations.store import get
+            from modules.integrations.grokbot import bot_url
+            agent = {**agent, 'interface_url': bot_url(agent.get('remote_id'))}
             connector = get(user, 'grokbot')
             state = ('Reconnect required' if connector.get('status') == 'Reconnect required' else
                      'Sync delayed' if connector.get('error') else

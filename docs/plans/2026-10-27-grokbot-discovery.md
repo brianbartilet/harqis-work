@@ -100,3 +100,27 @@ background schedule. A failed request retains the last roster. Reconnect-require
 and delayed-sync states remain visible; disconnect/disable hides imported orbs
 but retains their records. Missing Bots are marked unavailable only after a
 validated complete roster. The connector count reflects the actual inventory.
+
+
+## Fleet connector and entry points — 2026-11-20
+
+Read-only discovery on the Mac mini returned Noa and HARQIS, both already imported
+and active. The roster also includes `slackConnections`; additive metadata is
+accepted without copying it into Fleet.
+
+Successful connection or Refresh Bots now reconciles one connector entity per
+owner/account/provider origin, with independent `connected through` relationships
+from each Bot. Failed refresh retains identities and marks the connector stale.
+Disable/disconnect update its state; existing visibility rules isolate accounts.
+Existing connections acquire the entity on their next successful Refresh Bots.
+
+The inspector opens `https://grok.com/bot/<validated UUID>` using the shared
+interface-link control, with opener isolation and a normal link fallback.
+View fleet opens a Grok-only view and clears saved search, Space and date filters,
+then fits the graph. This does not duplicate or rename either agent. Selecting an
+agent can dim the other orbs; it does not mean those agents were not imported.
+
+No CLI runtime, task execution, or background scheduler is introduced. Grok owns
+remote execution. These additions use explicit connector discovery; no second
+schedule owner is installed. Validation uses isolated stores and simulated API
+responses; local tests do not establish deployment of the new mapping.

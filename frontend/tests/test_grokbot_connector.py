@@ -225,6 +225,72 @@ def test_bad_roster_does_not_mark_missing(grok, fleet):
     assert bots(fleet)[0]['remote_available']
 
 
+def test_shared_connector_identity_isolation_and_refresh(grok, fleet, authenticated_client):
+    from modules.agents import entities
+    g, state = grok
+    second = str(uuid4())
+    state['rows'] = [remote(), remote(second, 'HARQIS')]
+    g.connect_key(USER, 'key')
+    first = entities.snapshot(USER)
+    assert len(first['items']) == 1 and first['items'][0]['kind'] == 'connector'
+    connector_id = first['items'][0]['id']
+    assert len(first['edges']) == 2
+    g.sync(USER)
+    assert entities.snapshot(USER)['items'][0]['id'] == connector_id
+    assert len(entities.snapshot(USER)['edges']) == 2
+    listing = authenticated_client.get('/agents/api/items').json()['items']
+    imported = [a for a in listing if a['runtime'] == 'grokbot']
+    assert {a['name'] for a in imported} == {'Research Bot', 'HARQIS'}
+    assert {a['interface_url'] for a in imported} == {'https://grok.com/bot/' + BOT, 'https://grok.com/bot/' + second}
+    g.connect_key('another-owner', 'key')
+    assert entities.snapshot('another-owner')['items'][0]['id'] != connector_id
+    state['fail'] = (502, 'Roster temporarily unavailable')
+    with pytest.raises(HTTPException):
+        g.sync(USER)
+    assert entities.snapshot(USER)['items'][0]['state'] == 'stale'
+    assert len(bots(fleet)) == 4
+    state['fail'] = None
+    g.sync(USER)
+    assert entities.snapshot(USER)['items'][0]['state'] == 'connected'
+    g.toggle(USER, False)
+    assert entities.snapshot(USER)['items'][0]['state'] == 'disabled'
+    g.toggle(USER, True)
+    assert entities.snapshot(USER)['items'][0]['state'] == 'connected'
+
+
+def test_connector_merge_refresh_unmerge_and_account_replacement(grok, fleet):
+    from modules.agents import entities
+    g, state = grok
+    g.connect_key(USER, 'key')
+    original = entities.snapshot(USER)['items'][0]
+    alias = entities.entity('connector', original['namespace'], 'reviewed-alias', 'Alias',
+                            source='grokbot', scope=original['scope'], category='manual')
+    entities.observe(USER, [alias], [])
+    entities.merge(USER, original['id'], alias['id'])
+    merge = entities.merge(USER, original['id'], alias['id'], confirmed=True)
+    g.sync(USER)
+    assert len(entities.snapshot(USER)['items']) == 1
+    entities.unmerge(USER, merge['merge_id'])
+    assert len(entities.snapshot(USER)['items']) == 2
+    state['rows'] = []
+    g.sync(USER)
+    assert not bots(fleet)[0]['remote_available']
+    state['rows'] = [remote(name='Renamed')]
+    g.sync(USER)
+    assert bots(fleet)[0]['remote_available']
+    state['pair'] = pair('second-account')
+    g.connect_key(USER, 'another-key')
+    snapshots = entities.snapshot(USER)['items']
+    assert len({n['namespace'] for n in snapshots}) == 2
+    g.disconnect(USER)
+    assert any(n['state'] == 'disconnected' for n in entities.snapshot(USER)['items'])
+
+
+@pytest.mark.parametrize('identity', [None, '', 'https://evil.test', '../bad', 'not-a-uuid'])
+def test_bot_link_rejects_invalid_identity(grok, identity):
+    assert grok[0].bot_url(identity) == ''
+
+
 def test_roster_accepts_additive_metadata(grok, fleet, monkeypatch):
     g, state = grok
     upstream = g.request
@@ -270,7 +336,7 @@ def test_wire_protocol_pending_and_secret_log_redaction(fleet, monkeypatch, capl
     assert all(r.url.host=='api2.cursor.sh' for r in requests)
 
 
-def test_browser_connection_ui(grok, authenticated_client, tmp_path, monkeypatch):
+def test_browser_connection_ui(grok, fleet, authenticated_client, tmp_path, monkeypatch):
     playwright = pytest.importorskip('playwright.sync_api')
     errors=[]
     with playwright.sync_playwright() as p:
@@ -288,6 +354,7 @@ def test_browser_connection_ui(grok, authenticated_client, tmp_path, monkeypatch
         card.get_by_role('button',name='Connect',exact=True).click()
         dialog=page.get_by_role('dialog',name='Connect Grok Bot')
         g, state = grok
+        state['rows'] = [remote(), remote(str(uuid4()), 'HARQIS')]
         state['fail'] = (502, 'Temporary roster failure')
         dialog.get_by_role('button',name='Sign in with browser',exact=True).click()
         retry = dialog.get_by_role('button',name='Check sign-in again',exact=True)
@@ -314,8 +381,28 @@ def test_browser_connection_ui(grok, authenticated_client, tmp_path, monkeypatch
         assert dialog.evaluate('(el)=>el.scrollWidth<=el.clientWidth')
         dialog.get_by_role('button',name='Connect with API key',exact=True).click()
         playwright.expect(dialog).not_to_be_visible()
-        page.goto('https://grok.test/agents')
-        page.get_by_role('button',name='Select Research Bot',exact=True).click()
-        page.get_by_role('button',name='Open Grok Bot',exact=True).wait_for()
+        page.goto('https://grok.test/agents?integration=grokbot&agent=' + next(a['id'] for a in bots(fleet) if a['remote_id'] == BOT))
+        entry = page.get_by_role('link',name='Open Grok in new window',exact=True)
+        entry.wait_for()
+        assert entry.get_attribute('href') == 'https://grok.com/bot/' + BOT
+        assert entry.get_attribute('rel') == 'noopener noreferrer'
+        page.get_by_role('button', name='Close Agent work drawer', exact=True).click()
+        entry.scroll_into_view_if_needed()
+        assert page.locator('.fleet-agent-toolbar').evaluate('(e)=>e.scrollWidth<=e.clientWidth')
+        page.screenshot(path=str(tmp_path/'grokbot-inspector-mobile.png'))
+        page.set_viewport_size({'width':1440,'height':1000})
+        page.screenshot(path=str(tmp_path/'grokbot-inspector-desktop.png'))
+        graph = authenticated_client.get('/agents/api/graph').json()
+        assert {'Research Bot', 'HARQIS'} <= {n['label'] for n in graph['nodes'] if n['kind'] == 'agent'}
+        assert len([n for n in graph['nodes'] if n['kind'] == 'connector' and n.get('source') == 'grokbot']) == 1
+        assert len(page.locator('.fleet-agent-toolbar').all()) == 1
+        page.context.route('https://grok.com/**', lambda route: route.fulfill(body='<title>Bot test</title>'))
+        with page.expect_popup() as opened:
+            entry.click()
+        popup = opened.value
+        popup.wait_for_load_state()
+        assert popup.url == 'https://grok.com/bot/' + BOT
+        assert popup.evaluate('window.opener === null')
+        popup.close()
         assert not errors
         browser.close()

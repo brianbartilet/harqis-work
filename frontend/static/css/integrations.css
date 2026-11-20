@@ -156,3 +156,6 @@ html:has(.integration-tabs){scrollbar-gutter:stable}
 .grokbot-key-choice{margin-top:1rem;border-top:1px solid #334155;padding-top:1rem}.grokbot-key-choice>summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:1rem}.grokbot-key-choice>summary::-webkit-details-marker{display:none}.grokbot-key-choice>summary svg{width:20px;height:20px;color:#93c5fd;pointer-events:none;flex-shrink:0}.grokbot-key-choice[open]>summary svg{transform:rotate(180deg)}
 
 @media(max-width:640px){.connector-footer .integration-controls{gap:.375rem}.connector-footer .integration-controls>:is(button,a){padding-inline:.375rem;font-size:.6875rem}}
+
+/* Long sign-in guidance uses a warning panel rather than a status badge. */
+.integration-dialog .integration-warning{display:block;padding:.75rem 1rem;border:1px solid #854d0e;border-left:3px solid #fbbf24;border-radius:.5rem;background:#422006;color:#fde68a;line-height:1.5;overflow-wrap:anywhere}
