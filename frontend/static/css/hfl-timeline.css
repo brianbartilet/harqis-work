@@ -510,7 +510,7 @@
 .agent-terminal-actions-body > :is(button,a) { text-align:left; width:100%; box-sizing:border-box; }
 .agent-terminal-actions-body > .agent-terminal-status { padding:.25rem .4rem .5rem; font-size:.7rem; }
 .action-agent-workspace .agent-terminal-controls > select { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2367e8f9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 7.5 5 5 5-5'/%3E%3C/svg%3E"); }
-@media(max-width:760px) { .agent-session-section .agent-terminal-controls { flex-wrap:wrap; } .action-agent-workspace .agent-terminal-controls > select { flex:1 1 calc(50% - .4rem); } }
+@media(max-width:1100px) { .agent-session-section .agent-terminal-controls { flex-wrap:wrap; } .action-agent-workspace .agent-terminal-controls > select { flex:1 1 calc(50% - .4rem); } }
 .agent-terminal-hint,.agent-details p { color:#94a3b8; font-size:.8rem; }
 .agent-details { border:1px solid #334155; padding:.7rem; border-radius:.5rem; }
 .agent-config-dialog { width:min(52rem,calc(100vw - 2rem)); }

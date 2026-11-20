@@ -339,7 +339,8 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path, ter
         assert sidebar.locator('.agent-attachments-area').evaluate('(e)=>e.nextElementSibling.classList.contains("agent-initial-prompt-runs")')
         toolbar=page.get_by_role('region',name='Session controls')
         assert toolbar.get_by_role('combobox', name='Agent session').count() == 1
-        assert toolbar.get_by_role('combobox',name='Agent session').bounding_box()['width'] <= 220
+        assert toolbar.locator('.agent-terminal-controls').evaluate('(e)=>e.scrollWidth<=e.clientWidth+1')
+        assert abs(toolbar.get_by_role('combobox',name='Agent session').bounding_box()['y'] - toolbar.get_by_role('button',name='New session',exact=True).bounding_box()['y']) < 4
         playwright.expect(toolbar.get_by_role('button',name='New session',exact=True)).to_be_visible()
         assert sidebar.locator('.agent-details').get_by_role('link',name='Agent default settings').get_attribute('target') == '_blank'
         assert sidebar.locator('.agent-results-footer').count() == 0
@@ -432,7 +433,7 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path, ter
         for width in (390, 768, 1440, 1920):
             page.set_viewport_size({'width':width,'height':1000})
             assert page.locator('.agent-session-section').evaluate('''section => {
-              const status=section.querySelector('.agent-terminal-status'), original=status.textContent;
+              const status=section.querySelector('.agent-terminal-controls > .agent-terminal-status'), original=status.textContent;
               const messages=['Loading last session…','Loading session…','Waiting for a worker to connect…','Starting Hermes…','Ready for commands',
                 'Worker capacity reached — waiting for an execution slot… 100/100 executions active.',
                 'Running — waiting for reply','Session expired — transcript archived','Session closed — transcript archived',
@@ -440,7 +441,7 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path, ter
                 'Error: '+ 'LongUnbrokenWorkerError'.repeat(100)];
               const fits=messages.every(message=>{
                 status.textContent=message;
-                return status.scrollWidth<=status.clientWidth+1 && section.scrollWidth<=section.clientWidth+1
+                return getComputedStyle(status).textOverflow==='ellipsis' && section.scrollWidth<=section.clientWidth+1
                   && status.getBoundingClientRect().height<=96;
               });
               status.textContent=original;
