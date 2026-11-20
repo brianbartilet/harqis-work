@@ -488,7 +488,7 @@ def test_fleet_activity_labels_and_solid_hud_links(fleet, authenticated_client, 
             playwright.expect(page.locator('.fleet-inspector')).not_to_be_visible()
         page.get_by_role('button',name='Animation',exact=True).click()
         page.get_by_role('button',name='Drift',exact=True).click()
-        page.get_by_role('button',name='Animation',exact=True).click()
+        playwright.expect(page.get_by_role('button',name='Animation',exact=True)).to_have_attribute('aria-expanded','false')
         page.mouse.move(0,0)
         page.wait_for_timeout(600)
         page.evaluate('window.labelPaints=[]')
@@ -497,7 +497,7 @@ def test_fleet_activity_labels_and_solid_hud_links(fleet, authenticated_client, 
         # Switching off must ease back to rest, even after the force engine cooled.
         page.get_by_role('button',name='Animation',exact=True).click()
         page.get_by_role('button',name='Off',exact=True).click()
-        page.get_by_role('button',name='Animation',exact=True).click()
+        playwright.expect(page.get_by_role('button',name='Animation',exact=True)).to_have_attribute('aria-expanded','false')
         page.wait_for_timeout(1800)
         page.evaluate('window.labelPaints=[]')
         page.wait_for_timeout(500)
