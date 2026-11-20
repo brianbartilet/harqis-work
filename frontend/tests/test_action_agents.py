@@ -559,6 +559,7 @@ def test_browser_terminal_paste_uploads_and_queues_image(workspace, authenticate
     item = create_action(actions)
     session = api.store().start_session(item['id'], {}, 'Paste test')
     api.store().claim_session(session['id'], 'test')
+    api.store().io(session['id'], 'out', 'old-queries', '\x1b]11;?\x07\x1b[c\x1b[6n\r\nReplay complete\r\n')
     playwright = pytest.importorskip('playwright.sync_api')
     frontend = Path(__file__).resolve().parents[1]
     with playwright.sync_playwright() as engine:
@@ -580,8 +581,12 @@ def test_browser_terminal_paste_uploads_and_queues_image(workspace, authenticate
             page.evaluate('(csrf)=>{const el=document.createElement("script");el.type="application/json";el.dataset.memoryCsrf="";el.textContent=JSON.stringify(csrf);document.body.append(el);}',owner_headers()['X-CSRF-Token'])
             for name in ('vendor/xterm-5.5.0.js', 'vendor/xterm-addon-fit-0.10.0.js', 'js/action-agent-workspace.js'):
                 page.add_script_tag(path=str(frontend/'static'/name))
+            page.evaluate('()=>{window.Terminal=class extends window.Terminal{constructor(...args){super(...args);window.testTerminal=this;}};}')
             page.evaluate('(id)=>window.actionAgentWorkspace.mount(document.querySelector("#workspace"),id)', item['id'])
             playwright.expect(page.get_by_role('combobox', name='Agent session')).to_have_value(session['id'])
+            page.wait_for_function("Array.from({length:window.testTerminal.buffer.active.length},(_,i)=>window.testTerminal.buffer.active.getLine(i).translateToString()).join('').includes('Replay complete')")
+            page.wait_for_timeout(150)
+            assert api.store().read_io(session['id'], 'in') == [], 'Replaying terminal queries must not generate input'
             prevented = page.evaluate("""() => {
                 const data=new DataTransfer();
                 data.items.add(new File([new Uint8Array([137,80,78,71])],'screenshot.png',{type:'image/png'}));
@@ -607,6 +612,13 @@ def test_browser_terminal_paste_uploads_and_queues_image(workspace, authenticate
             notice = page.get_by_role('region', name='Paste notification')
             playwright.expect(notice).to_contain_text('Text pasted into the terminal.')
             playwright.expect(notice).to_be_hidden(timeout=7000)
+            # Fresh queries still receive protocol responses; only history is inert.
+            api.store().io(session['id'], 'out', 'live-query', '\x1b]11;?\x07')
+            for _ in range(100):
+                if any('\x1b]11;rgb:' in event['data'] for event in api.store().read_io(session['id'], 'in')):
+                    break
+                page.wait_for_timeout(30)
+            assert any('\x1b]11;rgb:' in event['data'] for event in api.store().read_io(session['id'], 'in'))
 
         finally:
             browser.close()

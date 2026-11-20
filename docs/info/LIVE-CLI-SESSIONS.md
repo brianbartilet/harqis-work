@@ -46,6 +46,11 @@ worker WebSocket ↔ PTY ↔ native CLI.
 - Output persists before acknowledgement. Stable output keys make retries
   idempotent. Browser replay has one bounded batch in flight, acknowledged after
   xterm rendering; slow sends time out and reconnect from the rendered cursor.
+- Each browser connection records the output cursor that already exists. xterm
+  input is disabled while replaying that history, including its automatic
+  colour/device/cursor query replies. This prevents old terminal queries from
+  injecting escape-response fragments into a live prompt. Fresh queries still
+  receive normal replies; pasted or typed text is not stripped by a regex.
 - Input is durably keyed before acknowledgement. A live worker retains its
   delivered cursor across reconnects and ignores older input. Browser input with
   an uncertain acknowledgement is reported for review, not silently resent.

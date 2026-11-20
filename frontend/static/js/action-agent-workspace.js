@@ -36,6 +36,7 @@
     let disposed = false, session = null, cursor = 0, config, terminal, fit, polling, sessionList = [];
     let inputQueue = [], inputTimer, sendingInput = false, lastInputAt = 0;
     let socket, reconnectTimer, reconnectAttempts=0, rendering=Promise.resolve();
+    let replayingOutput=false;
     const requests=new Map();
     function streamRequest(type, payload={}) {
       if(socket?.readyState!==WebSocket.OPEN)return Promise.reject(new Error('Disconnected. Wait for reconnection before typing.'));
@@ -192,7 +193,7 @@
         resumeButton.textContent=item.native_id?'Restore session':'Start new session';
       }
       if(terminal){
-        terminal.options.disableStdin=!['starting','idle','waiting','running'].includes(item.state);
+        terminal.options.disableStdin=replayingOutput||!['starting','idle','waiting','running'].includes(item.state);
         terminal.options.cursorBlink=!terminal.options.disableStdin;
       }
     }
@@ -340,7 +341,7 @@
     function attach(item){
       empty.hidden=true;root.classList.remove('agent-session-is-empty');
       clearTimeout(reconnectTimer);if(socket){socket.onclose=null;socket.close();socket=null;}
-      session=item;cursor=0;terminal?.reset();download.hidden=false;download.href='/hfl-corpus/agent-bridge/sessions/'+item.id+'/transcript';
+      session=item;cursor=0;replayingOutput=false;terminal?.reset();download.hidden=false;download.href='/hfl-corpus/agent-bridge/sessions/'+item.id+'/transcript';
       const runtime=item.settings?.terminal_runtime||'hermes';
       const selected=JSON.stringify({runtime,host:item.settings?.agent_host});
       if([...runtimePicker.options].some(option=>option.value===selected))runtimePicker.value=selected;
@@ -379,13 +380,21 @@
         reconnectAttempts=0;session=data.session;
         const chunks=data.output.filter(chunk=>chunk.seq>cursor);
         if(chunks.length){
-          rendering=new Promise(resolve=>terminal.write(chunks.map(chunk=>chunk.data).join(''),()=>{
-            if(!disposed&&session?.id===identity){
-              cursor=chunks.at(-1).seq;
-              if(socket===ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'output_ack',after:cursor}));
+          rendering=rendering.then(async()=>{
+            if(disposed||session?.id!==identity||socket!==ws)return;
+            // xterm generates onData replies to colour/device/cursor queries.
+            // Historical queries must never send new input to the live process.
+            for(const historical of [true,false]){
+              const group=chunks.filter(chunk=>(chunk.seq<=data.replay_through)===historical);
+              if(!group.length)continue;
+              replayingOutput=historical;connectionState(session);
+              await new Promise(resolve=>terminal.write(group.map(chunk=>chunk.data).join(''),resolve));
+              if(disposed||session?.id!==identity||socket!==ws)return;
             }
-            resolve();
-          }));
+            replayingOutput=false;connectionState(session);
+            cursor=chunks.at(-1).seq;
+            if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'output_ack',after:cursor}));
+          });
         }
         const labels={queued:'Waiting for worker',starting:'Starting CLI…',idle:'Ready for commands',waiting:'Waiting for execution capacity',running:'CLI active',expired:'Expired · transcript archived',closed:'Closed · transcript archived',failed:'Stopped · transcript available'};
         status.textContent=session.error||labels[session.state]||session.state;

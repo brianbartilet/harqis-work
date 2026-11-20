@@ -62,6 +62,12 @@ async def serve(ws, identity, worker=False):
         cursor = hello.get('after', 0)
         if type(cursor) is not int or cursor < 0:
             raise ValueError('Invalid replay cursor.')
+        replay_through = 0
+        if not worker:
+            def replay_cursor():
+                with db.connect() as connection:
+                    return connection.execute('SELECT COALESCE(MAX(seq),0) FROM action_agent_io WHERE session=? AND direction=?', (identity, 'out')).fetchone()[0]
+            replay_through = await run_in_threadpool(replay_cursor)
     except (HTTPException, ValueError, KeyError, asyncio.TimeoutError):
         logging.getLogger(__name__).info('Terminal stream rejected at %s', stage)
         await ws.close(code=1008)
@@ -92,7 +98,7 @@ async def serve(ws, identity, worker=False):
                     # One bounded batch in flight. xterm acknowledges after rendering.
                     if output:
                         pending_output = output[-1]['seq']
-                    data = {'type': 'snapshot', 'session': item, 'output': output}
+                    data = {'type': 'snapshot', 'session': item, 'output': output, 'replay_through': replay_through}
                 if data != last:
                     await send(data)
                     last = data
