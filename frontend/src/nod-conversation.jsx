@@ -1,4 +1,13 @@
 import React,{useEffect,useRef,useState} from 'react';
+import {InspectorIcon} from './fleet-inspector.jsx';
+
+export function OpenNod({url,iconOnly=false}){
+ if(!/^https?:\/\//i.test(url||''))return null;
+ return <a className={iconOnly?'fleet-inspector-icon fleet-connect-icon':'fleet-nod-button fleet-primary'} href={url} target="_blank" rel="noopener noreferrer" aria-label="Open Nod in new window" title="Open Nod in new window" onClick={event=>{
+  const popup=window.open(url,'_blank','popup,width=1200,height=850');
+  if(popup){popup.opener=null;event.preventDefault();popup.focus();}
+ }}><InspectorIcon name="external"/>{!iconOnly&&<span>Open Nod</span>}</a>;
+}
 
 export function NodConversation({agent,api,refresh}){
  const [state,setState]=useState(null),[text,setText]=useState(''),[error,setError]=useState(''),[pollError,setPollError]=useState(''),[busy,setBusy]=useState(false),[pending,setPending]=useState(null),[notice,setNotice]=useState(''),[stopping,setStopping]=useState(false);
@@ -10,7 +19,7 @@ export function NodConversation({agent,api,refresh}){
  function message(extra){return {thread_id:state.thread_id,binding:state.binding,request_id:crypto.randomUUID(),...extra};}
  const canSend=state?.active&&state?.ready&&!busy&&!pending&&!pollError&&!state.needs_private_input;
  return <section className="fleet-nod" aria-label="Nod conversation"><p>One shared conversation with your Nod assistant. Messages can start work using its connected apps. Your Fleet persona does not override Nod’s instructions.</p>
- <div className="fleet-actions"><a href="/applications">Manage Nod connector</a>{state?.url&&<a href={state.url} target="_blank" rel="noopener noreferrer">Open Nod</a>}<button disabled={busy} onClick={load}>Refresh conversation</button></div>
+ <div className="fleet-nod-toolbar" role="group" aria-label="Nod conversation controls"><OpenNod url={state?.url||agent.connector_site}/><button type="button" aria-label="Refresh conversation" disabled={busy} onClick={load}><InspectorIcon name="refresh"/><span>Refresh</span></button><a className="fleet-nod-button fleet-nod-manage" href="/applications"><InspectorIcon name="connect"/><span>Manage Nod connector</span></a></div>
  {agent.mock&&<p className="fleet-badge">Mock conversation · no external actions</p>}
  {pollError&&<p role="alert">{pollError}</p>}{error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
  {!state&&!pollError&&<p role="status">Loading Nod conversation…</p>}

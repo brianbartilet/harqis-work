@@ -516,3 +516,9 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 .fleet-selected-specialization-card .fleet-specialization-description{font-size:13px;line-height:1.6;color:#cbd5e1;margin:0}
 .fleet-selected-specialization-card .fleet-actions{margin-top:4px;flex-wrap:wrap}
 .fleet-specialization-empty{display:grid;gap:10px}
+.fleet-nod-toolbar{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin:12px 0 16px}
+.fleet-nod-toolbar>.fleet-nod-manage{grid-column:1 / -1}
+.fleet-nod-toolbar>:is(a,button){display:flex;align-items:center;justify-content:center;gap:7px;min-height:36px;min-width:0;padding:8px 10px;border:1px solid #334155;border-radius:8px;background:#0f1c2e;color:#dbe7f5;font:inherit;font-size:12px;text-decoration:none;line-height:1.4}
+.fleet-nod-toolbar>:is(a,button):hover{background:#20334a;border-color:#64748b}
+.fleet-nod-toolbar svg{flex:none;width:16px;height:16px}
+.fleet-nod-toolbar>.fleet-primary{background:#164e63;border-color:#27758c;color:#cffafe}

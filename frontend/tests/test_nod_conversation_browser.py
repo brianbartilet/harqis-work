@@ -25,7 +25,7 @@ createRoot(document.getElementById('app')).render(<main className="fleet-shell">
 
 
 @pytest.mark.parametrize('width',[390,1440])
-def test_nod_uncertain_send_retains_request(browser,nod_bundle,width):
+def test_nod_uncertain_send_retains_request(browser,nod_bundle,width,tmp_path):
     from playwright.sync_api import expect
     page=browser.new_page(viewport={'width':width,'height':900})
     try:
@@ -35,6 +35,18 @@ def test_nod_uncertain_send_retains_request(browser,nod_bundle,width):
         css='\n'.join((ROOT/'frontend/static/css'/f'{name}.css').read_text('utf-8') for name in ('app.min','agent-fleet'))
         page.add_style_tag(content=css)
         page.add_script_tag(content=nod_bundle)
+        controls=page.get_by_role('group',name='Nod conversation controls')
+        expect(controls.get_by_role('link',name='Manage Nod connector')).to_be_visible()
+        expect(controls.get_by_role('button',name='Refresh conversation')).to_be_visible()
+        page.context.route('https://nod.example.test/**',lambda route:route.fulfill(body='Nod window'))
+        with page.expect_popup() as opened:
+            controls.get_by_role('link',name='Open Nod in new window').click()
+        popup=opened.value
+        popup.wait_for_load_state()
+        assert popup.url.startswith('https://nod.example.test')
+        assert popup.evaluate('window.opener===null')
+        popup.close()
+        page.screenshot(path=str(tmp_path/f'nod-controls-{width}.png'))
         box=page.get_by_label('Message Nod',exact=True)
         box.fill('Keep this instruction')
         page.get_by_role('button',name='Send to Nod',exact=True).click()
