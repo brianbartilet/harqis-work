@@ -178,6 +178,66 @@ def test_prepare_retry_does_not_duplicate_actions(fleet, authenticated_client):
     assert one.json()['action_id'] == two.json()['action_id']
 
 
+@pytest.mark.parametrize('runtime', ['codex', 'claude'])
+def test_native_fleet_session_reuses_action_and_live_session(fleet, authenticated_client, runtime):
+    from modules.hfl_corpus.action_agents import store
+    agent = post(authenticated_client, '/items', {'name': 'Native agent', 'runtime': runtime}).json()['item']
+    store().advertise('native-worker', [{'id': runtime, 'available': True}])
+    url = '/items/' + agent['id'] + '/prepare'
+    one = post(authenticated_client, url, {})
+    assert one.status_code == 200, one.text
+    two = post(authenticated_client, url, {})
+    assert two.status_code == 200, two.text
+    assert one.json()['action_id'] == two.json()['action_id']
+    sessions = store().sessions(one.json()['action_id'])
+    assert len(sessions) == 1
+    settings = sessions[0]['settings']
+    assert settings['terminal_runtime'] == runtime
+    assert settings['agent_host'] == 'native-worker'
+    assert settings['fleet_agent']['id'] == agent['id']
+    assert settings['initial_context']['agent']['id'] == agent['id']
+    with pytest.raises(ValueError):
+        fleet.execution(agent['id'])  # manual terminal support does not enable automation
+
+
+def test_native_fleet_prepare_rejects_unavailable_and_private_agents(fleet, authenticated_client):
+    from modules.hfl_corpus.action_agents import store
+    agent = post(authenticated_client, '/items', {'name': 'Native agent', 'runtime': 'codex'}).json()['item']
+    assert post(authenticated_client, '/items/' + agent['id'] + '/prepare', {}).status_code == 422
+
+    store().advertise('worker', [{'id': 'codex', 'available': True}])
+    fleet.store().save({**agent, 'connector_user': 'another-owner'}, identity=agent['id'], version=agent['version'])
+    assert post(authenticated_client, '/items/' + agent['id'] + '/prepare', {}).status_code == 422
+
+
+@pytest.mark.parametrize('runtime', ['codex', 'claude'])
+def test_native_fleet_open_session_button(fleet, authenticated_client, runtime):
+    playwright = pytest.importorskip('playwright.sync_api')
+    from modules.hfl_corpus.action_agents import store
+    client = authenticated_client
+    agent = post(client, '/items', {'name': 'Native ' + runtime, 'runtime': runtime}).json()['item']
+    store().advertise('native-worker', [{'id': runtime, 'available': True}])
+    with playwright.sync_playwright() as p:
+        browser = p.chromium.launch(channel='chrome', headless=True)
+        page = browser.new_page(viewport={'width': 1440, 'height': 1000})
+        def route(r):
+            u = urlparse(r.request.url)
+            response = client.request(r.request.method, u.path + ('?' + u.query if u.query else ''), content=r.request.post_data_buffer,
+                                      headers={k: v for k, v in r.request.headers.items() if k.lower() in {'content-type', 'x-csrf-token'}})
+            r.fulfill(status=response.status_code, content_type=response.headers.get('content-type', 'text/html'), body=response.content)
+        page.route('https://fleet.test/**', route)
+        page.goto('https://fleet.test/agents?agent=' + agent['id'])
+        page.get_by_role('button', name='Open session', exact=True).wait_for()
+        # Verify the Fleet-to-dialog contract; terminal interaction has its own browser test.
+        page.evaluate('window.hflAgentBridge.open=(...args)=>{window.openedAgentSession=args;}')
+        page.get_by_role('button', name='Open session', exact=True).click()
+        page.wait_for_function('window.openedAgentSession')
+        opened = page.evaluate('window.openedAgentSession')
+        assert opened[0] == 'actionable'
+        assert store().sessions(opened[1])[0]['settings']['terminal_runtime'] == runtime
+        browser.close()
+
+
 def test_fleet_action_assignment_uses_shared_editor_csrf(fleet, bridge, authenticated_client):
     client = authenticated_client
     page = client.get('/agents')

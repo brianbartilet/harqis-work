@@ -194,9 +194,31 @@ def prepare(identity, user):
     from modules.integrations.service import canonical
     from modules.hfl_corpus.action_agents import store as terminals
     agent = initialize().get(identity)
-    execution(identity)  # reject inactive/external agents before creating an action
+    from modules.agents.projection import visible
+    if not visible(agent, user) or agent.get('mock') or not agent['active']:
+        raise ValueError('Choose an active, available Fleet agent.')
+    native = agent['runtime'] in {'codex', 'claude'}
+    launch = None
+    if native:
+        import socket
+        hosts = [h['host'] for h in terminals().hosts() if any(r['id'] == agent['runtime'] and r['available'] for r in h['runtimes'])]
+        # Local observation connectors belong to this server, never another worker.
+        host = socket.gethostname() if agent.get('connector_provider') == 'codex' else agent.get('overrides', {}).get('agent_host')
+        if not host:
+            host = socket.gethostname() if socket.gethostname() in hosts else hosts[0] if len(hosts) == 1 else None
+        if host not in hosts:
+            raise ValueError('No unambiguous available CLI worker for this agent. Check the worker installation or configure its hostname.')
+        launch = {'runtime': agent['runtime'], 'host': host}
+    else:
+        execution(identity)  # automated execution remains Hermes-only
     request_id = str(uuid.uuid5(uuid.NAMESPACE_URL, 'fleet-session:' + str(store().path) + ':' + identity))
     item = canonical('POST', '/actions', {'request_id': request_id, 'title': agent['name'] + ' · Sessions',
                      'expected_outcome': 'Interactive work with ' + agent['name'], 'workspace_ids': agent['workspace_ids']})['item']
     terminals().configure('card:' + item['id'], {'preset': '', 'assignment_mode': 'butler' if identity == 'butler' else 'agent', 'agent_id': identity, 'overrides': {}})
+    if native:
+        current = [s for s in terminals().sessions(item['id']) if not s['closed'] and s['state'] in {'queued', 'starting', 'idle', 'waiting', 'running'}
+                   and s['settings'].get('terminal_runtime') == launch['runtime'] and s['settings'].get('agent_host') == launch['host']]
+        if not current:
+            from modules.hfl_corpus.action_agents import start_session
+            start_session(item['id'], launch, user)
     return {'action_id': item['id'], 'url': '/hfl-corpus/actions?integration_agent=' + item['id']}

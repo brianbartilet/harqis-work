@@ -340,10 +340,11 @@
     function attach(item){
       empty.hidden=true;root.classList.remove('agent-session-is-empty');
       clearTimeout(reconnectTimer);if(socket){socket.onclose=null;socket.close();socket=null;}
-      session=item;cursor=0;showConfig();terminal?.reset();download.hidden=false;download.href='/hfl-corpus/agent-bridge/sessions/'+item.id+'/transcript';
+      session=item;cursor=0;terminal?.reset();download.hidden=false;download.href='/hfl-corpus/agent-bridge/sessions/'+item.id+'/transcript';
       const runtime=item.settings?.terminal_runtime||'hermes';
       const selected=JSON.stringify({runtime,host:item.settings?.agent_host});
       if([...runtimePicker.options].some(option=>option.value===selected))runtimePicker.value=selected;
+      showConfig();
       hint.textContent=runtime.toUpperCase()+' · Closing this view leaves the CLI running. Paste images to queue file references; press Enter when ready.'+(['codex','claude'].includes(runtime)?' This CLI reserves a slot until ended and uses its host configuration.':'');
       connectionState(item);
       if(![...sessions.options].some(o=>o.value===item.id))sessions.append(new Option(new Date(item.created).toLocaleString()+' · '+item.state,item.id));

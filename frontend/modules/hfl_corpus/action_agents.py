@@ -230,6 +230,16 @@ def start_session(source_id: str, payload: dict, user=Depends(bridge.owner_auth)
             raise HTTPException(409, 'This runtime is unavailable on the selected worker. Refresh its capabilities.')
         settings = bridge.checked(effective, source_id, execute=False)
         settings.update(terminal_runtime=runtime, agent_host=host)
+        assignment = settings.get('action_assignment', {})
+        if runtime in {'codex', 'claude'} and assignment.get('runtime') == runtime and assignment.get('agent_id'):
+            from modules.agents import service as fleet
+            from modules.agents.projection import visible
+            agent = fleet.initialize().get(assignment['agent_id'])
+            if not visible(agent, user) or not agent['active'] or agent.get('mock'):
+                raise HTTPException(409, 'Choose an active, available Fleet agent.')
+            settings['fleet_agent'] = {k: agent.get(k) for k in ('id', 'name', 'runtime', 'version', 'persona', 'instructions', 'workspace_ids', 'tools', 'workflows', 'triggers', 'subagents')}
+            import hashlib
+            settings['fleet_agent']['hash'] = hashlib.sha256(json.dumps(settings['fleet_agent'], sort_keys=True).encode()).hexdigest()
         if runtime == 'jev' and settings.get('agent_mode') != 'trusted':
             raise HTTPException(409, 'Jev requires a trusted Hermes profile so its configured MCP tools can load. Choose trusted execution in the session settings.')
         if runtime == 'jev':

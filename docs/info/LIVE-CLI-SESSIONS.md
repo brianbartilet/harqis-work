@@ -11,6 +11,12 @@ Hermes, retaining action context, transcripts and isolated repository workspaces
 **Trigger:** manually start/open a session from an Action's agent workspace.
 The CLI selector chooses a runtime and a worker for a new session; it does not
 change the Action's automatic assignment or reasoning-model configuration.
+Fleet's Codex and Claude agent panels also expose **Open session**. This creates
+or reuses the agent's Sessions action and opens its native CLI in the same dialog.
+Local Codex connectors stay pinned to the server they observe; manual profiles
+use their configured host, the local available host, or a single available worker.
+Ambiguous or unavailable workers are rejected before creating an action. Native
+CLI access does not enable automated Action execution for these providers.
 
 **Ownership:** the worker owns the PTY process. The frontend authenticates and
 relays terminal traffic. Manual initiation is the only schedule owner. No new
