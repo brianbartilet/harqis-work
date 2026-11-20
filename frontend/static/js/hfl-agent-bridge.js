@@ -99,13 +99,13 @@
     clearTimeout(resultsTimer);
     const ticket = ++generation;
     dialog.replaceChildren();
-    const workspaceLayout = kind === 'actionable' && !!window.actionAgentWorkspace;
+    const workspaceLayout = ['actionable','fleet'].includes(kind) && !!window.actionAgentWorkspace;
     dialog.classList.toggle('action-agent-dialog', workspaceLayout);
     dialog.classList.remove('agent-sidebar-open');
     const header = element('header'); header.className = 'agenda-dialog-header';
-    const heading = element('h2', kind === 'actionable' ? 'Agent session' : 'Agent results'); heading.id = 'agent-bridge-title';
+    const heading = element('h2', workspaceLayout ? 'Agent session' : 'Agent results'); heading.id = 'agent-bridge-title';
     heading.tabIndex = -1; heading.setAttribute('autofocus', '');
-    const close = element('button'); close.type = 'button'; close.className = 'agent-results-close'; close.setAttribute('aria-label', kind === 'actionable' ? 'Close Agent session' : 'Close agent results'); close.title = 'Close (Esc)'; close.onclick = () => dialog.close();
+    const close = element('button'); close.type = 'button'; close.className = 'agent-results-close'; close.setAttribute('aria-label', workspaceLayout ? 'Close Agent session' : 'Close agent results'); close.title = 'Close (Esc)'; close.onclick = () => dialog.close();
     const closeIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     closeIcon.setAttribute('viewBox', '0 0 24 24'); closeIcon.setAttribute('aria-hidden', 'true'); closeIcon.setAttribute('focusable', 'false');
     const closePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -140,7 +140,15 @@
     information.append(task);
     const attachmentArea=element('div');attachmentArea.className='agent-attachments-area';
     if (workspaceLayout) information.append(attachmentArea);
-    if (workspaceLayout) disposeWorkspace = window.actionAgentWorkspace.mount(body, id, information, task, headerStatus);
+    if (workspaceLayout) disposeWorkspace = window.actionAgentWorkspace.mount(body, id, information, task, headerStatus, {fleet:kind==='fleet'});
+    if(kind==='fleet'){
+      task.replaceChildren(element('span','FLEET SESSION'),element('h3',title));
+      information.setAttribute('aria-label','Fleet session information');
+      header.querySelector('.agent-sidebar-toggle').textContent='Session details';
+      const helpBody=header.querySelector('.agent-header-help-body');
+      helpBody.replaceChildren(element('strong','Fleet sessions'),element('p','Start work without an Action. Save as Action when you want to track it. Closing this dialog leaves the CLI running. End session retains history; Discard removes unlinked history after stopping the CLI.'));
+      dialog.append(header,body);if(!dialog.open)dialog.showModal();return;
+    }
     const error = element('p'); error.className = 'agenda-error'; error.setAttribute('role', 'alert'); error.hidden = true;
     const cadenceLabel = element('label', 'Automatic runs');
     const cadence = element('select');

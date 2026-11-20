@@ -61,11 +61,15 @@ object. A visual association does not authorize execution or share credentials.
   Never place credentials in the URL. Keep **Manage connector** as a separate
   control. Reuse `OpenNod` in `frontend/src/nod-conversation.jsx` as the pattern.
 - For a CLI, add **Open session** using the existing Fleet prepare endpoint and
-  action-linked terminal dialog, as Codex/Claude do in
+  Fleet session dialog, as Codex/Claude do in
   `frontend/modules/agents/service.py` and `frontend/src/agent-fleet.jsx`.
   Resolve the selected agent's runtime and execution host from live worker
-  capabilities; preserve owner/installation boundaries and reuse its Sessions
-  action and live session. Do not silently switch providers or hosts. Check
+  capabilities; preserve owner/installation boundaries and reuse its live session.
+  Fleet entry must start unlinked: create an Action only through explicit
+  Save as Action, preserving the terminal and native context. Offer Discard for
+  unlinked history after stopping the worker; closing the dialog keeps it running.
+  Sessions launched from an existing Action remain attached to it. Do not silently
+  switch providers or hosts. Check
   executable discovery and authentication in the background worker environment,
   including standard install locations absent from an interactive shell's PATH.
 - Opening a CLI must not submit the saved Action prompt or enable unsupported

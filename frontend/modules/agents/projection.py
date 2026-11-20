@@ -24,7 +24,7 @@ def listing(user=None):
     from modules.hfl_corpus.action_agents import store as terminals
     db = terminals()
     db.expire_sessions()
-    sessions = db.sessions()
+    sessions = [s for s in db.sessions() if not s.get('owner') or s['owner'] == user]
     runs = db.list(limit=1000)
     assistant_activity = {}
     if user:
@@ -57,7 +57,7 @@ def listing(user=None):
             state = ('Reconnect required' if connector.get('status') == 'Reconnect required' else
                      'Sync delayed' if connector.get('error') else
                      'Unavailable' if not agent.get('remote_available', True) else 'Discovered')
-        result.append({**agent, 'gateway': gateways.get(agent['id'], {'enabled': False}),
+        result.append({**agent, 'active_sessions': sum(1 for s in sessions if s['settings'].get('fleet_agent', {}).get('id') == agent['id'] and not s['closed'] and s['state'] in {'queued','starting','idle','waiting','running'}), 'gateway': gateways.get(agent['id'], {'enabled': False}),
                        'classification': agent.get('classification', service.SERVICES.get(agent['runtime'], ('', 'general'))[1]),
                        'state': 'Mock' if agent.get('mock') else state, 'last_activity': max(activity)[0] if activity else ''})
     return result

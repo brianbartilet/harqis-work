@@ -10,7 +10,7 @@ def terminal_event(session, kind, payload=None, key=''):
     if not agent:
         return
     store().event('terminal:' + session['id'] + ':' + (key or kind), agent['id'],
-                  {'kind': kind, 'session_id': session['id'], 'action_id': session['source_id'],
+                  {'kind': kind, 'session_id': session['id'], 'action_id': (session.get('action_id', '') if session.get('fleet_id') else session['source_id']),
                    'agent_name': agent['name'], 'version': agent['version'], 'configuration_hash': agent['hash'],
                    **(payload or {})})
 

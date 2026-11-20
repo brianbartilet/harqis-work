@@ -217,7 +217,7 @@ def start_session(source_id: str, payload: dict, user=Depends(bridge.owner_auth)
     action = bridge.checked(bridge.action_call, 'GET', '/' + source_id)['item']
     if payload.get('restore') and not payload.get('runtime'):
         previous_session = bridge.checked(store().session, payload['restore'])
-        if previous_session['source_id'] != source_id:
+        if previous_session['source_id'] != source_id and previous_session.get('action_id') != source_id:
             raise HTTPException(400, 'Restore a session belonging to this action.')
         if previous_session['settings'].get('terminal_runtime'):
             payload = {**payload, 'runtime': previous_session['settings']['terminal_runtime'],
@@ -262,20 +262,26 @@ def start_session(source_id: str, payload: dict, user=Depends(bridge.owner_auth)
         settings['initial_context']['last_agent_result'] = previous[0]['result'].get('summary', '')
     # Opening a terminal does not execute the Initial prompt a second time.
     session = bridge.checked(store().start_session, source_id, settings, action['title'], payload.get('restore'))
+    from modules.agents.sessions import restore_files
+    restore_files(session)
     from modules.agents.audit import terminal_event
     terminal_event(session, 'session-started')
     return session
 
 
 @owner.get('/sessions/{identity}')
-def terminal_view(identity: str, after: int = 0):
+def terminal_view(identity: str, after: int = 0, user=Depends(bridge.owner_auth)):
+    from modules.agents.sessions import owned
+    owned(identity, user)
     db = store()
     session = bridge.checked(db.session, identity)
     return {'session': session, 'output': db.read_io(identity, 'out', max(0, after))}
 
 
 @owner.post('/sessions/{identity}')
-def terminal_edit(identity: str, payload: dict):
+def terminal_edit(identity: str, payload: dict, user=Depends(bridge.owner_auth)):
+    from modules.agents.sessions import owned
+    owned(identity, user)
     return edit_terminal(store(), identity, payload)
 
 
@@ -295,19 +301,24 @@ def edit_terminal(db, identity, payload):
 
 
 @owner.post('/sessions/{identity}/input')
-def terminal_input(identity: str, payload: dict):
+def terminal_input(identity: str, payload: dict, user=Depends(bridge.owner_auth)):
+    from modules.agents.sessions import owned
+    owned(identity, user)
     bridge.checked(store().io, identity, 'in', payload.get('key'), payload.get('data'))
     return {'ok': True}
 
 
 @owner.post('/sessions/{identity}/images')
-def terminal_image(identity: str, payload: dict):
+def terminal_image(identity: str, payload: dict, user=Depends(bridge.owner_auth)):
+    from modules.agents.sessions import owned
+    owned(identity, user)
     db = store()
     session = bridge.checked(db.session, identity)
-    attachments = bridge.checked(bridge.input_manifest, 'actionable', session['source_id'])['attachments']
+    from modules.agents.sessions import manifest
+    attachments = manifest(session)
     attachment = next((item for item in attachments if item['id'] == payload.get('attachment_id')), None)
     if attachment is None:
-        raise HTTPException(404, 'Image is not attached to this action.')
+        raise HTTPException(404, 'Image is not attached to this session.')
     if Path(attachment['filename']).suffix.lower() not in {'.png', '.jpg', '.jpeg', '.webp', '.gif'}:
         raise HTTPException(400, 'Choose a PNG, JPEG, WebP or GIF image.')
     bridge.checked(db.io, identity, 'image', payload.get('key'), json.dumps(attachment))
@@ -315,7 +326,9 @@ def terminal_image(identity: str, payload: dict):
 
 
 @owner.get('/sessions/{identity}/transcript')
-def transcript(identity: str):
+def transcript(identity: str, user=Depends(bridge.owner_auth)):
+    from modules.agents.sessions import owned
+    owned(identity, user)
     content = bridge.checked(store().transcript, identity)
     # Strip terminal controls for the portable text artifact; retain raw replay in SQLite.
     content = re.sub(r'\x1b\][^\x07]*(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]', '', content)
@@ -323,7 +336,11 @@ def transcript(identity: str):
 
 
 @owner.post('/sessions/{identity}/forget')
-def forget_session(identity: str):
+def forget_session(identity: str, user=Depends(bridge.owner_auth)):
+    from modules.agents.sessions import owned
+    item = owned(identity, user)
+    if item.get('fleet_id') and not item.get('action_id'):
+        raise HTTPException(409, 'Use Discard for an unlinked Fleet session.')
     bridge.checked(store().forget, identity)
     return {'ok': True}
 
@@ -341,7 +358,9 @@ def terminal_claim(identity: str, payload: dict):
     if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,200}', name):
         raise HTTPException(400, 'Invalid worker host.')
     pending = bridge.checked(store().session, identity)
-    attachments = bridge.checked(bridge.input_manifest, 'actionable', pending['source_id'])['attachments']
+    from modules.agents.sessions import manifest, restore_files
+    restore_files(pending)
+    attachments = manifest(pending)
     claimed = bridge.checked(store().claim_session, identity, name)
     claimed['attachments'] = attachments
     return claimed
@@ -350,7 +369,8 @@ def terminal_claim(identity: str, payload: dict):
 @worker.get('/terminals/{identity}/inputs/{attachment_id}')
 def terminal_attachment(identity: str, attachment_id: str, request: Request):
     session = bridge.checked(store().verify, identity, request.headers.get('X-Terminal-Lease'))
-    return bridge.input_download('actionable', session['source_id'], attachment_id)
+    from modules.agents.sessions import download
+    return download(session, attachment_id)
 
 
 @worker.post('/terminals/{identity}/poll')
@@ -371,8 +391,9 @@ def poll_terminal(db, identity, payload):
     from modules.agents.audit import terminal_event
     if session['state'] in {'closed', 'expired', 'failed'}:
         terminal_event(session, 'session-' + session['state'], {'state': session['state']})
-    action = bridge.checked(bridge.action_call, 'GET', '/' + session['source_id'])['item']
-    control['action_closed'] = action['status'] in {'done','dismissed'}
+    action_id = session.get('action_id') if session.get('fleet_id') else session['source_id']
+    action = bridge.checked(bridge.action_call, 'GET', '/' + action_id)['item'] if action_id else {}
+    control['action_closed'] = action.get('status') in {'done','dismissed'}
     return control
 
 
@@ -386,7 +407,8 @@ def terminal_output(identity: str, payload: dict):
 
 async def attach_output(source_id, name, content):
     if bridge.remote_inputs('actionable'):
-        return bridge.input_remote('POST', source_id, files=[('files', (name, content, 'application/octet-stream'))]).json()
+        from starlette.concurrency import run_in_threadpool
+        return (await run_in_threadpool(bridge.input_remote, 'POST', source_id, files=[('files', (name, content, 'application/octet-stream'))])).json()
     from modules.hfl_corpus.attachments import source_store
     attachments, source = source_store('actionable', source_id)
     return {'attachments': await attachments.upload(source, [UploadFile(filename=name, file=io.BytesIO(content))])}
@@ -408,7 +430,12 @@ async def terminal_file(identity: str, name: str, request: Request):
     with db.connect() as connection:
         exists = connection.execute('SELECT 1 FROM action_agent_files WHERE session=? AND name=? AND digest=?', (identity,name,digest)).fetchone()
     if not exists:
-        await attach_output(session['source_id'], versioned, bytes(content))
+        if session.get('fleet_id'):
+            from modules.agents.sessions import files
+            attachments, key = files(identity)
+            await attachments.upload(key, [UploadFile(filename=versioned, file=io.BytesIO(content))])
+        else:
+            await attach_output(session['source_id'], versioned, bytes(content))
         with db.connect() as connection:
             connection.execute('INSERT OR IGNORE INTO action_agent_files VALUES (?,?,?)', (identity,name,digest))
         from modules.agents.audit import terminal_event

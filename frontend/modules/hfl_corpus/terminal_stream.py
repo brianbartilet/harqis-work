@@ -58,7 +58,8 @@ async def serve(ws, identity, worker=False):
             stage = 'CSRF'
             if not api.bridge.verify_csrf_token(hello.get('csrf', ''), user):
                 raise ValueError('Refresh the page before connecting.')
-            await run_in_threadpool(db.session, identity)
+            from modules.agents.sessions import owned
+            await run_in_threadpool(owned, identity, user)
         cursor = hello.get('after', 0)
         if type(cursor) is not int or cursor < 0:
             raise ValueError('Invalid replay cursor.')

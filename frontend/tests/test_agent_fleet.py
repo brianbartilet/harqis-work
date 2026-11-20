@@ -172,14 +172,16 @@ def test_csrf_and_navigation(fleet, authenticated_client):
 
 
 def test_prepare_retry_does_not_duplicate_actions(fleet, authenticated_client):
+    from modules.hfl_corpus.action_agents import store
+    store().advertise('native-worker', [{'id': 'hermes', 'available': True}])
     one = post(authenticated_client, '/items/butler/prepare', {})
     two = post(authenticated_client, '/items/butler/prepare', {})
     assert one.status_code == 200, one.text
-    assert one.json()['action_id'] == two.json()['action_id']
+    assert one.json()['fleet_id'] == two.json()['fleet_id']
 
 
 @pytest.mark.parametrize('runtime', ['codex', 'claude'])
-def test_native_fleet_session_reuses_action_and_live_session(fleet, authenticated_client, runtime):
+def test_native_fleet_session_reuses_unlinked_live_session(fleet, authenticated_client, runtime):
     from modules.hfl_corpus.action_agents import store
     agent = post(authenticated_client, '/items', {'name': 'Native agent', 'runtime': runtime}).json()['item']
     store().advertise('native-worker', [{'id': runtime, 'available': True}])
@@ -188,8 +190,10 @@ def test_native_fleet_session_reuses_action_and_live_session(fleet, authenticate
     assert one.status_code == 200, one.text
     two = post(authenticated_client, url, {})
     assert two.status_code == 200, two.text
-    assert one.json()['action_id'] == two.json()['action_id']
-    sessions = store().sessions(one.json()['action_id'])
+    assert one.json()['fleet_id'] == two.json()['fleet_id']
+    from modules.agents.sessions import source
+    sessions = store().sessions(source(agent['id'], 'frontend-test-user'))
+    assert not sessions[0]['action_id']
     assert len(sessions) == 1
     settings = sessions[0]['settings']
     assert settings['terminal_runtime'] == runtime
@@ -203,11 +207,11 @@ def test_native_fleet_session_reuses_action_and_live_session(fleet, authenticate
 def test_native_fleet_prepare_rejects_unavailable_and_private_agents(fleet, authenticated_client):
     from modules.hfl_corpus.action_agents import store
     agent = post(authenticated_client, '/items', {'name': 'Native agent', 'runtime': 'codex'}).json()['item']
-    assert post(authenticated_client, '/items/' + agent['id'] + '/prepare', {}).status_code == 422
+    assert post(authenticated_client, '/items/' + agent['id'] + '/prepare', {}).status_code in {404, 409}
 
     store().advertise('worker', [{'id': 'codex', 'available': True}])
     fleet.store().save({**agent, 'connector_user': 'another-owner'}, identity=agent['id'], version=agent['version'])
-    assert post(authenticated_client, '/items/' + agent['id'] + '/prepare', {}).status_code == 422
+    assert post(authenticated_client, '/items/' + agent['id'] + '/prepare', {}).status_code in {404, 409}
 
 
 @pytest.mark.parametrize('runtime', ['codex', 'claude'])
@@ -233,8 +237,9 @@ def test_native_fleet_open_session_button(fleet, authenticated_client, runtime):
         page.get_by_role('button', name='Open session', exact=True).click()
         page.wait_for_function('window.openedAgentSession')
         opened = page.evaluate('window.openedAgentSession')
-        assert opened[0] == 'actionable'
-        assert store().sessions(opened[1])[0]['settings']['terminal_runtime'] == runtime
+        assert opened[0] == 'fleet'
+        from modules.agents.sessions import source
+        assert store().sessions(source(opened[1], 'frontend-test-user'))[0]['settings']['terminal_runtime'] == runtime
         browser.close()
 
 

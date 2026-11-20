@@ -28,11 +28,12 @@
     catch (_) {
       throw new Error(`The agent service returned an empty or invalid response (HTTP ${response.status}). Reconnecting; your transcript is retained.`);
     }
-    if (!response.ok) throw new Error(typeof data.detail === 'string' ? data.detail : 'Agent request failed.');
+    if (!response.ok) throw Object.assign(new Error(typeof data.detail === 'string' ? data.detail : 'Agent request failed.'),{status:response.status});
     return data;
   }
-  function mount(container, sourceId, sidebar, summary, headerStatus) {
-    const source = '/actions/' + encodeURIComponent(sourceId);
+  function mount(container, sourceId, sidebar, summary, headerStatus, options={}) {
+    const fleet=!!options.fleet;
+    const source = (fleet?'/fleet/':'/actions/') + encodeURIComponent(sourceId);
     let disposed = false, session = null, cursor = 0, config, terminal, fit, polling, sessionList = [];
     let inputQueue = [], inputTimer, sendingInput = false, lastInputAt = 0;
     let socket, reconnectTimer, reconnectAttempts=0, rendering=Promise.resolve();
@@ -58,7 +59,7 @@
             if(!extension)throw new Error('Paste a PNG, JPEG, WebP or GIF image.');
             const name='pasted-'+crypto.randomUUID()+'.'+extension;
             body.append('files',file,name);
-            const uploaded=await api('/inputs/actionable/'+encodeURIComponent(sourceId),body);
+            const uploaded=await api(session?.fleet_id?'/sessions/'+item.identity+'/files':'/inputs/actionable/'+encodeURIComponent(sourceId),body);
             const attachment=uploaded.attachments.find(file=>file.name===name);
             if(!attachment)throw new Error('The uploaded image was not returned.');
             window.dispatchEvent(new CustomEvent('hfl:actions-updated'));
@@ -128,22 +129,26 @@
       parent.append(node); return node;
     }
     const configureRow=el('div',undefined,'agent-configure-row');details.append(configureRow);
-    button('Edit assignment',async()=>{if(!window.HflIdeas?.openAction)throw Error('Reload to edit the Action.');await window.HflIdeas.openAction(sourceId);},configureRow);
-    button('Execution settings', configure, configureRow);
+    if(!fleet)button('Edit assignment',async()=>{if(!window.HflIdeas?.openAction)throw Error('Reload to edit the Action.');await window.HflIdeas.openAction(sourceId);},configureRow);
+    if(!fleet)button('Execution settings', configure, configureRow);
     const defaults=el('a','Agent default settings');defaults.href='/agents';defaults.target='_blank';defaults.rel='noopener noreferrer';
     defaults.title='Open Agents to change shared execution defaults';configureRow.append(defaults);
     const newSessionButton=button('New session', async()=>attach(await api(source+'/sessions',launchOptions())));
     iconControl(newSessionButton,'New session','M12 5v14 M5 12h14');
-    button('Save session', async()=>{if(!session)throw new Error('Start a session first.');await api('/sessions/'+session.id,{saved:true});await refreshList();});
+    if(!fleet)button('Save session', async()=>{if(!session)throw new Error('Start a session first.');await api('/sessions/'+session.id,{saved:true});await refreshList();});
     button('Restore selected',async()=>{const id=sessions.value;if(!id)throw new Error('Select a session.');const selected=sessionList.find(s=>s.id===id);if(['queued','starting','idle','waiting','running'].includes(selected.state))attach(selected);else attach(await api(source+'/sessions',{restore:id}));});
-    button('Remove from history',async()=>{if(!session)return;if(!window.confirm('Remove this session from history? Attached files remain on the action.'))return;await api('/sessions/'+session.id+'/forget',{});session=null;cursor=0;terminal.reset();download.hidden=true;const data=await refreshList();if(data.sessions.length)attach(data.sessions[0]);else showEmpty();});
+    if(!fleet)button('Remove from history',async()=>{if(!session)return;if(!window.confirm('Remove this session from history? Attached files remain on the action.'))return;await api('/sessions/'+session.id+'/forget',{});session=null;cursor=0;terminal.reset();download.hidden=true;const data=await refreshList();if(data.sessions.length)attach(data.sessions[0]);else showEmpty();});
     button('End session',async()=>{if(session)await api('/sessions/'+session.id,{closed:true});});
+    const saveAction=fleet?button('Save as Action',saveAsAction):null;if(saveAction)saveAction.disabled=true;
+    if(fleet)button('Discard session…',discardSession);
+    const reviewSessionFiles=!fleet?button('Review session files',reviewFiles,actionsBody):null;if(reviewSessionFiles)reviewSessionFiles.hidden=true;
     const download = el('a','Download transcript'); download.hidden=true;
     for(const node of [...controls.querySelectorAll('button')]){
-      if(node!==newSessionButton && node!==fullscreenButton)actionsBody.append(node);
+      if(node!==newSessionButton && node!==fullscreenButton && node!==saveAction)actionsBody.append(node);
     }
     actionsBody.append(download);
-    controls.append(runtimePicker,sessions,newSessionButton,fullscreenButton,actionsMenu);
+    controls.append(runtimePicker,sessions,newSessionButton);if(saveAction)controls.append(saveAction);controls.append(fullscreenButton,actionsMenu);
+    if(fleet)runtimePicker.hidden=true;
     const viewport = el('div',undefined,'agent-terminal'); viewport.setAttribute('aria-label','Live CLI terminal');
     let pasteNoticeTimer;
     const pasteNotice=el('section',undefined,'agent-session-notice agent-paste-notice');pasteNotice.hidden=true;
@@ -215,7 +220,7 @@
       catch(e){emptyFeedback.textContent=e.message;throw e;}
     },emptyContent);
     startButton.classList.add('agenda-primary');
-    const emptyNote=el('small','Your action details are included. You choose what happens next.');
+    const emptyNote=el('small',fleet?'Your selected agent provides the session context. You choose what happens next.':'Your action details are included. You choose what happens next.');
     emptyContent.append(emptyNote,emptyFeedback);
     empty.append(emptyContent);
     if (sidebar) {
@@ -232,14 +237,14 @@
       if(headerStatus){headerStatus.textContent=config?.effective.action_assignment?.executable===false?'No session · '+(config.effective.action_assignment.mode==='manual'?'Manual action':'Execution unavailable'):'No session · Start to begin';headerStatus.dataset.state='empty';}
       empty.hidden=false;root.classList.add('agent-session-is-empty');
       sessionNotice.hidden=true;
-      status.textContent='No session started';emptyFeedback.textContent=config?.effective.action_assignment?.reason||'Run the saved Action from the left panel, or start an interactive session.';
+      status.textContent='No session started';emptyFeedback.textContent=config?.effective.action_assignment?.reason||(fleet?'No Action is created until you choose Save as Action.':'Run the saved Action from the left panel, or start an interactive session.');
       if(terminal)terminal.options.disableStdin=true;
     }
     function showConfig() {
       const s=config.effective, assignment=s.action_assignment;
-      const unavailable=assignment?.executable===false&&!runtimePicker.value, manual=assignment?.mode==='manual';
+      const unavailable=assignment?.executable===false&&(!runtimePicker.value||fleet), manual=assignment?.mode==='manual';
       newSessionButton.disabled=unavailable;
-      startButton.disabled=false;
+      startButton.disabled=fleet&&unavailable;
       startButton.textContent=unavailable?(manual?'Assign an agent':'Change assignment'):'Start session';
       emptyHeading.textContent=unavailable?(manual?'Choose an agent to start a session':'Session unavailable for this agent'):'Ready to work on this action?';
       emptyDescription.textContent=unavailable?(manual?'This action is manual. Assign an active Hermes agent or Butler to work on it here.':'This terminal supports active Hermes agents and Butler. Change the assignment to continue here, or use the assigned provider’s app.'):'Start a session to ask questions, refine your instructions, or work through the next step with your selected CLI.';
@@ -250,6 +255,15 @@
       description.replaceChildren();
       for(const [label,value] of [['Agent',assignment?.name||'Hermes'],['Specialist',assignment?.specialist_profile?.name||'None · optional'],['Assignment',assignment?.mode||'Shared defaults'],['Configuration',config.effective.fleet_agent?.name||config.card.preset||'Shared defaults'],['Profile',s.hermes_profile||'Worker profile'],['Permissions',s.agent_mode],['Repository',s.agent_repository||'Isolated worktree'],['Idle expiry',s.agent_session_expiry_minutes+' minutes']])description.append(el('dt',label),el('dd',value));
       if(session?.settings?.fleet_agent){description.append(el('dt','Session agent'),el('dd',session.settings.fleet_agent.name),el('dt','Session specialist'),el('dd',session.settings.fleet_agent.specialist_profile?.name||'None'));}
+      if(fleet){
+        emptyHeading.textContent='Start a session with '+config.agent.name;
+        emptyDescription.textContent='Work freely, then save as an Action when needed.';
+        emptyFeedback.textContent=assignment?.reason||'No Action is created until you choose Save as Action.';
+        if(saveAction){saveAction.disabled=!session;saveAction.textContent=session?.action_id?'Open Action':'Save as Action';}
+        if(summary){summary.replaceChildren(el('span',session?.action_id?'LINKED TO ACTION':'UNLINKED SESSION'),el('h3',session?.title||config.agent.name),el('p','Agent: '+config.agent.name),el('p','Spaces are recorded from this Fleet agent when the session starts. Closing this dialog leaves the CLI running.'));
+          button('Review session files',reviewFiles,summary);
+        }
+      }
       if (summary && config.action) {
         const action=config.action;
         summary.replaceChildren(el('span','ACTION'),el('h3',action.title));
@@ -298,6 +312,47 @@
         summary.append(lists);
       }
     }
+    function sessionDialog(title){
+      const dialog=el('dialog',undefined,'agenda-dialog agent-config-dialog'),header=el('header',undefined,'agenda-dialog-header'),form=el('form',undefined,'agenda-form-body');
+      header.append(el('h2',title));button('Close',()=>dialog.close(),header);dialog.append(header,form);document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();return {dialog,form};
+    }
+    async function reviewFiles(){
+      if(!session)throw Error('Start a session first.');
+      const data=await api('/sessions/'+session.id+'/files'),{form}=sessionDialog('Session files');
+      form.append(el('p','Files remain available here. Discard does not undo changes in the worker checkout or external services.'));
+      for(const file of data.attachments){const link=el('a',file.name);link.href='/hfl-corpus/agent-bridge/sessions/'+session.id+'/files/'+encodeURIComponent(file.id);link.download=file.name;form.append(link,el('br'));}
+      if(!data.attachments.length)form.append(el('p','No uploaded or collected output files. Uncollected files may still exist in the worker checkout.'));
+    }
+    async function saveAsAction(){
+      if(!session)throw Error('Start a session first.');
+      if(session.action_id){await window.HflIdeas.openAction(session.action_id);return;}
+      const identity=session.id,data=await api('/sessions/'+identity+'/files'),{dialog,form}=sessionDialog('Save session as Action');
+      form.append(el('p','Create an In Review Action assigned to '+config.agent.name+'. It uses the Spaces recorded when this session started. Saving keeps this terminal running and does not execute a prompt.'));
+      const values={};
+      for(const [key,label,limit] of [['title','Title',200],['expected_outcome','Expected outcome',3000],['notes','Notes',6000]]){const row=el('label',label),input=el(key==='title'?'input':'textarea');input.name=key;input.maxLength=limit;input.required=key==='title';input.value=key==='title'?session.title:'';row.append(input);form.append(row);values[key]=input;}
+      const selected=[];
+      if(data.attachments.length)form.append(el('p','Choose session files to attach to the Action:'));
+      for(const file of data.attachments){const label=el('label'),check=el('input');check.type='checkbox';check.value=file.id;label.append(check,document.createTextNode(file.name));form.append(label);selected.push(check);}
+      form.append(el('p','The session history stays linked. Use Download transcript if you need a portable copy.'));
+      const feedback=el('p');feedback.setAttribute('role','alert');form.append(feedback);
+      const save=el('button','Save as Action');save.type='submit';form.append(save);let retained;
+      form.onsubmit=async event=>{event.preventDefault();save.disabled=true;retained ||= {...Object.fromEntries(Object.entries(values).map(([k,v])=>[k,v.value])),file_ids:selected.filter(c=>c.checked).map(c=>c.value)};
+        try{const result=await api('/sessions/'+identity+'/save-action',retained);if(session?.id===identity){session.action_id=result.action_id;showConfig();}window.dispatchEvent(new Event('hfl:actions-updated'));await refreshList();dialog.close();}
+        catch(e){feedback.textContent=e.message+' Retry saves the same Action and selected files.';Object.values(values).forEach(input=>input.readOnly=true);selected.forEach(input=>input.disabled=true);save.textContent='Retry save';}finally{save.disabled=false;}
+      };
+    }
+    async function discardSession(){
+      if(!session)return;
+      if(session.action_id)throw Error('This session belongs to an Action. Use End session to stop it.');
+      if(!window.confirm('Stop and discard this unlinked session and its HARQIS transcript/file history? Review or download session files first. This does not undo workspace edits, external actions, or provider-side history.'))return;
+      const identity=session.id;
+      for(let attempt=0;attempt<15;attempt++){
+        let result;try{result=await api('/sessions/'+identity+'/discard',{});}catch(e){if(e.status!==404)throw e;result={pending:false};}
+        if(!result.pending){if(socket){socket.onclose=null;socket.close();socket=null;}clearTimeout(reconnectTimer);session=null;cursor=0;terminal.reset();download.hidden=true;const data=await refreshList();if(data.sessions.length)attach(data.sessions[0]);else{showEmpty();showConfig();}window.dispatchEvent(new Event('hfl:agent-updated'));return;}
+        status.textContent='Stopping session before discarding…';await new Promise(resolve=>setTimeout(resolve,1000));if(disposed)return;
+      }
+      throw Error('Stop requested. Waiting for the worker; retry Discard once it has stopped. History is retained meanwhile.');
+    }
     async function refreshAction(){const updated=await api(source+'/configuration');if(!disposed){config=updated;showConfig();}}
     const actionChanged=()=>{refreshAction().catch(e=>{if(!disposed){error.textContent=e.message;error.hidden=false;}});};
     const editorClosed=event=>{if(event.target!==container.closest('dialog'))actionChanged();};
@@ -341,7 +396,7 @@
     function attach(item){
       empty.hidden=true;root.classList.remove('agent-session-is-empty');
       clearTimeout(reconnectTimer);if(socket){socket.onclose=null;socket.close();socket=null;}
-      session=item;cursor=0;replayingOutput=false;terminal?.reset();download.hidden=false;download.href='/hfl-corpus/agent-bridge/sessions/'+item.id+'/transcript';
+      session=item;if(reviewSessionFiles)reviewSessionFiles.hidden=!item.fleet_id;cursor=0;replayingOutput=false;terminal?.reset();download.hidden=false;download.href='/hfl-corpus/agent-bridge/sessions/'+item.id+'/transcript';
       const runtime=item.settings?.terminal_runtime||'hermes';
       const selected=JSON.stringify({runtime,host:item.settings?.agent_host});
       if([...runtimePicker.options].some(option=>option.value===selected))runtimePicker.value=selected;
@@ -398,7 +453,7 @@
         }
         const labels={queued:'Waiting for worker',starting:'Starting CLI…',idle:'Ready for commands',waiting:'Waiting for execution capacity',running:'CLI active',expired:'Expired · transcript archived',closed:'Closed · transcript archived',failed:'Stopped · transcript available'};
         status.textContent=session.error||labels[session.state]||session.state;
-        connectionState(session);
+        connectionState(session);if(fleet&&saveAction){saveAction.textContent=session.action_id?"Open Action":"Save as Action";}
       };
       ws.onclose=()=>{
         if(disposed||socket!==ws)return;

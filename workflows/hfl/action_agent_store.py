@@ -36,7 +36,27 @@ class ActionAgentStore(AgentBridgeStore):
                     PRIMARY KEY(session,name,digest));
                 CREATE TABLE IF NOT EXISTS action_terminal_hosts (
                     host TEXT PRIMARY KEY, updated TEXT NOT NULL, capabilities TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS terminal_promotions (
+                    session TEXT PRIMARY KEY, payload TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS terminal_locks (
+                    key TEXT PRIMARY KEY, token TEXT NOT NULL, expires TEXT NOT NULL);
             ''')
+            db.execute('BEGIN IMMEDIATE')
+            columns = {r['name'] for r in db.execute('PRAGMA table_info(action_agent_sessions)')}
+            for column in ('owner', 'fleet_id', 'action_id', 'restored_from'):
+                if column not in columns:
+                    db.execute(f"ALTER TABLE action_agent_sessions ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+
+    def lock(self, key, token, seconds=180):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            db.execute('DELETE FROM terminal_locks WHERE expires<?', (now(),))
+            return db.execute('INSERT OR IGNORE INTO terminal_locks VALUES (?,?,?)',
+                              (key, token, (datetime.now(timezone.utc) + timedelta(seconds=seconds)).isoformat())).rowcount == 1
+
+    def unlock(self, key, token):
+        with self.connect() as db:
+            db.execute('DELETE FROM terminal_locks WHERE key=? AND token=?', (key, token))
 
     def configs(self):
         with self.connect() as db:
@@ -74,19 +94,20 @@ class ActionAgentStore(AgentBridgeStore):
 
     def sessions(self, source_id=None):
         with self.connect() as db:
-            rows = db.execute('SELECT * FROM action_agent_sessions WHERE (? IS NULL OR source_id=?) ORDER BY created DESC',
-                              (source_id, source_id)).fetchall()
+            rows = db.execute('SELECT * FROM action_agent_sessions WHERE (? IS NULL OR source_id=? OR action_id=?) ORDER BY created DESC',
+                              (source_id, source_id, source_id)).fetchall()
         return [self.session_decode(row) for row in rows]
 
-    def start_session(self, source_id, settings, title, restore=None):
+    def start_session(self, source_id, settings, title, restore=None, *, owner='', fleet_id=''):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
-            live = db.execute("SELECT * FROM action_agent_sessions WHERE source_id=? AND state IN ('queued','starting','idle','waiting','running')", (source_id,)).fetchone()
+            live = db.execute("SELECT * FROM action_agent_sessions WHERE (source_id=? OR action_id=?) AND state IN ('queued','starting','idle','waiting','running')", (source_id, source_id)).fetchone()
             if live:
                 return self.session_decode(live)
             native = ''
+            action_id = ''
             if restore:
-                previous = db.execute('SELECT * FROM action_agent_sessions WHERE id=? AND source_id=?', (restore, source_id)).fetchone()
+                previous = db.execute('SELECT * FROM action_agent_sessions WHERE id=? AND (source_id=? OR action_id=?)', (restore, source_id, source_id)).fetchone()
                 if not previous or not previous['native_id']:
                     raise BridgeConflict('This session has no native context to restore. Its transcript remains available.')
                 native = previous['native_id']
@@ -95,9 +116,13 @@ class ActionAgentStore(AgentBridgeStore):
                 for key in ('hermes_profile', 'agent_host', 'terminal_runtime'):
                     settings[key] = original.get(key, '')
                 settings['agent_host'] = previous['worker'] or settings['agent_host']
+                source_id, owner, fleet_id, action_id = previous['source_id'], previous['owner'], previous['fleet_id'], previous['action_id']
+                if db.execute("SELECT 1 FROM action_agent_sessions WHERE source_id=? AND state IN ('queued','starting','idle','waiting','running')", (source_id,)).fetchone():
+                    raise BridgeConflict('End the agent\'s other live session before restoring this Action session.')
             identity, timestamp = uuid.uuid4().hex, now()
             db.execute('INSERT INTO action_agent_sessions(id,source_id,state,settings,title,native_id,heartbeat,activity,created) VALUES (?,?,?,?,?,?,?,?,?)',
                        (identity, source_id, 'queued', json.dumps(settings), title[:200], native, timestamp, timestamp, timestamp))
+            db.execute('UPDATE action_agent_sessions SET owner=?,fleet_id=?,action_id=?,restored_from=? WHERE id=?', (owner, fleet_id, action_id, restore or '', identity))
         return self.session(identity)
 
     def edit_session(self, identity, **fields):
@@ -160,6 +185,7 @@ class ActionAgentStore(AgentBridgeStore):
             if row['state'] not in {'closed','expired','failed'}:
                 raise BridgeConflict('End the session before removing it from saved history.')
             db.execute('DELETE FROM action_agent_io WHERE session=?', (identity,))
+            db.execute('DELETE FROM terminal_promotions WHERE session=?', (identity,))
             db.execute('DELETE FROM action_agent_sessions WHERE id=?', (identity,))
 
     def claim_session(self, identity, worker):

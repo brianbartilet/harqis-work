@@ -11,11 +11,12 @@ Hermes, retaining action context, transcripts and isolated repository workspaces
 **Trigger:** manually start/open a session from an Action's agent workspace.
 The CLI selector chooses a runtime and a worker for a new session; it does not
 change the Action's automatic assignment or reasoning-model configuration.
-Fleet's Codex and Claude agent panels also expose **Open session**. This creates
-or reuses the agent's Sessions action and opens its native CLI in the same dialog.
+Fleet's Hermes, Codex and Claude agent panels expose **Open session**. This
+creates an owner-scoped, unlinked session or reopens that agent's history in the
+same dialog. It never creates an Action just to open a terminal.
 Local Codex connectors stay pinned to the server they observe; manual profiles
 use their configured host, the local available host, or a single available worker.
-Ambiguous or unavailable workers are rejected before creating an action. Native
+Ambiguous or unavailable workers are rejected before starting a terminal. Native
 CLI access does not enable automated Action execution for these providers.
 
 **Ownership:** the worker owns the PTY process. The frontend authenticates and
@@ -33,6 +34,34 @@ does not submit the saved action prompt.
 preserve ordered replay and input identity, enforce existing worker leases and
 capacity, show unavailable runtimes with reasons, and verify local desktop/mobile
 interaction plus focused protocol/worker regression tests.
+
+## Fleet session lifecycle
+
+Entry: Agents Fleet → selected agent → Open session. Action-launched sessions
+retain their existing Action association and controls.
+
+- Close hides the dialog and leaves the CLI running. Fleet shows Session active.
+  End session stops the CLI while retaining its history. Unlinked is not ephemeral:
+  terminal I/O and input files remain stored until explicitly discarded.
+- Save as Action asks for a title, expected outcome, notes and selected files.
+  The Action inherits the Fleet agent and its Spaces, starts In Review, and has
+  automatic execution disabled. The same terminal ID, settings, native context
+  and worker workspace remain intact. Open Action replaces Save as Action.
+- Promotion freezes the first submitted payload and uses a stable canonical
+  request ID. Lost responses and partial file-copy failures retry the same Action.
+  A pending promotion blocks discard until reconciled. Files uploaded or produced
+  afterward remain in the session; only files selected at save time are copied.
+- Discard is available only for unlinked sessions. It requests process shutdown,
+  waits for a terminal end state, then removes HARQIS transcript and file-manifest
+  history. It does not undo external actions, repository edits, provider history,
+  previously delivered audit events, or remove shared content-addressed blobs.
+  Review session files / Download transcript provide explicit export first.
+- Fleet session scope is owner + agent. There is at most one active terminal per
+  scope; the same session appears in its linked Action after promotion. Restore
+  retains provider/host affinity and requires a captured native session ID.
+- Existing auto-created “Sessions” Actions are preserved. No cards are silently
+  migrated or deleted. Linking an unlinked session to an existing Action is a
+  possible later extension; the implemented save flow creates a new Action.
 
 ## Architecture and limits
 
