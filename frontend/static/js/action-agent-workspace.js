@@ -1,6 +1,14 @@
 (() => {
   'use strict';
   const el = (tag, text, cls) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (cls) node.className = cls; return node; };
+  function iconControl(node, label, path) {
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');
+    svg.setAttribute('fill','none');svg.setAttribute('stroke','currentColor');
+    svg.setAttribute('stroke-width','1.7');svg.setAttribute('stroke-linecap','round');svg.setAttribute('stroke-linejoin','round');
+    const shape=document.createElementNS(svg.namespaceURI,'path');shape.setAttribute('d',path);svg.append(shape);
+    node.replaceChildren(svg);node.classList.add('agent-toolbar-icon');node.title=label;node.setAttribute('aria-label',label);
+  }
   const fields = [
     ['agent_mode','Execution permissions','select'], ['hermes_profile','Hermes profile'],
     ['agent_toolsets','Toolsets / MCP servers'], ['agent_model','Model'], ['agent_provider','Provider'],
@@ -27,6 +35,16 @@
     const source = '/actions/' + encodeURIComponent(sourceId);
     let disposed = false, session = null, cursor = 0, config, terminal, fit, polling, sessionList = [];
     let inputQueue = [], inputTimer, sendingInput = false, lastInputAt = 0;
+    let socket, reconnectTimer, reconnectAttempts=0, rendering=Promise.resolve();
+    const requests=new Map();
+    function streamRequest(type, payload={}) {
+      if(socket?.readyState!==WebSocket.OPEN)return Promise.reject(new Error('Disconnected. Wait for reconnection before typing.'));
+      const key=payload.key||crypto.randomUUID();
+      return new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>{requests.delete(key);reject(new Error('Delivery acknowledgement missing. Check the terminal before retrying.'));},10000);
+        requests.set(key,{resolve,reject,timer});socket.send(JSON.stringify({type,...payload,key}));
+      });
+    }
     async function flushInput() {
       if(sendingInput || !inputQueue.length)return;
       sendingInput=true;
@@ -47,9 +65,9 @@
             await api('/sessions/'+item.identity+'/images',{attachment_id:attachment.id,key:crypto.randomUUID()});
           }
           showPasteNotice('Image attached; file reference queued. Add your instructions, then press Enter.');
-        } else await api('/sessions/'+item.identity+'/input',{data:item.data,key:item.key});
+        } else {if(session?.id!==item.identity)throw new Error('Session changed. Input was not sent.');await streamRequest('input',{data:item.data,key:item.key});}
       }
-      catch(e) {error.textContent='Input was not delivered: '+e.message;error.hidden=false;if(item.files)showPasteNotice('Image paste did not complete. See the error above.');}
+      catch(e) {inputQueue=[];error.textContent='Input delivery needs review: '+e.message;error.hidden=false;if(item.files)showPasteNotice('Image paste did not complete. See the error above.');}
       finally {sendingInput=false;if(inputQueue.length)void flushInput();}
     }
     const root = el('section', undefined, 'action-agent-workspace'); container.append(root);
@@ -58,6 +76,50 @@
     const details = el('details', undefined, 'agent-details'); details.append(el('summary','Agent details'));
     const description = el('dl',undefined,'agent-config-summary'); details.append(description);
     const controls = el('div', undefined, 'agent-terminal-controls');
+    const runtimePicker=el('select');runtimePicker.setAttribute('aria-label','CLI runtime and worker');
+    runtimePicker.append(new Option('Assigned Hermes · default worker',''));
+    controls.append(runtimePicker);
+    const actionsMenu=el('details',undefined,'agent-terminal-actions');
+    const actionsToggle=el('summary','Actions');
+    iconControl(actionsToggle,'Actions','M4 6h16 M4 12h16 M4 18h16');
+    const actionsBody=el('div',undefined,'agent-terminal-actions-body');
+    actionsMenu.append(actionsToggle,actionsBody);
+    const runtimeStatus=el('p','Checking CLI workers…','agent-terminal-status');actionsBody.append(runtimeStatus);
+    runtimePicker.title='Select a CLI and worker for a new session';
+    function dismissActions(event){if(!actionsMenu.contains(event.target))actionsMenu.open=false;}
+    document.addEventListener('pointerdown',dismissActions);
+    actionsMenu.addEventListener('keydown',event=>{if(event.key==='Escape'&&actionsMenu.open){event.preventDefault();event.stopPropagation();actionsMenu.open=false;actionsToggle.focus();}});
+    actionsMenu.addEventListener('focusout',event=>{if(!actionsMenu.contains(event.relatedTarget))actionsMenu.open=false;});
+    actionsBody.addEventListener('click',event=>{if(event.target.closest('button,a')){actionsMenu.open=false;actionsToggle.focus();}});
+    function launchOptions(){return runtimePicker.value?JSON.parse(runtimePicker.value):{};}
+    async function refreshRuntimes(){
+      const data=await api('/terminal-runtimes');if(disposed)return;
+      const selected=runtimePicker.value;
+      runtimePicker.replaceChildren(new Option('Assigned Hermes · default worker',''));
+      for(const host of data.hosts)for(const runtime of host.runtimes){
+        const option=new Option(runtime.name+' · '+host.host+(runtime.available?'':' · '+runtime.reason),JSON.stringify({runtime:runtime.id,host:host.host}));
+        option.disabled=!runtime.available;runtimePicker.append(option);
+      }
+      if([...runtimePicker.options].some(o=>o.value===selected))runtimePicker.value=selected;
+      runtimeStatus.textContent=data.hosts.length?'Select a CLI for a new session.':'No live workers have reported CLI availability.';
+    }
+    button('Refresh CLIs',refreshRuntimes,actionsBody);
+    let ownsFullscreen=false;
+    const fullscreenButton=button('Full screen',async()=>{
+      // A <dialog> cannot request fullscreen. Expand its document instead.
+      if(document.fullscreenElement)await document.exitFullscreen();
+      else {await document.documentElement.requestFullscreen();ownsFullscreen=true;fullscreenChanged();}
+    });
+    iconControl(fullscreenButton,'Full screen','M8 3H3v5 M16 3h5v5 M3 16v5h5 M21 16v5h-5');
+    function fullscreenChanged(){
+      const expanded=ownsFullscreen&&document.fullscreenElement===document.documentElement;
+      (root.closest('.action-agent-dialog')||root).classList.toggle('agent-fullscreen',expanded);
+      iconControl(fullscreenButton,expanded?'Exit full screen':'Full screen',expanded?'M3 8h5V3 M21 8h-5V3 M8 21v-5H3 M16 21v-5h5':'M8 3H3v5 M16 3h5v5 M3 16v5h5 M21 16v5h-5');
+      fullscreenButton.setAttribute('aria-pressed',String(expanded));
+      if(!document.fullscreenElement)ownsFullscreen=false;
+    }
+    document.addEventListener('fullscreenchange',fullscreenChanged);
+    runtimePicker.onchange=()=>showConfig();
     const sessions = el('select'); sessions.setAttribute('aria-label','Agent session'); controls.append(sessions);
     function button(label, fn, parent=controls) {
       const node = el('button',label); node.type='button';
@@ -69,13 +131,19 @@
     button('Execution settings', configure, configureRow);
     const defaults=el('a','Agent default settings');defaults.href='/agents';defaults.target='_blank';defaults.rel='noopener noreferrer';
     defaults.title='Open Agents to change shared execution defaults';configureRow.append(defaults);
-    const newSessionButton=button('New session', async()=>attach(await api(source+'/sessions',{})));
+    const newSessionButton=button('New session', async()=>attach(await api(source+'/sessions',launchOptions())));
+    iconControl(newSessionButton,'New session','M12 5v14 M5 12h14');
     button('Save session', async()=>{if(!session)throw new Error('Start a session first.');await api('/sessions/'+session.id,{saved:true});await refreshList();});
     button('Restore selected',async()=>{const id=sessions.value;if(!id)throw new Error('Select a session.');const selected=sessionList.find(s=>s.id===id);if(['queued','starting','idle','waiting','running'].includes(selected.state))attach(selected);else attach(await api(source+'/sessions',{restore:id}));});
     button('Remove from history',async()=>{if(!session)return;if(!window.confirm('Remove this session from history? Attached files remain on the action.'))return;await api('/sessions/'+session.id+'/forget',{});session=null;cursor=0;terminal.reset();download.hidden=true;const data=await refreshList();if(data.sessions.length)attach(data.sessions[0]);else showEmpty();});
     button('End session',async()=>{if(session)await api('/sessions/'+session.id,{closed:true});});
-    const download = el('a','Download transcript'); download.hidden=true; controls.append(download);
-    const viewport = el('div',undefined,'agent-terminal'); viewport.setAttribute('aria-label','Native Hermes terminal');
+    const download = el('a','Download transcript'); download.hidden=true;
+    for(const node of [...controls.querySelectorAll('button')]){
+      if(node!==newSessionButton && node!==fullscreenButton)actionsBody.append(node);
+    }
+    actionsBody.append(download);
+    controls.append(runtimePicker,sessions,newSessionButton,fullscreenButton,actionsMenu);
+    const viewport = el('div',undefined,'agent-terminal'); viewport.setAttribute('aria-label','Live CLI terminal');
     let pasteNoticeTimer;
     const pasteNotice=el('section',undefined,'agent-session-notice agent-paste-notice');pasteNotice.hidden=true;
     pasteNotice.setAttribute('aria-label','Paste notification');
@@ -108,13 +176,14 @@
     const noticeText=el('p');noticeText.setAttribute('role','status');sessionNotice.append(noticeText);
     const resumeButton=button('Restore session',async()=>{
       if(!session)return;
-      attach(await api(source+'/sessions',session.native_id?{restore:session.id}:{}));
+      attach(await api(source+'/sessions',session.native_id?{restore:session.id}:launchOptions()));
       terminal?.focus();
     },sessionNotice);
     function connectionState(item){
       if(headerStatus){
         headerStatus.textContent=({queued:'Waiting for worker',starting:'Connecting…',idle:'Ready to type',waiting:'Waiting for capacity',running:'Working…',failed:'Disconnected · Restore session',closed:'Closed · Read-only',expired:'Expired · Restore session'})[item.state]||item.state;
         headerStatus.dataset.state=item.state;
+        if(item.state==='running'&&['codex','claude'].includes(item.settings?.terminal_runtime))headerStatus.textContent='CLI active';
       }
       const ended=['failed','closed','expired'].includes(item.state);
       sessionNotice.hidden=!ended;
@@ -127,21 +196,21 @@
         terminal.options.cursorBlink=!terminal.options.disableStdin;
       }
     }
-    const hint = el('p','Native Hermes CLI · paste images into the terminal to attach them; press Enter when your prompt is ready. Use /help for commands. Closing this dialog leaves execution running.','agent-terminal-hint');
+    const hint = el('p','Live CLI · paste images into the terminal to attach them; press Enter when your prompt is ready. Use /help for commands. Closing this dialog leaves execution running.','agent-terminal-hint');
     const empty = el('section',undefined,'agent-session-empty'); empty.hidden=true;
     const emptyContent=el('div');
     const icon=el('span','>_','agent-session-empty-icon'); icon.setAttribute('aria-hidden','true');
     const emptyHeading=el('h3','Ready to work on this action?');
-    const emptyDescription=el('p','Start a session to ask questions, refine your instructions, or work through the next step with Hermes.');
+    const emptyDescription=el('p','Start a session to ask questions, refine your instructions, or work through the next step with your selected CLI.');
     emptyContent.append(icon,emptyHeading,emptyDescription);
     const emptyFeedback=el('p',''); emptyFeedback.setAttribute('role','status');
     const startButton=button('Start session',async()=>{
-      if(config?.effective.action_assignment?.executable===false){
+      if(config?.effective.action_assignment?.executable===false&&!runtimePicker.value){
         if(!window.HflIdeas?.openAction)throw Error('Reload to edit the Action assignment.');
         await window.HflIdeas.openAction(sourceId);return;
       }
       emptyFeedback.textContent='Connecting to '+(config?.effective.action_assignment?.name||'Hermes')+'…';
-      try {attach(await api(source+'/sessions',{}));terminal?.focus();}
+      try {attach(await api(source+'/sessions',launchOptions()));terminal?.focus();}
       catch(e){emptyFeedback.textContent=e.message;throw e;}
     },emptyContent);
     startButton.classList.add('agenda-primary');
@@ -167,12 +236,12 @@
     }
     function showConfig() {
       const s=config.effective, assignment=s.action_assignment;
-      const unavailable=assignment?.executable===false, manual=assignment?.mode==='manual';
+      const unavailable=assignment?.executable===false&&!runtimePicker.value, manual=assignment?.mode==='manual';
       newSessionButton.disabled=unavailable;
       startButton.disabled=false;
       startButton.textContent=unavailable?(manual?'Assign an agent':'Change assignment'):'Start session';
       emptyHeading.textContent=unavailable?(manual?'Choose an agent to start a session':'Session unavailable for this agent'):'Ready to work on this action?';
-      emptyDescription.textContent=unavailable?(manual?'This action is manual. Assign an active Hermes agent or Butler to work on it here.':'This terminal supports active Hermes agents and Butler. Change the assignment to continue here, or use the assigned provider’s app.'):'Start a session to ask questions, refine your instructions, or work through the next step with Hermes.';
+      emptyDescription.textContent=unavailable?(manual?'This action is manual. Assign an active Hermes agent or Butler to work on it here.':'This terminal supports active Hermes agents and Butler. Change the assignment to continue here, or use the assigned provider’s app.'):'Start a session to ask questions, refine your instructions, or work through the next step with your selected CLI.';
       emptyNote.hidden=unavailable;
       emptyFeedback.hidden=unavailable;
       hint.hidden=unavailable&&!session;
@@ -270,10 +339,15 @@
     }
     function attach(item){
       empty.hidden=true;root.classList.remove('agent-session-is-empty');
+      clearTimeout(reconnectTimer);if(socket){socket.onclose=null;socket.close();socket=null;}
       session=item;cursor=0;showConfig();terminal?.reset();download.hidden=false;download.href='/hfl-corpus/agent-bridge/sessions/'+item.id+'/transcript';
+      const runtime=item.settings?.terminal_runtime||'hermes';
+      const selected=JSON.stringify({runtime,host:item.settings?.agent_host});
+      if([...runtimePicker.options].some(option=>option.value===selected))runtimePicker.value=selected;
+      hint.textContent=runtime.toUpperCase()+' · Closing this view leaves the CLI running. Paste images to queue file references; press Enter when ready.'+(['codex','claude'].includes(runtime)?' This CLI reserves a slot until ended and uses its host configuration.':'');
       connectionState(item);
       if(![...sessions.options].some(o=>o.value===item.id))sessions.append(new Option(new Date(item.created).toLocaleString()+' · '+item.state,item.id));
-      sessions.value=item.id;status.textContent='Loading session…';
+      sessions.value=item.id;status.textContent='Loading session…';connectStream();
       if(terminal)api('/sessions/'+item.id,{cols:Math.max(10,Math.min(300,terminal.cols)),rows:Math.max(10,Math.min(300,terminal.rows))}).catch(()=>{});
     }
     async function refreshList(){
@@ -284,51 +358,70 @@
       sessions.value=selected||session?.id||'';
       return data;
     }
-    let lastListRefresh=0, pollingBusy=false, pollingError='', pollFailures=0;
-    async function poll(){
-      if(disposed||pollingBusy)return;
-      pollingBusy=true;
-      try{
-        if(session){
-          const identity=session.id;
-          const data=await api('/sessions/'+identity+'?after='+cursor);
-          if(disposed||session?.id!==identity)return;
-          session=data.session;
-          for(const chunk of data.output){terminal.write(chunk.data);cursor=chunk.seq;}
-          const labels={queued:'Waiting for a worker to connect…',starting:'Starting Hermes…',idle:'Ready for commands',waiting:'Worker capacity reached — waiting for an execution slot…',running:'Running — waiting for reply',expired:'Session expired — transcript archived',closed:'Session closed — transcript archived',failed:'Session stopped — transcript available'};
-          status.textContent=session.error||labels[session.state]||session.state;
-          connectionState(session);
+    function connectStream(){
+      if(disposed||!session)return;
+      const identity=session.id;
+      const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'/hfl-corpus/agent-bridge/sessions/'+identity+'/stream');
+      socket=ws;
+      ws.onopen=()=>{
+        ws.send(JSON.stringify({csrf:JSON.parse(document.querySelector('[data-memory-csrf]')?.textContent||'""'),after:cursor}));
+      };
+      ws.onmessage=event=>{
+        if(disposed||socket!==ws||session?.id!==identity)return;
+        const data=JSON.parse(event.data);
+        if(data.type==='ack'||data.type==='error'){
+          const request=requests.get(data.key);
+          if(request){clearTimeout(request.timer);requests.delete(data.key);data.type==='ack'?request.resolve(data.result):request.reject(new Error(data.message));}
+          return;
         }
-        if(Date.now()-lastListRefresh>=4000){lastListRefresh=Date.now();const data=await refreshList();if(data&&session&&session.state==='waiting')status.textContent+=' '+data.busy+'/'+data.capacity+' executions active.';}
-        if(pollingError && error.textContent===pollingError)error.hidden=true;
-        pollingError='';pollFailures=0;
-      }catch(e){pollFailures++;status.textContent='Reconnecting…';if(headerStatus){headerStatus.textContent='Reconnecting…';headerStatus.dataset.state='failed';}pollingError=e.message;error.textContent=pollingError;error.hidden=false;}
-      finally{pollingBusy=false;if(!disposed)polling=setTimeout(poll,pollFailures?Math.min(1000*2**Math.min(pollFailures-1,4),10000):(Date.now()-lastInputAt<3000||session?.state==='running'?75:400));}
+        if(data.type!=='snapshot')return;
+        reconnectAttempts=0;session=data.session;
+        const chunks=data.output.filter(chunk=>chunk.seq>cursor);
+        if(chunks.length){
+          rendering=new Promise(resolve=>terminal.write(chunks.map(chunk=>chunk.data).join(''),()=>{
+            if(!disposed&&session?.id===identity){
+              cursor=chunks.at(-1).seq;
+              if(socket===ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify({type:'output_ack',after:cursor}));
+            }
+            resolve();
+          }));
+        }
+        const labels={queued:'Waiting for worker',starting:'Starting CLI…',idle:'Ready for commands',waiting:'Waiting for execution capacity',running:'CLI active',expired:'Expired · transcript archived',closed:'Closed · transcript archived',failed:'Stopped · transcript available'};
+        status.textContent=session.error||labels[session.state]||session.state;
+        connectionState(session);
+      };
+      ws.onclose=()=>{
+        if(disposed||socket!==ws)return;
+        terminal.options.disableStdin=true;status.textContent='Reconnecting…';
+        for(const request of requests.values()){clearTimeout(request.timer);request.reject(new Error('Connection lost. Delivery may have occurred; check before retrying.'));}requests.clear();
+        reconnectTimer=setTimeout(()=>void rendering.then(connectStream),Math.min(1000*2**reconnectAttempts++,10000));
+      };
     }
     const observer=new ResizeObserver(()=>{
       if(!terminal||!fit||disposed)return;
-      fit.fit();terminal.resize(Math.max(10,Math.min(300,terminal.cols)),Math.max(10,Math.min(300,terminal.rows)));if(session)api('/sessions/'+session.id,{cols:terminal.cols,rows:terminal.rows}).catch(()=>{});
+      fit.fit();terminal.resize(Math.max(10,Math.min(300,terminal.cols)),Math.max(10,Math.min(300,terminal.rows)));if(session)streamRequest('resize',{cols:terminal.cols,rows:terminal.rows}).catch(()=>{});
     });
     (async()=>{
       try{
         config=await api(source+'/configuration');if(disposed)return;showConfig();
+        await refreshRuntimes();
         terminal=new Terminal({cursorBlink:true,convertEol:false,scrollback:10000,fontSize:14,fontFamily:'Consolas, "Liberation Mono", Menlo, monospace',lineHeight:1.15,theme:{background:'#080f1e',foreground:'#e2e8f0'}});
         fit=new FitAddon.FitAddon();terminal.loadAddon(fit);terminal.open(viewport);fit.fit();observer.observe(viewport);
         terminal.onData(data=>{
           if(!session)return;lastInputAt=Date.now();
-          if(!pollingBusy){clearTimeout(polling);polling=setTimeout(poll,0);}
           const pending=inputQueue.at(-1);
           if(pending?.identity===session.id && !pending.files && pending.data.length+data.length<=65536)pending.data+=data;
           else inputQueue.push({identity:session.id,key:crypto.randomUUID(),data});
-          clearTimeout(inputTimer);inputTimer=setTimeout(flushInput,16);
+          // Fixed small batch window; continuous typing must not postpone flushing.
+          if(!inputTimer)inputTimer=setTimeout(()=>{inputTimer=null;void flushInput();},4);
         });
         sessions.onchange=()=>{const item=sessionList.find(s=>s.id===sessions.value);if(item)attach(item);};
         const data=await refreshList();if(disposed)return;
         if(data.sessions.length)attach(data.sessions[0]);else showEmpty();
-        await poll();
+
       }catch(e){error.textContent=e.message;error.hidden=false;status.textContent='Agent session could not be loaded.';}
     })();
-    return ()=>{disposed=true;clearTimeout(pasteNoticeTimer);window.removeEventListener('hfl:actions-updated',actionChanged);document.removeEventListener('close',editorClosed,true);clearTimeout(polling);clearTimeout(inputTimer);void flushInput();observer.disconnect();terminal?.dispose();};
+    return ()=>{disposed=true;document.removeEventListener('pointerdown',dismissActions);document.removeEventListener('fullscreenchange',fullscreenChanged);if(ownsFullscreen&&document.fullscreenElement)void document.exitFullscreen().catch(()=>{});clearTimeout(reconnectTimer);if(socket){socket.onclose=null;socket.close();}for(const r of requests.values()){clearTimeout(r.timer);r.reject(new Error('Session view closed.'));}requests.clear();clearTimeout(pasteNoticeTimer);window.removeEventListener('hfl:actions-updated',actionChanged);document.removeEventListener('close',editorClosed,true);clearTimeout(polling);clearTimeout(inputTimer);void flushInput();observer.disconnect();terminal?.dispose();};
   }
   window.actionAgentWorkspace={mount};
 })();

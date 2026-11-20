@@ -77,6 +77,24 @@ def test_native_pty_roundtrip_and_resize(tmp_path):
         terminal.close()
 
 
+def test_pty_preserves_quoted_arguments(tmp_path):
+    import os
+    if os.name == 'nt':
+        pytest.importorskip('winpty')
+    script = tmp_path / 'arguments.py'
+    script.write_text('import sys\nprint(repr(sys.argv[1]), flush=True)\ninput()\n')
+    argument = 'instructions="Before responding, read the Action context."'
+    terminal = Pty([sys.executable, str(script), argument], tmp_path, dict(os.environ), 100, 24)
+    try:
+        output = ''
+        deadline = time.monotonic() + 10
+        while repr(argument) not in output and time.monotonic() < deadline:
+            output += terminal.read()
+        assert repr(argument) in output
+    finally:
+        terminal.close()
+
+
 @pytest.mark.parametrize('native_state,expected', [('idle','expired'), ('running','closed')])
 def test_idle_expiry_archives_but_does_not_expire_active_turn(tmp_path, monkeypatch, native_state, expected):
     import json

@@ -59,6 +59,7 @@ from modules.hfl_corpus.remote import close_remote_http_client
 from modules.hfl_corpus.router import router as hfl_corpus_router
 from modules.hfl_corpus.agent_bridge import owner_router as agent_bridge_owner_router, worker_router as agent_bridge_worker_router
 from modules.hfl_corpus.action_agents import owner as action_agent_owner_router, worker as action_agent_worker_router
+from modules.hfl_corpus.terminal_stream import router as terminal_stream_router
 from modules.hfl_shares.router import guest_router as hfl_share_guest_router
 from modules.hfl_shares.router import owner_router as hfl_share_owner_router
 from modules.git_forks.router import router as git_forks_router
@@ -286,6 +287,7 @@ app.include_router(agent_bridge_owner_router)
 app.include_router(agent_bridge_worker_router)
 app.include_router(action_agent_owner_router)
 app.include_router(action_agent_worker_router)
+app.include_router(terminal_stream_router)
 app.include_router(hfl_share_owner_router)
 app.include_router(hfl_share_guest_router)
 app.include_router(git_forks_router)

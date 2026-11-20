@@ -216,7 +216,39 @@ def test_expiry_settings_validation():
             validate_settings({'agent_session_expiry_minutes':invalid})
 
 
-def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
+
+@pytest.fixture
+def terminal_live_server():
+    import socket, threading, time, uvicorn
+    from main import app
+    listener = socket.socket()
+    listener.bind(('127.0.0.1', 0))
+    from starlette.responses import HTMLResponse
+    class LocalServer(str):
+        html = ''
+    base = LocalServer('http://127.0.0.1:' + str(listener.getsockname()[1]))
+    async def application(scope, receive, send):
+        if scope['type']=='http' and scope['path']=='/':
+            await HTMLResponse(base.html)(scope,receive,send)
+        else:
+            await app(scope,receive,send)
+    server = uvicorn.Server(uvicorn.Config(application, lifespan='off', log_level='error',timeout_graceful_shutdown=2))
+    thread = threading.Thread(target=server.run, kwargs={'sockets': [listener]}, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 10
+    while not server.started and time.monotonic() < deadline:
+        time.sleep(.01)
+    assert server.started
+    yield base
+    server.should_exit = True
+    thread.join(timeout=10)
+    listener.close()
+
+
+def browser_auth(page, client, base):
+    page.context.add_cookies([{'name': 'session', 'value': client.cookies.get('session'), 'url': base}])
+
+def test_native_workspace_browser(workspace, authenticated_client, tmp_path, terminal_live_server):
     from urllib.parse import urlparse
     playwright = pytest.importorskip('playwright.sync_api')
     api, _, actions, _ = workspace
@@ -236,18 +268,28 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
             if parsed.path.endswith('/input'):
                 input_requests.append(json.loads(r.request.post_data)['data'])
             if parsed.path=='/':
-                r.fulfill(content_type='text/html',body='<html><body style="background:#080f1e;color:white;font-family:Arial,sans-serif">'+editor_markup+'<script type="application/json" data-memory-csrf>'+json.dumps(owner_headers()['X-CSRF-Token'])+'</script></body></html>')
+                terminal_live_server.html='<html><body style="background:#080f1e;color:white;font-family:Arial,sans-serif">'+editor_markup+'<script type="application/json" data-memory-csrf>'+json.dumps(owner_headers()['X-CSRF-Token'])+'</script></body></html>'
+                r.continue_()
             else:
                 response=authenticated_client.request(r.request.method,parsed.path+('?' + parsed.query if parsed.query else ''),content=r.request.post_data,headers={k:v for k,v in r.request.headers.items() if k.lower() in {'content-type','x-csrf-token'}})
                 r.fulfill(status=response.status_code,content_type=response.headers.get('content-type','application/json'),body=response.content)
-        page.route('https://workspace.test/**',route)
-        page.goto('https://workspace.test/')
+        browser_auth(page, authenticated_client, terminal_live_server)
+        page.route(terminal_live_server+'/**',route)
+        page.goto(terminal_live_server+'/')
         for name in ('css/hfl-timeline.css','vendor/xterm-5.5.0.css'):
             page.add_style_tag(path=str(frontend/'static'/name))
         for name in ('vendor/xterm-5.5.0.js','vendor/xterm-addon-fit-0.10.0.js','js/hfl-input-attachments.js','js/hfl-checklists.js','js/hfl-intent-reuse.js','js/hfl-editor-state.js','js/hfl-board-state.js','js/hfl-ideas.js','js/action-agent-workspace.js','js/hfl-agent-bridge.js'):
             page.add_script_tag(path=str(frontend/'static'/name))
         page.evaluate('(item)=>window.hflAgentBridge.open("actionable",item.id,item.title)',item)
         page.get_by_role('heading',name='Ready to work on this action?').wait_for()
+        page.get_by_role('button',name='Full screen',exact=True).click()
+        page.wait_for_function('document.fullscreenElement===document.documentElement')
+        playwright.expect(page.locator('.action-agent-dialog')).to_have_class(__import__('re').compile('agent-fullscreen'))
+        playwright.expect(page.locator('.action-agent-workspace .agenda-error')).not_to_be_visible()
+        page.screenshot(path=str(tmp_path/'actions-agent-fullscreen.png'))
+        page.get_by_role('button',name='Exit full screen',exact=True).click()
+        page.wait_for_function('!document.fullscreenElement')
+        playwright.expect(page.locator('.action-agent-dialog')).to_be_visible()
         playwright.expect(page.locator('.agent-header-status')).to_have_text('No session · Start to begin')
         page.get_by_label('Actions agent help',exact=True).click()
         playwright.expect(page.locator('.agent-header-help-body')).to_contain_text('click inside the terminal to type')
@@ -283,7 +325,7 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         page.get_by_role('button',name='Close',exact=True).click()
         page.get_by_role('button',name='Start session',exact=True).click()
         playwright.expect(page.locator('.agent-session-empty')).not_to_be_visible()
-        page.get_by_text('Waiting for a worker to connect…').wait_for()
+        playwright.expect(page.locator('.agent-header-status')).to_have_text('Waiting for worker')
         session = api.store().sessions(item['id'])[0]
         claimed = api.store().claim_session(session['id'], 'test')
         response = authenticated_client.post('/api/hfl-agent/terminals/'+session['id']+'/files/lorem-ipsum.txt',
@@ -323,7 +365,7 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         assert preview.locator('body').evaluate('(el)=>getComputedStyle(el).backgroundColor')=='rgb(11, 18, 32)'
         page.screenshot(path=str(tmp_path/'actions-markdown-preview.png'))
         page.locator('.agent-input-preview').get_by_role('button',name='Close',exact=True).click()
-        terminal = page.get_by_label('Native Hermes terminal')
+        terminal = page.get_by_label('Live CLI terminal')
         before = terminal.bounding_box()
         assert .24 < sidebar.bounding_box()['width']/page.locator('.action-agent-dialog').bounding_box()['width'] < .30
         assert page.locator('.action-agent-dialog').bounding_box()['width'] < 1440*.90
@@ -331,7 +373,7 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         assert sidebar.evaluate('(el)=>el.scrollTop') > 0
         assert terminal.bounding_box() == before
         assert page.locator('.action-agent-dialog').evaluate('(el)=>el.scrollHeight<=el.clientHeight+1')
-        page.get_by_text('Starting Hermes…', exact=True).wait_for()
+        page.get_by_text('Starting CLI…', exact=True).wait_for()
         page.locator('.xterm-helper-textarea').focus()
         typed = 'typing should preserve every character in order'
         page.keyboard.type(typed)
@@ -339,6 +381,7 @@ def test_native_workspace_browser(workspace, authenticated_client, tmp_path):
         deadline = time.monotonic()+5
         while ''.join(input_requests) != typed and time.monotonic()<deadline:
             page.wait_for_timeout(50)
+            input_requests=[event['data'] for event in api.store().read_io(session['id'],'in')]
         assert ''.join(input_requests) == typed
         assert len(input_requests) < len(typed)
         current=authenticated_client.get('/hfl-corpus/timeline/items/'+item['id']).json()['item']
@@ -438,7 +481,7 @@ def test_other_card_update_does_not_expire_healthy_terminal(workspace, authentic
     assert not db.heartbeat_session(session['id'], claimed['token'], 'idle', 'native', 2)['close']
 
 
-def test_empty_poll_recovers_without_replacing_session(workspace, authenticated_client):
+def test_stream_reconnects_without_replacing_session(workspace, authenticated_client, terminal_live_server):
     from urllib.parse import urlsplit
     api, _, actions, _ = workspace
     item = create_action(actions)
@@ -446,29 +489,30 @@ def test_empty_poll_recovers_without_replacing_session(workspace, authenticated_
     api.store().claim_session(session['id'], 'test')
     playwright = pytest.importorskip('playwright.sync_api')
     frontend = Path(__file__).resolve().parents[1]
-    outage = [True]
     with playwright.sync_playwright() as engine:
         browser = engine.chromium.launch(channel='chrome', headless=True)
         try:
             page = browser.new_page()
+            page.add_init_script('window.TestWebSocket=window.WebSocket;window.WebSocket=class extends window.TestWebSocket{constructor(...args){super(...args);window.testSocket=this;}}')
             def route(r):
                 url = urlsplit(r.request.url)
                 if url.path == '/':
-                    r.fulfill(content_type='text/html', body='<div id="workspace"></div>')
-                elif url.query.startswith('after=') and outage[0]:
-                    outage[0] = False
-                    r.fulfill(status=502, body='')
+                    terminal_live_server.html='<div id="workspace"></div>'
+                    r.continue_()
                 else:
                     response = authenticated_client.request(r.request.method, url.path + ('?' + url.query if url.query else ''), content=r.request.post_data, headers=owner_headers())
                     r.fulfill(status=response.status_code, content_type='application/json', body=response.content)
-            page.route('https://workspace.test/**', route)
-            page.goto('https://workspace.test/')
+            browser_auth(page, authenticated_client, terminal_live_server)
+            page.route(terminal_live_server+'/**', route)
+            page.goto(terminal_live_server+'/')
+            page.evaluate('(csrf)=>{const el=document.createElement("script");el.type="application/json";el.dataset.memoryCsrf="";el.textContent=JSON.stringify(csrf);document.body.append(el);}',owner_headers()['X-CSRF-Token'])
             for name in ('vendor/xterm-5.5.0.js', 'vendor/xterm-addon-fit-0.10.0.js', 'js/action-agent-workspace.js'):
                 page.add_script_tag(path=str(frontend/'static'/name))
             page.evaluate('(id)=>window.actionAgentWorkspace.mount(document.querySelector("#workspace"),id)', item['id'])
-            error = page.locator('.agenda-error')
-            playwright.expect(error).to_contain_text('empty or invalid response (HTTP 502)')
-            playwright.expect(error).to_be_hidden(timeout=10000)
+            playwright.expect(page.get_by_text('Starting CLI…',exact=True)).to_be_visible()
+            page.evaluate('window.testSocket.close()')
+            playwright.expect(page.get_by_text('Reconnecting…',exact=True)).to_be_visible()
+            playwright.expect(page.get_by_text('Starting CLI…',exact=True)).to_be_visible(timeout=10000)
             assert page.get_by_role('combobox', name='Agent session').input_value() == session['id']
             assert api.store().session(session['id'])['state'] == 'starting'
         finally:
@@ -508,7 +552,7 @@ def test_terminal_image_scope_order_and_closed_session(workspace, authenticated_
     assert post(authenticated_client, endpoint, {'key':'late','attachment_id':image['id']}).status_code == 409
 
 
-def test_browser_terminal_paste_uploads_and_queues_image(workspace, authenticated_client):
+def test_browser_terminal_paste_uploads_and_queues_image(workspace, authenticated_client, terminal_live_server):
     from urllib.parse import urlsplit
     api, bridge_module, actions, _ = workspace
     item = create_action(actions)
@@ -523,13 +567,16 @@ def test_browser_terminal_paste_uploads_and_queues_image(workspace, authenticate
             def route(r):
                 url = urlsplit(r.request.url)
                 if url.path == '/':
-                    r.fulfill(content_type='text/html', body='<div id="workspace"></div>')
+                    terminal_live_server.html='<div id="workspace"></div>'
+                    r.continue_()
                 else:
                     headers = {**owner_headers(), 'Content-Type': r.request.headers.get('content-type', 'application/json')}
                     response = authenticated_client.request(r.request.method, url.path + ('?' + url.query if url.query else ''), content=r.request.post_data_buffer, headers=headers)
                     r.fulfill(status=response.status_code, content_type='application/json', body=response.content)
-            page.route('https://workspace.test/**', route)
-            page.goto('https://workspace.test/')
+            browser_auth(page, authenticated_client, terminal_live_server)
+            page.route(terminal_live_server+'/**', route)
+            page.goto(terminal_live_server+'/')
+            page.evaluate('(csrf)=>{const el=document.createElement("script");el.type="application/json";el.dataset.memoryCsrf="";el.textContent=JSON.stringify(csrf);document.body.append(el);}',owner_headers()['X-CSRF-Token'])
             for name in ('vendor/xterm-5.5.0.js', 'vendor/xterm-addon-fit-0.10.0.js', 'js/action-agent-workspace.js'):
                 page.add_script_tag(path=str(frontend/'static'/name))
             page.evaluate('(id)=>window.actionAgentWorkspace.mount(document.querySelector("#workspace"),id)', item['id'])

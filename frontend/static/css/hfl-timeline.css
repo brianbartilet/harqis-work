@@ -467,6 +467,8 @@
 .agent-bridge-dialog:not(.action-agent-dialog) select { appearance:none; padding-right:2.5rem; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2367e8f9' stroke-width='2'%3E%3Cpath d='m5 7.5 5 5 5-5'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right .8rem center; background-size:.8rem .8rem; }
 .agent-bridge-dialog.action-agent-dialog { width:min(104rem,88vw); }
 @media(max-width:760px) { .agent-bridge-dialog.action-agent-dialog { width:calc(100vw - 2rem); } }
+.agent-bridge-dialog.action-agent-dialog.agent-fullscreen[open] { width:100vw; height:100dvh; max-width:none; max-height:none; margin:0; border:0; border-radius:0; }
+.action-agent-workspace.agent-fullscreen { position:fixed; inset:0; z-index:100; background:#080f1e; }
 .action-agent-workspace { display:flex; flex-direction:column; gap:.8rem; min-width:0; position:relative; }
 .agent-session-empty { position:absolute; inset:1rem 1rem 3rem; display:grid; place-items:center; text-align:center; }
 .agent-session-empty > div { max-width:26rem; padding:1rem; }
@@ -491,6 +493,24 @@
 .action-agent-workspace .agent-terminal-controls > select { flex:0 1 13rem; width:13rem; max-width:100%; min-width:10rem; margin:0; padding-right:2.25rem; appearance:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%2394a3b8' stroke-width='1.5'%3E%3Cpath d='m3 4.5 3 3 3-3'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right .75rem center; background-size:.85rem; }
 @media(max-width:1100px) { .action-agent-workspace > .agent-terminal-controls { flex-wrap:wrap; } }
 .agent-terminal-status { color:#67e8f9; font-size:.85rem; }
+.agent-session-section .agent-terminal-controls { flex-wrap:nowrap; }
+.action-agent-workspace .agent-terminal-controls > select { min-width:6rem; flex:1 1 11rem; width:11rem; }
+.agent-terminal-controls > :is(button,details) { flex-shrink:0; }
+.agent-session-section .agent-terminal-controls > .agent-terminal-status { flex:0 1 auto; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.agent-terminal-actions { position:relative; font-size:.75rem; }
+.agent-terminal-actions > summary { list-style:none; cursor:pointer; padding:.5rem 2rem .5rem .75rem; border:1px solid #334155; border-radius:.4rem; background:#0f172a; color:#e2e8f0; }
+.agent-terminal-actions > summary::-webkit-details-marker { display:none; }
+.agent-terminal-actions > summary:focus-visible { outline:2px solid #38bdf8; outline-offset:2px; }
+.agent-terminal-controls .agent-toolbar-icon { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; padding:0; box-sizing:border-box; }
+.agent-terminal-controls .agent-toolbar-icon svg { width:18px; height:18px; pointer-events:none; }
+.agent-terminal-actions > summary.agent-toolbar-icon { width:36px; padding:0; }
+.agent-terminal-controls .agent-toolbar-icon:hover { background:#1e293b; color:#67e8f9; }
+.agent-terminal-controls .agent-toolbar-icon:focus-visible { outline:2px solid #38bdf8; outline-offset:2px; }
+.agent-terminal-actions-body { position:absolute; top:calc(100% + .4rem); right:0; z-index:30; display:grid; gap:.25rem; width:14rem; max-width:calc(100vw - 2rem); padding:.5rem; background:#0f172a; border:1px solid #334155; border-radius:.5rem; box-shadow:0 12px 30px #0006; }
+.agent-terminal-actions-body > :is(button,a) { text-align:left; width:100%; box-sizing:border-box; }
+.agent-terminal-actions-body > .agent-terminal-status { padding:.25rem .4rem .5rem; font-size:.7rem; }
+.action-agent-workspace .agent-terminal-controls > select { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='%2367e8f9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 7.5 5 5 5-5'/%3E%3C/svg%3E"); }
+@media(max-width:760px) { .agent-session-section .agent-terminal-controls { flex-wrap:wrap; } .action-agent-workspace .agent-terminal-controls > select { flex:1 1 calc(50% - .4rem); } }
 .agent-terminal-hint,.agent-details p { color:#94a3b8; font-size:.8rem; }
 .agent-details { border:1px solid #334155; padding:.7rem; border-radius:.5rem; }
 .agent-config-dialog { width:min(52rem,calc(100vw - 2rem)); }

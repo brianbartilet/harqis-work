@@ -121,8 +121,8 @@
       const helpToggle=element('summary','i');helpToggle.setAttribute('aria-label','Actions agent help');helpToggle.title='How agent sessions work';
       const helpBody=element('div');helpBody.className='agent-header-help-body';
       helpBody.append(element('strong','How agent sessions work'));
-      for(const text of ['This terminal uses Hermes CLI. Default worker uses shared settings; an assigned Hermes agent or Butler supplies its own instructions, skills and runtime settings.',
-        'Assigning Codex, Claude, Nod or another external provider does not switch the CLI. Action sessions are unavailable for those providers; continue in their own app. Manual actions and inactive agents cannot start a session.',
+      for(const text of ['Choose a CLI and execution host for a new session. Assigned Hermes uses shared or Fleet profile settings; Codex and Claude use their own host configuration.',
+        'Changing the Action assignment does not switch the CLI of a running session. The CLI selector lists host availability separately. Jev uses a configured Hermes profile and provides recommendation-only triage.',
         'Start a session, then click inside the terminal to type. Press Enter to send; use /help for commands. Opening a session does not run the saved prompt. Use Run initial prompt for that.',
         'An existing live session is reused. Closing this dialog leaves it running; End session stops it. Ending a session does not mark the Action done.'])helpBody.append(element('p',text));
       help.addEventListener('keydown',event=>{if(event.key==='Escape'&&help.open){event.preventDefault();event.stopPropagation();help.open=false;helpToggle.focus();}});

@@ -121,7 +121,7 @@ class Pty:
         self.windows = os.name == 'nt'
         if self.windows:
             from winpty import PtyProcess
-            self.process = PtyProcess.spawn(subprocess.list2cmdline(command), cwd=str(cwd), env=env, dimensions=(rows, cols))
+            self.process = PtyProcess.spawn(command, cwd=str(cwd), env=env, dimensions=(rows, cols))
         else:
             import pty
             import fcntl
@@ -168,6 +168,9 @@ class Pty:
     def alive(self):
         return self.process.isalive() if self.windows else self.process.poll() is None
 
+    def exit_status(self):
+        return self.process.exitstatus if self.windows else self.process.poll()
+
     def close(self):
         if self.windows:
             if self.alive():
@@ -194,8 +197,11 @@ class TerminalWorker:
         self.native_id = session['native_id']
         self.state = 'starting'
         self.sent = {}
+        self.transport = None
 
     def call(self, suffix, **payload):
+        if self.transport is not None and suffix in {'/poll', '/output'}:
+            return self.transport.call(suffix, **payload)
         return self.client.call(self.prefix + suffix, {'token': self.token, **payload})
 
     def upload(self, path):
@@ -253,7 +259,12 @@ class TerminalWorker:
             terminal.write(event['data'])
 
     def run(self):
-        command, hermes_root = self.runner.hermes_command()
+        if self.client is not None:
+            from scripts.agents.hfl.terminal_transport import TerminalTransport
+            self.transport = TerminalTransport(self)
+        runtime = self.session['settings'].get('terminal_runtime') or 'hermes'
+        native = runtime in {'codex', 'claude'}
+        command, hermes_root = ([], '') if native else self.runner.hermes_command()
         root = self.runner.spool_root() / 'terminals' / self.identity
         root.mkdir(parents=True, exist_ok=True)
         artifacts = root / 'outputs'
@@ -261,6 +272,11 @@ class TerminalWorker:
         control = root / 'state.json'
         control.unlink(missing_ok=True)
         settings = dict(self.session['settings'])
+        if runtime == 'jev':
+            if settings.get('agent_mode') != 'trusted':
+                raise ValueError('Jev requires the trusted Hermes profile.')
+            settings['hermes_profile'] = settings.get('hermes_profile') or os.getenv('HFL_AGENT_JEV_PROFILE', 'jev-decisions')
+            settings['agent_toolsets'] = ''
         settings['agent_repository'] = settings.get('agent_repository') or str(self.runner.REPO_ROOT)
         inputs = root / 'inputs'
         inputs.mkdir(exist_ok=True)
@@ -274,17 +290,21 @@ class TerminalWorker:
             'Use the isolated checkout at ' + str(workspace.path) + '. Do not edit the primary checkout. '
             'For another repository, ask the owner to configure that repository before editing it. '
             'Do not merge or push unless explicitly instructed.')
-        program = command[-1].split('main(query=sys.stdin.read()')[0] + NATIVE_HOOK
-        # A script file avoids Windows ConPTY command-line quoting of multiline -c.
-        launcher = root / 'native_cli.py'
-        launcher.write_text(program, encoding='utf-8')
-        command = [command[0], str(launcher)]
-        if os.name != 'nt':
-            # Become the controlling terminal after setsid, without preexec_fn
-            # (unsafe in this multithreaded worker).
-            command = [command[0], '-c',
-                       'import fcntl,termios,runpy,sys; fcntl.ioctl(0,termios.TIOCSCTTY,0); runpy.run_path(sys.argv[1],run_name="__main__")',
-                       str(launcher)]
+        if native:
+            from scripts.agents.hfl.terminal_runtimes import native_command
+            command, self.native_id = native_command(runtime, settings, workspace, root, self.identity, self.native_id)
+        else:
+            program = command[-1].split('main(query=sys.stdin.read()')[0] + NATIVE_HOOK
+            # A script file avoids Windows ConPTY command-line quoting of multiline -c.
+            launcher = root / 'native_cli.py'
+            launcher.write_text(program, encoding='utf-8')
+            command = [command[0], str(launcher)]
+            if os.name != 'nt':
+                # Become the controlling terminal after setsid, without preexec_fn
+                # (unsafe in this multithreaded worker).
+                command = [command[0], '-c',
+                           'import fcntl,termios,runpy,sys; fcntl.ioctl(0,termios.TIOCSCTTY,0); runpy.run_path(sys.argv[1],run_name="__main__")',
+                           str(launcher)]
         env = dict(os.environ)
         env.pop('HFL_AGENT_BRIDGE_TOKEN', None)
         env.pop('HFL_AGENT_CAPABILITY_CHECK', None)
@@ -299,6 +319,17 @@ class TerminalWorker:
                    HFL_TERMINAL_ARTIFACTS=str(artifacts), HFL_TERMINAL_CONTEXT=str(context_path),
                    TERMINAL_CWD=str(workspace.path), TERMINAL_ENV='local', TERM='xterm-256color',
                    PYTHONUTF8='1', PYTHONIOENCODING='utf-8')
+        if native:
+            # Reserve capacity for the full native session; no guessed per-turn state.
+            self.state = 'waiting'
+            while True:
+                admission = self.call('/poll', state='waiting', native_id=self.native_id, after=self.after)
+                if admission['close']:
+                    return
+                if admission.get('granted'):
+                    break
+                time.sleep(1)
+            self.state = 'running'
         terminal = Pty(command, workspace.path, env, self.session['cols'], self.session['rows'])
         transcript = root / 'transcript.txt'
         last_input = time.monotonic()
@@ -307,7 +338,7 @@ class TerminalWorker:
         heartbeat_state = None
         action_closed = False
         previous_state = 'starting'
-        turn_started = None
+        turn_started = time.monotonic() if native else None
         ran_turn = False
         previous_closed = None
         expiry = settings.get('agent_session_expiry_minutes', 60)
@@ -324,7 +355,8 @@ class TerminalWorker:
                     with transcript.open('a', encoding='utf-8') as stream:
                         stream.write(chunk)
                     pending += chunk
-                interval = .05 if pending or time.monotonic() - last_input < 3 else .25
+                # Streams already push controls; don't retain HTTP polling delay.
+                interval = 0 if self.transport else (.05 if pending or time.monotonic() - last_input < 3 else .25)
                 if time.monotonic() - last_poll < interval:
                     continue
                 last_poll = time.monotonic()
@@ -346,11 +378,11 @@ class TerminalWorker:
                     previous_state = self.state
                 # Retry collection while idle, including files written after the
                 # state transition. A failed upload must not terminate the CLI.
-                if self.state == 'idle' and time.monotonic() - last_file_scan >= 3:
+                if (native or self.state == 'idle') and time.monotonic() - last_file_scan >= 3:
                     last_file_scan = time.monotonic()
                     self.collect_outputs(artifacts)
                 full_poll = self.state != heartbeat_state or time.monotonic() - last_heartbeat >= (.3 if self.state == 'waiting' else 2)
-                reply = self.call('/poll', state=self.state, native_id=self.native_id, after=self.after, io_only=not full_poll)
+                reply = self.call('/poll', state=self.state, native_id=self.native_id, after=self.after, io_only=not full_poll) if full_poll or self.transport is None else self.transport.snapshot()
                 if full_poll:
                     last_heartbeat = time.monotonic()
                     heartbeat_state = self.state
@@ -370,17 +402,23 @@ class TerminalWorker:
                     dimensions = (reply['rows'], reply['cols'])
                     terminal.resize(*dimensions)
                 for event in reply['input']:
+                    if event['seq'] <= self.after:
+                        continue
                     self.deliver_input(event, terminal, inputs)
                     self.after = event['seq']
+                    if self.transport:
+                        self.transport.acknowledge(self.after)
                     last_input = time.monotonic()
                 if self.state == 'idle' and time.monotonic() - last_input >= expiry * 60:
                     exit_state = 'expired'
                     break
         finally:
+            if native and not terminal.alive() and terminal.exit_status() not in (None, 0):
+                exit_state = 'failed'
             terminal.close()
             if pending:
                 for offset in range(0, len(pending), 65536):
-                    self.call('/output', key=uuid.uuid4().hex, data=pending[offset:offset+65536])
+                    self.call('/output', key=pending_key if offset == 0 else uuid.uuid4().hex, data=pending[offset:offset+65536])
             # Upload everything before removing a worktree; failure leaves it recoverable.
             archive = workspace.preserve(artifacts)
             for path in artifacts.iterdir():
@@ -407,9 +445,16 @@ def watch_terminals(runner, stop):
     """Independent PTY threads; turn capacity is enforced atomically by the server."""
     active = {}
     host = socket.gethostname()
+    advertised = 0
+    runtime_capabilities = []
     while not stop.is_set():
         client = runner.BridgeClient()
         try:
+            if time.monotonic() - advertised > 30:
+                from scripts.agents.hfl.terminal_runtimes import capabilities
+                runtime_capabilities = capabilities(runner)
+                client.call('terminal-runtimes', {'host': host, 'runtimes': runtime_capabilities})
+                advertised = time.monotonic()
             active = {key: thread for key, thread in active.items() if thread.is_alive()}
             queued = client.call('terminals')['sessions']
             for session in reversed(queued):
@@ -417,6 +462,9 @@ def watch_terminals(runner, stop):
                 if len(active) >= 16:
                     break
                 if session['settings'].get('agent_host') not in {'', host}:
+                    continue
+                runtime = session['settings'].get('terminal_runtime') or 'hermes'
+                if not any(r['id'] == runtime and r['available'] for r in runtime_capabilities):
                     continue
                 try:
                     claimed = client.call('terminals/' + session['id'] + '/claim', {'host': host})
@@ -435,6 +483,8 @@ def watch_terminals(runner, stop):
                         except Exception:
                             pass
                     finally:
+                        if terminal.transport:
+                            terminal.transport.close()
                         connection.client.close()
                 thread = threading.Thread(target=execute, daemon=True)
                 active[session['id']] = thread

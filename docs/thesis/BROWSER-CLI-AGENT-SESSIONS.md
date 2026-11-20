@@ -4,6 +4,10 @@ Date: 2026-11-18
 
 Status: Investigation and proposed direction; no runtime changes implemented.
 
+Follow-up: the approved implementation and operating limits are described in
+[Live CLI sessions](../info/LIVE-CLI-SESSIONS.md). The analysis below records the
+original 2026-11-18 findings.
+
 ## Question and conclusion
 
 A screenshot of an interactive CLI in a Coder browser terminal prompted the

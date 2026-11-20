@@ -81,6 +81,32 @@ def store():
     return ActionAgentStore(bridge.bridge_store().path)
 
 
+@owner.get('/terminal-runtimes')
+def terminal_runtimes():
+    return {'hosts': store().hosts()}
+
+
+@worker.post('/terminal-runtimes')
+def advertise_runtimes(payload: dict):
+    host, runtimes = payload.get('host'), payload.get('runtimes')
+    if not isinstance(host, str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,200}', host):
+        raise HTTPException(400, 'Invalid worker host.')
+    if not isinstance(runtimes, list) or len(runtimes) > 4:
+        raise HTTPException(400, 'Invalid runtime capabilities.')
+    clean = []
+    for item in runtimes:
+        if not isinstance(item, dict) or item.get('id') not in {'hermes', 'codex', 'claude', 'jev'} or type(item.get('available')) is not bool:
+            raise HTTPException(400, 'Invalid runtime capability.')
+        clean.append({k: item[k] for k in ('id', 'available')} | {'name': str(item.get('name', item['id']))[:80], 'reason': str(item.get('reason', ''))[:300]})
+        if item['id'] == 'jev':
+            profile = item.get('profile', 'jev-decisions')
+            if not isinstance(profile, str) or not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,63}', profile):
+                raise HTTPException(400, 'Invalid Jev profile.')
+            clean[-1]['profile'] = profile
+    store().advertise(host, clean)
+    return {'ok': True}
+
+
 def overrides(value):
     if not isinstance(value, dict) or set(value) - CONFIG_KEYS:
         raise ValueError('Choose supported agent settings.')
@@ -189,8 +215,30 @@ def sessions(source_id: str):
 @owner.post('/actions/{source_id}/sessions')
 def start_session(source_id: str, payload: dict, user=Depends(bridge.owner_auth)):
     action = bridge.checked(bridge.action_call, 'GET', '/' + source_id)['item']
-    settings = bridge.checked(effective, source_id)
+    if payload.get('restore') and not payload.get('runtime'):
+        previous_session = bridge.checked(store().session, payload['restore'])
+        if previous_session['source_id'] != source_id:
+            raise HTTPException(400, 'Restore a session belonging to this action.')
+        if previous_session['settings'].get('terminal_runtime'):
+            payload = {**payload, 'runtime': previous_session['settings']['terminal_runtime'],
+                       'host': previous_session['worker'] or previous_session['settings'].get('agent_host')}
+    runtime = payload.get('runtime')
+    if runtime is not None:
+        host = payload.get('host')
+        found = next((r for h in store().hosts() if h['host'] == host for r in h['runtimes'] if r['id'] == runtime and r['available']), None)
+        if not found:
+            raise HTTPException(409, 'This runtime is unavailable on the selected worker. Refresh its capabilities.')
+        settings = bridge.checked(effective, source_id, execute=False)
+        settings.update(terminal_runtime=runtime, agent_host=host)
+        if runtime == 'jev' and settings.get('agent_mode') != 'trusted':
+            raise HTTPException(409, 'Jev requires a trusted Hermes profile so its configured MCP tools can load. Choose trusted execution in the session settings.')
+        if runtime == 'jev':
+            settings['hermes_profile'] = found.get('profile', 'jev-decisions')
+    else:
+        settings = bridge.checked(effective, source_id)
     settings['initial_context'] = {k: action.get(k, '') for k in ('title','status','prompt','expected_outcome','description','notes','completion_note')}
+    if runtime:
+        settings['initial_context']['assignment_instructions'] = settings.get('action_assignment', {}).get('instructions', '')
     if settings.get('fleet_agent'):
         settings['initial_context']['agent'] = settings['fleet_agent']
         from modules.hfl_corpus.action_connections import fleet_context
@@ -218,6 +266,10 @@ def terminal_view(identity: str, after: int = 0):
 
 @owner.post('/sessions/{identity}')
 def terminal_edit(identity: str, payload: dict):
+    return edit_terminal(store(), identity, payload)
+
+
+def edit_terminal(db, identity, payload):
     if set(payload) - {'saved','closed','cols','rows','title'}:
         raise HTTPException(400, 'Invalid session setting.')
     for key in ('saved','closed'):
@@ -228,7 +280,7 @@ def terminal_edit(identity: str, payload: dict):
             raise HTTPException(400, 'Terminal dimensions must be 10–300.')
     if 'title' in payload and (not isinstance(payload['title'], str) or len(payload['title']) > 200):
         raise HTTPException(400, 'Invalid session title.')
-    bridge.checked(store().edit_session, identity, **payload)
+    bridge.checked(db.edit_session, identity, **payload)
     return {'ok': True}
 
 
@@ -293,7 +345,10 @@ def terminal_attachment(identity: str, attachment_id: str, request: Request):
 
 @worker.post('/terminals/{identity}/poll')
 def terminal_poll(identity: str, payload: dict):
-    db = store()
+    return poll_terminal(store(), identity, payload)
+
+
+def poll_terminal(db, identity, payload):
     if payload.get('io_only') is True:
         session = bridge.checked(db.verify, identity, payload.get('token'))
         return {'input': db.read_io(identity, 'in', max(0, int(payload.get('after', 0)))),

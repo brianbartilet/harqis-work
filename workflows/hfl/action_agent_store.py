@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from workflows.hfl.agent_bridge_store import AgentBridgeStore, BridgeConflict, now
+from workflows.hfl.terminal_events import notify
 
 
 class ActionAgentStore(AgentBridgeStore):
@@ -29,14 +30,27 @@ class ActionAgentStore(AgentBridgeStore):
                     seq INTEGER PRIMARY KEY AUTOINCREMENT, session TEXT NOT NULL,
                     direction TEXT NOT NULL, request_key TEXT NOT NULL, data TEXT NOT NULL,
                     UNIQUE(session,direction,request_key));
+                CREATE INDEX IF NOT EXISTS action_agent_io_replay ON action_agent_io(session,seq);
                 CREATE TABLE IF NOT EXISTS action_agent_files (
                     session TEXT NOT NULL, name TEXT NOT NULL, digest TEXT NOT NULL,
                     PRIMARY KEY(session,name,digest));
+                CREATE TABLE IF NOT EXISTS action_terminal_hosts (
+                    host TEXT PRIMARY KEY, updated TEXT NOT NULL, capabilities TEXT NOT NULL);
             ''')
 
     def configs(self):
         with self.connect() as db:
             return {r['key']: json.loads(r['value']) for r in db.execute('SELECT * FROM action_agent_configs')}
+
+    def advertise(self, host, capabilities):
+        with self.connect() as db:
+            db.execute('INSERT INTO action_terminal_hosts VALUES (?,?,?) ON CONFLICT(host) DO UPDATE SET updated=excluded.updated,capabilities=excluded.capabilities',
+                       (host, now(), json.dumps(capabilities)))
+
+    def hosts(self):
+        cutoff = (datetime.now(timezone.utc) - timedelta(seconds=90)).isoformat()
+        with self.connect() as db:
+            return [{'host': r['host'], 'runtimes': json.loads(r['capabilities'])} for r in db.execute('SELECT * FROM action_terminal_hosts WHERE updated>?', (cutoff,))]
 
     def configure(self, key, value):
         with self.connect() as db:
@@ -74,11 +88,11 @@ class ActionAgentStore(AgentBridgeStore):
             if restore:
                 previous = db.execute('SELECT * FROM action_agent_sessions WHERE id=? AND source_id=?', (restore, source_id)).fetchone()
                 if not previous or not previous['native_id']:
-                    raise BridgeConflict('This session has no native Hermes context to restore. Its transcript remains available.')
+                    raise BridgeConflict('This session has no native context to restore. Its transcript remains available.')
                 native = previous['native_id']
                 # Native sessions belong to their original host and Hermes profile.
                 original = json.loads(previous['settings'])
-                for key in ('hermes_profile', 'agent_host'):
+                for key in ('hermes_profile', 'agent_host', 'terminal_runtime'):
                     settings[key] = original.get(key, '')
                 settings['agent_host'] = previous['worker'] or settings['agent_host']
             identity, timestamp = uuid.uuid4().hex, now()
@@ -92,19 +106,40 @@ class ActionAgentStore(AgentBridgeStore):
         self.session(identity)
         with self.connect() as db:
             db.execute('UPDATE action_agent_sessions SET ' + ','.join(k + '=?' for k in fields) + ' WHERE id=?', (*fields.values(), identity))
+        notify(identity)
 
-    def io(self, identity, direction, key, data):
+    def io(self, identity, direction, key, data, *, token=None):
         if direction not in {'in', 'out', 'image'} or not isinstance(data, str) or len(data) > 65536 or not isinstance(key, str) or not 1 <= len(key) <= 100:
             raise ValueError('Invalid terminal data.')
         with self.connect() as db:
-            row = db.execute('SELECT state,closed FROM action_agent_sessions WHERE id=?', (identity,)).fetchone()
+            row = db.execute('SELECT state,closed,token FROM action_agent_sessions WHERE id=?', (identity,)).fetchone()
             if not row:
                 raise KeyError(identity)
+            if token is not None:
+                import hmac
+                if not token or not hmac.compare_digest(row['token'], token):
+                    raise BridgeConflict('Terminal lease does not match.')
             if direction in {'in', 'image'} and (row['closed'] or row['state'] not in {'starting','idle','waiting','running'}):
                 raise BridgeConflict('Wait for the terminal to connect before typing.')
             db.execute('INSERT OR IGNORE INTO action_agent_io(session,direction,request_key,data) VALUES (?,?,?,?)', (identity, direction, key, data))
             if direction in {'in', 'image'}:
                 db.execute('UPDATE action_agent_sessions SET activity=? WHERE id=?', (now(), identity))
+        notify(identity)
+
+    def stream_snapshot(self, identity, direction, after, *, token=None, include_io=True):
+        """Read state and ordered I/O together without reopening the database twice."""
+        with self.connect() as db:
+            row = db.execute('SELECT * FROM action_agent_sessions WHERE id=?', (identity,)).fetchone()
+            if row is None:
+                raise KeyError(identity)
+            if token is not None:
+                import hmac
+                if not token or not hmac.compare_digest(row['token'], token):
+                    raise BridgeConflict('Terminal lease does not match.')
+            rows = db.execute('SELECT seq,data,direction FROM action_agent_io INDEXED BY action_agent_io_replay WHERE session=? AND seq>? AND direction IN (?,?) ORDER BY seq LIMIT 100',
+                              (identity, after, direction, 'image' if direction == 'in' else direction)) if include_io else []
+            output = [{'seq': r['seq'], 'data': r['data'], **({'type': 'image'} if r['direction'] == 'image' else {})} for r in rows]
+            return self.session_decode(row), output
 
     def read_io(self, identity, direction, after=0):
         with self.connect() as db:
@@ -163,6 +198,7 @@ class ActionAgentStore(AgentBridgeStore):
             target = 'running' if state == 'waiting' and granted else state
             db.execute('UPDATE action_agent_sessions SET state=?,native_id=?,heartbeat=?,activity=CASE WHEN state!=? THEN ? ELSE activity END WHERE id=?',
                        (target, native_id[:200], now(), target, now(), identity))
+        notify(identity)
         return {'granted': granted, 'close': bool(row['closed']), 'cols': row['cols'], 'rows': row['rows']}
 
     @staticmethod
