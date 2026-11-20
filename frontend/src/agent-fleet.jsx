@@ -172,7 +172,7 @@ function createFleetAvatar(agent){
   if(agent.connectorIcon){
     avatar.setAttribute('aria-label',agent.name+' connector');
     const img=document.createElement('img');img.alt='';img.src=agent.connectorIcon;
-    Object.assign(img.style,{objectFit:'contain',padding:'18%',boxSizing:'border-box',background:'#0f172a'});
+    Object.assign(img.style,{objectFit:'contain',padding:'18%',boxSizing:'border-box',background:'#0f172a',filter:'grayscale(1)'});
     img.addEventListener('error',()=>img.remove(),{once:true});avatar.append(img);
   }
   return avatar;
