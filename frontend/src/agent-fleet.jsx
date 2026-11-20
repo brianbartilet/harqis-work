@@ -3,7 +3,7 @@ import {AgentSpecialization} from './fleet-specialists.jsx';
 import {CodexConnection} from './codex-connection.jsx';
 import entitySemantics from '../static/entity-semantics.json';
 import {placeFleetNodes} from './fleet-placement.mjs';
-import {isFleetAnchor,pinFleetAnchors,releaseFleetNeighbors} from './fleet-drag.mjs';
+import {isFleetAnchor,releaseFleetNeighbors} from './fleet-drag.mjs';
 import {groupFleet,configureFleetLinks} from './fleet-grouping.mjs';
 import {OwnerCard,Description,Relationships,RelatedMemory} from './fleet-presentation.jsx';
 import {graphDateRange} from './graph-dates.mjs';
@@ -29,6 +29,7 @@ import {createRoot} from 'react-dom/client';
 import ForceGraph2D from 'react-force-graph-2d';
 import {phaseFor} from './graph-presets.mjs';
 import {fleetMotionOffset} from './fleet-motion.mjs';
+import {resetFleetChildren} from './fleet-reset.mjs';
 import {configureDragForces, settleDragNodes} from './graph-drag.mjs';
 import {filterFleet, activityKind} from './fleet-graph.mjs';
 import {createLabelLayout} from './graph-labels.mjs';
@@ -191,6 +192,7 @@ function FleetGraph({data,loaded,selected,select,agents,animation,animationMenuO
   const host=useRef(),graph=useRef(),positions=useRef(initialView.positions||{}),targets=useRef(new Map()),released=useRef(new Set()),dragging=useRef(false),avatarLayer=useRef(),avatarNodes=useRef(new Map()),fitted=useRef(false);
   const [size,setSize]=useState({width:800,height:640});
   const [layoutReady,setLayoutReady]=useState(false);
+  const resetApplied=useRef(false);
   useEffect(()=>{if(loaded&&!data.nodes.length)setLayoutReady(true);},[loaded,data.nodes.length]);
   const [dragActive,setDragActive]=useState(false),[hovered,setHovered]=useState(null),[keepDrawing,setKeepDrawing]=useState(true);
   const labelLayout=useRef(createLabelLayout()),labelClock=useRef({nextUpdate:0,fadeUntil:0}),pointers=useRef(new Set()),motionSettling=useRef(false);
@@ -243,9 +245,15 @@ function FleetGraph({data,loaded,selected,select,agents,animation,animationMenuO
   const persist=useRef();persist.current=()=>{savePositions();saveViewport();};
   useEffect(()=>{const save=()=>persist.current();const hidden=()=>{if(document.hidden)save();};window.addEventListener('pagehide',save);document.addEventListener('visibilitychange',hidden);return()=>{window.removeEventListener('pagehide',save);document.removeEventListener('visibilitychange',hidden);};},[]);
   useEffect(()=>{const observer=new ResizeObserver(([entry])=>setSize({width:Math.floor(entry.contentRect.width),height:Math.floor(entry.contentRect.height)}));observer.observe(host.current);return()=>observer.disconnect();},[]);
-  useEffect(()=>{if(!graph.current)return;dragging.current=false;released.current.clear();setDragActive(false);configureDragForces(graph.current,false);configureFleetLinks(graph.current);graph.current.d3ReheatSimulation();},[model]);
-  useEffect(()=>{if(!reset)return;positions.current={};targets.current.clear();try{const view=savedView();delete view.viewport;view.positions={};localStorage.setItem(viewKey,JSON.stringify(view));}catch{}for(const n of model.nodes){delete n.fx;delete n.fy;n.manual=false;}pinFleetAnchors(model.nodes);released.current.clear();dragging.current=false;setDragActive(false);configureDragForces(graph.current,false);configureFleetLinks(graph.current);graph.current.d3ReheatSimulation();fitted.current=false;},[reset]);
-  function stopped(){if(dragging.current||!model.nodes.length)return;if(released.current.size){settleDragNodes(released.current,targets.current,(n,target)=>fleetMotionOffset(reducedMotion?'off':animation,target,motionTime.current,phaseFor(n.id),graph.current?.zoom()||1));released.current.clear();lastFrame.current=performance.now();setDragActive(false);savePositions();return;}setDragActive(false);for(const n of model.nodes){n.fx=n.x;n.fy=n.y;targets.current.set(n.id,{x:n.x,y:n.y});}savePositions();if(!fitted.current){const view=savedView().viewport;fitted.current=true;if(view&&Number.isFinite(view.x)&&Number.isFinite(view.y)&&Number.isFinite(view.zoom)&&view.zoom>0){graph.current?.centerAt(view.x,view.y,0);graph.current?.zoom(view.zoom,0);}else graph.current?.zoomToFit(0,80);}setLayoutReady(true);}
+  useEffect(()=>{if(!graph.current)return;resetApplied.current=false;dragging.current=false;released.current.clear();setDragActive(false);configureDragForces(graph.current,false);configureFleetLinks(graph.current);graph.current.d3ReheatSimulation();},[model]);
+  useEffect(()=>{if(!reset)return;
+    resetApplied.current=true;
+    resetFleetChildren(model.nodes,model.links,{zoom:graph.current?.zoom()||1,motionPadding:animation==='drift'&&!reducedMotion?23:0});
+    for(const n of model.nodes){n.fx=n.x;n.fy=n.y;n.vx=n.vy=0;targets.current.set(n.id,{x:n.x,y:n.y});delete n.dragOrigin;delete n.dragWeight;delete n.dragParent;delete n.dragParentOrigin;}
+    released.current.clear();dragging.current=false;setDragActive(false);savePositions();
+    configureDragForces(graph.current,false);configureFleetLinks(graph.current);graph.current.d3ReheatSimulation();
+  },[reset]);
+  function stopped(){if(dragging.current||!model.nodes.length)return;if(resetApplied.current&&fitted.current){resetApplied.current=false;setDragActive(false);savePositions();return;}if(released.current.size){settleDragNodes(released.current,targets.current,(n,target)=>fleetMotionOffset(reducedMotion?'off':animation,target,motionTime.current,phaseFor(n.id),graph.current?.zoom()||1));released.current.clear();lastFrame.current=performance.now();setDragActive(false);savePositions();return;}setDragActive(false);for(const n of model.nodes){n.fx=n.x;n.fy=n.y;targets.current.set(n.id,{x:n.x,y:n.y});}savePositions();if(!fitted.current){const view=savedView().viewport;fitted.current=true;if(view&&Number.isFinite(view.x)&&Number.isFinite(view.y)&&Number.isFinite(view.zoom)&&view.zoom>0){graph.current?.centerAt(view.x,view.y,0);graph.current?.zoom(view.zoom,0);}else graph.current?.zoomToFit(0,80);}setLayoutReady(true);}
 
   function animate(now){const elapsed=Math.min(100,now-(lastFrame.current||now));lastFrame.current=now;const paused=dragging.current||released.current.size||document.hidden||animationMenuOpen||pointers.current.size||now-lastInteraction.current<250||document.querySelector('dialog[open]');
     const moving=!paused&&((animation!=='off'&&!reducedMotion)||motionSettling.current);

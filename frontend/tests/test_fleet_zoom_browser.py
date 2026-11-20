@@ -16,7 +16,7 @@ def test_repeated_zoom_out_and_wheel(authenticated_client, fleet, width):
     with playwright.sync_playwright() as p:
         browser = p.chromium.launch(channel='msedge', headless=True)
         page = browser.new_page(viewport={'width':width,'height':1000})
-        page.add_init_script("localStorage.setItem('harqis:fleet:graph:v2:frontend-test-user',JSON.stringify({viewport:{x:0,y:0,zoom:1},positions:{'agent:butler':{x:0,y:40},'owner:corpus':{x:-85,y:-45},'hud:context':{x:85,y:-45}}}));")
+        page.add_init_script("if(!localStorage.getItem('harqis:fleet:graph:v2:frontend-test-user'))localStorage.setItem('harqis:fleet:graph:v2:frontend-test-user',JSON.stringify({viewport:{x:0,y:0,zoom:1},positions:{'agent:butler':{x:0,y:40},'owner:corpus':{x:-85,y:-45},'hud:context':{x:85,y:-45}}}));")
         def route(r):
             u = urlparse(r.request.url)
             if u.path == '/agents/api/graph':
@@ -46,4 +46,17 @@ def test_repeated_zoom_out_and_wheel(authenticated_client, fleet, width):
         page.mouse.wheel(0,300)
         page.wait_for_timeout(500)
         assert zoom()<after
+        saved = lambda: page.evaluate("JSON.parse(localStorage.getItem('harqis:fleet:graph:v2:frontend-test-user'))")
+        prior=saved()
+        page.get_by_role('button',name='Reset positions',exact=True).click()
+        page.wait_for_timeout(1800)
+        reset=saved()
+        for identity in ['agent:butler','owner:corpus']:
+            assert reset['positions'][identity] == prior['positions'][identity]
+        assert reset['viewport'] == prior['viewport']
+        assert reset['positions']['hud:context'] != prior['positions']['hud:context']
+        page.reload()
+        page.locator('.fleet-map[aria-busy=false]').wait_for()
+        assert zoom() == pytest.approx(reset['viewport']['zoom'],rel=.01)
+        assert saved()['positions']['hud:context']['x'] == pytest.approx(reset['positions']['hud:context']['x'])
         browser.close()
