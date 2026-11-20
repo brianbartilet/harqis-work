@@ -1,12 +1,9 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {InspectorIcon} from './fleet-inspector.jsx';
+import {OpenAgentInterface} from './fleet-interface-link.jsx';
 
 export function OpenNod({url,iconOnly=false}){
- if(!/^https?:\/\//i.test(url||''))return null;
- return <a className={iconOnly?'fleet-inspector-icon fleet-connect-icon':'fleet-nod-button fleet-primary'} href={url} target="_blank" rel="noopener noreferrer" aria-label="Open Nod in new window" title="Open Nod in new window" onClick={event=>{
-  const popup=window.open(url,'_blank','popup,width=1200,height=850');
-  if(popup){popup.opener=null;event.preventDefault();popup.focus();}
- }}><InspectorIcon name="external"/>{!iconOnly&&<span>Open Nod</span>}</a>;
+ return <OpenAgentInterface url={url} provider="Nod" iconOnly={iconOnly}/>;
 }
 
 export function NodConversation({agent,api,refresh}){
