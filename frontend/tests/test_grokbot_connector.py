@@ -225,6 +225,32 @@ def test_bad_roster_does_not_mark_missing(grok, fleet):
     assert bots(fleet)[0]['remote_available']
 
 
+def test_roster_accepts_additive_metadata(grok, fleet, monkeypatch):
+    g, state = grok
+    upstream = g.request
+    def request(path, **kwargs):
+        result = upstream(path, **kwargs)
+        if path.endswith('ListGrokBotAgents'):
+            return {**result, 'futureMetadata': {'value': 'not persisted'}}
+        return result
+    monkeypatch.setattr(g, 'request', request)
+    assert g.connect_key(USER, 'key')['imported'] == 1
+    assert bots(fleet)[0]['remote_id'] == BOT
+    assert 'futureMetadata' not in json.dumps(bots(fleet))
+
+
+@pytest.mark.parametrize('response', [None, [], {'agents': None}, {'agents': {}}, {'error': 'unavailable'}])
+def test_invalid_roster_envelope_preserves_inventory(grok, fleet, monkeypatch, response):
+    g, state = grok
+    g.connect_key(USER, 'key')
+    upstream = g.request
+    monkeypatch.setattr(g, 'request', lambda path, **kw: response if path.endswith('ListGrokBotAgents') else upstream(path, **kw))
+    with pytest.raises(HTTPException):
+        g.sync(USER)
+    assert bots(fleet)[0]['remote_available']
+    assert g.store.get(USER, 'grokbot')['bot_count'] == 1
+
+
 def test_wire_protocol_pending_and_secret_log_redaction(fleet, monkeypatch, caplog):
     from modules.integrations import grokbot as g
     client_type = httpx.Client

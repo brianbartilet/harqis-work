@@ -133,7 +133,9 @@ def start_login(user):
 
 def roster(pair):
     raw = request('/aiserver.v1.GrokBotService/ListGrokBotAgents', token=pair['accessToken'], payload={})
-    if not isinstance(raw, dict) or set(raw) - {'agents'} or not isinstance(raw.get('agents', []), list):
+    # Accept additive response metadata, but never mistake an error envelope for
+    # an empty roster. Proto3 can omit the repeated field for an empty response.
+    if not isinstance(raw, dict) or (raw and 'agents' not in raw) or not isinstance(raw.get('agents', []), list):
         raise HTTPException(502, 'Grok Bot roster format changed. Your saved roster is unchanged.')
     rows = raw.get('agents', [])
     if len(rows) > 2000:
