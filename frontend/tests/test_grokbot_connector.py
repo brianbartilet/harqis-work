@@ -244,7 +244,7 @@ def test_wire_protocol_pending_and_secret_log_redaction(fleet, monkeypatch, capl
     assert all(r.url.host=='api2.cursor.sh' for r in requests)
 
 
-def test_browser_connection_ui(grok, authenticated_client, tmp_path):
+def test_browser_connection_ui(grok, authenticated_client, tmp_path, monkeypatch):
     playwright = pytest.importorskip('playwright.sync_api')
     errors=[]
     with playwright.sync_playwright() as p:
@@ -261,6 +261,19 @@ def test_browser_connection_ui(grok, authenticated_client, tmp_path):
         card=page.locator('.connector-card').filter(has=page.get_by_role('heading',name='Grok Bot',exact=True))
         card.get_by_role('button',name='Connect',exact=True).click()
         dialog=page.get_by_role('dialog',name='Connect Grok Bot')
+        g, state = grok
+        state['fail'] = (502, 'Temporary roster failure')
+        dialog.get_by_role('button',name='Sign in with browser',exact=True).click()
+        retry = dialog.get_by_role('button',name='Check sign-in again',exact=True)
+        retry.wait_for(timeout=15000)
+        with monkeypatch.context() as patch:
+            def busy_login(user):
+                raise HTTPException(409, 'Grok Bot connection is busy.')
+            patch.setattr(g, 'start_login', busy_login)
+            dialog.get_by_role('button',name='Sign in with browser',exact=True).click()
+            playwright.expect(dialog.get_by_role('alert')).to_have_text('Grok Bot connection is busy.')
+            playwright.expect(retry).not_to_be_visible()
+        state['fail'] = None
         dialog.get_by_role('button',name='Sign in with browser',exact=True).click()
         dialog.get_by_role('link',name='Continue on Cursor').wait_for()
         assert dialog.get_by_role('link',name='Continue on Cursor').get_attribute('href').startswith('https://cursor.com/loginDeepControl?')

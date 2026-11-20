@@ -65,9 +65,10 @@
     let attempt='',timer,closed=false,busy=false;
     const browserArea=el('div');body.append(browserArea);
     const links=el('div');browserArea.append(links);
-    async function cancel(){clearTimeout(timer);const id=attempt;attempt='';if(id)await api('/grokbot/login/'+id+'/cancel',{}).catch(()=>{});}
+    async function cancel(){clearTimeout(timer);retry.hidden=true;const id=attempt;attempt='';if(id)await api('/grokbot/login/'+id+'/cancel',{}).catch(()=>{});}
     async function poll(id){
-      if(closed||attempt!==id)return;
+      if(closed||!id||attempt!==id)return;
+      clearTimeout(timer);error.textContent='';
       try{
         const result=await api('/grokbot/login/'+id+'/poll',{});
         if(closed||attempt!==id)return;
