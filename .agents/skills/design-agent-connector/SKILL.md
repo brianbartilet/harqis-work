@@ -49,12 +49,45 @@ object. A visual association does not authorize execution or share credentials.
   relationship inspection. Label manual associations separately from discovered
   connections. Do not present association as a new permission grant.
 
+## Expose the agent's entry points in Fleet
+
+- Include a usable entry point in the selected agent's inspector toolbar, not
+  only a connector-management link. Discover whether the provider offers a web
+  interface, an interactive CLI, or both; expose the supported options. When
+  neither is available, explain the limitation rather than inventing execution.
+- For a web interface, use the saved connector's validated HTTP(S) URL. Add an
+  **Open <provider> in new window** icon with a tooltip and accessible label;
+  isolate the opened window from its opener and retain a normal link fallback.
+  Never place credentials in the URL. Keep **Manage connector** as a separate
+  control. Reuse `OpenNod` in `frontend/src/nod-conversation.jsx` as the pattern.
+- For a CLI, add **Open session** using the existing Fleet prepare endpoint and
+  action-linked terminal dialog, as Codex/Claude do in
+  `frontend/modules/agents/service.py` and `frontend/src/agent-fleet.jsx`.
+  Resolve the selected agent's runtime and execution host from live worker
+  capabilities; preserve owner/installation boundaries and reuse its Sessions
+  action and live session. Do not silently switch providers or hosts. Check
+  executable discovery and authentication in the background worker environment,
+  including standard install locations absent from an interactive shell's PATH.
+- Opening a CLI must not submit the saved Action prompt or enable unsupported
+  automated execution. Keep the CLI in the existing dialog unless the user
+  explicitly requests another presentation. Report missing worker/auth setup
+  with an actionable reason; disable execution for inactive or mock agents.
+- In Conversation tabs, group interface, refresh and connector controls into a
+  compact toolbar with consistent button styling. Use existing Fleet icons,
+  tooltips and keyboard focus behavior; keep labels on secondary actions where
+  they aid recognition. Preserve available connector/settings controls.
+
 ## Verify and deliver
 
 Test repeated discovery, multiple agents sharing applications, distinct accounts,
 owner isolation, partial failures, removed objects, merge-refresh-unmerge, and
 source changes. Use isolated stores and protocol doubles. Inspect the UI at
 desktop and mobile widths, including search, selected values, and error states.
+Verify inspector entry points as well: web links open the correct installation
+with an isolated opener; CLI controls select the correct runtime/host and reuse
+the live session. Cover unavailable workers, inactive/private agents, repeated
+clicks, and narrow-screen toolbar layout. Build changed frontend bundles using
+the repository's asset tooling and retain only intended generated changes.
 
 Report implemented mappings, verified capabilities, remaining limitations, and
 whether the real saved connector was linked. Do not claim a live connection from
