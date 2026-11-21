@@ -29,6 +29,21 @@ def test_graph_evidence_and_filters(corpus):
     assert all(e['source'] in ids and e['target'] in ids for e in graph['edges'])
 
 
+def test_graph_reuses_permitted_entries_only_within_one_request(corpus, monkeypatch):
+    reads = []
+
+    def collect():
+        reads.append(True)
+        return list(corpus)
+
+    monkeypatch.setattr(entities, 'current_entries', collect)
+    assert any(n['id'] == 'entry:one' for n in entities.graph()['nodes'])
+    assert len(reads) == 1
+    corpus.clear()
+    assert entities.graph()['nodes'] == []
+    assert len(reads) == 2
+
+
 def test_stale_removed_and_protected_entries_cannot_leak(corpus):
     store = get_store()
     mention = entities.mention(corpus[0], 'tools', 'React', 'uses React', 'model-extracted')

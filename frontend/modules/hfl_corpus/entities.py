@@ -216,12 +216,17 @@ def graph(source='', since='', until='', limit=100, query='', shared=False, cont
     from modules.hfl_corpus.ideas_graph import extend
     from modules.hfl_corpus.graph_workspace import active_context, scope_snapshot
     context = active_context(context)
-    snapshot = canonical_snapshot()
+    from config import get_settings
+    # Reuse this request's permitted corpus for local intent and entity projections.
+    # Scoped graphs still need a separate unfiltered read to validate intent evidence.
+    local_snapshot = not get_settings().hfl_corpus_api_url or os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') == '1'
+    entries = current_entries() if local_snapshot and not context else None
+    snapshot = canonical_snapshot(entries=entries) if entries is not None else canonical_snapshot()
     snapshot = scope_snapshot(snapshot, context)
     if not any(snapshot.get(k) for k in ('ideas', 'actions', 'topics', 'links', 'goals', 'maps', 'lists')):
-        result = _corpus_graph(source, since, until, limit, query, shared, context, include_provisional)
+        result = _corpus_graph(source, since, until, limit, query, shared, context, include_provisional, entries=entries)
     else:
-        base = _corpus_graph(source, since, until, 0, '', False, context, include_provisional)
+        base = _corpus_graph(source, since, until, 0, '', False, context, include_provisional, entries=entries)
         result = extend(base, snapshot, since=since, until=until, query=query, sources=source, context=context, shared=shared, limit=limit, workspace_scoped=bool(context))
     if not source and not shared:
         from modules.agents.projection import extend as fleet_graph
@@ -234,8 +239,9 @@ def graph(source='', since='', until='', limit=100, query='', shared=False, cont
     return result
 
 
-def _corpus_graph(source='', since='', until='', limit=100, query='', shared=False, context='', include_provisional=True):
-    rows = projection('', since, until, context) if context else projection('', since, until)
+def _corpus_graph(source='', since='', until='', limit=100, query='', shared=False, context='', include_provisional=True, *, entries=None):
+    rows = projection('', since, until, context, entries=entries) if entries is not None else (
+        projection('', since, until, context) if context else projection('', since, until))
     available_sources = sorted({e['source'] for e in rows if e['source']})
     selected_sources = {source} if isinstance(source, str) and source else set(source or [])
     if selected_sources:
@@ -344,11 +350,14 @@ def _corpus_graph(source='', since='', until='', limit=100, query='', shared=Fal
     # Curated relationship edges stay within the currently permitted graph nodes.
     from workflows.hfl.entity_soul import all_souls
     store = get_store()
+    from workflows.hfl.entity_store import identity_resolver
+    with store.connection() as db:
+        resolve = identity_resolver(db)
     for identity, soul in all_souls().items():
         if identity not in nodes:
             continue
         for relationship in soul['relationships']:
-            target = store.resolve(relationship['target_id'])
+            target = resolve(relationship['target_id'])
             if target not in nodes or target == identity:
                 continue
             if since and relationship.get('until') and relationship['until'] < since:

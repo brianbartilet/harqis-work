@@ -31,7 +31,7 @@ def call(operation, *args, **kwargs):
         raise HTTPException(422, str(exc)) from None
 
 
-def canonical_snapshot(*, include_promoted=False):
+def canonical_snapshot(*, include_promoted=False, entries=None):
     from config import get_settings
     settings = get_settings()
     if settings.hfl_corpus_api_url and os.getenv('HFL_TIMELINE_LOCAL_PREVIEW') != '1':
@@ -43,7 +43,7 @@ def canonical_snapshot(*, include_promoted=False):
             return response.json()
         except (httpx.HTTPError, ValueError):
             raise HTTPException(502, 'Ideas and actions could not load from the canonical host.') from None
-    return permitted_snapshot(include_promoted=include_promoted)
+    return permitted_snapshot(entries=entries, include_promoted=include_promoted)
 
 
 def permitted_snapshot(entries=None, *, include_promoted=False):
@@ -263,6 +263,8 @@ def board_graph(request: Request, identity: str, context: str = ''):
     # Permission checks remain authoritative for shared objects. Draft-only
     # boards bypass corpus loading entirely; editing uses the browser cache.
     from modules.hfl_corpus.entities import graph
+    from modules.hfl_corpus.graph_workspace import active_context
+    context = active_context(context)
     shared = graph(limit=0)
     available = {n['id']: n for n in shared['nodes']}
     eligible = {n['id'] for n in graph(limit=0, context=context)['nodes']} if context else set(available)

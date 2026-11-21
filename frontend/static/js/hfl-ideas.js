@@ -21,7 +21,7 @@ window.HflObjectDescription = (item = {}) => {
     if (!response.ok) throw Error(typeof data.detail === 'string' ? data.detail : 'Could not save. Check the fields and retry.');
     return data;
   }
-  const api = (path, method = 'GET', data) => request(base + path, {method, ...(data === undefined ? {} : {body: JSON.stringify(data)})});
+  const api = (path, method = 'GET', data, options = {}) => request(base + path, {...options, method, ...(data === undefined ? {} : {body: JSON.stringify(data)})});
   const button = (text, action) => { const b = el('button', text); b.type = 'button'; b.onclick = action; return b; };
   const changed = (selectId = null, boardSwitch = false, refreshShared = false) => { window.dispatchEvent(new CustomEvent('hfl:ideas-updated', {detail:{selectId,boardSwitch,refreshShared,boardLocal:!!maps.current}})); if(!maps.current)window.dispatchEvent(new Event('hfl:actions-updated')); };
   function dialog(title) {

@@ -786,7 +786,7 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     transition=null;if(!preserveLayout)motionTime=0;
     // Timeline opens on the latest week, even if an earlier session was panned
     // away from the date row. Keep saved filters and node positions intact.
-    const restoredViewport=preset!=='timeline'&&nodes.some(n=>pendingState?.positions?.[n.id])?pendingState?.viewport:null;
+    const restoredViewport=!board&&preset!=='timeline'&&nodes.some(n=>pendingState?.positions?.[n.id])?pendingState?.viewport:null;
     pendingState=null;
     if(window.HflIdeas)window.HflIdeas.maps.pendingPositions=null;
     // Supply endpoints from this render directly. Static board updates use zero
@@ -845,6 +845,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
   }
   function setLoading(value) {
     loading=value; $('reload').disabled=value;
+    const board=window.HflIdeas?.maps.current;
+    $('loading').querySelector('strong').textContent=board?'Loading board':'Loading Activity Graph';
+    $('loading').querySelector('span:last-child').textContent=board?'Opening '+board.name+' and preparing connections…':'Reading activity and preparing connections…';
     $('loading').hidden=!value; $('stage').setAttribute('aria-busy',String(value));
     $('workspace').inert=value;
   }
@@ -945,7 +948,8 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     if(exampleMode){setLoading(false);configureData(exampleGraph());window.HflIdeas?.maps.finishDeletionTransition();return;}
     const board=window.HflIdeas?.maps.current;
     if(board){
-      loading=true;$('reload').disabled=true;
+      requestController=new AbortController();setLoading(true);
+      const sameBoard=renderedBoardId===board.id;
       const progress=window.HflIdeas.maps.status;
       progress.textContent='Updating board and loading connected items…';progress.setAttribute('aria-busy','true');
       showInfo('status','Updating board and loading connected items…',true);
@@ -953,13 +957,13 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       try{
         let shared={nodes:board.members.map(id=>window.HflIdeas.maps.nodes.get(id)).filter(Boolean),edges:[...window.HflIdeas.maps.sharedEdges.values()],sources:[]};
         if(force===true||board.members.some(id=>id.startsWith('list:'))||shared.nodes.length!==board.members.length||(window.activityModals?.context()&&shared.nodes.some(n=>n.outside_workspace===undefined))){
-          shared=await window.HflIdeas.api('/maps/'+board.id+'/graph?'+new URLSearchParams({context:window.activityModals?.context()||''}));
+          shared=await window.HflIdeas.api('/maps/'+board.id+'/graph?'+new URLSearchParams({context:window.activityModals?.context()||''}),'GET',undefined,{signal:AbortSignal.any([requestController.signal,AbortSignal.timeout(45000)])});
           if(version!==requestVersion||window.HflIdeas.maps.current?.id!==board.id)return;
           board.members.forEach(id=>window.HflIdeas.maps.nodes.delete(id));
           for(const [key,edge] of window.HflIdeas.maps.sharedEdges)if(board.members.includes(edge.source)&&board.members.includes(edge.target))window.HflIdeas.maps.sharedEdges.delete(key);
         }
-        setLoading(false);configureData(shared,force===true);progress.textContent='Board ready · '+data.nodes.length+' nodes';
-      }catch(error){if(version===requestVersion){setLoading(false);showInfo('status',error.message,true);progress.textContent=error.message;}}
+        setLoading(false);configureData(shared,sameBoard);progress.textContent='Board ready · '+data.nodes.length+' nodes';
+      }catch(error){if(version===requestVersion){setLoading(false);configureData({nodes:[],edges:[],sources:[]});showInfo('status',error.message+' · Use Refresh to retry.',true);progress.textContent=error.message;}}
       finally{if(version===requestVersion)progress.removeAttribute('aria-busy');}
       return;
     }

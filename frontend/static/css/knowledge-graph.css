@@ -313,7 +313,8 @@
 .kg-capacity-heading .kg-types-heading{margin:0;font-size:12px;line-height:1.5}
 .kg-shell #kg-capacity-help-open{display:flex;align-items:center;justify-content:center;width:28px;height:28px;padding:4px;margin:0;border-color:transparent;background:transparent;color:#94a3b8}
 .kg-shell #kg-capacity-help-open:hover{color:#67e8f9;background:#172554}
-.kg-capacity-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.kg-capacity-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) auto;align-items:end;gap:12px}
+.kg-capacity-settings #kg-capacity-reset{height:36px;margin:0;padding:8px 12px;white-space:nowrap}
 .kg-capacity-field{min-width:0}
 .kg-capacity-field>label{display:block;font-size:12px;color:#94a3b8;margin-bottom:7px}
 .kg-number-control{display:flex;min-width:0;border:1px solid #30425b;border-radius:8px;background:#101d30;overflow:hidden}

@@ -16,6 +16,60 @@ def test_all_activity_defaults_are_not_a_filter():
     assert active_context('q=planning') == 'q=planning'
 
 
+def test_board_all_activity_context_builds_graph_once(ideas, authenticated_client, monkeypatch):
+    from modules.hfl_corpus import entities
+    board = ideas.save_map(board_payload(members=['entity:one']))
+    calls = []
+    def graph(**kwargs):
+        calls.append(kwargs)
+        return {'nodes': [{'id': 'entity:one', 'label': 'One', 'kind': 'tools'}], 'edges': []}
+    monkeypatch.setattr(entities, 'graph', graph)
+    response = authenticated_client.get(BASE+'/maps/'+board['id']+'/graph', params={
+        'context': 'views=&q=&source=&rolling=0&workspace_revision=5'})
+    assert response.status_code == 200
+    assert response.json()['nodes'][0]['outside_workspace'] is False
+    assert calls == [{'limit': 0}]
+
+
+@pytest.mark.parametrize('width', [390, 1440])
+def test_board_loading_overlay_and_initial_fit(ideas, authenticated_client, width, tmp_path):
+    from playwright.sync_api import sync_playwright, expect
+    from test_graph_capacity import route_app, launch
+    with sync_playwright() as engine:
+        browser = launch(engine)
+        page = browser.new_page(viewport={'width': width, 'height': 1000})
+        route_app(page, authenticated_client)
+        try:
+            page.goto('http://graph.test/hfl-corpus/graph?example=1')
+            expect(page.locator('#kg-loading')).to_be_hidden()
+            page.evaluate('''() => {
+                const maps=window.HflIdeas.maps;
+                window.HflIdeas.api=()=>new Promise(resolve=>window.finishBoardLoad=resolve);
+                maps.selectBoard({id:'loading-test',name:'Small board',members:['entity:a','entity:b'],
+                  drafts:[],edges:[],workspace_ids:[],positions:{'entity:a':{x:10000,y:10000},'entity:b':{x:10400,y:10200}}});
+            }''')
+            expect(page.locator('#kg-loading')).to_be_visible()
+            expect(page.locator('#kg-loading')).to_contain_text('Small board')
+            assert page.locator('#kg-workspace').evaluate('(el)=>el.inert')
+            assert page.locator('#kg-stage').get_attribute('aria-busy') == 'true'
+            page.screenshot(path=str(tmp_path/f'board-loading-{width}.png'))
+            page.evaluate('''() => window.finishBoardLoad({nodes:[
+              {id:'entity:a',kind:'tools',label:'First item'},
+              {id:'entity:b',kind:'tools',label:'Second item'}],edges:[],sources:[]})''')
+            expect(page.locator('#kg-loading')).to_be_hidden()
+            expect(page.locator('#kg-map-count')).to_contain_text('2 nodes')
+            page.wait_for_function('''() => {
+              const c=document.querySelector('#kg-canvas canvas'),t=c?.__zoom;
+              if(!t)return false;
+              return [[10000,10000],[10400,10200]].every(([x,y])=>
+                x*t.k+t.x>20 && x*t.k+t.x<c.clientWidth-20 &&
+                y*t.k+t.y>20 && y*t.k+t.y<c.clientHeight-20);
+            }''')
+            page.screenshot(path=str(tmp_path/f'board-fit-{width}.png'))
+        finally:
+            browser.close()
+
+
 def test_board_navigation_inherits_shared_selection(authenticated_client):
     from modules.hfl_corpus import workspace_views
     work = workspace_views.save(workspace_views.WorkspaceWrite(name='Work', state={'source': 'git'}))

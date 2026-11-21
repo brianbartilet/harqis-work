@@ -17,7 +17,7 @@ def ideas(monkeypatch, tmp_path):
     followups = FollowUpStore(tmp_path / 'ideas.sqlite3')
     monkeypatch.setattr(timeline, 'store', lambda: followups)
     monkeypatch.setattr(entities, 'current_entries', lambda *a: [])
-    monkeypatch.setattr(entities, 'projection', lambda *a: [])
+    monkeypatch.setattr(entities, 'projection', lambda *a, **kw: [])
     return IdeasStore(followups)
 
 
