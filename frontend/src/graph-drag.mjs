@@ -2,7 +2,7 @@ import {forceCollide, forceX, forceY} from 'd3-force-3d';
 
 // Preserve preset spacing while letting connected nodes follow elastically.
 const originalLinkStrength=new WeakMap();
-export function configureDragForces(graph,localDrag=false,response=1) {
+export function configureDragForces(graph,localDrag=false,response=1,{screenSpace=false}={}) {
   const linkForce=graph.d3Force('link');
   if(!originalLinkStrength.has(linkForce))originalLinkStrength.set(linkForce,linkForce.strength());
   linkForce.strength(localDrag?.06:originalLinkStrength.get(linkForce));
@@ -19,7 +19,7 @@ export function configureDragForces(graph,localDrag=false,response=1) {
     // Presets are not a force-equilibrium layout: reheating must not contract
     // every link to 105 or pull the entire graph back to the old cluster centers.
     graph.d3Force('center',null);
-    graph.d3Force('drag-damping',dragDamping(response));
+    graph.d3Force('drag-damping',dragDamping(response,screenSpace?Math.max(.000001,graph.zoom?.()||1):1));
   }else{
     graph.d3Force('drag-damping',null);
   }
@@ -51,7 +51,7 @@ export function dragFollow(scale=1,response=1){
   force.initialize=value=>{nodes=value;};return force;
 }
 
-export function dragDamping(response=1){
+export function dragDamping(response=1,scale=1){
   let nodes=[];
   const force=()=>{for(const n of nodes){
     if(!n.dragOrigin)continue;
@@ -60,13 +60,13 @@ export function dragDamping(response=1){
     const px=parent&&origin?(parent.fx??parent.x)-origin.x:0;
     const py=parent&&origin?(parent.fy??parent.y)-origin.y:0;
     const dx=n.x+n.vx-n.dragOrigin.x,dy=n.y+n.vy-n.dragOrigin.y;
-    const distance=Math.hypot(dx,dy),reach=(Math.hypot(px,py)+120+(weight===1?Math.hypot(n.dragOrigin.x-origin.x,n.dragOrigin.y-origin.y)*(1-Math.exp(-Math.hypot(px,py)/100)):0))*weight;
+    const distance=Math.hypot(dx,dy),reach=(Math.hypot(px,py)+120/scale+(weight===1?Math.hypot(n.dragOrigin.x-origin.x,n.dragOrigin.y-origin.y)*(1-Math.exp(-Math.hypot(px,py)/100)):0))*weight;
     if(distance>reach){
       n.vx=n.dragOrigin.x+dx/distance*reach-n.x;
       n.vy=n.dragOrigin.y+dy/distance*reach-n.y;
     }
     // Clamp after correcting the envelope so reversing a drag cannot teleport nodes.
-    const speed=Math.hypot(n.vx,n.vy),maxSpeed=24*weight*response;
+    const speed=Math.hypot(n.vx,n.vy),maxSpeed=24*weight*response/scale;
     if(speed>maxSpeed){n.vx*=maxSpeed/speed;n.vy*=maxSpeed/speed;}
   }};
   force.initialize=value=>{nodes=value;};

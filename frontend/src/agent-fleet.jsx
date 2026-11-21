@@ -267,7 +267,7 @@ function FleetGraph({data,loaded,selected,select,agents,animation,animationMenuO
   useEffect(()=>{let frame;const tick=now=>{animateRef.current(now);frame=requestAnimationFrame(tick);};frame=requestAnimationFrame(tick);return()=>cancelAnimationFrame(frame);},[]);
   useEffect(()=>{motionSettling.current=true;},[animation]);
   useEffect(()=>{const release=e=>{if(pointers.current.delete(e.pointerId))lastInteraction.current=performance.now();};window.addEventListener('pointerup',release);window.addEventListener('pointercancel',release);return()=>{window.removeEventListener('pointerup',release);window.removeEventListener('pointercancel',release);};},[]);
-  function followDrag(n,delta={x:0,y:0}){lastInteraction.current=performance.now();if(dragging.current===n)return;dragging.current=n;releaseFleetNeighbors(n,model.nodes,model.links,released.current,{x:n.x-delta.x,y:n.y-delta.y});configureDragForces(graph.current,true,2.2);setDragActive(true);}
+  function followDrag(n,delta={x:0,y:0}){lastInteraction.current=performance.now();if(dragging.current===n)return;dragging.current=n;releaseFleetNeighbors(n,model.nodes,model.links,released.current,{x:n.x-delta.x,y:n.y-delta.y});configureDragForces(graph.current,true,2.2,{screenSpace:true});setDragActive(true);}
   function endDrag(n){dragging.current=false;n.manual=true;n.fx=n.x;n.fy=n.y;targets.current.set(n.id,{x:n.x,y:n.y});lastInteraction.current=performance.now();savePositions();graph.current.d3ReheatSimulation();}
 
   const endpointId=n=>typeof n==='object'?n.id:n;

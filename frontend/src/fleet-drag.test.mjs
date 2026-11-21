@@ -45,3 +45,26 @@ test('faster Fleet response follows a dragged agent sooner and settles finitely'
  };
  assert.ok(run(2.2)>run(1.3),'Fleet catches up sooner');
 });
+
+test('Fleet follow speed remains strong when zoomed out and reverses smoothly',async()=>{
+ const {forceSimulation,forceManyBody,forceLink}=await import('d3-force-3d');
+ const {configureDragForces}=await import('./graph-drag.mjs');
+ for(const zoom of [1,.2,.02,.005]){
+  const parent={id:'a',kind:'agent',x:0,y:0,fx:0,fy:0,radius:12};
+  const child={id:'c',kind:'skill',x:105/zoom,y:0,fx:105/zoom,fy:0,radius:7};
+  const nodes=[parent,child],links=[{source:'a',target:'c'}];
+  const sim=forceSimulation(nodes).stop().velocityDecay(.2).force('charge',forceManyBody()).force('link',forceLink(links).id(n=>n.id));
+  releaseFleetNeighbors(parent,nodes,links,new Set());
+  configureDragForces({d3Force:(...args)=>sim.force(...args),zoom:()=>zoom},true,2.2,{screenSpace:true});
+  parent.x=parent.fx=-300/zoom;
+  sim.tick(5);
+  assert.ok(105-child.x*zoom>100,'child follows more than 100 screen pixels at zoom '+zoom);
+  parent.x=parent.fx=300/zoom;
+  for(let i=0;i<200;i++){
+   const x=child.x,y=child.y;sim.tick();
+   assert.ok(Math.hypot(child.x-x,child.y-y)*zoom<=52.81,'reversal stays within screen speed limit');
+  }
+  assert.ok(Number.isFinite(child.x)&&Math.abs(child.vx*zoom)<.1);
+  sim.stop();
+ }
+});
