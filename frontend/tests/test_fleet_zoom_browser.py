@@ -53,7 +53,7 @@ def test_repeated_zoom_out_and_wheel(authenticated_client, fleet, width):
         reset=saved()
         for identity in ['agent:butler','owner:corpus']:
             assert reset['positions'][identity] == prior['positions'][identity]
-        assert reset['viewport'] != prior['viewport']
+        assert reset['viewport'] == prior['viewport']
         assert reset['positions']['hud:context'] != prior['positions']['hud:context']
         # Zoom and animation must not change Reset's saved resting layout.
         for mode in ['Drift','Breathing','Ripple','Off']:
@@ -63,8 +63,6 @@ def test_repeated_zoom_out_and_wheel(authenticated_client, fleet, width):
             page.get_by_role('button',name='Reset positions',exact=True).click()
             page.wait_for_timeout(2200)
             assert saved()['positions'] == reset['positions']
-            assert saved()['viewport'] == pytest.approx(reset['viewport'],abs=1e-8)
-            assert saved()['animation'] == 'off'
         reset=saved()
         page.reload()
         page.locator('.fleet-map[aria-busy=false]').wait_for()

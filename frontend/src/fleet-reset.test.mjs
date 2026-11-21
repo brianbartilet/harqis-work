@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resetFleetChildren,fitFleetReset} from './fleet-reset.mjs';
+import {resetFleetChildren} from './fleet-reset.mjs';
 const hub=(id,x=0,y=0,kind='agent')=>({id,kind,x,y,fx:x,fy:y,radius:35});
 const child=(id,kind='skill')=>({id,kind,x:1,y:1,radius:6});
 const link=(source,target)=>({source,target});
@@ -43,22 +43,4 @@ test('types occupy distinct sectors and sparse parents use the inner ring',()=>{
  assert.ok(nodes.filter(n=>n.kind==='workflow').every(n=>n.x<0));
  const sparse=[hub('b'),child('only')];resetFleetChildren(sparse,[link('b','only')]);
  assert.ok(Math.hypot(sparse[1].x,sparse[1].y)<100);assertSeparated(nodes);
-});
-
-test('fitted reset keeps anchors fixed and pins every child within the viewport',()=>{
- for(const [width,height] of [[1000,640],[390,640]]){
-  const nodes=[hub('a',-150),hub('b',150),...Array.from({length:50},(_,i)=>child('c'+i))];
-  const links=nodes.slice(2).map((n,i)=>link(i<25?'a':'b',n.id));
-  const before=nodes.slice(0,2).map(n=>[n.x,n.y]);
-  const view=fitFleetReset(nodes,links,width,height);
-  assert.deepEqual(nodes.slice(0,2).map(n=>[n.x,n.y]),before);
-  for(const n of nodes){
-   assert.equal(n.x,n.fx);assert.equal(n.y,n.fy);
-   assert.ok(Math.abs((n.x-view.x)*view.zoom)+(n.radius||7)<width/2);
-   assert.ok(Math.abs((n.y-view.y)*view.zoom)+(n.radius||7)<height/2);
-  }
-  const points=nodes.map(n=>[n.x,n.y]);
-  assert.deepEqual(fitFleetReset(nodes,links,width,height),view);
-  assert.deepEqual(nodes.map(n=>[n.x,n.y]),points);
- }
 });

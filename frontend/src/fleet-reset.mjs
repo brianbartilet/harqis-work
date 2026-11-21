@@ -2,8 +2,8 @@ import {isFleetAnchor} from './fleet-drag.mjs';
 
 // Reset uses one graph-space layout regardless of camera zoom or animation.
 // Reserve the same motion margin in every mode so changing modes never repacks it.
-export function resetFleetChildren(nodes,links,layoutScale=1){
- const scale=layoutScale,motionPadding=23;
+export function resetFleetChildren(nodes,links){
+ const scale=1,motionPadding=23;
  const fixed=n=>isFleetAnchor(n)||n.manual;
  const endpoint=v=>typeof v==='object'?v.id:v;
  const byId=new Map(nodes.map(n=>[n.id,n]));
@@ -72,31 +72,4 @@ export function resetFleetChildren(nodes,links,layoutScale=1){
   }
  }
  return moved;
-}
-
-// Fit is derived from the viewport size, never the previous camera or animation.
-export function fitFleetReset(nodes,links,width,height){
- if(!nodes.length)return null;
- const fixed=n=>isFleetAnchor(n)||n.manual;
- const fit=()=>{
-  const xs=nodes.map(n=>n.x),ys=nodes.map(n=>n.y);
-  const left=Math.min(...xs),right=Math.max(...xs),top=Math.min(...ys),bottom=Math.max(...ys);
-  const padding=Math.max(...nodes.map(n=>n.radius||7))+55;
-  return {x:(left+right)/2,y:(top+bottom)/2,zoom:Math.max(.01,Math.min(3,Math.max(40,width-2*padding)/Math.max(1,right-left),Math.max(40,height-2*padding)/Math.max(1,bottom-top)))};
- };
- let scale=1,best;
- for(let pass=0;pass<4;pass++){
-  resetFleetChildren(nodes,links,scale);
-  const view=fit();let overlap=0;
-  for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
-   const a=nodes[i],b=nodes[j];if(fixed(a)&&fixed(b))continue;
-   const gap=(a.radius||7)+(b.radius||7)+12;
-   overlap+=Math.max(0,gap-Math.hypot(a.x-b.x,a.y-b.y)*view.zoom);
-  }
-  if(!best||overlap<best.overlap)best={overlap,view,points:nodes.map(n=>({x:n.x,y:n.y}))};
-  if(overlap===0)break;
-  scale=view.zoom;
- }
- nodes.forEach((n,i)=>Object.assign(n,best.points[i],{fx:best.points[i].x,fy:best.points[i].y,vx:0,vy:0}));
- return best.view;
 }
