@@ -57,6 +57,7 @@ from modules.hfl_corpus.entities_api import router as entities_router
 from modules.hfl_corpus.corpus import corpus_index
 from modules.hfl_corpus.remote import close_remote_http_client
 from modules.hfl_corpus.router import router as hfl_corpus_router
+from modules.hfl_corpus.quick_notes import router as quick_notes_router
 from modules.hfl_corpus.agent_bridge import owner_router as agent_bridge_owner_router, worker_router as agent_bridge_worker_router
 from modules.hfl_corpus.action_agents import owner as action_agent_owner_router, worker as action_agent_worker_router
 from modules.hfl_corpus.terminal_stream import router as terminal_stream_router
@@ -284,6 +285,7 @@ app.include_router(integrations_router)
 app.include_router(hfl_corpus_api_router)
 app.include_router(entities_router)
 app.include_router(hfl_corpus_router)
+app.include_router(quick_notes_router)
 app.include_router(agent_bridge_owner_router)
 app.include_router(agent_bridge_worker_router)
 app.include_router(action_agent_owner_router)

@@ -244,6 +244,8 @@ def test_briefings_browser_without_gateway(fleet, authenticated_client, tmp_path
             pw.expect(pane.locator('.butler-briefing-card')).to_have_count(6)
             page.get_by_role('tab', name='Briefings', exact=True).focus()
             page.keyboard.press('ArrowRight')
+            pw.expect(page.get_by_role('tab', name='Quick Notes')).to_have_attribute('aria-selected', 'true')
+            page.keyboard.press('ArrowRight')
             pw.expect(page.get_by_role('tab', name='Conversations')).to_have_attribute('aria-selected', 'true')
             page.keyboard.press('Escape')
             assert page.locator('#butler-launch').evaluate('(el)=>el===document.activeElement')

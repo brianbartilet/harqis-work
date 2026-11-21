@@ -1,0 +1,14 @@
+<link rel="stylesheet" href="{{ static_asset('css/quick-notes.css') }}">
+<dialog id="quick-notes-dialog" aria-labelledby="quick-notes-title">
+  <header class="qn-heading"><h2 id="quick-notes-title">Quick Notes</h2><div class="qn-actions">
+    <button type="button" id="qn-archive" class="qn-archive-toggle" role="switch" aria-label="Show archived" title="Show archived" aria-checked="false"><span>Show archived</span><span class="qn-switch-track" aria-hidden="true"></span></button>
+    <button type="button" id="qn-new" class="qn-header-icon" aria-label="New checklist" title="New checklist"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 4H4v16h16v-9M16 4h6M19 1v6M8 10h4M8 15h8"/></svg></button>
+    <button type="button" id="qn-close" class="qn-header-icon" aria-label="Close Quick Notes" title="Close Quick Notes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+  </div></header>
+  <div class="qn-feedback"><span id="qn-undo"></span><span id="qn-status" role="status" aria-live="polite"></span><button type="button" id="qn-retry" hidden>Retry saving</button><button type="button" id="qn-reload" hidden>Reload latest</button></div>
+  <section id="qn-grid" class="qn-grid" aria-label="Checklist notes"></section>
+</dialog>
+<dialog id="qn-note-dialog" aria-label="Edit checklist">
+  <section id="qn-editor" hidden aria-label="Note contents"></section>
+</dialog>
+<script defer src="{{ static_asset('js/quick-notes.js') }}"></script>

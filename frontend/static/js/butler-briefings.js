@@ -2,7 +2,7 @@
 (() => {
   const $ = id => document.getElementById(id), panel = $('butler-panel');
   if (!panel) return;
-  const tabs = ['briefings', 'conversation', 'settings'], list = $('butler-briefing-list');
+  const tabs = ['briefings', 'notes', 'conversation', 'settings'], list = $('butler-briefing-list');
   const error = $('butler-briefing-error'), refresh = $('butler-briefing-refresh');
   const demo = $('butler-briefing-demo-load');
   const csrf = JSON.parse($('butler-csrf').textContent);
@@ -200,7 +200,7 @@
     panel.dataset.tab = name;
     $('butler-connection').hidden = name !== 'conversation';
     $('butler-briefing-subtitle').hidden = name === 'conversation';
-    $('butler-briefing-subtitle').textContent = name === 'settings' ? 'Schedule your updates' : 'All activity · recent briefings and updates';
+    $('butler-briefing-subtitle').textContent = name === 'notes' ? 'Quick Notes · current Spaces' : name === 'settings' ? 'Schedule your updates' : 'All activity · recent briefings and updates';
     for (const tab of tabs) {
       const selected = tab === name, button = tabButton(tab);
       button.setAttribute('aria-selected', String(selected));

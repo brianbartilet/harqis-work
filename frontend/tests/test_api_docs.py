@@ -73,6 +73,31 @@ def test_documented_auth_and_profile_example(authenticated_client):
     assert authenticated_client.post('/agents/api/items', json=example).status_code == 403
 
 
+def test_quick_notes_contract_and_examples(authenticated_client):
+    from modules.hfl_corpus.quick_notes import Note
+    schema = authenticated_client.get('/openapi.json').json()
+    paths = schema['paths']
+    listing = paths['/hfl-corpus/quick-notes']['get']
+    writes = paths['/hfl-corpus/quick-notes/{identity}']
+    for operation in [listing, writes['put'], writes['delete']]:
+        assert operation['tags'] == ['Activity · Quick Notes']
+        assert operation['security'] == [{'OwnerSession': []}]
+        assert '$ref' in operation['responses']['200']['content']['application/json']['schema']
+        assert '401' in operation['responses']
+    for method in ['put', 'delete']:
+        assert writes[method]['requestBody']['required']
+        assert {'403', '409', '422'} <= writes[method]['responses'].keys()
+    examples = writes['put']['requestBody']['content']['application/json']['examples']
+    assert set(examples) == {'create', 'archive', 'restore'}
+    for example in examples.values():
+        Note.model_validate(example['value'])
+    assert examples['create']['value']['revision'] == 0
+    assert examples['archive']['value']['archived'] is True
+    assert examples['restore']['value']['archived'] is False
+    Note.model_validate(writes['delete']['requestBody']['content']['application/json']['example'])
+    assert '404' in writes['delete']['responses']
+
+
 def test_swagger_browser_reads_and_creates_profile(fleet, authenticated_client, tmp_path):
     playwright = pytest.importorskip('playwright.sync_api')
     client = authenticated_client

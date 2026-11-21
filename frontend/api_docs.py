@@ -18,6 +18,7 @@ GROUPS = [
     ('Workflows', 'Registered Celery workflows, dispatch and task status. Triggering submits real work.'),
     ('Corpus · Entries & search', 'Capture, retrieve and search the Activity Corpus.'),
     ('Corpus · Actions & planning', 'Actions, ideas, boards, goals, categories and pins.'),
+    ('Activity · Quick Notes', 'Owner checklist notes, Space links, ordering and lifecycle operations.'),
     ('Corpus · Entities', 'Entity profiles, relationships, merges and resolution.'),
     ('Corpus · Sources & synchronization', 'Source ingestion, connector synchronization and execution receipts.'),
     ('Activity · Timeline & views', 'Dashboard activity, timeline editing and view preferences.'),
@@ -52,6 +53,8 @@ def group_for(path):
         if section in {'entries', 'documents', 'search', 'tree', 'matches', 'activity', 'curated-feed', 'stats'}:
             return 'Corpus · Entries & search'
         return 'Corpus · Sources & synchronization'
+    if path.startswith('/hfl-corpus/quick-notes'):
+        return 'Activity · Quick Notes'
     if path.startswith('/hfl-corpus'):
         return 'Activity · Timeline & views'
     if path.startswith(('/integrations', '/applications')):
