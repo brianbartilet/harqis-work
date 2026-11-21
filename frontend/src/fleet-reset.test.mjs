@@ -71,3 +71,10 @@ test('large fitted fleets keep individual child orbs visible',()=>{
  const view=resetFleetView(nodes,links,1100,740);
  for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++)assert.ok(Math.hypot(nodes[i].x-nodes[j].x,nodes[i].y-nodes[j].y)*view.zoom>=nodes[i].radius+nodes[j].radius,'orbs remain distinct');
 });
+
+test('reset preserves an explicit pinned entity even without the manual flag',()=>{
+ const pinned={...child('pinned'),x:120,y:-180,fx:120,fy:-180,pinned:true};
+ const nodes=[hub('a'),pinned,child('free')],before=structuredClone(pinned);
+ resetFleetChildren(nodes,[link('a','pinned'),link('a','free')],{scale:.2});
+ assert.deepEqual(pinned,before);assert.notEqual(nodes[2].x,1);
+});

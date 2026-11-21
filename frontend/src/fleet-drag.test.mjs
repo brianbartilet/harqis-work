@@ -14,6 +14,7 @@ test('child drag leaves owner and agent anchors pinned and unrelated children un
 });
 test('direct anchor drag can release its children without releasing other anchors',()=>{
  const {nodes,links}=fixture(),released=new Set();
+ nodes[2].manual=false;nodes[3].manual=false;
  releaseFleetNeighbors(nodes[1],nodes,links,released,{x:100,y:50});
  assert.ok(released.has(nodes[2]));assert.ok(released.has(nodes[3]));
  assert.equal(nodes[0].fx,0);assert.ok(!released.has(nodes[0]));assert.ok(!released.has(nodes[1]));
@@ -21,6 +22,7 @@ test('direct anchor drag can release its children without releasing other anchor
 
 test('status drag releases its children but keeps agent anchors pinned',()=>{
  const {nodes,links}=fixture(),released=new Set();
+ nodes[2].manual=false;
  releaseFleetNeighbors(nodes[4],nodes,links,released);
  assert.ok(released.has(nodes[2]));
  for(const n of [nodes[0],nodes[1],nodes[4]])assert.ok(!released.has(n));
@@ -67,4 +69,13 @@ test('Fleet follow speed remains strong when zoomed out and reverses smoothly',a
   assert.ok(Number.isFinite(child.x)&&Math.abs(child.vx*zoom)<.1);
   sim.stop();
  }
+});
+
+test('drag never clears manual or explicit pins on connected entities',()=>{
+ const {nodes,links}=fixture(),released=new Set();
+ nodes[3].manual=false;nodes[3].pinned=true;
+ const before=structuredClone(nodes.slice(2));
+ releaseFleetNeighbors(nodes[1],nodes,links,released);
+ assert.equal(released.size,0);
+ assert.deepEqual(nodes.slice(2).map(n=>[n.x,n.y,n.manual,n.pinned]),before.map(n=>[n.x,n.y,n.manual,n.pinned]));
 });

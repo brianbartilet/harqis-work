@@ -1,10 +1,10 @@
-import {isFleetAnchor} from './fleet-drag.mjs';
+import {isFleetFixed} from './fleet-drag.mjs';
 
 // Reset uses one graph-space layout regardless of camera zoom or animation.
 // Use compact resting positions; Reset turns ambient animation off.
 export function resetFleetChildren(nodes,links,{scale=1,bounds=null}={}){
  const motionPadding=0;
- const fixed=n=>isFleetAnchor(n)||n.manual;
+ const fixed=isFleetFixed;
  const endpoint=v=>typeof v==='object'?v.id:v;
  const byId=new Map(nodes.map(n=>[n.id,n]));
  const parents=nodes.filter(n=>['agent','owner','connector'].includes(n.kind));
@@ -87,7 +87,7 @@ export function resetFleetChildren(nodes,links,{scale=1,bounds=null}={}){
 // This avoids both collapsed children and a repeated expand/refit feedback loop.
 export function resetFleetView(nodes,links,width,height){
  if(!nodes.length)return null;
- const anchors=nodes.filter(n=>isFleetAnchor(n)||n.manual);
+ const anchors=nodes.filter(isFleetFixed);
  const base=anchors.length?anchors:[{x:0,y:0}];
  const xs=base.map(n=>n.x),ys=base.map(n=>n.y);
  const left=Math.min(...xs),right=Math.max(...xs),top=Math.min(...ys),bottom=Math.max(...ys);
