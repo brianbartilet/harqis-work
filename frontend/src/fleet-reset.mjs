@@ -1,9 +1,9 @@
 import {isFleetAnchor} from './fleet-drag.mjs';
 
 // Reset uses one graph-space layout regardless of camera zoom or animation.
-// Reserve the same motion margin in every mode so changing modes never repacks it.
+// Use compact resting positions; Reset turns ambient animation off.
 export function resetFleetChildren(nodes,links){
- const scale=1,motionPadding=23;
+ const scale=1,motionPadding=0;
  const fixed=n=>isFleetAnchor(n)||n.manual;
  const endpoint=v=>typeof v==='object'?v.id:v;
  const byId=new Map(nodes.map(n=>[n.id,n]));

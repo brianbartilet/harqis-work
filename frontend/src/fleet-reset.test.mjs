@@ -4,7 +4,7 @@ import {resetFleetChildren} from './fleet-reset.mjs';
 const hub=(id,x=0,y=0,kind='agent')=>({id,kind,x,y,fx:x,fy:y,radius:35});
 const child=(id,kind='skill')=>({id,kind,x:1,y:1,radius:6});
 const link=(source,target)=>({source,target});
-function assertSeparated(nodes,zoom=1,padding=23){
+function assertSeparated(nodes,zoom=1,padding=0){
  for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
   const a=nodes[i],b=nodes[j];
   const extra=n=>['agent','owner','connector','status'].includes(n.kind)||n.manual?0:padding;
@@ -29,7 +29,7 @@ test('dense neighboring clusters return to the same rings after animated movemen
   const parents=[hub('a',0),hub('b',separation)],nodes=[...parents],links=[];
   for(let i=0;i<300;i++){const n=child('n'+i,i%2?'skill':'workflow');nodes.push(n);links.push(link(i<150?'a':'b',n.id));}
   const start=performance.now();resetFleetChildren(nodes,links);
-  assert.ok(performance.now()-start<2000);assertSeparated(nodes,1,23);
+  assert.ok(performance.now()-start<2000);assertSeparated(nodes,1,0);
   const first=nodes.map(n=>[n.x,n.y]);
   for(const n of nodes.slice(2)){n.x+=18;n.y-=14;}
   resetFleetChildren(nodes,links);
@@ -43,4 +43,11 @@ test('types occupy distinct sectors and sparse parents use the inner ring',()=>{
  assert.ok(nodes.filter(n=>n.kind==='workflow').every(n=>n.x<0));
  const sparse=[hub('b'),child('only')];resetFleetChildren(sparse,[link('b','only')]);
  assert.ok(Math.hypot(sparse[1].x,sparse[1].y)<100);assertSeparated(nodes);
+});
+
+test('a thousand children stay compact without zoom-dependent expansion',()=>{
+ const nodes=[hub('a'),...Array.from({length:1000},(_,i)=>child('c'+i))];
+ resetFleetChildren(nodes,nodes.slice(1).map(n=>link('a',n.id)));
+ assert.ok(Math.max(...nodes.map(n=>Math.hypot(n.x,n.y)))<650);
+ assertSeparated(nodes);
 });
