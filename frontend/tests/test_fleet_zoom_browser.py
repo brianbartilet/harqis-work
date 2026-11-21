@@ -48,7 +48,7 @@ def test_repeated_zoom_out_and_wheel(authenticated_client, fleet, width):
         assert zoom()<after
         saved = lambda: page.evaluate("JSON.parse(localStorage.getItem('harqis:fleet:graph:v2:frontend-test-user'))")
         prior=saved()
-        page.get_by_role('button',name='Arrange all',exact=True).click()
+        page.get_by_role('button',name='Reset positions',exact=True).click()
         page.wait_for_timeout(1800)
         reset=saved()
         assert reset['viewport'] == pytest.approx(prior['viewport'])
@@ -58,7 +58,7 @@ def test_repeated_zoom_out_and_wheel(authenticated_client, fleet, width):
             page.get_by_role('button',name='Animation',exact=True).click()
             page.get_by_role('button',name=mode,exact=True).click()
             page.get_by_role('button',name='Zoom out',exact=True).click()
-            page.get_by_role('button',name='Arrange all',exact=True).click()
+            page.get_by_role('button',name='Reset positions',exact=True).click()
             page.wait_for_timeout(2200)
             assert saved()['positions'] == reset['positions']
             assert saved()['animation'] == mode.lower()
@@ -67,7 +67,7 @@ def test_repeated_zoom_out_and_wheel(authenticated_client, fleet, width):
         for _ in range(32):
             page.get_by_role('button',name='Zoom out',exact=True).click()
         assert zoom()<.01
-        page.get_by_role('button',name='Arrange all',exact=True).click()
+        page.get_by_role('button',name='Reset positions',exact=True).click()
         page.wait_for_timeout(1800)
         page.get_by_role('button',name='Fit view',exact=True).click()
         page.wait_for_timeout(300)
