@@ -1,4 +1,4 @@
-"""Dense Fleet disclosure and dragging through the shipped bundle."""
+"""Dense Fleet entities remain visible and draggable through the shipped bundle."""
 from urllib.parse import urlparse
 import pytest
 from frontend.tests.test_agent_fleet import fleet, bridge
@@ -53,6 +53,8 @@ def test_dense_groups_and_parent_drag(authenticated_client, fleet, width, tmp_pa
         assert page.evaluate("window.fleetText.some(t=>t.text.includes('100'))")
         assert not page.evaluate("window.fleetText.some(t=>parseFloat(t.font.match(/([\\d.]+)px/)[1])>14)")
         saved = lambda: page.evaluate("JSON.parse(localStorage.getItem('harqis:fleet:graph:v2:frontend-test-user'))")
+        assert all(f'config:{i}' in saved()['positions'] for i in range(200))
+        assert not any(key.startswith('fleet-group:') for key in saved()['positions'])
         if width < 600:
             parents = saved()['positions']
             assert abs(parents['agent:butler']['x'] - parents[other['id']]['x']) + abs(parents['agent:butler']['y'] - parents[other['id']]['y']) > 100
@@ -75,7 +77,6 @@ def test_dense_groups_and_parent_drag(authenticated_client, fleet, width, tmp_pa
             assert after['positions'][other['id']] == before['positions'][other['id']]
             delta = after['positions']['agent:butler']['x'] - pos['x']
             assert delta * transform['k'] == pytest.approx(60, abs=2)
-            group_id = 'fleet-group:["agent:butler","configuration"]'
-            assert after['positions'][group_id]['x'] - before['positions'][group_id]['x'] == pytest.approx(delta)
+            assert after['positions']['config:99']['x'] - before['positions']['config:99']['x'] == pytest.approx(delta)
         assert not errors
         browser.close()

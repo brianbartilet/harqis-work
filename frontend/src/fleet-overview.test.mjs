@@ -19,14 +19,15 @@ test('assignment wins over higher degree, corpus ownership, and relationship ord
  assert.equal(fleetParents(data.nodes,data.links).get('child:0'),'agent:a');
  assert.equal(fleetParents([...data.nodes].reverse(),[...data.links].reverse()).get('child:0'),'agent:a');
 });
-test('700 children become bounded named groups and a selected entity stays reachable',()=>{
+test('dense fleets retain every entity and relationship without count substitutes',()=>{
  const data=fixture(700),initial=structuredClone(data);
- const overview=fleetOverview(data);
- assert.equal(overview.nodes.length,4);assert.equal(overview.groups.length,2);
- const expanded=fleetOverview(data,{group:overview.groups[0].id,limit:24,selected:'child:699'});
- assert.ok(expanded.nodes.length<=29);assert.ok(expanded.nodes.some(n=>n.id==='child:699'));
- const searched=fleetOverview(data,{group:overview.groups[0].id,query:'Skill 698',page:999});
- assert.equal(searched.groups[0].visible[0].id,'child:698');
+ for(const options of [{},{compact:true},{group:'fleet-group:["agent:a","skill"]',page:99,limit:12}]){
+  const overview=fleetOverview(data,options);
+  assert.deepEqual(overview.nodes.map(n=>n.id),data.nodes.map(n=>n.id));
+  assert.deepEqual(overview.links,data.links);
+  assert.ok(!overview.nodes.some(n=>n.kind==='group'));
+  assert.equal(overview.nodes[0].childCount,350);
+ }
  assert.deepEqual(data,initial);
 });
 test('arrangement separates parents and keeps each displayed child closer to its own parent',()=>{
@@ -65,11 +66,9 @@ test('arranging repairs coincident parents while preserving explicit child pins'
  assert.ok(Math.hypot(data.nodes[0].x-data.nodes[1].x,data.nodes[0].y-data.nodes[1].y)>300);
  assert.equal(data.nodes[3].x,75);assert.equal(data.nodes[3].y,0);
 });
-test('narrow canvases focus one parent while retaining group navigation and selection',()=>{
- const data=fixture();const first=fleetOverview(data,{compact:true});
- assert.equal(first.nodes.filter(n=>n.kind==='agent').length,1);
- assert.equal(first.groups.length,2);
- const selected=fleetOverview(data,{compact:true,selected:'child:199'});
- assert.equal(selected.focusParent,'agent:b');assert.ok(selected.nodes.some(n=>n.id==='child:199'));
- assert.ok(!selected.nodes.some(n=>n.id==='agent:a'));
+test('narrow canvases retain all parents and their individual entities',()=>{
+ const data=fixture();const overview=fleetOverview(data,{compact:true,selected:'child:199'});
+ assert.equal(overview.nodes.filter(n=>n.kind==='agent').length,2);
+ assert.equal(overview.nodes.length,202);
+ assert.ok(overview.nodes.some(n=>n.id==='child:199'));
 });

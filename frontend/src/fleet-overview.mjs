@@ -1,6 +1,5 @@
 import {fleetParents,isFleetParent} from './fleet-parent.mjs';
 
-export const fleetGroupId=(parent,kind)=>'fleet-group:'+JSON.stringify([parent,kind]);
 export function fleetCamera(nodes,width,height){
  const points=nodes.filter(n=>Number.isFinite(n.x)&&Number.isFinite(n.y));if(!points.length)return null;
  const x=(Math.min(...points.map(n=>n.x))+Math.max(...points.map(n=>n.x)))/2;
@@ -12,36 +11,15 @@ export function fleetCamera(nodes,width,height){
  }
  return {x,y,zoom:Math.max(.000001,zoom)};
 }
-export function fleetOverview(data,{selected,group='',query='',page=0,limit=24,compact=false}={}){
- const parents=fleetParents(data.nodes,data.links),groups=new Map();
- const hubCounts=new Map();
- for(const n of data.nodes){
-  const parent=parents.get(n.id);if(!parent)continue;
-  hubCounts.set(parent,(hubCounts.get(parent)||0)+1);
-  const id=fleetGroupId(parent,n.kind);
-  if(!groups.has(id))groups.set(id,{id,parent,kind:n.kind,members:[]});
-  groups.get(id).members.push(n);
- }
- const hidden=new Set(),extra=[],shown=new Set();
- for(const g of groups.values()){
-  g.members.sort((a,b)=>(a.label||a.id).localeCompare(b.label||b.id)||a.id.localeCompare(b.id));
-  // Bound total children per parent, not just each individual type.
-  if(hubCounts.get(g.parent)<=limit)continue;
-  g.label=g.kind.replaceAll('_',' ')+' · '+g.members.length;
-  const matches=g.members.filter(n=>(n.label||n.id).toLowerCase().includes(query.toLowerCase()));
-  g.matches=matches;g.page=Math.max(0,Math.min(page,Math.ceil(matches.length/limit)-1));
-  g.visible=group===g.id?matches.slice(g.page*limit,(g.page+1)*limit):[];
-  for(const n of g.members)if(n.id!==selected&&!g.visible.includes(n)&&!n.manual&&!n.pinned)hidden.add(n.id);else shown.add(n.id);
-  extra.push({id:g.id,kind:'group',label:g.label,groupParent:g.parent,layoutParent:g.parent,radius:16,color:g.members[0].color||'#60a5fa',count:g.members.length,clusterX:0,clusterY:0});
- }
- const nodes=data.nodes.filter(n=>!hidden.has(n.id)).map(n=>({...n,layoutParent:parents.get(n.id),groupParent:parents.get(n.id)||n.groupParent,childCount:hubCounts.get(n.id)||0}));
+// Keep every entity supplied by Fleet's existing search and type filters visible.
+// Density must not replace selectable entities with synthetic count nodes.
+export function fleetOverview(data){
+ const parents=fleetParents(data.nodes,data.links),hubCounts=new Map();
+ for(const parent of parents.values())hubCounts.set(parent,(hubCounts.get(parent)||0)+1);
+ const nodes=data.nodes.map(n=>({...n,layoutParent:parents.get(n.id),groupParent:parents.get(n.id)||n.groupParent,childCount:hubCounts.get(n.id)||0}));
  const ids=new Set(nodes.map(n=>n.id));
  const links=data.links.filter(l=>ids.has(typeof l.source==='object'?l.source.id:l.source)&&ids.has(typeof l.target==='object'?l.target.id:l.target)).map(l=>({...l}));
- for(const n of extra)links.push({source:n.groupParent,target:n.id,relation:'contains',direction:'none'});
- const focusParent=compact?(nodes.find(n=>n.id===selected&&isFleetParent(n))?.id||parents.get(selected)||groups.get(group)?.parent||nodes.find(n=>n.kind==='agent')?.id||nodes.find(isFleetParent)?.id):null;
- const shownNodes=focusParent?[...nodes,...extra].filter(n=>n.id===focusParent||n.layoutParent===focusParent||n.groupParent===focusParent):[...nodes,...extra];
- const shownIds=new Set(shownNodes.map(n=>n.id));
- return {nodes:shownNodes,links:links.filter(l=>shownIds.has(typeof l.source==='object'?l.source.id:l.source)&&shownIds.has(typeof l.target==='object'?l.target.id:l.target)),groups:[...groups.values()].filter(g=>g.label),parents,focusParent};
+ return {nodes,links,parents};
 }
 
 // Explicit arrangement repairs overlapping/legacy anchors. Camera is separate.
