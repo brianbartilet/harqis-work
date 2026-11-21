@@ -4,7 +4,7 @@ import {resetFleetChildren} from './fleet-reset.mjs';
 const hub=(id,x=0,y=0,kind='agent')=>({id,kind,x,y,fx:x,fy:y,radius:35});
 const child=(id,kind='skill')=>({id,kind,x:1,y:1,radius:6});
 const link=(source,target)=>({source,target});
-function assertSeparated(nodes,zoom=1,padding=0){
+function assertSeparated(nodes,zoom=1,padding=23){
  for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){
   const a=nodes[i],b=nodes[j];
   const extra=n=>['agent','owner','connector','status'].includes(n.kind)||n.manual?0:padding;
@@ -24,13 +24,15 @@ test('shared children choose the parent with the most distinct connections',()=>
  resetFleetChildren(nodes,links);
  assert.ok(Math.hypot(shared.x-b.x,shared.y-b.y)<Math.hypot(shared.x-a.x,shared.y-a.y));
 });
-test('dense neighboring clusters use free rings without overlap at different zooms',()=>{
- for(const zoom of [.15,1,2]){
-  const parents=[hub('a',0),hub('b',300/zoom)],nodes=[...parents],links=[];
+test('dense neighboring clusters return to the same rings after animated movement',()=>{
+ for(const separation of [150,300,600]){
+  const parents=[hub('a',0),hub('b',separation)],nodes=[...parents],links=[];
   for(let i=0;i<300;i++){const n=child('n'+i,i%2?'skill':'workflow');nodes.push(n);links.push(link(i<150?'a':'b',n.id));}
-  const start=performance.now();resetFleetChildren(nodes,links,{zoom,motionPadding:23});
-  assert.ok(performance.now()-start<2000);assertSeparated(nodes,zoom,23);
-  const first=nodes.map(n=>[n.x,n.y]);resetFleetChildren(nodes,links,{zoom,motionPadding:23});
+  const start=performance.now();resetFleetChildren(nodes,links);
+  assert.ok(performance.now()-start<2000);assertSeparated(nodes,1,23);
+  const first=nodes.map(n=>[n.x,n.y]);
+  for(const n of nodes.slice(2)){n.x+=18;n.y-=14;}
+  resetFleetChildren(nodes,links);
   assert.deepEqual(nodes.map(n=>[n.x,n.y]),first);
  }
 });
@@ -40,5 +42,5 @@ test('types occupy distinct sectors and sparse parents use the inner ring',()=>{
  assert.ok(nodes.filter(n=>n.kind==='skill').every(n=>n.x>0));
  assert.ok(nodes.filter(n=>n.kind==='workflow').every(n=>n.x<0));
  const sparse=[hub('b'),child('only')];resetFleetChildren(sparse,[link('b','only')]);
- assert.ok(Math.hypot(sparse[1].x,sparse[1].y)<80);assertSeparated(nodes);
+ assert.ok(Math.hypot(sparse[1].x,sparse[1].y)<100);assertSeparated(nodes);
 });

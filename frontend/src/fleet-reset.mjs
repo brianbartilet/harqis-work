@@ -1,9 +1,9 @@
 import {isFleetAnchor} from './fleet-drag.mjs';
 
-// Reset only the movable children. Coordinates are packed in screen space,
-// because Fleet draws its orbs at a constant pixel size at every zoom.
-export function resetFleetChildren(nodes,links,{zoom=1,motionPadding=0}={}){
- const scale=Number.isFinite(zoom)&&zoom>0?zoom:1;
+// Reset uses one graph-space layout regardless of camera zoom or animation.
+// Reserve the same motion margin in every mode so changing modes never repacks it.
+export function resetFleetChildren(nodes,links){
+ const scale=1,motionPadding=23;
  const fixed=n=>isFleetAnchor(n)||n.manual;
  const endpoint=v=>typeof v==='object'?v.id:v;
  const byId=new Map(nodes.map(n=>[n.id,n]));
