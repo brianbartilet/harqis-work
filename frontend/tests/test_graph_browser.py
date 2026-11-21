@@ -28,11 +28,11 @@ def test_motion_keeps_drawing_while_hovered(authenticated_client, monkeypatch):
             # Observe actual node paints, rather than just browser frame callbacks.
             page.evaluate('''() => {
                 const canvas=document.querySelector('#kg-canvas canvas'),ctx=canvas.getContext('2d');
-                const arc=ctx.arc;
+                const drawImage=ctx.drawImage;
                 window.motionPaints=[];
-                ctx.arc=function(x,y,...args){
-                    window.motionPaints.push({x,y,time:performance.now()});
-                    return arc.call(this,x,y,...args);
+                ctx.drawImage=function(image,x,y,w,h){
+                    window.motionPaints.push({x:x+w/2,y:y+h/2,time:performance.now()});
+                    return drawImage.call(this,image,x,y,w,h);
                 };
             }''')
             page.click('#kg-open-animation')

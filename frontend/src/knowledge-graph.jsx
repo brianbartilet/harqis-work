@@ -4,6 +4,7 @@ import {connectionRadius} from './graph-sizing.mjs';
 import {readGraphState} from './graph-state.mjs';
 import {graphDateRange} from './graph-dates.mjs';
 import {createLabelLayout} from './graph-labels.mjs';
+import {createOrbPainter} from './graph-orbs.mjs';
 import {boardCurvature} from './graph-curves.mjs';
 import {exampleGraph} from './knowledge-graph-example.js';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
@@ -11,6 +12,7 @@ import {createRoot} from 'react-dom/client';
 import ForceGraph2D from 'react-force-graph-2d';
 import {configureDragForces, releaseDragNeighbors, settleDragNodes} from './graph-drag.mjs';
 import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffset, phaseFor} from './graph-presets.mjs';
+const skipLinkPointerPaint=()=>{};
 // Bundled locally. Graph data is fetched only from the authenticated HARQIS API.
 (() => {
   'use strict';
@@ -277,7 +279,8 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     const delta=Math.min(100,now-(lastClock||now));lastClock=now;
     const state=paused?'Paused':animationMode==='off'?'Motion is off':PRESETS[preset]+' · '+animationMode;
     if($('animation-status').textContent!==state)$('animation-status').textContent=state;
-    host.dataset.motion=paused?'paused':animationMode;
+    const motionState=paused?'paused':animationMode;
+    if(host.dataset.motion!==motionState)host.dataset.motion=motionState;
     if(!moving){lastMotionFrame=now;return;}
     motionTime+=delta;if(transition)transition.elapsed+=delta;
     const elapsed=Math.min(100,now-lastMotionFrame);lastMotionFrame=now;
@@ -300,6 +303,8 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
     const ref=useRef();
     const [keepDrawing,setKeepDrawing]=useState(true);
     setGraphRedraw=setKeepDrawing;
+    const orbPainter=useRef(null);
+    if(!orbPainter.current)orbPainter.current=createOrbPainter();
     const labelLayout=useRef(null);
     if(!labelLayout.current)labelLayout.current=createLabelLayout();
     const sizeTools=useRef(),actionTools=useRef(),connectorTools=useRef(),connectionTools=useRef(),hoverTimer=useRef(),gesture=useRef();
@@ -444,19 +449,11 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       if(data.nodes.length>1000&&node.kind==='entries'&&!emphasis){
         ctx.fillStyle=ink;ctx.beginPath();ctx.arc(node.x,node.y,radius,0,2*Math.PI);ctx.fill();ctx.restore();return;
       }
-      const glow=ctx.createRadialGradient(node.x,node.y,0,node.x,node.y,(emphasis?30:18)/globalScale);
-      glow.addColorStop(0,(statusInk||ink)+(emphasis?'75':'35'));glow.addColorStop(1,(statusInk||ink)+'00');
-      ctx.fillStyle=glow;ctx.beginPath();ctx.arc(node.x,node.y,(emphasis?30:18)/globalScale,0,2*Math.PI);ctx.fill();
-      const fill=ctx.createRadialGradient(node.x-radius*.3,node.y-radius*.4,0,node.x,node.y,radius*1.6);
-      fill.addColorStop(0,'#effbff');fill.addColorStop(.3,ink);fill.addColorStop(1,ink+'70');
-      ctx.beginPath();ctx.arc(node.x,node.y,radius,0,2*Math.PI);ctx.fillStyle=fill;ctx.fill();
-      ctx.strokeStyle=ink;ctx.lineWidth=.8/globalScale;ctx.stroke();
-      if(statusInk){ctx.beginPath();ctx.arc(node.x,node.y,radius+2/globalScale,0,2*Math.PI);ctx.strokeStyle=statusInk;ctx.lineWidth=1.5/globalScale;ctx.stroke();}
+      orbPainter.current(ctx,node,globalScale,ink,statusInk,emphasis);
       if(data.nodes.length<=35&&node.kind!=='entries'){
         const mark=node.kind==='people'?node.label.slice(0,1):node.kind==='tools'?'⌘':'◇';
         ctx.font=`600 ${14/globalScale}px ${uiFont}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#10263c';ctx.fillText(mark,node.x,node.y);ctx.textAlign='left';
       }
-      if(emphasis){ctx.beginPath();ctx.arc(node.x,node.y,radius+5/globalScale,0,2*Math.PI);ctx.strokeStyle=ink+'aa';ctx.lineWidth=1/globalScale;ctx.stroke();}
       ctx.restore();
     }
     return <><ForceGraph2D ref={ref} width={size.width} height={size.height} autoPauseRedraw={!keepDrawing}
@@ -520,6 +517,9 @@ import {PRESETS, randomizePresetNodes, presetLayout, presetFitPoints, motionOffs
       }}
       nodeCanvasObject={paintNode}
       nodePointerAreaPaint={(node,paint,ctx)=>{ctx.fillStyle=paint;ctx.beginPath();ctx.arc(node.x,node.y,(node.radius+4)/(ref.current?.zoom()||1),0,2*Math.PI);ctx.fill();}}
+      // Only boards have selectable edges. Avoid periodically rasterizing thousands
+      // of otherwise unused link hit areas on the main graph's shadow canvas.
+      linkPointerAreaPaint={board?undefined:skipLinkPointerPaint}
       linkColor={link=>color(board?link.source.kind:link.target.kind)+Math.round(parseInt(connection===link?'ff':activeId?(isLinked(link)?'df':'07'):(data.nodes.length<=35?'70':'32'),16)*arrivalAlpha(edgeArrivals.get(arrivalKey(link)))).toString(16).padStart(2,'0')}
       linkDirectionalArrowLength={link=>board||link.direction==='none'?0:link.manual?4:['ideas','actions','goals','drafts','boards','lists','thoughts'].includes(link.source.kind)||['ideas','actions','goals','drafts','boards','lists','thoughts'].includes(link.target.kind)?4:0}
       linkDirectionalArrowRelPos={0.8}

@@ -86,7 +86,7 @@
       </div>
     </span></div>
     <div class="kg-capacity-fields">
-      {% for key, label, minimum, maximum, default in [('node', 'Maximum nodes', 1000, 20000, 1000), ('edge', 'Maximum connections', 100, 100000, 2000)] %}
+      {% for key, label, minimum, maximum, default in [('node', 'Max nodes', 1000, 20000, 1000), ('edge', 'Max connections', 100, 100000, 2000)] %}
       <div class="kg-capacity-field">
         <label for="kg-{{ key }}-limit">{{ label }}</label>
         <div class="kg-number-control"><input id="kg-{{ key }}-limit" type="number" min="{{ minimum }}" max="{{ maximum }}" step="1" value="{{ default }}" inputmode="numeric" required>
