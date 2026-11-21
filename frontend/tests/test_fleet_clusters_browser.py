@@ -46,21 +46,7 @@ def test_dense_groups_and_parent_drag(authenticated_client, fleet, width, tmp_pa
         page.locator('.fleet-map[aria-busy=false]').wait_for()
         if width < 900:
             page.get_by_role('button', name='Close Agent work drawer', exact=True).click()
-        page.locator('.fleet-cluster-browser summary').click()
-        page.locator('.fleet-cluster-items button').first.click()
-        items = page.locator('.fleet-cluster-items button')
-        playwright.expect(items).to_have_count(12 if width < 600 else 24)
-        page.get_by_role('button', name='Next', exact=True).click()
-        assert 'Configuration 000' not in items.all_text_contents()
-        page.get_by_role('button', name='Previous', exact=True).click()
-        assert 'Configuration 000' in items.all_text_contents()
-        page.get_by_role('textbox', name='Search group entities').fill('Configuration 099')
-        playwright.expect(items).to_have_count(1)
-        items.first.click()
-        page.get_by_role('button', name='Close group', exact=True).click()
-        # Collapse the browser so it cannot obscure graph drag targets.
-        if page.locator('.fleet-cluster-browser').get_attribute('open') is not None:
-            page.locator('.fleet-cluster-browser summary').click()
+        playwright.expect(page.locator('.fleet-cluster-browser, .fleet-layout-menu')).to_have_count(0)
         page.get_by_role('button', name='Fit view', exact=True).click()
         page.wait_for_timeout(600)
         page.screenshot(path=str(tmp_path / f'fleet-clusters-{width}.png'), full_page=True)
@@ -68,10 +54,6 @@ def test_dense_groups_and_parent_drag(authenticated_client, fleet, width, tmp_pa
         assert not page.evaluate("window.fleetText.some(t=>parseFloat(t.font.match(/([\\d.]+)px/)[1])>14)")
         saved = lambda: page.evaluate("JSON.parse(localStorage.getItem('harqis:fleet:graph:v2:frontend-test-user'))")
         if width < 600:
-            page.locator('.fleet-cluster-browser summary').click()
-            page.locator('.fleet-cluster-items button').last.click()
-            playwright.expect(page.locator('.fleet-cluster-items button')).to_have_count(12)
-            page.screenshot(path=str(tmp_path / 'fleet-clusters-parent-navigation.png'), full_page=True)
             parents = saved()['positions']
             assert abs(parents['agent:butler']['x'] - parents[other['id']]['x']) + abs(parents['agent:butler']['y'] - parents[other['id']]['y']) > 100
             page.set_viewport_size({'width': 1440, 'height': 1100})
@@ -93,9 +75,7 @@ def test_dense_groups_and_parent_drag(authenticated_client, fleet, width, tmp_pa
             assert after['positions'][other['id']] == before['positions'][other['id']]
             delta = after['positions']['agent:butler']['x'] - pos['x']
             assert delta * transform['k'] == pytest.approx(60, abs=2)
-            assert after['positions']['config:99']['x'] - before['positions']['config:99']['x'] == pytest.approx(delta)
-            page.locator('.fleet-layout-menu summary').click()
-            page.get_by_role('button', name='Undo layout', exact=True).click()
-            assert saved()['positions'] == before['positions']
+            group_id = 'fleet-group:["agent:butler","configuration"]'
+            assert after['positions'][group_id]['x'] - before['positions'][group_id]['x'] == pytest.approx(delta)
         assert not errors
         browser.close()

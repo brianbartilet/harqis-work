@@ -53,10 +53,6 @@ def test_repeated_zoom_out_and_wheel(authenticated_client, fleet, width):
         reset=saved()
         assert reset['viewport'] == pytest.approx(prior['viewport'])
         assert reset['positions']['hud:context'] != prior['positions']['hud:context']
-        page.locator('.fleet-layout-menu summary').click()
-        page.get_by_role('button',name='Undo layout',exact=True).click()
-        assert saved()['positions'] == prior['positions']
-        page.get_by_role('button',name='Arrange all',exact=True).click()
         # Zoom and animation must not change Reset's saved resting layout.
         for mode in ['Drift','Breathing','Ripple','Off']:
             page.get_by_role('button',name='Animation',exact=True).click()
