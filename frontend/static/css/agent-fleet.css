@@ -177,8 +177,6 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 .fleet-shell .fleet-dashboard-link:hover{background:#155e75;color:#fff}
 .fleet-shell .fleet-dashboard-link:focus-visible{outline:2px solid var(--harqis-focus-color, #38bdf8);outline-offset:var(--harqis-focus-offset, 2px)}
 .fleet-graph-avatars {position:absolute;inset:0;overflow:hidden;pointer-events:none;}
-.fleet-map-footer .fleet-viewport-controls{flex-wrap:wrap;max-width:100%}
-.fleet-map-footer .fleet-viewport-controls button{min-height:44px;min-width:44px}
 .fleet-graph-avatars .agent-avatar {position:absolute;left:0;top:0;box-shadow:none;}
 .fleet-conversation {display:flex;flex-direction:column;gap:10px;min-width:0;}
 .fleet-conversation header {display:flex;align-items:center;justify-content:space-between;gap:12px;}

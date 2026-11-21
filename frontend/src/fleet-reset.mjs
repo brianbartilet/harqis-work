@@ -1,5 +1,4 @@
 import {isFleetAnchor} from './fleet-drag.mjs';
-import {fleetParents} from './fleet-parent.mjs';
 
 // Reset uses one graph-space layout regardless of camera zoom or animation.
 // Use compact resting positions; Reset turns ambient animation off.
@@ -20,9 +19,11 @@ export function resetFleetChildren(nodes,links,{scale=1,bounds=null}={}){
  const rank=(a,b)=>degree(b)-degree(a)||a.id.localeCompare(b.id);
  parents.sort(rank);
  const groups=new Map();
- const ownership=fleetParents(nodes,links);
  for(const n of nodes.filter(n=>!fixed(n)).sort((a,b)=>a.id.localeCompare(b.id))){
-  const parent=byId.get(ownership.get(n.id));
+  const candidates=new Set([...adjacency.get(n.id)].filter(id=>parentIds.has(id)));
+  for(const id of n.agent_ids||[])if(parentIds.has('agent:'+id))candidates.add('agent:'+id);
+  if(parentIds.has(n.groupParent))candidates.add(n.groupParent);
+  const parent=[...candidates].map(id=>byId.get(id)).sort(rank)[0]||parents.find(p=>p.kind==='owner')||parents[0];
   const key=parent?.id||'';
   if(!groups.has(key))groups.set(key,{parent,children:[]});
   groups.get(key).children.push(n);

@@ -3,10 +3,7 @@ import {AgentSpecialization} from './fleet-specialists.jsx';
 import {CodexConnection} from './codex-connection.jsx';
 import entitySemantics from '../static/entity-semantics.json';
 import {placeFleetNodes} from './fleet-placement.mjs';
-import {isFleetAnchor,translateFleetChildren} from './fleet-drag.mjs';
-import {fleetParents,isFleetParent} from './fleet-parent.mjs';
-import {fleetOverview,arrangeFleetClusters,fleetCamera} from './fleet-overview.mjs';
-import {fleetScreenTransform,paintFleetLabel} from './fleet-labels.mjs';
+import {isFleetAnchor,releaseFleetNeighbors} from './fleet-drag.mjs';
 import {groupFleet,configureFleetLinks} from './fleet-grouping.mjs';
 import {OwnerCard,Description,Relationships,RelatedMemory} from './fleet-presentation.jsx';
 import {graphDateRange} from './graph-dates.mjs';
@@ -32,6 +29,7 @@ import {createRoot} from 'react-dom/client';
 import ForceGraph2D from 'react-force-graph-2d';
 import {phaseFor} from './graph-presets.mjs';
 import {fleetMotionOffset} from './fleet-motion.mjs';
+import {resetFleetView} from './fleet-reset.mjs';
 import {configureDragForces, settleDragNodes} from './graph-drag.mjs';
 import {filterFleet, activityKind} from './fleet-graph.mjs';
 import {createLabelLayout} from './graph-labels.mjs';
@@ -182,7 +180,18 @@ function createFleetAvatar(agent){
   return avatar;
 }
 const viewKey='harqis:fleet:graph:v2:'+owner;
-function savedView(){try{const {demo,...view}=JSON.parse(localStorage.getItem(viewKey))||{};return view;}catch{return {};}}
+function savedView(){
+  try{
+    const {demo,...view}=JSON.parse(localStorage.getItem(viewKey))||{};
+    // Discard only the retired redesign's layout, preserving filters/preferences.
+    if(view.layoutVersion===3){
+      localStorage.setItem(viewKey+':retired-layout-v3',JSON.stringify(view));
+      for(const key of ['positions','viewport','layoutVersion','expandedGroup','groupPage'])delete view[key];
+      localStorage.setItem(viewKey,JSON.stringify(view));
+    }
+    return view;
+  }catch{return {};}
+}
 const initialView=savedView();
 if(initialView.types&&!initialView.skillNodesRestored&&!initialView.types.includes('skill'))initialView.types.push('skill');
 if(initialView.types&&!initialView.connectedEntityKindsRestored)initialView.types=[...new Set([...initialView.types,'account','schedule'])];
@@ -190,8 +199,7 @@ if(initialView.types&&!initialView.connectorNodesRestored&&!initialView.types.in
 if(initialView.types&&!initialView.hudNodesRestored&&!initialView.types.includes('hud'))initialView.types.push('hud');
 if(initialView.types&&!initialView.statusNodesRestored&&!initialView.types.includes('status'))initialView.types.push('status');
 function FleetGraph({data,loaded,selected,select,agents,animation,animationMenuOpen,reset,fullscreen,setFullscreen}) {
-  const previousModel=useRef(null),dragSnapshot=useRef(null),cancelledDrag=useRef(null);
-  const [pinRevision,setPinRevision]=useState(0);
+  const previousModel=useRef(null);
   const host=useRef(),graph=useRef(),positions=useRef(initialView.positions||{}),targets=useRef(new Map()),released=useRef(new Set()),dragging=useRef(false),avatarLayer=useRef(),avatarNodes=useRef(new Map()),fitted=useRef(false);
   const [size,setSize]=useState({width:800,height:640});
   const [layoutReady,setLayoutReady]=useState(false);
@@ -202,34 +210,22 @@ function FleetGraph({data,loaded,selected,select,agents,animation,animationMenuO
   const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
   const active=hovered||selected;
   const near=useMemo(()=>new Set(data.links.flatMap(l=>l.source===active?[l.target]:l.target===active?[l.source]:[])),[data,active]);
-  const visible=n=>isFleetParent(n)||!active||n.id===active||n.id===selected||near.has(n.id)||n.groupParent===active;
+  const visible=n=>!active||n.id===active||n.id===selected||near.has(n.id);
   const visibility=useRef();visibility.current=visible;
   const uiFont=host.current?getComputedStyle(host.current).fontFamily:'sans-serif';
   const motionTime=useRef(0),lastFrame=useRef(0),lastInteraction=useRef(0);
   const agentMap=useMemo(()=>new Map(agents.map(a=>[a.id,a])),[agents]);
-  const overview=useMemo(()=>fleetOverview({...data,nodes:data.nodes.map(n=>({...n,manual:!!positions.current[n.id]?.manual}))}),[data,pinRevision]);
-  const ownership=useMemo(()=>fleetParents(data.nodes,data.links),[data]);
   const model=useMemo(()=>{
     // Keep hidden children in the position map when filters or Spaces change.
     if(previousModel.current)for(const n of previousModel.current.nodes){
       const base=n.fx!==undefined?targets.current.get(n.id):n;
-      if(Number.isFinite(base?.x)&&Number.isFinite(base?.y))positions.current[n.id]={x:base.x,y:base.y,manual:!!n.manual,layoutParent:n.layoutParent};
+      if(Number.isFinite(base?.x)&&Number.isFinite(base?.y))positions.current[n.id]={x:base.x,y:base.y,manual:!!n.manual};
     }
 
-    const scale=graph.current?.zoom()||initialView.viewport?.zoom||1;
-    if(!Object.keys(positions.current).length){
-      // Seed all filtered entities once; resizing preserves their saved positions.
-      const initial=fleetOverview(data);
-      const seeds=placeFleetNodes(initial.nodes,{},scale);
-      arrangeFleetClusters(seeds,initial.links,size);
-      for(const n of seeds)positions.current[n.id]={x:n.x,y:n.y,manual:!!n.manual,layoutParent:n.layoutParent};
-    }
-    const nodes=placeFleetNodes(overview.nodes,positions.current,scale);
-    if(!nodes.some(n=>positions.current[n.id]))arrangeFleetClusters(nodes,overview.links,{...size,childrenOnly:true,scale});
+    const nodes=placeFleetNodes(data.nodes,positions.current,graph.current?.zoom()||initialView.viewport?.zoom||1);
     targets.current=new Map(nodes.map(n=>[n.id,{x:n.x,y:n.y}]));
-    const next={nodes,links:overview.links.map(l=>({...l}))};previousModel.current=next;return next;
-  },[overview]);
-  const layoutOwnership=useMemo(()=>fleetParents(model.nodes,model.links),[model]);
+    const next={nodes,links:data.links.map(l=>({...l}))};previousModel.current=next;return next;
+  },[data]);
   // Native images animate even when ForceGraph has paused canvas redraws.
   useEffect(()=>{
     const layer=avatarLayer.current;layer.replaceChildren();avatarNodes.current.clear();
@@ -255,33 +251,22 @@ function FleetGraph({data,loaded,selected,select,agents,animation,animationMenuO
     }
     position();return()=>cancelAnimationFrame(frame);
   },[model,agentMap,size]);
-  function savePositions(){const visible=Object.fromEntries(model.nodes.map(n=>[n.id,{...(n.fx!==undefined?targets.current.get(n.id)||{x:n.x,y:n.y}:{x:n.x,y:n.y}),manual:!!n.manual,layoutParent:n.layoutParent}]).filter(([,p])=>Number.isFinite(p.x)&&Number.isFinite(p.y)));positions.current={...positions.current,...visible};try{localStorage.setItem(viewKey,JSON.stringify({...savedView(),positions:positions.current,layoutVersion:3}));}catch{}}
+  function savePositions(){const visible=Object.fromEntries(model.nodes.map(n=>[n.id,{...(n.fx!==undefined?targets.current.get(n.id)||{x:n.x,y:n.y}:{x:n.x,y:n.y}),manual:!!n.manual}]).filter(([,p])=>Number.isFinite(p.x)&&Number.isFinite(p.y)));positions.current={...positions.current,...visible};try{localStorage.setItem(viewKey,JSON.stringify({...savedView(),positions:positions.current}));}catch{}}
   function saveViewport(){if(!fitted.current||!graph.current||!model.nodes.length)return;const center=graph.current.centerAt(),zoom=graph.current.zoom();if(!Number.isFinite(center.x)||!Number.isFinite(center.y)||!Number.isFinite(zoom))return;try{localStorage.setItem(viewKey,JSON.stringify({...savedView(),viewport:{...center,zoom}}));}catch{}}
   const persist=useRef();persist.current=()=>{savePositions();saveViewport();};
   useEffect(()=>{const save=()=>persist.current();const hidden=()=>{if(document.hidden)save();};window.addEventListener('pagehide',save);document.addEventListener('visibilitychange',hidden);return()=>{window.removeEventListener('pagehide',save);document.removeEventListener('visibilitychange',hidden);};},[]);
   useEffect(()=>{const observer=new ResizeObserver(([entry])=>setSize({width:Math.floor(entry.contentRect.width),height:Math.floor(entry.contentRect.height)}));observer.observe(host.current);return()=>observer.disconnect();},[]);
   useEffect(()=>{if(!graph.current)return;resetApplied.current=false;dragging.current=false;released.current.clear();setDragActive(false);configureDragForces(graph.current,false);configureFleetLinks(graph.current);graph.current.d3ReheatSimulation();},[model]);
-  function snapshot(){
-    savePositions();return {positions:structuredClone(positions.current),viewport:graph.current?{...graph.current.centerAt(),zoom:graph.current.zoom()}:null};
-  }
-  function restoreSnapshot(saved){
-    if(!saved)return;positions.current=structuredClone(saved.positions);
-    for(const n of model.nodes){const p=positions.current[n.id];if(p){Object.assign(n,p,{fx:p.x,fy:p.y,vx:0,vy:0});targets.current.set(n.id,{x:p.x,y:p.y});}}
-    dragging.current=false;dragSnapshot.current=null;setDragActive(false);setPinRevision(v=>v+1);
-    if(saved.viewport){graph.current.centerAt(saved.viewport.x,saved.viewport.y,0);graph.current.zoom(saved.viewport.zoom,0);}
-    savePositions();saveViewport();graph.current.d3ReheatSimulation();
-  }
-  function arrange(childrenOnly=false){
-    const nodes=childrenOnly&&selected?model.nodes.filter(n=>n.id===selected||n.layoutParent===selected):model.nodes;
-    arrangeFleetClusters(nodes,model.links,{...size,childrenOnly,scale:graph.current.zoom()});
-    const rendered=new Set(nodes.map(n=>n.id));
-    for(const n of data.nodes)if(!rendered.has(n.id)&&(!childrenOnly||ownership.get(n.id)===selected)&&!positions.current[n.id]?.manual)delete positions.current[n.id];
-    for(const n of nodes)targets.current.set(n.id,{x:n.x,y:n.y});
-    savePositions();graph.current.d3ReheatSimulation();
-  }
-  function fitView(nodes=model.nodes){const view=fleetCamera(nodes,size.width,size.height);if(!view)return;graph.current.centerAt(view.x,view.y,0);graph.current.zoom(view.zoom,0);saveViewport();}
-  useEffect(()=>{if(reset)arrange();},[reset]);
-  function stopped(){if(dragging.current||!model.nodes.length)return;if(resetApplied.current&&fitted.current){resetApplied.current=false;setDragActive(false);savePositions();return;}if(released.current.size){settleDragNodes(released.current,targets.current,(n,target)=>fleetMotionOffset(reducedMotion?'off':animation,target,motionTime.current,phaseFor(n.id),graph.current?.zoom()||1));released.current.clear();lastFrame.current=performance.now();setDragActive(false);savePositions();return;}resetApplied.current=false;setDragActive(false);for(const n of model.nodes){if(n.fx===undefined||!targets.current.has(n.id))targets.current.set(n.id,{x:n.x,y:n.y});n.fx=n.x;n.fy=n.y;}savePositions();if(!fitted.current){const view=savedView().viewport;fitted.current=true;if(view&&Number.isFinite(view.x)&&Number.isFinite(view.y)&&Number.isFinite(view.zoom)&&view.zoom>0){graph.current?.centerAt(view.x,view.y,0);graph.current?.zoom(view.zoom,0);}else fitView();}setLayoutReady(true);}
+  useEffect(()=>{if(!reset)return;
+    resetApplied.current=true;
+    const view=resetFleetView(model.nodes,model.links,size.width,size.height);
+    motionTime.current=0;lastFrame.current=performance.now();
+    for(const n of model.nodes){n.fx=n.x;n.fy=n.y;n.vx=n.vy=0;targets.current.set(n.id,{x:n.x,y:n.y});delete n.dragOrigin;delete n.dragWeight;delete n.dragParent;delete n.dragParentOrigin;}
+    released.current.clear();dragging.current=false;setDragActive(false);savePositions();
+    if(view){fitted.current=true;graph.current.centerAt(view.x,view.y,0);graph.current.zoom(view.zoom,0);saveViewport();}
+    configureDragForces(graph.current,false);configureFleetLinks(graph.current);graph.current.d3ReheatSimulation();
+  },[reset]);
+  function stopped(){if(dragging.current||!model.nodes.length)return;if(resetApplied.current&&fitted.current){resetApplied.current=false;setDragActive(false);savePositions();return;}if(released.current.size){settleDragNodes(released.current,targets.current,(n,target)=>fleetMotionOffset(reducedMotion?'off':animation,target,motionTime.current,phaseFor(n.id),graph.current?.zoom()||1));released.current.clear();lastFrame.current=performance.now();setDragActive(false);savePositions();return;}resetApplied.current=false;setDragActive(false);for(const n of model.nodes){if(n.fx===undefined||!targets.current.has(n.id))targets.current.set(n.id,{x:n.x,y:n.y});n.fx=n.x;n.fy=n.y;}savePositions();if(!fitted.current){const view=savedView().viewport;fitted.current=true;if(view&&Number.isFinite(view.x)&&Number.isFinite(view.y)&&Number.isFinite(view.zoom)&&view.zoom>0){graph.current?.centerAt(view.x,view.y,0);graph.current?.zoom(view.zoom,0);}else graph.current?.zoomToFit(0,80);}setLayoutReady(true);}
 
   function animate(now){const elapsed=Math.min(100,now-(lastFrame.current||now));lastFrame.current=now;const paused=!layoutReady||resetApplied.current||dragging.current||released.current.size||document.hidden||animationMenuOpen||pointers.current.size||now-lastInteraction.current<250||document.querySelector('dialog[open]');
     const moving=!paused&&((animation!=='off'&&!reducedMotion)||motionSettling.current);
@@ -293,34 +278,8 @@ function FleetGraph({data,loaded,selected,select,agents,animation,animationMenuO
   useEffect(()=>{let frame;const tick=now=>{animateRef.current(now);frame=requestAnimationFrame(tick);};frame=requestAnimationFrame(tick);return()=>cancelAnimationFrame(frame);},[]);
   useEffect(()=>{motionSettling.current=true;},[animation]);
   useEffect(()=>{const release=e=>{if(pointers.current.delete(e.pointerId))lastInteraction.current=performance.now();};window.addEventListener('pointerup',release);window.addEventListener('pointercancel',release);return()=>{window.removeEventListener('pointerup',release);window.removeEventListener('pointercancel',release);};},[]);
-  function followDrag(n,delta={x:0,y:0}){
-    lastInteraction.current=performance.now();
-    if(cancelledDrag.current){const p=cancelledDrag.current;Object.assign(n,{x:p.x,y:p.y,fx:p.x,fy:p.y});return;}
-    if(!dragging.current){
-      dragSnapshot.current=snapshot();
-      dragSnapshot.current.positions[n.id]={...dragSnapshot.current.positions[n.id],x:n.x-delta.x,y:n.y-delta.y,manual:!!n.manual};
-      dragging.current=n;setDragActive(true);
-      // Stop decorative motion at its saved resting offset before translation.
-      for(const child of model.nodes){const base=targets.current.get(child.id);if(child!==n&&base){child.x=child.fx=base.x;child.y=child.fy=base.y;}}
-    }
-    for(const child of translateFleetChildren(n,model.nodes,layoutOwnership,delta))targets.current.set(child.id,{x:child.x,y:child.y});
-    // Collapsed children must follow too, so expanding/reloading cannot undo a drag.
-    const rendered=new Set(model.nodes.map(child=>child.id));
-    if(isFleetParent(n))for(const child of data.nodes){
-      const p=positions.current[child.id];
-      if(rendered.has(child.id)||ownership.get(child.id)!==n.id||!p||p.manual||p.pinned)continue;
-      p.x+=delta.x;p.y+=delta.y;
-    }
-    n.fx=n.x;n.fy=n.y;targets.current.set(n.id,{x:n.x,y:n.y});
-  }
-  function endDrag(n){
-    cancelledDrag.current=null;
-    if(!dragging.current)return;
-    dragSnapshot.current=null;
-    dragging.current=false;n.fx=n.x;n.fy=n.y;targets.current.set(n.id,{x:n.x,y:n.y});lastInteraction.current=performance.now();setDragActive(false);savePositions();
-  }
-  const cancelDrag=useRef();cancelDrag.current=()=>{if(dragSnapshot.current){cancelledDrag.current=dragSnapshot.current.positions[dragging.current.id];restoreSnapshot(dragSnapshot.current);}};
-  useEffect(()=>{const cancel=()=>cancelDrag.current();const key=e=>{if(e.key==='Escape')cancel();};window.addEventListener('pointercancel',cancel);window.addEventListener('keydown',key);return()=>{window.removeEventListener('pointercancel',cancel);window.removeEventListener('keydown',key);};},[]);
+  function followDrag(n,delta={x:0,y:0}){lastInteraction.current=performance.now();if(dragging.current===n)return;dragging.current=n;releaseFleetNeighbors(n,model.nodes,model.links,released.current,{x:n.x-delta.x,y:n.y-delta.y});configureDragForces(graph.current,true,2.2,{screenSpace:true});setDragActive(true);}
+  function endDrag(n){dragging.current=false;n.manual=true;n.fx=n.x;n.fy=n.y;targets.current.set(n.id,{x:n.x,y:n.y});lastInteraction.current=performance.now();savePositions();graph.current.d3ReheatSimulation();}
 
   const endpointId=n=>typeof n==='object'?n.id:n;
   const linked=l=>active&&(endpointId(l.source)===active||endpointId(l.target)===active);
@@ -345,17 +304,30 @@ function FleetGraph({data,loaded,selected,select,agents,animation,animationMenuO
   function paintLabels(ctx,scale){
     if(!graph.current||!Number.isFinite(scale)||scale<=0)return;
     const origin=graph.current.screen2GraphCoords(0,0);
-    const project=n=>({id:n.id,label:n.label+(isFleetParent(n)&&n.childCount?' · '+n.childCount:''),kind:activityKind(n.kind),x:(n.x-origin.x)*scale,y:(n.y-origin.y)*scale,radius:n.radius,degree:n.visibleDegree||0,alwaysShow:isFleetAnchor(n)||n.kind==='group'||n.id===selected,preferred:true,pinned:!!n.manual,emphasis:n.id===active||n.id===selected});
-    const anchors=model.nodes.filter(n=>Number.isFinite(n.x)&&Number.isFinite(n.y)).map(project);
-    ctx.save();fleetScreenTransform(ctx,scale);
-    const obstacles=anchors.map(n=>({x:n.x-n.radius-4,y:n.y-n.radius-4,w:2*n.radius+8,h:2*n.radius+8}));
-    const labels=labelLayout.current(()=>model.nodes.filter(n=>isFleetAnchor(n)||n.kind==='group'||visible(n)).map(project),{width:size.width,height:size.height,zoom:scale,obstacles,cameraKey:`${scale}:${origin.x}:${origin.y}`},(text,font)=>{ctx.font=`500 ${font}px ${uiFont}`;return ctx.measureText(text).width;},performance.now(),JSON.stringify([labelRevision,size,active,selected,dragActive]),reducedMotion,id=>{const n=labelNodes.get(id);return n?project(n):null;});
+    const project=n=>({id:n.id,label:n.label,kind:activityKind(n.kind),x:(n.x-origin.x)*scale,y:(n.y-origin.y)*scale,radius:n.radius,degree:n.visibleDegree,alwaysShow:n.kind==='status',preferred:n.kind==='status'||['sources','people','tools','companies'].includes(activityKind(n.kind)),pinned:!!n.manual,emphasis:n.id===active||n.id===selected});
+    ctx.save();
+    const labels=labelLayout.current(()=>model.nodes.filter(n=>n.kind==='status'||visible(n)).map(project),{width:size.width,height:size.height,zoom:scale,cameraKey:`${scale}:${origin.x}:${origin.y}`},(text,font)=>{ctx.font=`500 ${font}px ${uiFont}`;return ctx.measureText(text).width;},performance.now(),JSON.stringify([labelRevision,size,active,selected,dragActive]),reducedMotion,id=>{const n=labelNodes.get(id);return n?project(n):null;});
     labelClock.current={nextUpdate:labels.nextUpdate,fadeUntil:labels.fadeUntil};
-    for(const box of labels)paintFleetLabel(ctx,box,labelNodes.get(box.node.id)?.color,uiFont);
+    // Check current screen coordinates every frame, including cached/fading labels.
+    const anchors=model.nodes.filter(n=>['agent','owner','connector'].includes(n.kind)&&Number.isFinite(n.x)&&Number.isFinite(n.y)).map(project);
+    for(const box of labels){
+      const overlapsAgent=anchors.some(anchor=>{
+        if(anchor.id===box.node.id)return false;
+        const dx=anchor.x-Math.max(box.x,Math.min(anchor.x,box.x+box.w));
+        const dy=anchor.y-Math.max(box.y,Math.min(anchor.y,box.y+box.h));
+        return dx*dx+dy*dy<(anchor.radius+4)**2;
+      });
+      if(overlapsAgent)continue;
+      ctx.globalAlpha=box.alpha;
+      const x=origin.x+box.x/scale,y=origin.y+box.y/scale,ink=labelNodes.get(box.node.id)?.color||'#60a5fa';
+      ctx.fillStyle=box.node.emphasis?'#142a42f5':'#0a1728ee';ctx.beginPath();ctx.roundRect(x,y,box.w/scale,box.h/scale,5/scale);ctx.fill();
+      ctx.strokeStyle=ink+(box.node.emphasis?'90':'30');ctx.lineWidth=.6/scale;ctx.stroke();
+      ctx.font=`500 ${box.font/scale}px ${uiFont}`;ctx.textAlign='left';ctx.textBaseline='middle';ctx.fillStyle=box.node.emphasis?'#ffffff':'#d9e9fa';
+      box.lines.forEach((line,index)=>ctx.fillText(line,x+6/scale,y+(12+index*16)/scale));
+    }
     ctx.restore();
   }
-
-  return <div className={"fleet-map"+(!layoutReady?" fleet-map-loading":"")} aria-busy={!layoutReady} ref={host} onPointerDownCapture={e=>{cancelledDrag.current=null;pointers.current.add(e.pointerId);lastInteraction.current=performance.now();}} onWheel={()=>{lastInteraction.current=performance.now();}}><ForceGraph2D ref={graph} minZoom={.000001} width={size.width} height={size.height} graphData={model} backgroundColor="transparent" nodeLabel={()=>''} nodeVal={n=>n.radius*n.radius/20} nodeCanvasObject={draw} nodePointerAreaPaint={(n,color,ctx)=>{ctx.fillStyle=color;ctx.beginPath();ctx.arc(n.x,n.y,(n.radius+4)/(graph.current?.zoom()||1),0,Math.PI*2);ctx.fill();}} linkColor={l=>(l.target.color||'#60a5fa')+(active?(linked(l)?'df':'07'):(l.target.layoutParent===endpointId(l.source)||l.source.layoutParent===endpointId(l.target)?'50':'08'))} linkWidth={l=>linked(l)?2:model.nodes.length<=35?1.1:.65} linkCurvature={.16} linkDirectionalArrowLength={l=>l.direction==='none'?0:['delegates','triggers','produced'].includes(l.relation)?4:0} linkDirectionalArrowRelPos={.8} onNodeHover={n=>{setHovered(n?.id||null);if(host.current)host.current.style.cursor=n?'pointer':'grab';}} onNodeClick={n=>select(n.id)} onBackgroundClick={()=>select('')} onNodeDrag={followDrag} onNodeDragEnd={endDrag} onZoomEnd={saveViewport} onEngineStop={stopped} onRenderFramePost={paintLabels} autoPauseRedraw={!keepDrawing} cooldownTicks={model.nodes.every(n=>n.fx!==undefined)?1:90} d3VelocityDecay={dragActive?.2:.4} d3AlphaMin={.001} enableNodeDrag/><div ref={avatarLayer} className="fleet-graph-avatars" aria-hidden="true"/>{!layoutReady&&<div className="fleet-layout-loading" role="status"><span>Restoring your last view...</span></div>}{loaded&&!model.nodes.length&&<div className="fleet-empty"><strong>No matching connections</strong><p>Adjust the text, dates, Spaces or object types.</p></div>}<div className="fleet-map-footer"><div className="fleet-viewport-controls" role="group" aria-label="Graph viewport"><button aria-label="Zoom in" title="Zoom in" onClick={()=>graph.current?.zoom(graph.current.zoom()*1.3,0)}>+</button><button aria-label="Zoom out" title="Zoom out" onClick={()=>graph.current?.zoom(graph.current.zoom()/1.3,0)}>−</button><button aria-label="Fit view" title="Fit view" onClick={()=>fitView()}><svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg></button>{!fullscreen&&<button id="fleet-enter-fullscreen" aria-label="Fullscreen" title="Fullscreen" aria-expanded={fullscreen} onClick={()=>setFullscreen(true)}><svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></button>}</div></div></div>;
+  return <div className={"fleet-map"+(!layoutReady?" fleet-map-loading":"")} aria-busy={!layoutReady} ref={host} onPointerDownCapture={e=>{pointers.current.add(e.pointerId);lastInteraction.current=performance.now();}} onWheel={()=>{lastInteraction.current=performance.now();}}><ForceGraph2D ref={graph} minZoom={.000001} width={size.width} height={size.height} graphData={model} backgroundColor="transparent" nodeLabel={()=>''} nodeVal={n=>n.radius*n.radius/20} nodeCanvasObject={draw} nodePointerAreaPaint={(n,color,ctx)=>{ctx.fillStyle=color;ctx.beginPath();ctx.arc(n.x,n.y,(n.radius+4)/(graph.current?.zoom()||1),0,Math.PI*2);ctx.fill();}} linkColor={l=>(l.target.color||'#60a5fa')+(active?(linked(l)?'df':'07'):(model.nodes.length<=35?'70':'32'))} linkWidth={l=>linked(l)?2:model.nodes.length<=35?1.1:.65} linkCurvature={.16} linkDirectionalArrowLength={l=>l.direction==='none'?0:['delegates','triggers','produced'].includes(l.relation)?4:0} linkDirectionalArrowRelPos={.8} onNodeHover={n=>{setHovered(n?.id||null);if(host.current)host.current.style.cursor=n?'pointer':'grab';}} onNodeClick={n=>select(n.id)} onBackgroundClick={()=>select('')} onNodeDrag={followDrag} onNodeDragEnd={endDrag} onZoomEnd={saveViewport} onEngineStop={stopped} onRenderFramePost={paintLabels} autoPauseRedraw={!keepDrawing} cooldownTicks={dragActive?Infinity:90} d3VelocityDecay={dragActive?.2:.4} d3AlphaMin={.001} enableNodeDrag/><div ref={avatarLayer} className="fleet-graph-avatars" aria-hidden="true"/>{!layoutReady&&<div className="fleet-layout-loading" role="status"><span>Restoring your last view...</span></div>}{loaded&&!model.nodes.length&&<div className="fleet-empty"><strong>No matching connections</strong><p>Adjust the text, dates, Spaces or object types.</p></div>}<div className="fleet-map-footer"><div className="fleet-viewport-controls" role="group" aria-label="Graph viewport"><button aria-label="Zoom in" title="Zoom in" onClick={()=>graph.current?.zoom(graph.current.zoom()*1.3,0)}>+</button><button aria-label="Zoom out" title="Zoom out" onClick={()=>graph.current?.zoom(graph.current.zoom()/1.3,0)}>−</button><button aria-label="Fit view" title="Fit view" onClick={()=>graph.current?.zoomToFit(0,80)}><svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg></button>{!fullscreen&&<button id="fleet-enter-fullscreen" aria-label="Fullscreen" title="Fullscreen" aria-expanded={fullscreen} onClick={()=>setFullscreen(true)}><svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg></button>}</div></div></div>;
 }
 function FleetListAvatar({agent}){
  const host=useRef();
@@ -417,7 +389,7 @@ function App(){
  const graphInfoRef=useRef(null);
  const graphNotices=data.warnings.filter(w=>w.startsWith('Graph shows '));
  const serviceName=id=>catalog?.services.find(s=>s.id===id)?.name||id;
- return <><div className="fleet-toolbar"><SecondBrainNavigation/><input aria-label="Search agents and outputs" type="search" placeholder="Search agents and outputs…" value={query} onChange={e=>setQuery(e.target.value)}/><button className="fleet-icon" aria-label="Refresh" title="Refresh" disabled={busy} onClick={()=>run(refresh)}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5"/></svg></button><button type="button" className="fleet-icon fleet-hotkeys" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (K)" aria-haspopup="dialog" aria-controls="activity-hotkey-help"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 9h.01M10 9h.01M14 9h.01M17 9h.01M7 12h.01M10 12h.01M14 12h.01M17 12h.01M8 15h8"/></svg></button><button type="button" className="fleet-icon" aria-label="Graph info" title="Graph info" aria-expanded={graphInfoOpen} aria-controls="fleet-graph-info" onClick={e=>{const rect=e.currentTarget.getBoundingClientRect(),tip=graphInfoRef.current;tip.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-328))+"px";tip.style.top=(rect.bottom+8)+"px";tip.togglePopover();}}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg></button><AnimationMenu value={animation} onChange={setAnimation} open={animationMenuOpen} setOpen={setAnimationMenuOpen}/><button aria-label="Reset positions" title="Reset positions" onClick={()=>setReset(v=>v+1)}>Reset</button><div className="fleet-actions fleet-toolbar-actions" role="group" aria-label="Fleet management"><CreateIntent/><button className="fleet-primary" disabled={!catalog} onClick={()=>setEditor({})}>Add agent</button><button title="Shared execution defaults for agents" onClick={()=>setDefaults(true)}>Agent settings</button><a className="fleet-connector-link" href="/applications?from=agents" target="_blank" rel="noopener noreferrer">Connect services</a></div><Spaces selected={space} onApply={(ids,snapshot,manual)=>{if(manual)integrationScope.current=false;if(integrationScope.current)ids=[];setInitialSpaces(true);setSpaces(snapshot.views||[]);if(space.join(',')!==ids.join(',')){setSpace(ids);}}}/><button className="fleet-filter-trigger" aria-haspopup="dialog" aria-controls="fleet-filter-drawer" aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(true)}>Filters</button></div>
+ return <><div className="fleet-toolbar"><SecondBrainNavigation/><input aria-label="Search agents and outputs" type="search" placeholder="Search agents and outputs…" value={query} onChange={e=>setQuery(e.target.value)}/><button className="fleet-icon" aria-label="Refresh" title="Refresh" disabled={busy} onClick={()=>run(refresh)}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8M21 3v5h-5"/></svg></button><button type="button" className="fleet-icon fleet-hotkeys" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (K)" aria-haspopup="dialog" aria-controls="activity-hotkey-help"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 9h.01M10 9h.01M14 9h.01M17 9h.01M7 12h.01M10 12h.01M14 12h.01M17 12h.01M8 15h8"/></svg></button><button type="button" className="fleet-icon" aria-label="Graph info" title="Graph info" aria-expanded={graphInfoOpen} aria-controls="fleet-graph-info" onClick={e=>{const rect=e.currentTarget.getBoundingClientRect(),tip=graphInfoRef.current;tip.style.left=Math.max(8,Math.min(rect.left,window.innerWidth-328))+"px";tip.style.top=(rect.bottom+8)+"px";tip.togglePopover();}}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/></svg></button><AnimationMenu value={animation} onChange={setAnimation} open={animationMenuOpen} setOpen={setAnimationMenuOpen}/><button aria-label="Reset positions" title="Reset positions" onClick={()=>{setAnimation('off');setReset(v=>v+1);}}>Reset</button><div className="fleet-actions fleet-toolbar-actions" role="group" aria-label="Fleet management"><CreateIntent/><button className="fleet-primary" disabled={!catalog} onClick={()=>setEditor({})}>Add agent</button><button title="Shared execution defaults for agents" onClick={()=>setDefaults(true)}>Agent settings</button><a className="fleet-connector-link" href="/applications?from=agents" target="_blank" rel="noopener noreferrer">Connect services</a></div><Spaces selected={space} onApply={(ids,snapshot,manual)=>{if(manual)integrationScope.current=false;if(integrationScope.current)ids=[];setInitialSpaces(true);setSpaces(snapshot.views||[]);if(space.join(',')!==ids.join(',')){setSpace(ids);}}}/><button className="fleet-filter-trigger" aria-haspopup="dialog" aria-controls="fleet-filter-drawer" aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(true)}>Filters</button></div>
  {filtersOpen&&<Dialog title="Filters" id="fleet-filter-drawer" className="fleet-filter-drawer" close={()=>setFiltersOpen(false)}><div className="fleet-filter-fields"><label>Service<select aria-label="Service" value={runtime} onChange={e=>setRuntime(e.target.value)}><option value="">All services</option>{catalog?.services.map(s=><option key={s.id} value={s.id} disabled={s.availability?.available===false} title={s.availability?.reason}>{s.name}{s.availability?.available===false?" · Unavailable":""}</option>)}</select></label><div className="fleet-date-fields"><label>Date range<select aria-label="Date range" value={range} onChange={e=>setRange(e.target.value)}>{[['0','Fixed dates'],['today','Today'],['24h','Last 24 hours'],['week','This week'],['7','Last 7 days'],['30','Last 30 days'],['90','Last 90 days'],['365','Last 365 days']].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><label>From<input aria-label="From date" type="date" value={since} max={until||undefined} onChange={e=>{setRange('0');setSince(e.target.value);}}/></label><label>Through<input aria-label="Through date" type="date" value={until} min={since||undefined} onChange={e=>{setRange('0');setUntil(e.target.value);}}/></label></div><p className="fleet-filter-date-hint">Available agents stay visible across Spaces and dates. Search and Service narrow agents. Dates filter activity. Actions and ideas remain visible across dates; done and dismissed items are hidden unless enabled below.</p><fieldset className="fleet-filter-type-group"><legend>Node types</legend><div className="fleet-filter-types">{data.types.map(t=><label key={t.id}><input type="checkbox" checked={types?.includes(t.id)||false} onChange={e=>setTypes(old=>e.target.checked?[...old,t.id]:old.filter(v=>v!==t.id))}/><i style={{background:t.color}}/>{t.name}</label>)}</div></fieldset><label className="fleet-filter-toggle"><input type="checkbox" role="switch" checked={includeOwnerActivity} onChange={e=>setIncludeOwnerActivity(e.target.checked)}/>Include owner activity</label><label className="fleet-filter-toggle"><input type="checkbox" role="switch" checked={inactive} onChange={e=>setInactive(e.target.checked)}/>Show deactivated agents</label><label className="fleet-filter-toggle"><input type="checkbox" role="switch" checked={dismissed} onChange={e=>setDismissed(e.target.checked)}/>Show done and dismissed items</label><button onClick={()=>{setQuery('');setRange('0');setSince('');setUntil('');setRuntime('');setHideInactiveWorkflows(false);setHideArchivedWorkflows(false);setInactive(false);setDismissed(false);setIncludeOwnerActivity(true);setTypes(data.types.map(t=>t.id));}}>Reset filters</button></div></Dialog>}
  {error&&<div role="alert" className="fleet-alert">{error}</div>}{data.warnings.filter(w=>!w.startsWith("Graph shows ")).map(w=><div className="fleet-alert" key={w}>{w}</div>)}
  <div ref={graphInfoRef} id="fleet-graph-info" className="fleet-graph-help" popover="auto" onToggle={e=>setGraphInfoOpen(e.newState==="open")}><strong>About this graph</strong><p>Explore connections between agents and their outputs. The graph shows a limited overview; Agent work is independent.</p>{graphNotices.map(w=><p key={w}>{w}</p>)}<p><a href="/hfl-corpus/graph">Explore more in Activity Graph</a></p></div>

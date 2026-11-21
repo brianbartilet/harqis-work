@@ -5,7 +5,8 @@ from frontend.tests.test_agent_fleet import fleet, bridge
 
 
 @pytest.mark.parametrize('width', [1440,390])
-def test_repeated_zoom_out_and_wheel(authenticated_client, fleet, width):
+@pytest.mark.parametrize('retired_layout', [False,True])
+def test_repeated_zoom_out_and_wheel(authenticated_client, fleet, width, retired_layout, tmp_path):
     playwright = pytest.importorskip('playwright.sync_api')
     from modules.agents import ecosystem
     fleet.initialize()
@@ -17,6 +18,14 @@ def test_repeated_zoom_out_and_wheel(authenticated_client, fleet, width):
         browser = p.chromium.launch(channel='msedge', headless=True)
         page = browser.new_page(viewport={'width':width,'height':1000})
         page.add_init_script("if(!localStorage.getItem('harqis:fleet:graph:v2:frontend-test-user'))localStorage.setItem('harqis:fleet:graph:v2:frontend-test-user',JSON.stringify({viewport:{x:0,y:0,zoom:1},positions:{'agent:butler':{x:0,y:40},'owner:corpus':{x:-85,y:-45},'hud:context':{x:85,y:-45}}}));")
+        if retired_layout:
+            page.add_init_script("""const k='harqis:fleet:graph:v2:frontend-test-user';
+              if(!localStorage.getItem(k+':retired-layout-v3')){
+                const v=JSON.parse(localStorage.getItem(k));
+                v.layoutVersion=3;v.expandedGroup='fleet-group:old';v.groupPage=3;
+                v.positions['fleet-group:old']={x:0,y:0};v.inactive=true;
+                localStorage.setItem(k,JSON.stringify(v));
+              }""")
         def route(r):
             u = urlparse(r.request.url)
             if u.path == '/agents/api/graph':
@@ -47,11 +56,22 @@ def test_repeated_zoom_out_and_wheel(authenticated_client, fleet, width):
         page.wait_for_timeout(500)
         assert zoom()<after
         saved = lambda: page.evaluate("JSON.parse(localStorage.getItem('harqis:fleet:graph:v2:frontend-test-user'))")
+        if retired_layout:
+            assert saved()['inactive'] is True
+            assert 'layoutVersion' not in saved()
+            assert 'expandedGroup' not in saved()
+            assert 'groupPage' not in saved()
+            assert not any(key.startswith('fleet-group:') for key in saved()['positions'])
+            assert page.evaluate("!!localStorage.getItem('harqis:fleet:graph:v2:frontend-test-user:retired-layout-v3')")
+        assert page.locator('.fleet-cluster-browser, .fleet-layout-menu').count() == 0
+        page.screenshot(path=str(tmp_path / f'fleet-restored-{width}.png'), full_page=True)
         prior=saved()
         page.get_by_role('button',name='Reset positions',exact=True).click()
         page.wait_for_timeout(1800)
         reset=saved()
-        assert reset['viewport'] == pytest.approx(prior['viewport'])
+        for identity in ['agent:butler','owner:corpus']:
+            assert reset['positions'][identity] == prior['positions'][identity]
+        assert reset['viewport'] != prior['viewport']
         assert reset['positions']['hud:context'] != prior['positions']['hud:context']
         # Zoom and animation must not change Reset's saved resting layout.
         for mode in ['Drift','Breathing','Ripple','Off']:
@@ -61,7 +81,8 @@ def test_repeated_zoom_out_and_wheel(authenticated_client, fleet, width):
             page.get_by_role('button',name='Reset positions',exact=True).click()
             page.wait_for_timeout(2200)
             assert saved()['positions'] == reset['positions']
-            assert saved()['animation'] == mode.lower()
+            assert saved()['viewport'] == pytest.approx(reset['viewport'],abs=1e-8)
+            assert saved()['animation'] == 'off'
         reset=saved()
         # Recover from layouts/cameras beyond the old 0.01 zoom floor.
         for _ in range(32):
@@ -69,9 +90,7 @@ def test_repeated_zoom_out_and_wheel(authenticated_client, fleet, width):
         assert zoom()<.01
         page.get_by_role('button',name='Reset positions',exact=True).click()
         page.wait_for_timeout(1800)
-        page.get_by_role('button',name='Fit view',exact=True).click()
-        page.wait_for_timeout(300)
-        reset=saved()
+        assert saved()['viewport'] == pytest.approx(reset['viewport'],abs=1e-8)
         transform=page.locator('.fleet-map canvas').first.evaluate('(el)=>({x:el.__zoom.x,y:el.__zoom.y,k:el.__zoom.k,width:el.clientWidth,height:el.clientHeight})')
         for position in saved()['positions'].values():
             assert 0 <= position['x']*transform['k']+transform['x'] <= transform['width']
