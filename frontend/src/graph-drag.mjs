@@ -10,8 +10,8 @@ export function configureDragForces(graph,localDrag=false,response=1,{screenSpac
   graph.d3Force('link').distance(localDrag?link=>Math.max(30,Math.hypot(link.source.x-link.target.x,link.source.y-link.target.y)):105);
   // Apply attraction before collisions, and the speed limiter after collisions.
   graph.d3Force('collide',null);graph.d3Force('drag-damping',null);
-  graph.d3Force('drag-follow',localDrag?dragFollow(Math.max(.02,graph.zoom?.()||1),response):null);
-  const scale=localDrag?Math.max(.02,graph.zoom?.()||1):1;
+  const scale=localDrag?Math.max(screenSpace?.000001:.02,graph.zoom?.()||1):1;
+  graph.d3Force('drag-follow',localDrag?dragFollow(scale,response,screenSpace):null);
   graph.d3Force('collide',forceCollide(n=>(n.radius+(localDrag?12:30))/scale).iterations(localDrag?3:2));
   graph.d3Force('x',localDrag?null:forceX(n=>n.clusterX||0).strength(.065));
   graph.d3Force('y',localDrag?null:forceY(n=>n.clusterY||0).strength(.065));
@@ -28,13 +28,20 @@ export function configureDragForces(graph,localDrag=false,response=1,{screenSpac
 
 // Nearby children orbit a spring's rest distance from the actual parent.
 // Their bearing is free to change, so collisions can deflect their path.
-export function dragFollow(scale=1,response=1){
+export function dragFollow(scale=1,response=1,preserveOffsets=false){
   let nodes=[];
   const force=()=>{for(const n of nodes){
     if(!n.dragOrigin||!n.dragParent)continue;
     const parent=n.dragParent,origin=n.dragParentOrigin,weight=n.dragWeight??1;
     const parentX=parent.fx??parent.x,parentY=parent.fy??parent.y;
     const px=parentX-origin.x,py=parentY-origin.y;
+    if(preserveOffsets){
+      // Translate the resting cluster rather than contracting all its rings
+      // into one orbit. Collisions can still deflect followers while moving.
+      n.vx+=(n.dragOrigin.x+px*weight-n.x)*.10*response;
+      n.vy+=(n.dragOrigin.y+py*weight-n.y)*.10*response;
+      continue;
+    }
     if(weight===1){
       const initial=Math.hypot(n.dragOrigin.x-origin.x,n.dragOrigin.y-origin.y);
       const progress=1-Math.exp(-Math.hypot(px,py)/100);

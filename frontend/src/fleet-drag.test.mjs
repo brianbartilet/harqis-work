@@ -79,3 +79,22 @@ test('drag never clears manual or explicit pins on connected entities',()=>{
  assert.equal(released.size,0);
  assert.deepEqual(nodes.slice(2).map(n=>[n.x,n.y,n.manual,n.pinned]),before.map(n=>[n.x,n.y,n.manual,n.pinned]));
 });
+
+test('dense Fleet rings retain their spacing after dragging at extreme zoom',async()=>{
+ const {forceSimulation,forceManyBody,forceLink}=await import('d3-force-3d');
+ const {configureDragForces}=await import('./graph-drag.mjs');
+ for(const zoom of [.005,.0001]){
+  const parent={id:'a',kind:'agent',x:0,y:0,fx:0,fy:0,radius:44};
+  const children=Array.from({length:24},(_,i)=>{const angle=i*Math.PI/12,reach=i%2?160:100;return {id:'c'+i,kind:'skill',x:reach*Math.cos(angle)/zoom,y:reach*Math.sin(angle)/zoom,radius:5};});
+  const nodes=[parent,...children],links=children.map(n=>({source:'a',target:n.id}));
+  const before=children.map(n=>({x:n.x,y:n.y}));
+  const sim=forceSimulation(nodes).stop().velocityDecay(.2).force('charge',forceManyBody()).force('link',forceLink(links).id(n=>n.id));
+  releaseFleetNeighbors(parent,nodes,links,new Set());
+  configureDragForces({d3Force:(...args)=>sim.force(...args),zoom:()=>zoom},true,2.2,{screenSpace:true});
+  parent.x=parent.fx=300/zoom;parent.y=parent.fy=100/zoom;
+  sim.tick(300);
+  children.forEach((n,i)=>assert.ok(Math.hypot(n.x-parent.x-before[i].x,n.y-parent.y-before[i].y)*zoom<2));
+  for(const n of children)assert.ok(Math.hypot(n.x-parent.x,n.y-parent.y)*zoom>90);
+  sim.stop();
+ }
+});
