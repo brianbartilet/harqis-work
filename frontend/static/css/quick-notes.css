@@ -54,3 +54,15 @@
 @media(hover:none){#qn-note-dialog .qn-remove-item{opacity:1}}
 
 .qn-reference-results:not(:empty){display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+
+/* Center the empty collection in the available dialog/panel body. */
+#qn-grid:has(>.qn-empty){display:flex;align-items:stretch}
+#qn-grid>.qn-empty,#butler-notes-list>.qn-empty{display:flex;flex:1;flex-direction:column;align-items:center;justify-content:center;gap:12px;box-sizing:border-box;width:100%;margin:0;padding:32px 20px;text-align:center;font-family:inherit}
+.qn-empty-icon{display:grid;place-items:center;width:60px;height:60px;margin-bottom:4px;border:1px solid #294660;border-radius:16px;background:#13283c;color:#7dd3fc;flex:none}
+.qn-empty-icon svg{width:28px;height:28px}
+#qn-grid .qn-empty h3,#butler-notes-list .qn-empty h3{margin:0;color:#e2e8f0;font-family:inherit;font-size:18px;font-weight:600;line-height:1.35}
+#qn-grid .qn-empty p,#butler-notes-list .qn-empty p{max-width:300px;margin:0;color:#9fb1c6;font-size:13px;line-height:1.65}
+#quick-notes-dialog .qn-empty-action,#butler-panel .qn-empty-action{width:auto;min-height:38px;margin-top:6px;padding:8px 14px;border:1px solid #3b6e8d;border-radius:8px;background:#16364e;color:#d9f2ff;font:inherit;font-size:12px;font-weight:600;cursor:pointer}
+#quick-notes-dialog .qn-empty-action:hover,#butler-panel .qn-empty-action:hover{background:#20465f}
+#butler-notes-list .qn-empty{padding:24px 12px}
+#butler-notes-list .qn-empty h3{font-size:16px}

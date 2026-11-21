@@ -27,8 +27,17 @@
     catch(e){status(e.message,true);}
   }
   function ordered(){return [...notes.values()].filter(n=>!n.archived||showArchived).sort((a,b)=>Number(a.archived)-Number(b.archived)||Number(b.pinned)-Number(a.pinned)||a.order-b.order||a.id.localeCompare(b.id));}
-  function render(){grid.replaceChildren();for(const n of ordered())grid.append(card(n,false));if(!grid.childElementCount)grid.append(el('p','Nothing to remember yet. Create a checklist.','qn-empty'));renderButler();}
-  function renderButler(){if(!butler)return;const scroll=butler.scrollTop;butler.replaceChildren();for(const n of [...notes.values()].filter(n=>!n.archived).sort((a,b)=>Number(b.pinned)-Number(a.pinned)||a.order-b.order||a.id.localeCompare(b.id)))butler.append(card(n,false,true));if(!butler.childElementCount)butler.append(el('p','No Quick Notes in these Spaces.','qn-empty'));butler.scrollTop=scroll;}
+  function emptyState(compact=false){
+    const state=el('div',undefined,'qn-empty'),icon=el('span',undefined,'qn-empty-icon');
+    icon.setAttribute('aria-hidden','true');
+    icon.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H5v18h14V8z M14 3v5h5 M8 12h1m3 0h4 M8 16h1m3 0h4"/></svg>';
+    state.append(icon,el('h3',compact?'No notes in these Spaces':'No checklists yet'),
+      el('p',compact?'Keep reminders close at hand with a checklist.':'Capture a reminder, plan your next steps, or make a simple checklist.'),
+      button(compact?'Open Quick Notes':'Create a checklist',compact?open:()=>$('qn-new').click(),'qn-empty-action'));
+    return state;
+  }
+  function render(){grid.replaceChildren();for(const n of ordered())grid.append(card(n,false));if(!grid.childElementCount)grid.append(emptyState());renderButler();}
+  function renderButler(){if(!butler)return;const scroll=butler.scrollTop;butler.replaceChildren();for(const n of [...notes.values()].filter(n=>!n.archived).sort((a,b)=>Number(b.pinned)-Number(a.pinned)||a.order-b.order||a.id.localeCompare(b.id)))butler.append(card(n,false,true));if(!butler.childElementCount)butler.append(emptyState(true));butler.scrollTop=scroll;}
   function title(n){return n.title||'Untitled checklist';}
   function rerender(n){if(selected===n.id)edit(n);render();}
   function toggle(n,item,value){item.completed=value;for(const child of n.items)if(child.parent===item.id)child.completed=value;change(n);rerender(n);}
