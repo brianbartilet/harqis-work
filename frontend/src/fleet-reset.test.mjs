@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {resetFleetChildren} from './fleet-reset.mjs';
+import {resetFleetChildren,resetFleetView} from './fleet-reset.mjs';
 const hub=(id,x=0,y=0,kind='agent')=>({id,kind,x,y,fx:x,fy:y,radius:35});
 const child=(id,kind='skill')=>({id,kind,x:1,y:1,radius:6});
 const link=(source,target)=>({source,target});
@@ -50,4 +50,24 @@ test('a thousand children stay compact without zoom-dependent expansion',()=>{
  resetFleetChildren(nodes,nodes.slice(1).map(n=>link('a',n.id)));
  assert.ok(Math.max(...nodes.map(n=>Math.hypot(n.x,n.y)))<650);
  assertSeparated(nodes);
+});
+
+test('distant saved anchors do not collapse child nodes at fitted zoom',()=>{
+ for(const distance of [1000,100000,1000000]){
+  const nodes=[hub('a',-distance),hub('b',distance),...Array.from({length:160},(_,i)=>child('child'+i,i%2?'skill':'workflow'))];
+  const links=nodes.slice(2).map((n,i)=>link(i<80?'a':'b',n.id));
+  const view=resetFleetView(nodes,links,1100,740);
+  assert.equal(nodes[0].x,-distance);assert.equal(nodes[1].x,distance);
+  for(const n of nodes){assert.ok(Math.abs(n.x-view.x)*view.zoom+n.radius<=550);assert.ok(Math.abs(n.y-view.y)*view.zoom+n.radius<=370);}
+  assertSeparated(nodes,view.zoom,0);
+  const positions=nodes.map(n=>[n.x,n.y]);assert.deepEqual(resetFleetView(nodes,links,1100,740),view);
+  assert.deepEqual(nodes.map(n=>[n.x,n.y]),positions);
+ }
+});
+
+test('large fitted fleets keep individual child orbs visible',()=>{
+ const nodes=Array.from({length:16},(_,i)=>hub('a'+i,100000*Math.cos(i*Math.PI/8),70000*Math.sin(i*Math.PI/8))),links=[];
+ for(let i=0;i<700;i++){nodes.push({...child('c'+i,i%2?'skill':'workflow'),radius:5});links.push(link('a'+i%16,'c'+i));}
+ const view=resetFleetView(nodes,links,1100,740);
+ for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++)assert.ok(Math.hypot(nodes[i].x-nodes[j].x,nodes[i].y-nodes[j].y)*view.zoom>=nodes[i].radius+nodes[j].radius,'orbs remain distinct');
 });

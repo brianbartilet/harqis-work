@@ -2,8 +2,8 @@ import {isFleetAnchor} from './fleet-drag.mjs';
 
 // Reset uses one graph-space layout regardless of camera zoom or animation.
 // Use compact resting positions; Reset turns ambient animation off.
-export function resetFleetChildren(nodes,links){
- const scale=1,motionPadding=0;
+export function resetFleetChildren(nodes,links,{scale=1,bounds=null}={}){
+ const motionPadding=0;
  const fixed=n=>isFleetAnchor(n)||n.manual;
  const endpoint=v=>typeof v==='object'?v.id:v;
  const byId=new Map(nodes.map(n=>[n.id,n]));
@@ -35,10 +35,10 @@ export function resetFleetChildren(nodes,links){
   if(!grid.has(key))grid.set(key,[]);
   grid.get(key).push({x,y,r:radius(n)});
  };
- const clear=(n,x,y)=>{
+ const clear=(n,x,y,gap=12)=>{
   const cx=Math.floor(x/cellSize),cy=Math.floor(y/cellSize);
   for(let i=cx-1;i<=cx+1;i++)for(let j=cy-1;j<=cy+1;j++)
-   for(const p of grid.get(i+':'+j)||[])if(Math.hypot(x-p.x,y-p.y)<radius(n)+p.r+12)return false;
+   for(const p of grid.get(i+':'+j)||[])if(Math.hypot(x-p.x,y-p.y)<radius(n)+p.r+gap)return false;
   return true;
  };
  for(const n of nodes.filter(fixed))insert(n);
@@ -56,20 +56,51 @@ export function resetFleetChildren(nodes,links){
   // Each ring tries the full available circumference before expanding. Occupied
   // sectors are skipped, leaving neighboring fixed hubs and earlier clusters intact.
   let remaining=children.length;
-  for(let ring=0;remaining;ring++){
-   const reach=start+ring*step;
-   for(const sector of sectors){
-    if(sector.next===sector.members.length)continue;
-    const slots=Math.max(1,Math.floor(reach*sector.span/step));
-    for(let slot=0;slot<slots&&sector.next<sector.members.length;slot++){
-     const angle=sector.angle+sector.span*(slot+.5)/slots;
-     const px=x+reach*Math.cos(angle),py=y+reach*Math.sin(angle),n=sector.members[sector.next];
-     if(!clear(n,px,py))continue;
-     Object.assign(n,{x:px/scale,y:py/scale,fx:px/scale,fy:py/scale,vx:0,vy:0,manual:false});
-     insert(n,px,py);moved.push(n);sector.next++;remaining--;
+  // Try the preferred type sectors inside the fitted viewport first. If space
+  // is tight, reduce the gap before allowing overflow; never hide any nodes.
+  for(const gap of bounds?[12,4,0,-1]:[-1]){
+   const spacing=gap<0?step:Math.max(12,...children.map(n=>radius(n)*2+gap));
+   const maxRing=bounds&&gap>=0?Math.ceil(Math.max(...[bounds.left,bounds.right].flatMap(px=>[bounds.top,bounds.bottom].map(py=>Math.hypot(px-x,py-y))))/spacing)+1:Infinity;
+   for(let ring=0;remaining&&ring<=maxRing;ring++){
+    const reach=start+ring*spacing;
+    for(const sector of sectors){
+     if(sector.next===sector.members.length)continue;
+     const slots=Math.max(1,Math.floor(reach*sector.span/spacing));
+     for(let slot=0;slot<slots&&sector.next<sector.members.length;slot++){
+      const angle=sector.angle+sector.span*(slot+.5)/slots;
+      const px=x+reach*Math.cos(angle),py=y+reach*Math.sin(angle),n=sector.members[sector.next];
+      const r=radius(n)+8;
+      if(bounds&&gap>=0&&(px-r<bounds.left||px+r>bounds.right||py-r<bounds.top||py+r>bounds.bottom))continue;
+      if(!clear(n,px,py,gap<0?12:gap))continue;
+      Object.assign(n,{x:px/scale,y:py/scale,fx:px/scale,fy:py/scale,vx:0,vy:0,manual:false});
+      insert(n,px,py);moved.push(n);sector.next++;remaining--;
+     }
     }
    }
+   if(!remaining)break;
   }
  }
  return moved;
+}
+
+// Establish the camera from fixed anchors only, then pack in that viewport.
+// This avoids both collapsed children and a repeated expand/refit feedback loop.
+export function resetFleetView(nodes,links,width,height){
+ if(!nodes.length)return null;
+ const anchors=nodes.filter(n=>isFleetAnchor(n)||n.manual);
+ const base=anchors.length?anchors:[{x:0,y:0}];
+ const xs=base.map(n=>n.x),ys=base.map(n=>n.y);
+ const left=Math.min(...xs),right=Math.max(...xs),top=Math.min(...ys),bottom=Math.max(...ys);
+ const x=(left+right)/2,y=(top+bottom)/2;
+ const scale=Math.max(.000001,Math.min(1,Math.max(40,width*.55)/(right-left||1),Math.max(40,height*.55)/(bottom-top||1)));
+ const bounds={left:x*scale-width/2+16,right:x*scale+width/2-16,top:y*scale-height/2+16,bottom:y*scale+height/2-16};
+ resetFleetChildren(nodes,links,{scale,bounds});
+ // Only genuinely over-capacity views need a final camera reduction.
+ let zoom=scale;
+ for(const n of nodes){
+  const margin=(n.radius||7)+24;
+  if(n.x!==x)zoom=Math.min(zoom,Math.max(1,width/2-margin)/Math.abs(n.x-x));
+  if(n.y!==y)zoom=Math.min(zoom,Math.max(1,height/2-margin)/Math.abs(n.y-y));
+ }
+ return {x,y,zoom:Math.max(.000001,zoom)};
 }

@@ -29,7 +29,7 @@ import {createRoot} from 'react-dom/client';
 import ForceGraph2D from 'react-force-graph-2d';
 import {phaseFor} from './graph-presets.mjs';
 import {fleetMotionOffset} from './fleet-motion.mjs';
-import {resetFleetChildren} from './fleet-reset.mjs';
+import {resetFleetView} from './fleet-reset.mjs';
 import {configureDragForces, settleDragNodes} from './graph-drag.mjs';
 import {filterFleet, activityKind} from './fleet-graph.mjs';
 import {createLabelLayout} from './graph-labels.mjs';
@@ -248,11 +248,11 @@ function FleetGraph({data,loaded,selected,select,agents,animation,animationMenuO
   useEffect(()=>{if(!graph.current)return;resetApplied.current=false;dragging.current=false;released.current.clear();setDragActive(false);configureDragForces(graph.current,false);configureFleetLinks(graph.current);graph.current.d3ReheatSimulation();},[model]);
   useEffect(()=>{if(!reset)return;
     resetApplied.current=true;
-    resetFleetChildren(model.nodes,model.links);
+    const view=resetFleetView(model.nodes,model.links,size.width,size.height);
     motionTime.current=0;lastFrame.current=performance.now();
     for(const n of model.nodes){n.fx=n.x;n.fy=n.y;n.vx=n.vy=0;targets.current.set(n.id,{x:n.x,y:n.y});delete n.dragOrigin;delete n.dragWeight;delete n.dragParent;delete n.dragParentOrigin;}
     released.current.clear();dragging.current=false;setDragActive(false);savePositions();
-    fitted.current=true;graph.current.zoomToFit(0,80);saveViewport();
+    if(view){fitted.current=true;graph.current.centerAt(view.x,view.y,0);graph.current.zoom(view.zoom,0);saveViewport();}
     configureDragForces(graph.current,false);configureFleetLinks(graph.current);graph.current.d3ReheatSimulation();
   },[reset]);
   function stopped(){if(dragging.current||!model.nodes.length)return;if(resetApplied.current&&fitted.current){resetApplied.current=false;setDragActive(false);savePositions();return;}if(released.current.size){settleDragNodes(released.current,targets.current,(n,target)=>fleetMotionOffset(reducedMotion?'off':animation,target,motionTime.current,phaseFor(n.id),graph.current?.zoom()||1));released.current.clear();lastFrame.current=performance.now();setDragActive(false);savePositions();return;}resetApplied.current=false;setDragActive(false);for(const n of model.nodes){if(n.fx===undefined||!targets.current.has(n.id))targets.current.set(n.id,{x:n.x,y:n.y});n.fx=n.x;n.fy=n.y;}savePositions();if(!fitted.current){const view=savedView().viewport;fitted.current=true;if(view&&Number.isFinite(view.x)&&Number.isFinite(view.y)&&Number.isFinite(view.zoom)&&view.zoom>0){graph.current?.centerAt(view.x,view.y,0);graph.current?.zoom(view.zoom,0);}else graph.current?.zoomToFit(0,80);}setLayoutReady(true);}
