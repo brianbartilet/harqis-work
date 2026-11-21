@@ -14,15 +14,16 @@ test('child drag leaves owner and agent anchors pinned and unrelated children un
 });
 test('direct anchor drag can release its children without releasing other anchors',()=>{
  const {nodes,links}=fixture(),released=new Set();
+ nodes[2].manual=nodes[3].manual=false;
  releaseFleetNeighbors(nodes[1],nodes,links,released,{x:100,y:50});
  assert.ok(released.has(nodes[2]));assert.ok(released.has(nodes[3]));
  assert.equal(nodes[0].fx,0);assert.ok(!released.has(nodes[0]));assert.ok(!released.has(nodes[1]));
 });
 
-test('status drag releases its children but keeps agent anchors pinned',()=>{
+test('status drag cannot release owned children',()=>{
  const {nodes,links}=fixture(),released=new Set();
  releaseFleetNeighbors(nodes[4],nodes,links,released);
- assert.ok(released.has(nodes[2]));
+ assert.equal(released.size,0);
  for(const n of [nodes[0],nodes[1],nodes[4]])assert.ok(!released.has(n));
  assert.equal(nodes[1].fx,100);
 });

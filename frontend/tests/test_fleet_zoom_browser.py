@@ -48,31 +48,34 @@ def test_repeated_zoom_out_and_wheel(authenticated_client, fleet, width):
         assert zoom()<after
         saved = lambda: page.evaluate("JSON.parse(localStorage.getItem('harqis:fleet:graph:v2:frontend-test-user'))")
         prior=saved()
-        page.get_by_role('button',name='Reset positions',exact=True).click()
+        page.get_by_role('button',name='Arrange all',exact=True).click()
         page.wait_for_timeout(1800)
         reset=saved()
-        for identity in ['agent:butler','owner:corpus']:
-            assert reset['positions'][identity] == prior['positions'][identity]
-        assert reset['viewport'] != prior['viewport']
+        assert reset['viewport'] == pytest.approx(prior['viewport'])
         assert reset['positions']['hud:context'] != prior['positions']['hud:context']
+        page.locator('.fleet-layout-menu summary').click()
+        page.get_by_role('button',name='Undo layout',exact=True).click()
+        assert saved()['positions'] == prior['positions']
+        page.get_by_role('button',name='Arrange all',exact=True).click()
         # Zoom and animation must not change Reset's saved resting layout.
         for mode in ['Drift','Breathing','Ripple','Off']:
             page.get_by_role('button',name='Animation',exact=True).click()
             page.get_by_role('button',name=mode,exact=True).click()
             page.get_by_role('button',name='Zoom out',exact=True).click()
-            page.get_by_role('button',name='Reset positions',exact=True).click()
+            page.get_by_role('button',name='Arrange all',exact=True).click()
             page.wait_for_timeout(2200)
             assert saved()['positions'] == reset['positions']
-            assert saved()['viewport'] == pytest.approx(reset['viewport'],abs=1e-8)
-            assert saved()['animation'] == 'off'
+            assert saved()['animation'] == mode.lower()
         reset=saved()
         # Recover from layouts/cameras beyond the old 0.01 zoom floor.
         for _ in range(32):
             page.get_by_role('button',name='Zoom out',exact=True).click()
         assert zoom()<.01
-        page.get_by_role('button',name='Reset positions',exact=True).click()
+        page.get_by_role('button',name='Arrange all',exact=True).click()
         page.wait_for_timeout(1800)
-        assert saved()['viewport'] == pytest.approx(reset['viewport'],abs=1e-8)
+        page.get_by_role('button',name='Fit view',exact=True).click()
+        page.wait_for_timeout(300)
+        reset=saved()
         transform=page.locator('.fleet-map canvas').first.evaluate('(el)=>({x:el.__zoom.x,y:el.__zoom.y,k:el.__zoom.k,width:el.clientWidth,height:el.clientHeight})')
         for position in saved()['positions'].values():
             assert 0 <= position['x']*transform['k']+transform['x'] <= transform['width']

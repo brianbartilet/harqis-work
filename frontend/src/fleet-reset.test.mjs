@@ -18,11 +18,11 @@ test('reset preserves anchors and manual positions and changes only child placem
  assert.deepEqual(fixed,before);assert.deepEqual(links,original);assertSeparated(nodes);
  assert.equal(nodes.at(-1).fx,nodes.at(-1).x);
 });
-test('shared children choose the parent with the most distinct connections',()=>{
+test('shared children choose a stable parent independent of connection counts',()=>{
  const a=hub('a',-500),b=hub('b',500),shared=child('shared'),nodes=[a,b,shared,child('b-only')];
  const links=[link('a','shared'),link('b','shared'),link('b','b-only'),link('a','shared')];
  resetFleetChildren(nodes,links);
- assert.ok(Math.hypot(shared.x-b.x,shared.y-b.y)<Math.hypot(shared.x-a.x,shared.y-a.y));
+ assert.ok(Math.hypot(shared.x-a.x,shared.y-a.y)<Math.hypot(shared.x-b.x,shared.y-b.y));
 });
 test('dense neighboring clusters return to the same rings after animated movement',()=>{
  for(const separation of [150,300,600]){

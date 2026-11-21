@@ -6,19 +6,21 @@ export function placeFleetNodes(input,positions={},zoom=1){
  const scale=Number.isFinite(zoom)&&zoom>0?zoom:1;
  const valid=p=>Number.isFinite(p?.x)&&Number.isFinite(p?.y);
  const nodes=input.map((n,i)=>{
-  const prior=valid(positions[n.id])?positions[n.id]:null,phase=phaseFor(n.id);
+  const saved=positions[n.id],reassigned=saved?.layoutParent&&n.groupParent&&saved.layoutParent!==n.groupParent&&!saved.manual;
+  const prior=valid(saved)&&!reassigned?saved:null,phase=phaseFor(n.id);
   const point=prior||{x:(n.clusterX??0)+(isFleetAnchor(n)?0:100*Math.cos(phase+i)),y:(n.clusterY??0)+(isFleetAnchor(n)?0:100*Math.sin(phase+i))};
   const node={...n,...point};
   if(prior||isFleetAnchor(n)){node.fx=node.x;node.fy=node.y;}
   return node;
  });
- const settled=nodes.filter(n=>valid(positions[n.id]));
+ const hasPosition=n=>valid(positions[n.id])&&(!positions[n.id].layoutParent||positions[n.id].layoutParent===n.groupParent||positions[n.id].manual);
+ const settled=nodes.filter(hasPosition);
  if(!settled.length)return nodes; // The first layout still uses the normal simulation.
- const occupied=nodes.filter(n=>valid(positions[n.id])||isFleetAnchor(n));
+ const occupied=nodes.filter(n=>hasPosition(n)||isFleetAnchor(n));
  const median=values=>{values.sort((a,b)=>a-b);return values[Math.floor(values.length/2)];};
- for(const n of nodes.filter(n=>!valid(positions[n.id])&&!isFleetAnchor(n)).sort((a,b)=>a.id.localeCompare(b.id))){
+ for(const n of nodes.filter(n=>!hasPosition(n)&&!isFleetAnchor(n)).sort((a,b)=>a.id.localeCompare(b.id))){
   const siblings=settled.filter(p=>p.kind===n.kind&&p.groupParent===n.groupParent);
-  const peers=siblings.length?siblings:settled.filter(p=>p.kind===n.kind);
+  const peers=siblings; // A different parent's children are never an arrival target.
   const parent=nodes.find(p=>p.id===n.groupParent);
   let center;
   if(peers.length){

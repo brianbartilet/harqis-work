@@ -177,6 +177,21 @@ body.fleet-page{height:100dvh;display:flex;flex-direction:column;overflow:hidden
 .fleet-shell .fleet-dashboard-link:hover{background:#155e75;color:#fff}
 .fleet-shell .fleet-dashboard-link:focus-visible{outline:2px solid var(--harqis-focus-color, #38bdf8);outline-offset:var(--harqis-focus-offset, 2px)}
 .fleet-graph-avatars {position:absolute;inset:0;overflow:hidden;pointer-events:none;}
+.fleet-cluster-browser{position:absolute;top:12px;left:12px;z-index:3;max-width:min(320px,calc(100% - 24px));max-height:calc(100% - 104px);overflow:auto;padding:8px 12px;border:1px solid #2d415a;border-radius:10px;background:#0b1626ee;color:#dbe7f5}
+.fleet-cluster-browser summary{cursor:pointer;min-height:32px;align-content:center}
+.fleet-cluster-browser input{width:100%;margin:8px 0}
+.fleet-cluster-items{display:grid;gap:4px;max-height:220px;overflow:auto;margin:8px 0}
+.fleet-cluster-items button{text-align:left;min-height:44px;white-space:normal}
+.fleet-map-footer .fleet-viewport-controls{flex-wrap:wrap;max-width:100%}
+.fleet-map-footer .fleet-viewport-controls button{min-height:44px;min-width:44px}
+.fleet-layout-menu{position:relative;font-size:13px}
+.fleet-layout-menu summary{list-style:none;cursor:pointer;min-height:44px;padding:12px 30px 12px 10px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7.5 5 5 5-5' stroke='%2367e8f9' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") right 6px center/18px no-repeat}
+.fleet-layout-menu summary::-webkit-details-marker{display:none}
+.fleet-layout-menu[open] summary{background-color:#20334a;border-radius:8px}
+.fleet-layout-options{position:absolute;bottom:calc(100% + 12px);left:0;width:190px;display:grid;gap:5px;padding:8px;background:#0c1829;border:1px solid #334155;border-radius:10px;box-shadow:0 8px 24px #0008;z-index:4}
+.fleet-layout-options button{text-align:left}
+.fleet-layout-menu summary svg{display:none}
+@media(max-width:600px){.fleet-layout-menu summary{min-width:44px;padding:12px;background-image:none}.fleet-layout-menu summary span{display:none}.fleet-layout-menu summary svg{display:block}.fleet-map-footer{left:112px!important}}
 .fleet-graph-avatars .agent-avatar {position:absolute;left:0;top:0;box-shadow:none;}
 .fleet-conversation {display:flex;flex-direction:column;gap:10px;min-width:0;}
 .fleet-conversation header {display:flex;align-items:center;justify-content:space-between;gap:12px;}

@@ -37,3 +37,12 @@ test('status nodes are pinned on initial layout and retain saved positions',()=>
  const [saved]=placeFleetNodes(input,{'status:failed':{x:120,y:240,manual:true}});
  assert.equal(saved.fx,120);assert.equal(saved.fy,240);
 });
+
+test('an assignment change places the child near its new parent but respects an explicit pin',()=>{
+ const input=[node('agent:a','agent'),node('agent:b','agent'),node('moved','action','agent:b')];
+ const saved={'agent:a':{x:0,y:0},'agent:b':{x:5000,y:0},moved:{x:100,y:0,layoutParent:'agent:a'}};
+ const result=placeFleetNodes(input,saved);
+ assert.ok(Math.hypot(result[2].x-5000,result[2].y)<200);
+ saved.moved.manual=true;
+ assert.equal(placeFleetNodes(input,saved)[2].x,100);
+});
