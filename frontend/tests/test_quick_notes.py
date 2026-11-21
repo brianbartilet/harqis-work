@@ -184,7 +184,7 @@ def test_notes_browser(authenticated_client, monkeypatch, tmp_path):
             page.locator('#butler-tab-notes').click()
             pw.expect(page.locator('#butler-notes-list')).to_contain_text('Travel kit')
             page.locator('#butler-notes-list input[type=checkbox]').last.uncheck()
-            pw.expect(page.locator('#butler-notes-playback')).to_have_text('Resume scrolling')
+            pw.expect(page.locator('#butler-notes-playback')).to_have_attribute('aria-label', 'Resume scrolling')
             page.locator('#butler-notes-list .qn-title').click()
             pw.expect(page.locator('#quick-notes-dialog')).to_be_visible()
             page.mouse.click(180, 100)
