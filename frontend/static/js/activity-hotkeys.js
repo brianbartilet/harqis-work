@@ -27,7 +27,7 @@
     const title=document.createElement('h2');title.id='activity-hotkey-title';title.textContent='Keyboard shortcuts';
     const close=document.createElement('button');close.type='button';close.className='context-icon-button';close.setAttribute('aria-label','Close keyboard shortcuts');close.title='Close';close.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';close.onclick=()=>dialog.close();header.append(title,close);
     const body=document.createElement('div');body.className='context-help-body';
-    for(const [heading,rows] of [['Page',[['k','Keyboard shortcuts'],['b','Show/hide Butler'],...pageKeys,['n','Toggle dynamic mode'],['Alt + `','All activity'],['Alt + 1–9','Select space']]], ['Selected board',graph?[['Space','Attach existing'],['Ctrl + S','Save now'],['Ctrl + L','Save layout'],['Ctrl + E','Open board settings'],['Ctrl + D','Delete board']]:[]], [board?'Focused or hovered card':'Selected orb',contextKeys]]){
+    for(const [heading,rows] of [['Page',[['k','Keyboard shortcuts'],['b','Show/hide Butler'],...((board||fleet)?[['s','Quick Notes']]:[]),...pageKeys,['n','Toggle dynamic mode'],['Alt + `','All activity'],['Alt + 1–9','Select space']]], ['Selected board',graph?[['Space','Attach existing'],['Ctrl + S','Save now'],['Ctrl + L','Save layout'],['Ctrl + E','Open board settings'],['Ctrl + D','Delete board']]:[]], [board?'Focused or hovered card':'Selected orb',contextKeys]]){
       if(!rows.length)continue;
       const h=document.createElement('h3');h.textContent=heading;body.append(h);
       const list=document.createElement('dl');list.className='activity-hotkey-list';
